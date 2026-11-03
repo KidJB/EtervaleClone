@@ -1,6 +1,9 @@
 using System.Numerics;
 using PristonTale.Application.World;
 using PristonTale.Gameplay.UI;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Combat;
 
 namespace PristonTale.Tests;
 
@@ -9,7 +12,7 @@ internal static class OutboxTests
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
         yield return ("outbox coalesces positions while preserving every event in order", CoalescingAsync);
-        yield return ("event saturation fails the stream instead of silently dropping facts", SaturationAsync);
+        yield return ("a reader that falls past the event capacity loses the unread events, keeps its stream and is told so", SaturationAsync);
         yield return ("unchanged presence is suppressed and changed vitals remain visible", PresenceAsync);
         yield return ("HUD remains inside 4:3, widescreen and ultrawide viewports", LayoutAsync);
         yield return ("normal-rate outboxes share immutable event batches without cross-subscriber mutation", SharedBatchAsync);
@@ -19,12 +22,12 @@ internal static class OutboxTests
     {
         var first = new WorldOutbox();
         var second = new WorldOutbox();
-        var events = new[] { new CombatEventView(1, 2, CombatEventKindView.Hit, damage: 7) };
+        var events = new[] { new CombatEventView(1, 2, CombatEventKind.Hit, damage: 7) };
         var published = new WorldSnapshot(1, [], events);
         first.Writer.TryWrite(published);
         second.Writer.TryWrite(published);
         Assert.True(first.Reader.TryRead(out var delivered) && ReferenceEquals(delivered.Events, events), "single batch was copied per subscriber");
-        first.Writer.TryWrite(new WorldSnapshot(2, [], [new CombatEventView(1, 2, CombatEventKindView.Hit, damage: 3)]));
+        first.Writer.TryWrite(new WorldSnapshot(2, [], [new CombatEventView(1, 2, CombatEventKind.Hit, damage: 3)]));
         first.Reader.TryRead(out _);
         Assert.True(second.Reader.TryRead(out var untouched) && ReferenceEquals(untouched.Events, events)
             && untouched.Events[0].Damage == 7, "another subscriber changed a published batch");
@@ -37,7 +40,7 @@ internal static class OutboxTests
         for (uint tick = 1; tick <= 100; tick++)
         {
             Assert.True(outbox.Writer.TryWrite(new WorldSnapshot(tick, [],
-                [new CombatEventView(tick, 1, CombatEventKindView.Hit, damage: (int)tick)])), "outbox rejected bounded event count");
+                [new CombatEventView(tick, 1, CombatEventKind.Hit, damage: (int)tick)])), "outbox rejected bounded event count");
         }
 
         Assert.True(outbox.Reader.TryRead(out var snapshot) && snapshot.ServerTick == 100, "obsolete position roster retained");
@@ -51,20 +54,24 @@ internal static class OutboxTests
         return Task.CompletedTask;
     }
 
-    private static async Task SaturationAsync()
+    private static Task SaturationAsync()
     {
-        var outbox = new WorldOutbox(1);
-        var snapshot = new WorldSnapshot(1, [], [new CombatEventView(1, 2, CombatEventKindView.Hit)]);
-        Assert.True(outbox.Writer.TryWrite(snapshot) && !outbox.Writer.TryWrite(snapshot), "event capacity not enforced");
-        Assert.True(outbox.Reader.TryRead(out var accepted) && accepted.Events.Length == 1, "previously accepted event was lost");
-        await Assert.ThrowsAsync(async () => await outbox.Reader.WaitToReadAsync());
+        var outbox = new WorldOutbox(2);
+        WorldSnapshot Hit(uint tick, int damage) => new(tick, [], [new CombatEventView(1, 2, CombatEventKind.Hit, damage: damage)]);
+        Assert.True(outbox.Writer.TryWrite(Hit(1, 1)) && outbox.Writer.TryWrite(Hit(2, 2)) && outbox.Writer.TryWrite(Hit(3, 3)),
+            "a reader that fell behind lost its stream");
+        Assert.True(outbox.Reader.TryRead(out var behind) && behind is { ServerTick: 3, EventsLost: true } && behind.Events is [{ Damage: 3 }],
+            "the unread events were kept past the capacity, or the reader was not told they were lost");
+        Assert.True(outbox.Writer.TryWrite(Hit(4, 4)) && outbox.Reader.TryRead(out var next) && !next.EventsLost && next.Events is [{ Damage: 4 }],
+            "a reader that caught up was still told events were lost");
+        return Task.CompletedTask;
     }
 
     private static Task PresenceAsync()
     {
-        EntityView View(int hp, int maxHp = 10)
+        EntityView View(int life, int maxLife = 10)
         {
-            return new EntityView(1, EntityKindView.Player, false, Vector3.Zero, 0, MoveStateView.Idle, 1, hp, maxHp, default);
+            return new EntityView(1, EntityKind.Player, false, Vector3.Zero, 0, MotionState.Stand, 1, life, maxLife, default);
         }
 
         var presence = new SubscriberPresence(1);

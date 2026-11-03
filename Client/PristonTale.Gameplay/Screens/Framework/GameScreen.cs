@@ -1,4 +1,6 @@
 using Microsoft.Xna.Framework;
+using PristonTale.Assets;
+using PristonTale.Gameplay.UI.Rendering;
 
 namespace PristonTale.Gameplay.Screens.Framework;
 
@@ -10,6 +12,9 @@ public abstract class GameScreen : IDisposable
 
     public virtual string StatusText => string.Empty;
 
+    // The pointer this screen shows after its update.
+    public virtual HudCursorKind Cursor => HudCursorKind.Default;
+
     public virtual void Enter() { }
 
     public abstract void Update(GameTime gameTime);
@@ -20,11 +25,10 @@ public abstract class GameScreen : IDisposable
 
     public virtual void Dispose() { }
 
+    // Work Dispose started that still needs the connection (leaving the world); shutdown waits for it.
+    public virtual Task Closing => Task.CompletedTask;
+
     protected static string Fallback(string value, string ifEmpty) => string.IsNullOrWhiteSpace(value) ? ifEmpty : value;
 
-    protected string AssetPath(string relativePath)
-    {
-        var normalized = relativePath.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
-        return Path.Combine(Context.AssetRoot, normalized);
-    }
+    protected string AssetPath(string relativePath) => AssetFiles.Combine(Context.AssetRoot, relativePath);
 }

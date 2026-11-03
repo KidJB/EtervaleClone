@@ -41,6 +41,35 @@ public sealed class Inventory
     public ItemInstance this[int index] => _slots[index];
     public event Action Changed;
 
+    // The items with their anchors, in cell order.
+    public IEnumerable<(int Anchor, ItemInstance Item)> Occupied()
+    {
+        for (var anchor = 0; anchor < _slots.Length; anchor++)
+        {
+            if (_slots[anchor] is { } item)
+            {
+                yield return (anchor, item);
+            }
+        }
+    }
+
+    public IEnumerable<ItemInstance> Items()
+    {
+        foreach (var (_, item) in Occupied())
+        {
+            yield return item;
+        }
+    }
+
+    // Copies of another grid's items (ids kept) at the same anchors, into this empty grid of the same size.
+    public void CopyFrom(Inventory source)
+    {
+        foreach (var (anchor, item) in source.Occupied())
+        {
+            TryPlace(item.Copy(item.Count, preserveId: true), anchor);
+        }
+    }
+
     public int Find(Guid instanceId)
     {
         for (var index = 0; index < _slots.Length; index++)
@@ -157,35 +186,87 @@ public sealed class Inventory
         return true;
     }
 
-    public bool TryExchange(int anchor, ItemInstance replacement)
+    // Covered returns this when an item set down would lie over more than one item.
+    public const int Several = -2;
+
+    // The anchor of the one item an item of this footprint set down at `anchor` would lie over (except the item at
+    // `except`, the one being moved): -1 on free cells, Several over more than one.
+    public int Covered(int anchor, ItemDefinition definition, int except = -1)
     {
-        if (anchor < 0 || anchor >= Capacity || _slots[anchor] is not { } outgoing)
+        var covered = -1;
+        var x = anchor % Width;
+        var y = anchor / Width;
+        for (var index = 0; index < Capacity; index++)
+        {
+            if (index == except || _slots[index] is not { } other || !Overlaps(index, other.Definition, x, y, definition))
+            {
+                continue;
+            }
+
+            if (covered >= 0)
+            {
+                return Several;
+            }
+
+            covered = index;
+        }
+
+        return covered;
+    }
+
+    // Sets the item at `from` down with its top-left at `to` over exactly one other item, which moves to where the first
+    // one was, or to the first free space: the bag side of the original's exchange, where the covered item is picked up.
+    public bool TrySwap(int from, int to)
+    {
+        if (from < 0 || from >= Capacity || _slots[from] is not { } item || to < 0 || to >= Capacity
+            || Covered(to, item.Definition, from) is var covered && covered < 0)
         {
             return false;
         }
 
+        var displaced = _slots[covered];
         Span<uint> rows = stackalloc uint[Height];
         _rows.CopyTo(rows);
-        SetFootprint(rows, anchor, outgoing.Definition, false);
-        var destination = anchor;
-        if (replacement is not null)
+        SetFootprint(rows, from, item.Definition, false);
+        SetFootprint(rows, covered, displaced.Definition, false);
+        if (!Fits(to, item.Definition, rows))
         {
-            if (replacement.Count < 1 || replacement.Count > replacement.Definition.MaxStack || Find(replacement.InstanceId) >= 0)
-            {
-                return false;
-            }
+            return false;
+        }
 
-            if (!Fits(destination, replacement.Definition, rows))
-            {
-                destination = FindSpace(replacement.Definition, rows);
-            }
+        SetFootprint(rows, to, item.Definition, true);
+        var destination = Destination(rows, from, displaced.Definition);
+        if (destination < 0)
+        {
+            return false;
+        }
 
-            if (destination < 0)
-            {
-                return false;
-            }
+        SetFootprint(rows, destination, displaced.Definition, true);
+        _slots[from] = null;
+        _slots[covered] = null;
+        _slots[to] = item;
+        _slots[destination] = displaced;
+        rows.CopyTo(_rows);
+        NotifyChanged();
+        return true;
+    }
 
-            SetFootprint(rows, destination, replacement.Definition, true);
+    // Whether TryExchange would succeed, changing nothing.
+    public bool CanExchange(int anchor, ItemInstance replacement, int at = -1)
+    {
+        Span<uint> rows = stackalloc uint[Height];
+        return PlanExchange(rows, anchor, replacement, at) >= 0;
+    }
+
+    // Takes the item at `anchor` out and sets `replacement` (when given) at `at`, or with `at` -1 where the item was or in
+    // the first free space. Nothing changes when the replacement does not fit.
+    public bool TryExchange(int anchor, ItemInstance replacement, int at = -1)
+    {
+        Span<uint> rows = stackalloc uint[Height];
+        var destination = PlanExchange(rows, anchor, replacement, at);
+        if (destination < 0)
+        {
+            return false;
         }
 
         _slots[anchor] = null;
@@ -199,6 +280,34 @@ public sealed class Inventory
         return true;
     }
 
+    // The rows after the exchange and where the replacement goes (the anchor when there is none); -1 when it fails.
+    private int PlanExchange(Span<uint> rows, int anchor, ItemInstance replacement, int at)
+    {
+        if (anchor < 0 || anchor >= Capacity || _slots[anchor] is not { } outgoing
+            || replacement is not null && (replacement.Count < 1 || replacement.Count > replacement.Definition.MaxStack || Find(replacement.InstanceId) >= 0))
+        {
+            return -1;
+        }
+
+        _rows.CopyTo(rows);
+        SetFootprint(rows, anchor, outgoing.Definition, false);
+        if (replacement is null)
+        {
+            return anchor;
+        }
+
+        var destination = at >= 0 ? (Fits(at, replacement.Definition, rows) ? at : -1) : Destination(rows, anchor, replacement.Definition);
+        if (destination >= 0)
+        {
+            SetFootprint(rows, destination, replacement.Definition, true);
+        }
+
+        return destination;
+    }
+
+    // Places an item, without joining stacks, at the first cells that fit.
+    public bool TryPlaceFirstFree(ItemInstance item) => item is not null && FindSpace(item.Definition, _rows) is var anchor && anchor >= 0 && TryPlace(item, anchor);
+
     public bool TrySplit(int from, int to, int amount)
     {
         if (from < 0 || from >= Capacity || _slots[from] is not { } item || !item.Definition.IsStackable
@@ -207,8 +316,7 @@ public sealed class Inventory
             return false;
         }
 
-        _slots[to] = item.Copy(amount);
-        item.Count -= amount;
+        _slots[to] = item.Split(amount);
         SetFootprint(_rows, to, item.Definition, true);
         NotifyChanged();
         return true;
@@ -236,6 +344,39 @@ public sealed class Inventory
             _slots[from] = null;
         }
 
+        NotifyChanged();
+        return true;
+    }
+
+    // Takes `amount` of the item at `index` out of the bag: the item itself when that is all of it, otherwise a new stack
+    // split from it. Null when there is no such item or amount.
+    public ItemInstance TakeFrom(int index, int amount)
+    {
+        if (index < 0 || index >= Capacity || _slots[index] is not { } item || amount < 1 || amount > item.Count)
+        {
+            return null;
+        }
+
+        if (amount == item.Count)
+        {
+            return TakeAt(index);
+        }
+
+        var taken = item.Split(amount);
+        NotifyChanged();
+        return taken;
+    }
+
+    // Adds all of a stack to the compatible stack at `anchor`, when the stack limit allows it.
+    public bool TryJoin(int anchor, ItemInstance item)
+    {
+        if (anchor < 0 || anchor >= Capacity || _slots[anchor] is not { } there || !Compatible(there, item)
+            || there.Count + item.Count > there.Definition.MaxStack)
+        {
+            return false;
+        }
+
+        there.Count += item.Count;
         NotifyChanged();
         return true;
     }
@@ -278,13 +419,22 @@ public sealed class Inventory
         return true;
     }
 
+    // Where an item moved aside goes, as the original's exchange puts it: back at `preferred`, or the first free space.
+    private int Destination(ReadOnlySpan<uint> rows, int preferred, ItemDefinition definition) =>
+        Fits(preferred, definition, rows) ? preferred : FindSpace(definition, rows);
+
+    // The first free space down each column from the left, as the original's client fills the bag: items received one
+    // after another stack under each other before taking the next column.
     private int FindSpace(ItemDefinition definition, ReadOnlySpan<uint> rows)
     {
-        for (var index = 0; index < Capacity; index++)
+        for (var x = 0; x < Width; x++)
         {
-            if (Fits(index, definition, rows))
+            for (var y = 0; y < Height; y++)
             {
-                return index;
+                if (Fits(y * Width + x, definition, rows))
+                {
+                    return y * Width + x;
+                }
             }
         }
 
@@ -318,6 +468,13 @@ public sealed class Inventory
         return true;
     }
 
+    private bool Overlaps(int anchor, ItemDefinition definition, int x, int y, ItemDefinition other)
+    {
+        var left = anchor % Width;
+        var top = anchor / Width;
+        return left < x + other.GridWidth && x < left + definition.GridWidth && top < y + other.GridHeight && y < top + definition.GridHeight;
+    }
+
     private void SetFootprint(Span<uint> rows, int anchor, ItemDefinition definition, bool occupied)
     {
         var x = anchor % Width;
@@ -339,6 +496,7 @@ public sealed class Inventory
     {
         return left.Definition.IsStackable && left.Definition == right.Definition
             && left.UpgradeLevel == right.UpgradeLevel && left.DurabilityCurrent == right.DurabilityCurrent
-            && left.DurabilityMax == right.DurabilityMax && left.Roll == right.Roll;
+            && left.DurabilityMax == right.DurabilityMax && left.Roll == right.Roll && left.Maturity == right.Maturity
+            && left.MixSheltom == right.MixSheltom && left.MixStats == right.MixStats;
     }
 }

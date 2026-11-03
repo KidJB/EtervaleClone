@@ -1,5 +1,7 @@
 using Microsoft.Xna.Framework;
 using PristonTale.Engine3D.IO;
+using PristonTale.Contracts.Units;
+using PristonTale.Assets;
 
 namespace PristonTale.Engine3D.Formats;
 
@@ -27,7 +29,6 @@ public sealed class PristonCameraPath
     private const int MatrixRecordSize = 64;
     private const int MaximumWarpFrames = 10;
 
-    public const int TicksPerFrame = 160;
 
     private readonly List<PristonCameraPositionKey> _positions;
     private readonly List<PristonCameraRotationKey> _rotations;
@@ -61,12 +62,12 @@ public sealed class PristonCameraPath
             throw new InvalidOperationException($"The original camera supports at most {MaximumWarpFrames} warp intervals.");
         }
 
-        _warps.Add((checked(startFrame * TicksPerFrame), checked(endFrame * TicksPerFrame)));
+        _warps.Add((checked(startFrame * GameUnits.FrameTicks), checked(endFrame * GameUnits.FrameTicks)));
     }
 
     public static PristonCameraPath ReadCam(string path)
     {
-        var bytes = PristonFileResolver.ReadAllBytes(path);
+        var bytes = AssetFiles.ReadAllBytes(path);
         var cursor = new BinaryCursor(bytes);
         cursor.Require(HeaderSize);
 
@@ -106,9 +107,9 @@ public sealed class PristonCameraPath
         position = SamplePosition(ticks);
         SampleOrientation(ticks, out forward, out up);
 
-        position.Z = -position.Z;
-        forward.Z = -forward.Z;
-        up.Z = -up.Z;
+        position = WorldSpace.Mirror(position);
+        forward = WorldSpace.Mirror(forward);
+        up = WorldSpace.Mirror(up);
 
         forward = NormalizeOrFallback(forward, Vector3.Forward);
         up = NormalizeOrFallback(up, Vector3.Up);

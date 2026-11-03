@@ -12,6 +12,10 @@ using PristonTale.Gameplay.UI.Chat;
 using PristonTale.Gameplay.UI.Widgets;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Social;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -81,10 +85,10 @@ internal sealed class ChatCaptureProbe : Game
         _hud.Combat.SetCatalog(new WorldRenderCatalog());
         _hud.Combat.Observe(new PresenceUpdate(1,
         [
-            new(1, RemoteEntityKind.Player, true, default, 0, RemoteMoveState.Idle, 64, 64, new PlayerAppearanceInfo("Panzer", 2, 0, 0, 0, "", "", 1), 0),
-            new(2, RemoteEntityKind.Player, false, default, 0, RemoteMoveState.Idle, 80, 80, new PlayerAppearanceInfo("Rosalind", 5, 0, 0, 0, "", "", 1), 0),
-            new(3, RemoteEntityKind.Npc, false, default, 0, RemoteMoveState.Idle, 0, 0, null, 1, Name: "Lena"),
-            new(4, RemoteEntityKind.Monster, false, default, 0, RemoteMoveState.Idle, 30, 30, null, 1, Name: "Hopy")
+            new(1, EntityKind.Player, true, default, 0, MotionState.Stand, 64, 64, new PlayerAppearanceInfo("Panzer", PlayerClass.Mechanician, 0, 0, 0, "", "", 1), 0),
+            new(2, EntityKind.Player, false, default, 0, MotionState.Stand, 80, 80, new PlayerAppearanceInfo("Rosalind", PlayerClass.Atalanta, 0, 0, 0, "", "", 1), 0),
+            new(3, EntityKind.Npc, false, default, 0, MotionState.Stand, 0, 0, null, 1, Name: "Lena"),
+            new(4, EntityKind.Monster, false, default, 0, MotionState.Stand, 30, 30, null, 1, Name: "Hopy")
         ], [], [], []));
         _hud.SelfId = 1;
         _hud.Chat.SelfId = 1;
@@ -107,20 +111,20 @@ internal sealed class ChatCaptureProbe : Game
     private static void Fill(HudChat chat)
     {
         var log = chat.Window.Log;
-        log.Add("Notice> Welcome to Etervale. Double experience this weekend!", HudChatLog.NoticeKind);
-        log.Add("Rosalind: anyone going to the Bamboo Forest? I need two more for the hunt near the river", HudChatLog.PlayerKind);
-        log.Add("Panzer: count me in", HudChatLog.OwnKind);
-        log.Add("Notice> The servers will be going down soon due to maintenance", HudChatLog.NoticeKind);
-        log.Add("Merchant Kay: Selling a +4 Dragon Axe, whisper me", HudChatLog.TradeKind);
-        log.Add("From> Rosalind: meet me at the fountain", HudChatLog.WhisperKind);
-        log.Add("To> Rosalind: on my way", HudChatLog.WhisperKind);
-        log.Add("Gnome: party pull in 5", HudChatLog.PartyKind);
-        log.Add("Ironwood> clan war at nine", HudChatLog.ClanKind);
-        log.Add("Rosalind is currently online", HudChatLog.ServerKind);
-        log.Add("Bought.", HudChatLog.ServerKind);
-        log.Add("Kill 10 Hopy near the windmill.", HudChatLog.AssistKind);
-        log.Add("Report back to the Bargon of Ricarten.", HudChatLog.AssistKind);
-        log.Add("Rosalind: see you there", HudChatLog.PlayerKind);
+        log.Add("Notice> Welcome to Etervale. Double experience this weekend!", ChatKind.Notice);
+        log.Add("Rosalind: anyone going to the Bamboo Forest? I need two more for the hunt near the river", ChatKind.Player);
+        log.Add("Panzer: count me in", ChatKind.Player);
+        log.Add("Notice> The servers will be going down soon due to maintenance", ChatKind.Notice);
+        log.Add("Merchant Kay: Selling a +4 Dragon Axe, whisper me", ChatKind.Trade);
+        log.Add("From> Rosalind: meet me at the fountain", ChatKind.Whisper);
+        log.Add("To> Rosalind: on my way", ChatKind.Whisper);
+        log.Add("Gnome: party pull in 5", ChatKind.Party);
+        log.Add("Ironwood> clan war at nine", ChatKind.Clan);
+        log.Add("Rosalind is currently online", ChatKind.Server);
+        log.Add("Bought.", ChatKind.Server);
+        log.Add("Kill 10 Hopy near the windmill.", ChatKind.Assist);
+        log.Add("Report back to the Bargon of Ricarten.", ChatKind.Assist);
+        log.Add("Rosalind: see you there", ChatKind.Player);
     }
 
     protected override void Update(GameTime gameTime)

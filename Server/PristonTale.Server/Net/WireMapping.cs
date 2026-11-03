@@ -5,57 +5,25 @@ using PristonTale.Protocol.Packets;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.World.Loot;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Skills;
+using PristonTale.Contracts.Sessions;
+using PristonTale.Contracts.Units;
+using PristonTale.Simulation.World.Monsters;
 
 namespace PristonTale.Server.Net;
 
 // Server-side mapping from authoritative views to original Priston structs.
 internal static class WireMapping
 {
-    public static short ActionCode(MoveStateView state) => state switch
-    {
-        MoveStateView.Walking => MotionStateCode.Walk,
-        MoveStateView.Running => MotionStateCode.Run,
-        MoveStateView.Attack => MotionStateCode.Attack,
-        MoveStateView.Damage => MotionStateCode.Damage,
-        MoveStateView.Dead => MotionStateCode.Dead,
-        MoveStateView.Skill => MotionStateCode.Skill,
-        MoveStateView.Eat => MotionStateCode.Eat,
-        MoveStateView.Warp => MotionStateCode.Warp,
-        _ => MotionStateCode.Stand
-    };
-
-    public static short ClampShort(int value) => (short)Math.Clamp(value, short.MinValue, short.MaxValue);
 
     public static uint ItemCode(string? catalogKey) => ItemCodes.TryParse(catalogKey, out var code) ? code : 0;
 
-    // The template code clients use to share one description among monsters and NPCs of a kind. Players and owned
+    // The template key clients use to share one description among monsters and NPCs of a kind. Players and owned
     // summons describe themselves (a summon's owner and size are its own), so they carry none.
-    public static uint SharedTemplate(in EntityView view) => view.Kind == EntityKindView.Player || view.OwnerId != 0 ? 0u : view.TemplateId;
+    public static uint SharedTemplate(in EntityView view) =>
+        view.Kind == EntityKind.Player || view.OwnerId != 0 ? 0u : PresenceWire.TemplateKey(view.Kind, view.TemplateId);
 
-    public static byte Motion(MoveStateView state) => state switch
-    {
-        MoveStateView.Walking => PresenceMotion.Walk,
-        MoveStateView.Running => PresenceMotion.Run,
-        MoveStateView.Attack => PresenceMotion.Attack,
-        MoveStateView.Damage => PresenceMotion.Damage,
-        MoveStateView.Dead => PresenceMotion.Dead,
-        MoveStateView.Skill => PresenceMotion.Skill,
-        MoveStateView.Eat => PresenceMotion.Eat,
-        MoveStateView.Warp => PresenceMotion.Warp,
-        _ => PresenceMotion.Stand
-    };
-
-    // A full presence entry: the motion part plus life, level, target, attack sequence, description revision, shared
-    // template and field.
-    public static PresenceEntry Entry(in EntityView view, int fieldCode, byte revision) => new(
-        view.EntityId, true, view.Position, view.Facing, Motion(view.MoveState), view.Hp, view.MaxHp, view.Level, view.AttackTargetId,
-        view.AttackSequence, revision, SharedTemplate(view), fieldCode);
-
-    public static int WriteFull(Span<byte> destination, in EntityView view, int fieldCode, byte revision) =>
-        PresenceWire.WriteFull(destination, Entry(view, fieldCode, revision));
-
-    public static int WriteMotion(Span<byte> destination, in EntityView view) =>
-        PresenceWire.WriteMotion(destination, view.EntityId, view.Position, view.Facing, Motion(view.MoveState));
 
     private static DescribedGlow Glow(in Simulation.Items.HeldItemGlow glow) =>
         new(glow.Blink, glow.R, glow.G, glow.B, glow.A, glow.Scale, glow.Mix, glow.MixScroll, glow.ClassUp);
@@ -65,39 +33,40 @@ internal static class WireMapping
     {
         switch (view.Kind)
         {
-            case EntityKindView.Player:
+            case EntityKind.Player:
             {
                 var appearance = view.Appearance;
-                var looks = new DescribedPlayer(appearance.JobCode, appearance.Tier, appearance.FaceIndex, appearance.HairIndex, appearance.ModelName2 ?? "",
+                var looks = new DescribedPlayer(appearance.Class, appearance.Tier, appearance.FaceIndex, appearance.HairIndex, appearance.ModelName2 ?? "",
                     ItemCode(appearance.WeaponKey), ItemCode(appearance.ArmorKey), ItemCode(appearance.OffHandKey), appearance.InVillage, appearance.Phoenix,
                     appearance.HelperPet, appearance.BigHead)
                 {
                     WeaponGlow = Glow(appearance.WeaponGlow),
-                    OffHandGlow = Glow(appearance.OffHandGlow)
+                    OffHandGlow = Glow(appearance.OffHandGlow),
+                    ShopSign = appearance.ShopSign
                 };
-                return new EntityDescriptionPacket(view.EntityId, revision, DescribedKind.Player, view.Level, view.MoveSpeed, view.AttackRate,
+                return new EntityDescriptionPacket(view.EntityId, revision, EntityKind.Player, view.Level, view.MoveSpeed, view.AttackRate,
                     appearance.Name ?? "", appearance.ModelName ?? "", looks);
             }
-            case EntityKindView.Monster when data.Monsters.TryGet((int)view.TemplateId, out var monster):
+            case EntityKind.Monster when data.Monsters.TryGet((int)view.TemplateId, out var monster):
             {
                 // An owned summon fights on its owner's side: the original marks it with the user brood.
                 var owned = view.OwnerId != 0;
                 var template = new DescribedTemplate(view.TemplateId, monster.ModelScale, (uint)monster.SoundCode, monster.PortraitOffsetY,
                     monster.PortraitOffsetZ, (byte)(owned ? Simulation.World.Monsters.MonsterBrood.User : monster.Brood), view.OwnerId,
                     owned ? view.ModelScale : 0f, 0, (int)monster.Class, monster.ShadowSizeLevel);
-                return new EntityDescriptionPacket(view.EntityId, revision, DescribedKind.Monster, view.Level, view.MoveSpeed, view.AttackRate,
+                return new EntityDescriptionPacket(view.EntityId, revision, EntityKind.Monster, view.Level, view.MoveSpeed, view.AttackRate,
                     monster.Name ?? "", monster.ModelInxPath ?? "", Template: template);
             }
-            case EntityKindView.Npc when data.Npcs.TryGet((int)view.TemplateId, out var npc):
+            case EntityKind.Npc when data.Npcs.TryGet((int)view.TemplateId, out var npc):
             {
                 var template = new DescribedTemplate(view.TemplateId, npc.ModelScale, (uint)npc.SoundCode, npc.PortraitOffsetY, npc.PortraitOffsetZ, 0, 0, 0f,
                     npc.ServiceSet.Bits, 0, npc.ShadowSizeLevel);
-                return new EntityDescriptionPacket(view.EntityId, revision, DescribedKind.Npc, view.Level, view.MoveSpeed, view.AttackRate,
+                return new EntityDescriptionPacket(view.EntityId, revision, EntityKind.Npc, view.Level, view.MoveSpeed, view.AttackRate,
                     npc.Label ?? "", npc.ModelInxPath ?? "", Template: template);
             }
             default:
                 // A template missing from the catalog is still described by kind and code.
-                return new EntityDescriptionPacket(view.EntityId, revision, view.Kind == EntityKindView.Npc ? DescribedKind.Npc : DescribedKind.Monster,
+                return new EntityDescriptionPacket(view.EntityId, revision, view.Kind,
                     view.Level, view.MoveSpeed, view.AttackRate, "", "", Template: new DescribedTemplate(view.TemplateId, 1f, 0, 0, 0, 0, view.OwnerId, 0f, 0));
         }
     }
@@ -105,7 +74,7 @@ internal static class WireMapping
     // Character info record embedded in the character record for the entering character.
     public static CharacterListEntry Entry(CharacterSummary summary) => new(
         summary.Name,
-        (uint)summary.ClassId,
+        summary.Class,
         summary.Level,
         summary.Tier,
         summary.FaceIndex,
@@ -117,10 +86,11 @@ internal static class WireMapping
 
     public static OwnerStatusPacket Status(OwnerState owner) => new(
         owner.Level, owner.Experience, owner.LevelStart, owner.NextLevel, owner.Money,
-        owner.Hp, owner.MaxHp, owner.Mp, owner.MaxMp, owner.Sp, owner.MaxSp,
+        owner.Life, owner.MaxLife, owner.Mana, owner.MaxMana, owner.Stamina, owner.MaxStamina,
         owner.StatPoints, owner.SkillPoints, owner.Strength, owner.Spirit, owner.Talent, owner.Agility, owner.Health,
         owner.DamageMin, owner.DamageMax, owner.Defence, owner.Absorption, owner.AttackRating, owner.MoveSpeed, owner.AttackRange,
-        owner.InventoryRevision, owner.ProgressionRevision, owner.SkillsRevision, owner.EliteSkillPoints, owner.Tier);
+        owner.InventoryRevision, owner.ProgressionRevision, owner.SkillsRevision, owner.EliteSkillPoints, owner.Tier, (byte)owner.BagPage,
+        (byte)owner.WeaponSet);
 
     public static InventoryItemEntry Item(OwnedItemView item) => new(
         item.InstanceId, item.Code, (int)item.Kind, item.Count, item.Anchor, item.Slot, (short)item.Width, (short)item.Height, item.Name);
@@ -143,24 +113,24 @@ internal static class WireMapping
             flags |= CombatEventFlags.Skill;
         }
 
-        return new CombatEventEntry(view.AttackerId, view.TargetId, (byte)view.Kind, flags, view.DurationMs, view.HitAtMs, view.Damage,
-            view.Resources, view.SourceSoundCode, PristonUnits.ToFixed(view.Position.X), PristonUnits.ToFixed(view.Position.Y),
-            PristonUnits.ToFixed(view.Position.Z), PristonUnits.ToAngle(view.Facing), (short)Math.Clamp(view.Clip, -1, short.MaxValue));
+        return new CombatEventEntry(view.AttackerId, view.TargetId, view.Kind, flags, view.DurationMs, view.HitAtMs, view.Damage,
+            view.Resources, view.SourceSoundCode, GameUnits.ToFixed(view.Position.X), GameUnits.ToFixed(view.Position.Y),
+            GameUnits.ToFixed(view.Position.Z), (short)GameUnits.ToAngle(view.Facing), (short)Math.Clamp(view.Clip, -1, short.MaxValue));
     }
 
     public static SkillEventEntry SkillEvent(in SkillEventView view) => new(
         view.CasterId,
         view.TargetId,
         view.SkillCode,
-        (SkillEventPhase)view.Phase,
+        view.Phase,
         (byte)Math.Clamp(view.Rank, 0, 255),
-        (ushort)view.Flags,
+        view.Flags,
         view.DurationMs,
         view.HitAtMs,
-        PristonUnits.ToFixed(view.Position.X),
-        PristonUnits.ToFixed(view.Position.Y),
-        PristonUnits.ToFixed(view.Position.Z),
-        PristonUnits.ToAngle(view.Facing),
+        GameUnits.ToFixed(view.Position.X),
+        GameUnits.ToFixed(view.Position.Y),
+        GameUnits.ToFixed(view.Position.Z),
+        (short)GameUnits.ToAngle(view.Facing),
         (ushort)Math.Clamp(view.TargetCount, 0, ushort.MaxValue),
         (int)MathF.Round(view.Radius));
 
@@ -179,17 +149,17 @@ internal static class WireMapping
 
         var duration = view.Permanent ? 0 : Math.Max(0, view.DurationMs);
         var remaining = view.Permanent ? 0 : Math.Clamp(view.RemainingMs, 0, duration);
-        return new StatusEffectEntry(view.EntityId, view.SourceId, view.StatusCode, (StatusEffectOp)view.Op, (byte)Math.Clamp(view.Stacks, 0, 255),
+        return new StatusEffectEntry(view.EntityId, view.SourceId, view.StatusCode, view.Op, (byte)Math.Clamp(view.Stacks, 0, 255),
             view.SourceKind, view.Control, flags, duration, remaining, view.Value);
     }
 
     public static GroundItemEntry Drop(GroundDropView drop) => new(
         drop.Id,
-        drop.Gold ? ItemCodes.Parse("GG101") : drop.ItemCode,
+        drop.Gold ? ItemCodes.GoldCode : drop.ItemCode,
         drop.Gold,
         drop.Amount,
-        PristonUnits.ToFixed(drop.Position.X),
-        PristonUnits.ToFixed(drop.Position.Y),
-        PristonUnits.ToFixed(drop.Position.Z),
+        GameUnits.ToFixed(drop.Position.X),
+        GameUnits.ToFixed(drop.Position.Y),
+        GameUnits.ToFixed(drop.Position.Z),
         drop.Name);
 }

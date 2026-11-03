@@ -19,22 +19,24 @@ the in-game Settings panel, and how a change reaches the display, the renderer a
 |---|---|
 | [`ClientSettings.cs`](../Client/PristonTale.Engine3D/Rendering/ClientSettings.cs) | The record: fields and defaults, `Validate`, `WithQuality` (presets), `HasSameRendering`, `HasSameDisplay`, `FrameLimit`. |
 | `Client/PristonTale.Engine3D/Rendering/GraphicsOptions.cs` | Enums `GraphicsQuality`, `AntiAliasingMode`, `TonemapperMode`, `BloomQuality`, `ShadowFilterMode` (serialized by name). |
-| `Client/PristonTale.Engine3D/Rendering/DistanceFogMode.cs` | `DistanceFogMode` and its converter (accepts legacy booleans). |
+| `Client/PristonTale.Engine3D/Rendering/DistanceFogMode.cs` | `DistanceFogMode` and its converter (accepts older booleans). |
 | `Client/PristonTale.Engine3D/Rendering/PristonFrameContext.cs` | `PristonDebugView`; `PristonDistanceFog.For` (fog mode to fog parameters). |
 | `Client/PristonTale.Engine3D/IO/ClientSettingsStore.cs` | Load, version check, read-only protection of unreadable files, asynchronous atomic save. |
 | `Client/PristonTale.Engine3D/Rendering/PresentationSettings.cs` | Shared state between the UI and the display controller: `Requested`, confirmation flags, `ApplyRendering` and the `RenderingChanged` event. |
 | `Client/PristonTale/Display/PresentationController.cs` | Applies requested settings at the frame boundary, display preview and 15-second confirmation, rollback, frame pacing, save on accept. |
 | `Client/PristonTale/Display/DisplayController.cs` | Window mode, back-buffer size and vertical sync through the Vulkan platform. |
+| `Client/PristonTale.Engine3D/Rendering/WindowPlacement.cs` | Where the windowed window goes: centred on the primary monitor, or its saved position while the title bar stays on screen (`DisplayController` applies it and maximizes a window that was). |
 | `Client/PristonTale/Display/DisplayValidationProbe.cs` | `--validate-display REPORT.json`: cycles display configurations and checks pacing. |
 | `Client/PristonTale.Gameplay/UI/Widgets/HudSettingsPanel.cs` | The in-game Settings panel (system menu, entry Settings). |
 | `Client/PristonTale.Gameplay/UI/DisplayConfirmation.cs` | Confirm (Enter or button) / revert (Escape or button) prompt of a display change. |
 | `Client/PristonTale.Engine3D/Rendering/PristonRenderer.cs` (`ApplyQuality`) | Reads the rendering fields when `RenderingChanged` fires. |
-| `tests/PristonTale.Tests/ClientSettingsTests.cs`, `PhotorealTests.cs` | Validation, legacy fog booleans, persistence, invalid documents, pacing; preset contents. |
+| `tests/PristonTale.Tests/ClientSettingsTests.cs`, `PhotorealTests.cs` | Validation, older fog booleans, persistence, invalid documents, pacing; preset contents. |
 
 ## File location and lifecycle
 
-- Path: `Environment.SpecialFolder.LocalApplicationData/PristonTale/client-settings.json` (`%LOCALAPPDATA%\PristonTale`
-  on Windows). `PristonTale --settings PATH` uses another file (`Client/PristonTale/Program.cs`).
+- Path: `client-settings.json` beside the client executable (`AppContext.BaseDirectory`); the game never stores
+  settings in a per-user profile folder. `PristonTale --settings PATH` uses another file (`Client/PristonTale/Program.cs`).
+  A missing file is created with every key at its default.
 - JSON: camelCase property names, case-sensitive, indented on save. Enums are written and read by name.
 - Load (`ClientSettingsStore.Load`, on the main thread before the window is created):
   - no file: defaults, and the defaults are queued for saving;
@@ -61,15 +63,21 @@ renderer through `PresentationSettings.ApplyRendering` and apply at once.
 |---|---|---|---|---|
 | `version` | int, `1` | must be 1 | | Any other value: defaults and a read-only store. |
 | `monitor` | int, `-1` | >= -1 | yes | -1 current. The Vulkan platform offers the primary monitor only; a value above 0 logs a warning and uses the primary monitor. Display. |
-| `windowWidth`, `windowHeight` | int, `1280`, `720` | 800-16384, 600-16384 | yes (resolution) | Windowed size (the window is resizable; a manual resize is accepted and saved). Fullscreen picks the closest primary-monitor mode; borderless uses the desktop size. Display. |
+| `windowWidth`, `windowHeight` | int, `1280`, `720` | 800-16384, 600-16384 | yes (resolution) | Windowed size (the window is resizable; a manual resize is accepted and saved, except while maximized: the restored size is kept). Fullscreen picks the closest primary-monitor mode; borderless uses the desktop size. Display. |
+| `windowX`, `windowY`, `windowMaximized` | int or null, null; bool, `false` | any | no (saved on exit) | Where the windowed window was left: its client area's top-left in desktop coordinates (MonoGame's `Window.Position`) while not maximized, and whether it was maximized. The first windowed apply restores the position while the title bar lands on the primary monitor (otherwise, or without a position, the window opens centred on it with its title bar on screen), then maximizes the window if it was. Later applies centre a window that no longer fits. A platform that places windows itself (a Wayland session) may ignore the position. Not display fields: moving or maximizing the window applies nothing. |
 | `windowMode` | `Windowed` (default), `Borderless`, `Fullscreen` | defined enum | yes | Fullscreen is an exclusive mode switch. Display. |
 | `refreshRate` | int, `0` | 0-1000 | yes (fullscreen only) | 0 desktop frequency. The platform switches at the desktop frequency only; a nonzero value logs a warning. Display. |
 | `verticalSync` | bool, `false` | | yes | Applied without a display reset. |
-| `musicEnabled`, `soundEnabled` | bool, `true`, `true` | | yes (BGM, Audio) | Read by `PristonAudioLibrary.ApplySettings` every update. |
+| `musicEnabled`, `soundEnabled` | bool, `true`, `true` | | yes (BGM, Audio) | Read by `PristonAudioLibrary.ApplySettings` every update; the login and character screens ignore them. |
 | `maxFps` | int, `0` | 0 or 15-1000 | yes: 0, 30, 60, 90, 120, 144, 165, 240, 360 | Foreground frame limit; 0 unlimited. Paced by `PresentationController.Pace` (sleeps in 1-4 ms steps). |
 | `backgroundMaxFps` | int, `30` | 0 or 15-1000 | yes (same list) | Limit while the window is inactive: `min(maxFps, backgroundMaxFps)`, or `backgroundMaxFps` when `maxFps` is 0; 0 means "use `maxFps`". |
 | `uiScale` | float, `1` | 0.75-1.5 | | Validated and stored only; the in-game HUD always uses the largest integer scale that fits. |
 | `classicTargetHealthBar` | bool, `false` | | yes (Target HP) | `false`: the target frame always shows the HP bar with level and life percentage. `true`: the bar, without numbers, appears only after you attack a monster at full life. Either way the frame shows a live 3D portrait of the target's head, its name and, for monsters, the race icon. |
+| `classicNamePlates` | bool, `false` | | yes (Name plates) | `false`: the name boxes over monsters and NPCs (rounded, in the speech bubble's colours) hold smaller text, a monster's life bar shows once it was clicked or attacked, and NPCs get no hover outline. `true`: the same box, the HUD text size, the bar while the cursor is on the monster, and a green NPC outline. |
+| `levelGuide` | bool, `true` | | yes (the guide window's On/Off) | On reaching a level the game guide has a page for, a blinking notice offers its summary. |
+| `realisticSky` | bool, `true` | | yes (Sky) | The physical sky (sun, moon, stars, aurora, rainbow, clouds) instead of the original's painted domes ([rendering.md](rendering.md#realistic-sky)). |
+| `cloudQuality` | `Off`, `Low`, `Medium` (default), `High` | others: the default | yes (Clouds) | The realistic sky's volumetric clouds and their shadows: off, or their hemisphere rendered at 768 x 192, 1024 x 256 or 1536 x 384 (High costs about 2.7 ms a frame on a GTX 1050 Ti at 1920 x 1080); presets Low and Medium take `Low`, High `Medium`, Ultra `High`. |
+| `weatherEnabled` | bool, `true` | | yes (Weather) | The weather the server sends: clouds, rain, splashes, lightning, the rain and thunder sounds ([client.md](client.md#weather)). `false` keeps the sky clear and the field ambience on, as the original's rain switch did. |
 
 ### Rendering
 
@@ -87,7 +95,7 @@ renderer through `PresentationSettings.ApplyRendering` and apply at once.
 | `sharpening` | float, `0.35` | finite, 0-1 | | Contrast-adaptive sharpening in the final pass. |
 | `localLightLimit` | int, `32` | 8, 16, 32 | | Local lights shaded per pixel: transient combat lights first (at most 8), then the stage lamps nearest the camera focus. |
 | `shadowsEnabled` | bool, `true` | | yes (Shadows) | All shadows: sun cascades and lamp cube shadows. |
-| `shadowMapSize` | int, `4096` | 1024, 2048, 4096, 8192 | yes (Sun shadow) | Size of the sun's cascade atlas (R32F). If allocation fails the renderer halves the size down to 1024. |
+| `shadowMapSize` | int, `4096` | 1024, 2048, 4096, 8192 | yes (Sun shadow) | Size of the sun's cascade atlas (a 32-bit float depth surface). If allocation fails the renderer halves the size down to 1024. |
 | `shadowCascades` | int, `4` | 1-4 | | Stabilized cascades over 9000 units of view depth; from 2 cascades on the atlas is a 2x2 grid. |
 | `shadowFilter` | `Pcss` (default), `Pcf` | defined enum | | PCSS widens the penumbra with the blocker distance; the moon always uses PCF. |
 | `shadowUpdateRate` | int Hz, `60` | 0, 30, 60, 120 | yes (Shadow animation: 30, 60, 120, every frame) | Sun cascade refit and refresh rate; 0 every frame. Far cascades refresh less often; at night the rate is halved (at least 30 Hz). The two near cascades redraw every frame regardless, so characters cast from their current pose. |
@@ -98,7 +106,7 @@ renderer through `PresentationSettings.ApplyRendering` and apply at once.
 | `imageBasedLighting` | bool, `true` | | | Sky-dome irradiance (spherical harmonics) and prefiltered reflections, refreshed every 250 ms; `false`: hemispherical sky/ground ambient. |
 | `screenSpaceReflections` | bool, `false` | | | Screen-space reflections of smooth surfaces (water, ice) over the sky reflection; needs the depth pre-pass; skipped when no smooth surface is visible. |
 | `volumetricLight` | bool, `true` | | | Sunlight scattered by a thin height fog, with shadow shafts, at quarter resolution up to the distance-fog start; by day only, needs the depth pre-pass and sun shadows. |
-| `distanceFog` | `Atmospheric` (default), `Classic`, `Off`; legacy `true`/`false` | defined enum | | `Atmospheric`: from 2208 units the surface fades toward the captured sky, at most 85 %, with forward scattering toward the sun. `Classic` is accepted for old files and draws exactly as `Atmospheric`. `true` reads as `Atmospheric`, `false` as `Off`; saving writes the name. |
+| `distanceFog` | `Atmospheric` (default), `Classic`, `Off`; older `true`/`false` | defined enum | | `Atmospheric`: from 2208 units the surface fades toward the captured sky, at most 85 %, with forward scattering toward the sun. `Classic` is accepted for old files and draws exactly as `Atmospheric`. `true` reads as `Atmospheric`, `false` as `Off`; saving writes the name. |
 | `calibrationSpheres` | bool, `false` | | | Look development: an 18 % grey and a chrome sphere beside the camera focus. |
 | `debugView` | `Shaded` (default), `Albedo`, `VertexColour`, `Normals`, `Lighting`, `Overdraw`, `ExposureFalseColour`, `Roughness`, `Metallic`, `AmbientOcclusion`, `Specular` | defined enum | | Development views. `AmbientOcclusion`: occlusion in red, contact shadows in green. `Specular`: specular light alone. `ExposureFalseColour`: EV100 false colour in the final pass. `Overdraw`: additive, no sky, pre-pass or TAA. |
 
@@ -108,11 +116,13 @@ booleans have no validation. An unknown enum name is a JSON error (whole file ig
 ## In-game Settings panel
 
 `HudSettingsPanel` rows, in order: Window, Monitor, Resolution, Frequency, VSync, BGM, Audio, Maximum FPS, Background
-FPS, Anti-aliasing, Sun shadow, Graphics quality, Shadow animation, Shadows, Target HP. Click cycles forward,
-Shift+click backward. Resolution offers 800x600, 1024x768, 1280x720, 1920x1080, 2560x1440 (windowed and borderless)
-plus the primary monitor's modes. Graphics quality cycles Low, Medium, High, Ultra; from `Custom` it goes to Low
-(forward) or Ultra (backward). Anti-aliasing, Sun shadow, Shadow animation and Shadows set `quality` to `Custom`.
-Rows are inert while a display change awaits confirmation.
+FPS, Anti-aliasing, Sun shadow, Graphics quality, Shadow animation, Shadows, Target HP, Name plates, Weather, Sky,
+Clouds. Click cycles
+forward, Shift+click backward. Resolution offers only the sizes the primary monitor reports (at least 800x600,
+`HudSettingsPanel.Resolutions`): any of them in fullscreen, those that fit on the desktop below the window's title bar
+when windowed, and none when borderless (it covers the desktop). Graphics quality cycles Low, Medium, High, Ultra;
+from `Custom` it goes to Low (forward) or Ultra (backward). Anti-aliasing, Sun shadow, Shadow animation and Shadows set
+`quality` to `Custom`. Rows are inert while a display change awaits confirmation.
 
 ## Apply and confirm
 
@@ -129,8 +139,8 @@ Rows are inert while a display change awaits confirmation.
 5. A failing apply (`InvalidOperationException`, `ArgumentException`, `NoSuitableGraphicsDeviceException`) rolls back to
    the accepted settings (defaults on the first apply) and shows the error.
 
-Starting in `Borderless` or `Fullscreen` also asks for confirmation; the fallback is then the default windowed
-settings.
+The saved display applies at start without confirmation: it was confirmed when it was chosen. A first apply that fails
+falls back to the default windowed settings.
 
 ## Quality presets
 
@@ -154,16 +164,18 @@ values. The defaults equal the High preset (checked by `PhotorealTests`).
 | `shadowsEnabled`, `autoExposure`, `colorGrading` | on | on | on | on |
 
 Reference GPU frame totals, measured with `--benchmark-render` at 1920x1080 on a GTX 1050 Ti in Ricarten at noon and in
-the lamp-lit street at 21:00, cascades refreshed at 60 Hz: Low about 2.6 ms (day) and 3.4 ms (night; FXAA would add
+the lamp-lit street at night, cascades refreshed at 60 Hz: Low about 2.6 ms (day) and 3.4 ms (night; FXAA would add
 about 0.7 ms), Medium about 3.6 ms and 4.8 ms, High about 5.7 ms and 5.7 ms; Ultra costs High plus the every-frame
 cascades and the reflections. At 60 frames per second or less every frame refreshes the cascades (about 1 ms more on
 High). Re-measure after renderer changes; see [testing.md](testing.md) for the benchmark arguments.
 
 ## Debug keys (not saved)
 
-In the gameplay screen (`GameplayScreen.UpdateDebugKeys`): `Ctrl+F3` toggles the render statistics in the window title,
-`Ctrl+F5` toggles the renderer's shadows, `Ctrl+F10` cycles `debugView`, `,` and `.` move the time of day by one hour,
-`P` pauses or resumes the day cycle. These change the live renderer only; the file keeps its values.
+Anywhere, `F9` shows or hides the diagnostics at the top left, as the original's debug display
+(`GameClient.Diagnostics`: the frame rate and timing and the screen's status); the window title stays "Etervale". In the
+gameplay screen (`GameplayScreen.UpdateDebugKeys`): `Ctrl+F3` adds the render statistics to those diagnostics, `Ctrl+F5`
+toggles the renderer's shadows, `Ctrl+F10` cycles `debugView`, `,` and `.` move the time of day by one hour, `P` pauses
+or resumes the day cycle. These change the live renderer only; the file keeps its values.
 
 ## How to
 

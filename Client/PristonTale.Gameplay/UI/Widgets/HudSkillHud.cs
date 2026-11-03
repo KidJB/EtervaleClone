@@ -8,6 +8,7 @@ using PristonTale.Simulation.Items.Usable;
 using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.Quests;
 using PristonTale.Simulation.Skills;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Gameplay.UI.Widgets;
 
@@ -18,7 +19,9 @@ public sealed class HudSkillHud : IDisposable
     private const int BuffOrigin = 10;
     private const int BuffIcon = 32;
     private const int BuffStep = 32;
-    private const int MaxBuffs = 10;
+    private const int BuffsPerRow = 10;
+    // Two rows: a player keeping every crystal pet (MonsterCrystals.PetSlots) still sees the other effects.
+    private const int MaxBuffs = BuffsPerRow * 2;
     private const int GaugeSteps = 72;
     private const float GaugeRadius = 14.14f;
     private const double FrameMs = 1000d / 70d;
@@ -100,10 +103,25 @@ public sealed class HudSkillHud : IDisposable
         return 0;
     }
 
+    // Whether a status's icon was drawn in the last frame.
+    public bool Shows(uint code)
+    {
+        foreach (var (_, drawn) in _drawnBuffs)
+        {
+            if (drawn == code)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // The original's continuous-skill bar: from (10, 10), one 32 px icon per running effect, the one running longest
-    // first. Each icon is the gauge background, a fan that fills clockwise from 12 o'clock as the time runs out, and the
-    // keep icon over it. Icons fade in over 255 frames, fade out over the last 180, blink every 31 frames in the last
-    // four seconds and slide 2 px per frame to their place; frames are the original's 70 Hz.
+    // first, ten to a row and a second row under the first. Each icon is the gauge background, a fan that fills clockwise
+    // from 12 o'clock as the time runs out, and the keep icon over it. Icons fade in over 255 frames, fade out over the
+    // last 180, blink every 31 frames in the last four seconds and slide 2 px per frame to their place; frames are the
+    // original's 70 Hz.
     public void DrawBuffs(HudPainter painter, IReadOnlyList<StatusEntry> statuses, double nowMs)
     {
         var frames = _lastBuffDrawMs < 0 ? 0d : Math.Max(0d, nowMs - _lastBuffDrawMs) / FrameMs;
@@ -125,12 +143,12 @@ public sealed class HudSkillHud : IDisposable
         {
             var status = _ordered[index];
             _visibleCodes.Add(status.Code);
-            var target = (float)(index * BuffStep);
+            var target = (float)(index % BuffsPerRow * BuffStep);
             var x = _buffX.TryGetValue(status.Code, out var current) ? current : target;
             var step = (float)(SlidePixelsPerFrame * frames);
             x = x < target ? Math.Min(target, x + step) : Math.Max(target, x - step);
             _buffX[status.Code] = x;
-            var bounds = new Rectangle(BuffOrigin + (int)x, BuffOrigin, BuffIcon, BuffIcon);
+            var bounds = new Rectangle(BuffOrigin + (int)x, BuffRowY(index), BuffIcon, BuffIcon);
             _drawnBuffs.Add((bounds, status.Code));
             DrawBuff(painter, status, bounds, nowMs);
         }
@@ -140,6 +158,8 @@ public sealed class HudSkillHud : IDisposable
             _buffX.Remove(code);
         }
     }
+
+    private static int BuffRowY(int index) => BuffOrigin + index / BuffsPerRow * BuffStep;
 
     // Without a status book there are no effect icons to hit or to follow.
     public void ClearBuffs()
@@ -157,7 +177,8 @@ public sealed class HudSkillHud : IDisposable
             return;
         }
 
-        var bounds = new Rectangle(BuffOrigin + _drawnBuffs.Count * BuffStep, BuffOrigin, BuffIcon, BuffIcon);
+        var slot = _drawnBuffs.Count;
+        var bounds = new Rectangle(BuffOrigin + slot % BuffsPerRow * BuffStep, BuffRowY(slot), BuffIcon, BuffIcon);
         _questTimer = bounds;
         painter.Stretch(GaugeBackground, bounds);
         if (quest.Timer == QuestTimerKind.Expiring && _gauge is not null)
@@ -218,9 +239,16 @@ public sealed class HudSkillHud : IDisposable
             lines.Add(effect);
         }
 
+        var crystalPet = MonsterCrystals.TryGetByPetStatus(code, out _);
         if (!status.Permanent && status.DurationMs > 0)
         {
-            lines.Add($"Time left: {(int)Math.Ceiling(status.RemainingMs(nowMs) / 1000d)} s");
+            var seconds = (int)Math.Ceiling(status.RemainingMs(nowMs) / 1000d);
+            lines.Add(crystalPet ? $"Time Left: {seconds / 60}:{seconds % 60:D2}" : $"Time left: {seconds} s");
+        }
+
+        if (crystalPet)
+        {
+            lines.Add("Right-click to dismiss");
         }
 
         if (summonAutomatic?.Invoke(code) is { } automatic)
@@ -341,19 +369,27 @@ public sealed class HudSkillHud : IDisposable
         _gauge = null;
     }
 
-    private void DrawSocket(HudPainter painter, Rectangle socket, int y, uint skillCode, SkillCooldownBook cooldowns, double nowMs)
+    private void DrawSocket(HudPainter painter, Rectangle socket, int y, uint skillCode, SkillCooldownBook cooldowns, double nowMs) =>
+        DrawSkillIcon(painter, new Rectangle(socket.X + (socket.Width - SkillIcon) / 2, socket.Y + y + (socket.Height - SkillIcon) / 2, SkillIcon, SkillIcon),
+            skillCode, cooldowns, nowMs);
+
+    // The skill buttons' size.
+    public const int SkillIcon = 40;
+
+    // A class skill's button with its cooldown sweep and seconds left; false when it has no button (the basic attack, a
+    // skill of another class) or the art is not loaded yet.
+    public bool DrawSkillIcon(HudPainter painter, Rectangle bounds, uint skillCode, SkillCooldownBook cooldowns, double nowMs)
     {
         if (skillCode is 0 or HudSkillBindings.BasicAttackId || !_buttons.TryGetValue(skillCode, out var button) || painter.Texture(button) is not { } texture)
         {
-            return;
+            return false;
         }
 
-        var bounds = new Rectangle(socket.X + (socket.Width - 40) / 2, socket.Y + y + (socket.Height - 40) / 2, 40, 40);
         painter.Image(texture, bounds);
         var fraction = cooldowns?.Fraction(skillCode, nowMs) ?? 0f;
         if (fraction <= 0f)
         {
-            return;
+            return true;
         }
 
         // The sweep drains from the top as the gauge refills, like the original's mastery gauge.
@@ -362,6 +398,7 @@ public sealed class HudSkillHud : IDisposable
         painter.ColorBox(new Rectangle(bounds.X, bounds.Y + shade - 1, bounds.Width, 1), 255, 220, 120, 200);
         var seconds = (int)Math.Ceiling(cooldowns.RemainingMs(skillCode, nowMs) / 1000d);
         painter.TextCentered(_seconds[Math.Clamp(seconds, 0, _seconds.Length - 1)], bounds.X, bounds.Right, bounds.Y + 13, new Color(255, 240, 200));
+        return true;
     }
 
     private string Icon(uint code)

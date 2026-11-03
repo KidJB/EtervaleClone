@@ -16,8 +16,9 @@ namespace PristonTale.Engine3D.Rendering;
 // colour target's depth buffer, so the lit pass shades each pixel once (BindPrepass).
 // The caller's render targets and viewport are captured when the scene begins and restored when it is composed, so the
 // scene can be drawn into the back buffer or any 8-bit target. The sky dome is composed display-referred in its own
-// 8-bit target (its layers are authored for sRGB blending) and decoded behind the scene (Shaders/Passes/SkyComposite.fx),
-// which also fills the temporal targets.
+// target (its layers are authored for sRGB blending, so its values are sRGB codes; half floats keep the slow gradients
+// of the realistic sky's clouds from banding) and decoded behind the scene (Shaders/Passes/SkyComposite.fx), which also
+// fills the temporal targets.
 internal sealed class PristonSceneTargets : IDisposable
 {
     public const string SkyCompositeAsset = "Effects/SkyComposite";
@@ -33,12 +34,11 @@ internal sealed class PristonSceneTargets : IDisposable
     private readonly EffectParameter _backgroundRadiance;
     private readonly PristonPostProcessor _post;
     private readonly PristonTemporalAntiAliasing _temporal;
-    private readonly RenderTargetBinding[] _callerTargets = new RenderTargetBinding[8];
+    private readonly PristonBoundTargets _callerTargets = new();
     private readonly RenderTargetBinding[] _temporalBinding = new RenderTargetBinding[2];
     private readonly RenderTargetBinding[] _prepassBinding = new RenderTargetBinding[3];
     private readonly RenderTargetBinding[] _prepassTemporalBinding = new RenderTargetBinding[4];
     private readonly Action _bindCaller;
-    private int _callerTargetCount;
     private Viewport _callerViewport;
     private RenderTarget2D _color;
     private RenderTarget2D _motion;
@@ -91,16 +91,11 @@ internal sealed class PristonSceneTargets : IDisposable
     // Binds the scene target in place of the caller's, at the caller's target size and viewport.
     public void Begin(int multiSampleCount, bool temporal, bool prepass = false)
     {
-        _callerTargetCount = _device.RenderTargetCount;
-        if (_callerTargetCount > 0)
-        {
-            _device.GetRenderTargets(_callerTargets);
-        }
-
+        _callerTargets.Save(_device);
         _callerViewport = _device.Viewport;
         int width;
         int height;
-        if (_callerTargetCount > 0 && _callerTargets[0].RenderTarget is Texture2D target)
+        if (_callerTargets.First is { } target)
         {
             width = target.Width;
             height = target.Height;
@@ -153,13 +148,13 @@ internal sealed class PristonSceneTargets : IDisposable
 
     private const float SkyDepth = 65000f;
 
-    // Binds the 8-bit sky target, cleared to the sRGB colour behind the dome, for the dome's layers.
+    // Binds the sky target, cleared to the sRGB colour behind the dome, for the dome's layers.
     public void BeginSky(Color background)
     {
         if (_sky is null || _sky.Width != _color.Width || _sky.Height != _color.Height)
         {
             _sky?.Dispose();
-            _sky = new RenderTarget2D(_device, _color.Width, _color.Height, false, SurfaceFormat.Color, DepthFormat.None, 0,
+            _sky = new RenderTarget2D(_device, _color.Width, _color.Height, false, SurfaceFormat.HalfVector4, DepthFormat.None, 0,
                 RenderTargetUsage.PreserveContents);
         }
 
@@ -168,12 +163,12 @@ internal sealed class PristonSceneTargets : IDisposable
         _device.Clear(background);
     }
 
-    // Starts the scene: clears depth and stencil and fills every scene target with the sky dome composed by BeginSky
+    // Starts the scene: clears depth (PristonDepth) and fills every scene target with the sky dome composed by BeginSky
     // (sky true) or a flat radiance, behind everything.
     public void Fill(bool sky, float displayScale, Vector3 backgroundRadiance)
     {
         BindTemporal();
-        _device.Clear(ClearOptions.DepthBuffer | ClearOptions.Stencil, Vector4.Zero, 1f, 0);
+        _device.Clear(ClearOptions.DepthBuffer, Vector4.Zero, PristonDepth.Clear, 0);
         _device.BlendState = BlendState.Opaque;
         _skyComposite.CurrentTechnique = sky ? _skyTechnique : _backgroundTechnique;
         if (sky)
@@ -219,15 +214,7 @@ internal sealed class PristonSceneTargets : IDisposable
 
     private void BindCaller()
     {
-        if (_callerTargetCount == 0)
-        {
-            _device.SetRenderTarget(null);
-        }
-        else
-        {
-            _device.SetRenderTargets(_callerTargets[.._callerTargetCount]);
-        }
-
+        _callerTargets.Restore(_device);
         _device.Viewport = _callerViewport;
     }
 
@@ -254,7 +241,7 @@ internal sealed class PristonSceneTargets : IDisposable
             height,
             false,
             SurfaceFormat.HalfVector4,
-            DepthFormat.Depth24Stencil8,
+            PristonDepth.Format,
             multiSampleCount,
             RenderTargetUsage.PreserveContents);
         _requestedSamples = multiSampleCount;

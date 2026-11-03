@@ -1,4 +1,5 @@
 using PristonTale.Engine3D.Formats;
+using PristonTale.Contracts.Motion;
 
 namespace PristonTale.Gameplay.Combat;
 
@@ -11,33 +12,39 @@ public enum MotionCommandKind : byte
     Restart = 2,
 }
 
-public readonly record struct MotionCommand(MotionCommandKind Kind, PristonActorMotion Motion)
+public readonly record struct MotionCommand(MotionCommandKind Kind, MotionCode Motion)
 {
-    public static readonly MotionCommand None = new(MotionCommandKind.None, PristonActorMotion.Stand);
+    public static readonly MotionCommand None = new(MotionCommandKind.None, MotionCode.Stand);
 }
 
 public sealed class ActorMotionController
 {
-    public PristonActorMotion Current { get; private set; } = PristonActorMotion.Stand;
+    public MotionCode Current { get; private set; } = MotionCode.Stand;
 
-    public bool IsDead => Current == PristonActorMotion.Dead;
+    public bool IsDead => Current == MotionCode.Dead;
 
-    public bool LocomotionFrozen => Current is PristonActorMotion.Damage or PristonActorMotion.Dead or PristonActorMotion.Eat;
+    // Swings and casts begun so far: each one that begins ends the one before it.
+    public long ActionStarts { get; private set; }
 
-    public MotionCommand ApplyAuthoritative(PristonActorMotion motion)
+    // A landing holds the player until its clip ends, as every motion from 0x100 up does in the original.
+    public bool LocomotionFrozen => Current is MotionCode.Damage or MotionCode.Dead or MotionCode.Eat
+        or MotionCode.FallStand or MotionCode.FallDamage or MotionCode.Yahoo;
+
+    public MotionCommand ApplyAuthoritative(MotionCode motion)
     {
         if (motion == Current)
         {
             return MotionCommand.None;
         }
 
-        Current = motion;
+        Begin(motion);
         return new MotionCommand(IsOneShotBusy(motion) ? MotionCommandKind.Restart : MotionCommandKind.Set, motion);
     }
 
-    public MotionCommand ApplyLocomotion(PristonActorMotion motion)
+    // A fall keeps its motion while the player walks; the landing replaces it.
+    public MotionCommand ApplyLocomotion(MotionCode motion)
     {
-        if (LocomotionFrozen || motion == Current)
+        if (LocomotionFrozen || motion == Current || Current == MotionCode.FallDown)
         {
             return MotionCommand.None;
         }
@@ -46,21 +53,31 @@ public sealed class ActorMotionController
         return new MotionCommand(MotionCommandKind.Set, motion);
     }
 
-    public MotionCommand Retrigger(PristonActorMotion oneShot)
+    public MotionCommand Retrigger(MotionCode oneShot)
     {
         if (IsDead)
         {
             return MotionCommand.None;
         }
 
-        Current = oneShot;
+        Begin(oneShot);
         return new MotionCommand(MotionCommandKind.Restart, oneShot);
     }
 
-    private static bool IsOneShotBusy(PristonActorMotion motion) => motion is
-        PristonActorMotion.Attack or
-        PristonActorMotion.Damage or
-        PristonActorMotion.Skill or
-        PristonActorMotion.Eat or
-        PristonActorMotion.Restart;
+    private void Begin(MotionCode motion)
+    {
+        Current = motion;
+        if (motion is MotionCode.Attack or MotionCode.Skill)
+        {
+            ActionStarts++;
+        }
+    }
+
+    private static bool IsOneShotBusy(MotionCode motion) => motion is
+        MotionCode.Attack or
+        MotionCode.Damage or
+        MotionCode.Skill or
+        MotionCode.Eat or
+        MotionCode.Yahoo or
+        MotionCode.Restart;
 }

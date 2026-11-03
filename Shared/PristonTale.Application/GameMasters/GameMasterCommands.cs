@@ -79,10 +79,12 @@ public sealed class GmCommandContext
 public sealed class GameMasterCommands
 {
     private const string Denied = "denied: level too low";
-    private readonly Action<Exception>? _fault;
+    private const int MostAuditResult = 1000;
+    private readonly IGmAudit? _audit;
+    private GameMasterOptions _options = GameMasterOptions.Default;
 
     public GameMasterCommands(ChatDirectory directory, WorldServer world, WorldDataHolder worldData, GameMasterOptions? options = null,
-        IServerOperations? server = null, IGameMasterRepository? repository = null, Action<Exception>? fault = null)
+        IServerOperations? server = null, IGameMasterRepository? repository = null, IGmAudit? audit = null)
     {
         Directory = directory;
         World = world;
@@ -90,17 +92,23 @@ public sealed class GameMasterCommands
         Options = options ?? GameMasterOptions.Default;
         Server = server ?? new DetachedServer();
         Repository = repository;
-        _fault = fault;
+        _audit = audit;
     }
 
     public ChatDirectory Directory { get; }
     public WorldServer World { get; }
     public WorldDataHolder WorldData { get; }
-    public GameMasterOptions Options { get; }
+    public GameMasterOptions Options
+    {
+        get => Volatile.Read(ref _options);
+        set => Volatile.Write(ref _options, value ?? GameMasterOptions.Default);
+    }
+
+    public Settings.ServerSettingsAppService? Settings { get; set; }
     public IServerOperations Server { get; }
     public IGameMasterRepository? Repository { get; }
     public IAccountRepository? Accounts { get; init; }
-    public ICharacterRepository? Characters { get; init; }
+    public Saves.ICharacterSaves? Saves { get; init; }
     public IWarehouseRepository? Warehouses { get; init; }
     public ItemCreationOverrides ItemOverrides { get; } = new();
 
@@ -120,6 +128,7 @@ public sealed class GameMasterCommands
         new("/@get_perf", GameMasterLevel.Administrator, GmItemCommands.Perfect),
         new("/@get", GameMasterLevel.Administrator, GmItemCommands.Create),
         new("/@put", GameMasterLevel.Administrator, GmItemCommands.Gift),
+        new("/AgingSetting", GameMasterLevel.Operator, GmItemCommands.Aged),
         new("/get_potion", GameMasterLevel.Guide, GmInformationCommands.Potions) { Enabled = static options => options.PotionMonitor },
         new("/>", GameMasterLevel.Moderator, GmServerCommands.Notice),
         new("/netlog", GameMasterLevel.Guide, GmInformationCommands.NetLog),
@@ -129,8 +138,11 @@ public sealed class GameMasterCommands
         new("/kill", GameMasterLevel.Moderator, GmPlayerCommands.Kill),
         new("/open_warehouse", GameMasterLevel.Moderator, GmAccountCommands.OpenWarehouse),
         new("/shutdown", GameMasterLevel.Moderator, GmServerCommands.Shutdown),
+        new("/weather", GameMasterLevel.Moderator, GmServerCommands.Weather),
+        new("/reload_settings", GameMasterLevel.Administrator, GmServerCommands.ReloadSettings),
+        new("/setting", GameMasterLevel.Administrator, GmServerCommands.Setting),
         new("/insert", GameMasterLevel.Moderator, GmAccountCommands.Insert),
-        new("/usercode", GameMasterLevel.Guide, GmInformationCommands.UserBySerial),
+        new("/usercode", GameMasterLevel.Guide, GmInformationCommands.UserByEntityId),
         new("/userid", GameMasterLevel.Guide, GmInformationCommands.UserByAccount),
         new("/username", GameMasterLevel.Guide, GmInformationCommands.UserByName),
         new("/near", GameMasterLevel.Moderator, GmPlayerCommands.Near),
@@ -197,7 +209,7 @@ public sealed class GameMasterCommands
                     command.Text, required, issuer.GmLevel));
             }
 
-            await AuditAsync(issuer, line, required, accepted, accepted ? string.Join(" | ", context.Replies) : Denied);
+            Audit(issuer, line, required, accepted, accepted ? string.Join(" | ", context.Replies) : Denied);
             return true;
         }
 
@@ -206,7 +218,7 @@ public sealed class GameMasterCommands
             var context = new GmCommandContext(this, issuer, line, 1);
             if (await GmItemCommands.DebugDrop(context))
             {
-                await AuditAsync(issuer, line, GameMasterLevel.Guide, true, "dropped");
+                Audit(issuer, line, GameMasterLevel.Guide, true, "dropped");
                 return true;
             }
         }
@@ -217,22 +229,7 @@ public sealed class GameMasterCommands
     private static int TestOrAdministrator(GameMasterOptions options) =>
         options.TestServer || options.DebugServer ? GameMasterLevel.Guide : GameMasterLevel.Administrator;
 
-    private async Task AuditAsync(ChatMember issuer, string line, int required, bool accepted, string result)
-    {
-        if (Repository is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var entry = new GmAuditEntry(issuer.AccountId, issuer.UserId, issuer.Name, issuer.GmLevel, line, required, accepted,
-                result.Length > 1000 ? result[..1000] : result);
-            await Repository.AppendAuditAsync(entry, CancellationToken.None);
-        }
-        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
-        {
-            _fault?.Invoke(ex);
-        }
-    }
+    private void Audit(ChatMember issuer, string line, int required, bool accepted, string result) =>
+        _audit?.Append(new GmAuditEntry(issuer.AccountId, issuer.UserId, issuer.Name, issuer.GmLevel, line, required, accepted,
+            result.Length > MostAuditResult ? result[..MostAuditResult] : result));
 }

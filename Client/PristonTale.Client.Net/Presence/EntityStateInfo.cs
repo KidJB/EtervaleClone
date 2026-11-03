@@ -1,13 +1,14 @@
 using System.Numerics;
+using PristonTale.Contracts.Motion;
 
 namespace PristonTale.Client.Net.Presence;
 
-public sealed record EntityStateInfo(
+public readonly record struct EntityStateInfo(
     ulong EntityId,
     Vector3 Position,
     float Facing,
-    RemoteMoveState MoveState,
-    int Hp,
+    MotionState MoveState,
+    int Life,
     int MoveSpeed = 0,
     float AttackRate = 1f,
     ulong AttackTargetId = 0,

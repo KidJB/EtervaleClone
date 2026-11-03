@@ -3,6 +3,8 @@ using PristonTale.Application.World;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Skills;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Contracts.Skills;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -44,7 +46,7 @@ internal static class SkillSummonTests
         Assert.True(golem.Aggressive && Vector3.Distance(golem.Position, scenario.Player.Position) < 60f, "the golem is not an aggressive helper beside its owner");
         Assert.True(character.Effects.TryGet(MetalGolem, out var status) && Math.Abs(status.RemainingMs - 355000f) < 5000f,
             "the owner has no status with the summon's lifetime");
-        Assert.True(scenario.Statuses.Any(value => value.StatusCode == MetalGolem && value.Op == StatusEventOpView.Add), "the keep icon was not sent");
+        Assert.True(scenario.Statuses.Any(value => value.StatusCode == MetalGolem && value.Op == StatusEffectOp.Add), "the keep icon was not sent");
         var view = scenario.Field.BuildViews().Single(value => value.EntityId == golem.EntityId);
         Assert.True(view.OwnerId == scenario.Player.EntityId && Math.Abs(view.ModelScale - golem.ModelScale) < 0.0001f, "the view lost the owner or scale");
 
@@ -118,7 +120,7 @@ internal static class SkillSummonTests
         Assert.True(scenario.Run(20 * 10, () => Vector3.Distance(golem.Position, scenario.Player.Position) < 120f) > 0, "the golem did not follow");
         scenario.Player.Teleport(new Vector3(0, 0, 1200));
         scenario.Run(2);
-        Assert.True(Vector3.Distance(golem.Position, scenario.Player.Position) < 1f, "the golem was not recalled beside a far owner");
+        Assert.True(MathF.Abs(Vector3.Distance(golem.Position, scenario.Player.Position) - 48f) < 2f, "the golem was not recalled beside a far owner");
 
         var enemy = scenario.Spawn(SkillScenario.Enemy(), scenario.Player.Position + new Vector3(110, 0, 0));
         Assert.True(scenario.Cast(MetalGolem, command: SkillCastCommand.SummonPassive).Accepted && !golem.Aggressive, "passive order refused");
@@ -146,7 +148,7 @@ internal static class SkillSummonTests
         second.ExpiresAtMs = scenario.Field.NowMs;
         scenario.Run(2);
         Assert.True(!second.IsAlive && !scenario.Character.Effects.TryGet(MetalGolem, out _), "an expired summon or its status survived");
-        Assert.True(scenario.Statuses.Any(value => value.StatusCode == MetalGolem && value.Op == StatusEventOpView.Remove), "the keep icon was not removed");
+        Assert.True(scenario.Statuses.Any(value => value.StatusCode == MetalGolem && value.Op == StatusEffectOp.Remove), "the keep icon was not removed");
 
         scenario.Refill();
         scenario.ClearCooldowns();

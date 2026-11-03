@@ -20,15 +20,16 @@ FluentMigrator migrations, the schema, and the SQLite and PostgreSQL providers. 
 | `.../IDbConnectionFactory.cs`, `IDatabaseMigrator.cs` | Open a provider connection; apply pending migrations |
 | `.../Accounts/` | `AccountRecord` (with `GmLevel`), `IAccountRepository` |
 | `.../GameMasters/IGameMasterRepository.cs` | Set a game-master level, append and read the audit trail, move a character between accounts |
+| `.../GameLogs/GameLogRecords.cs` | `IGameLogRepository` and the game log records: item transfers, currency sinks, server events |
 | `.../Characters/CharacterRecord.cs` | One `characters` row; positional record, JSON columns as `JsonText` |
-| `.../Characters/CharacterJson.cs` | `JsonText` wrapper, shared JSON options, `DerivedStatsDto` |
+| `.../Characters/CharacterJson.cs` | `JsonText` wrapper, shared JSON options |
 | `.../Characters/CharacterStateCodec.cs` | Owned-state JSON (`SavedItems`, `SavedSkills`): capture, strict restore |
 | `.../Characters/CharacterRecordFactory.cs` | New starter rows; capture a live `PlayerCharacter` into a save snapshot |
 | `.../Warehouses/` | `WarehouseRecord`, `IWarehouseRepository`, `WarehouseStateCodec` |
 | `.../WorldData/` | Read-side catalog records and [WorldDataFactory](../Persistence/PristonTale.Persistence.Abstractions/WorldData/WorldDataFactory.cs) |
 | `.../Security/PasswordHasher.cs` | PBKDF2-SHA256 hashes: `pbkdf2-sha256$<iterations>$<salt b64>$<key b64>` |
 | `Persistence/PristonTale.Persistence/Repositories/` | `Dapper*Repository` implementations shared by both providers |
-| `Persistence/PristonTale.Persistence/Migrations/` | `M013Baseline`, `M014PortraitData`, `M015NpcServices`, `M016QuestData`, `M019GameMasters`, `M021MonsterSkillData`, `M022MonsterExperience64`, `M023ItemFootprints`, `M024WorldDataFields`, `FluentMigratorDatabaseMigrator` |
+| `Persistence/PristonTale.Persistence/Migrations/` | `M013Baseline`, `M014PortraitData`, `M015NpcServices`, `M016QuestData`, `M019GameMasters`, `M021MonsterSkillData`, `M022MonsterExperience64`, `M023ItemFootprints`, `M024WorldDataFields`, `M026Contacts`, `M027CatalogIdentities`, `M028WorldCatalog`, `M029NpcPlacementFacts`, `M030CharacterSaveSequence`, `M031GameLogs`, `M032StarterGifts`, `M033HelpPet`, `FluentMigratorDatabaseMigrator` |
 | `Persistence/PristonTale.Persistence.Sqlite/` | `AddPristonSqlite`, connection factory (WAL), Dapper type handlers, path resolution |
 | `Persistence/PristonTale.Persistence.Postgres/` | `AddPristonPostgres`, `NpgsqlDataSource` factory, `jsonb` handler for `JsonText` |
 | `docker-compose.yml` | Local PostgreSQL 17 for development |
@@ -43,18 +44,26 @@ Consumers: `Server/PristonTale.Server/Hosting/HostingExtensions.cs` (provider se
 | Interface | Implementation | Operations |
 | --- | --- | --- |
 | `IAccountRepository` | `DapperAccountRepository` | `FindByUserIdAsync`, `CreateAsync` (INSERT ... RETURNING), `UpdateLastLoginAsync` |
-| `ICharacterRepository` | `DapperCharacterRepository` | List by account (ordered by slot), find by name for account, global `NameExistsAsync`, `UsedSlotsAsync`, create (RETURNING), delete by name, `UpdateAsync` |
+| `ICharacterRepository` | `DapperCharacterRepository` | List by account (ordered by slot), find by name for account, global `NameExistsAsync`, `UsedSlotsAsync`, create (RETURNING), delete by name, `UpdateAsync`, `SaveAllAsync` (the background saves: every record in one transaction, skipping older captures and missing characters, returns the rows written), `UpdateAllAsync` (several characters in one transaction, all or none: a personal shop sale) |
+| `IContactRepository` | `DapperContactRepository` | `ListAsync` (in the order added), `AddAsync` (false when the name is already on the list), `RemoveAsync` |
 | `IWarehouseRepository` | `DapperWarehouseRepository` | `FindAsync`, `SaveWithCharacterAsync` (character + warehouse in one transaction) |
 | `IWorldDataRepository` | `DapperWorldDataRepository` | Read-only bulk loads: items, monsters, NPCs, field spawns, motion models, motion slots |
+| `IServerSettingsRepository` | `DapperServerSettingsRepository` | `SeedAsync` (insert missing rows, refresh descriptions, `ON CONFLICT` on both providers), `LoadAsync`, `SetAsync` |
 
 - All repositories are DI singletons; every call opens its own connection through `IDbConnectionFactory` and
   disposes it. There is no unit of work across calls.
 - `IWorldDataRepository` is read-only by design. Catalog writes live in the importer (`Importer`), see
   [world-import.md](world-import.md).
 - `UpdateAsync` writes every mutable column; identity columns (`id`, `account_id`, `name`, `slot`, `job_code`,
-  `created_at`) are never updated. It returns false when no row matched.
-- Child collections are loaded with one query per child table and joined in memory with `ToLookup` on the parent
-  natural key (`item_code`, `monster_name`, `npc_name`, `field_code`).
+  `created_at`) are never updated. Every character write (`UpdateAsync`, `SaveAllAsync`, `UpdateAllAsync`, the
+  warehouse's `SaveWithCharacterAsync`) shares `DapperCharacterRepository.UpdateSql`; transactions over several
+  characters write them in id order, so a save batch and a trade never wait on each other. `UpdateSql` writes only
+  when the stored `save_seq` is not higher than the record's: background saves may reach storage out of order, and an
+  older capture never replaces a newer one (writing the same capture again is harmless). `UpdateAsync` returns false when no row
+  took the record.
+- Child collections are loaded with one query per child table and joined in memory with `ToLookup` on the parent key
+  (`definition_id`, `monster_id`, `npc_id`, `stage`). Names and dialog lines are read in English (`CatalogLanguages.English`)
+  by a `LEFT JOIN` on the `*_texts` table; a record's `Name` is null when the entity has no text in that language.
 
 ### Runtime catalog build
 
@@ -62,10 +71,10 @@ Consumers: `Server/PristonTale.Server/Hosting/HostingExtensions.cs` (provider se
 
 | Factory method | Contract |
 | --- | --- |
-| `ToItemDefinitions` | Skips rows with `item_code_mask = 0`. Runtime item code = `item_code_mask`; `CatalogKey` = `code`. Base stats are midpoints of the min/max columns |
-| `ToMonsterDefinitions` | Runtime code = 1-based index in `ORDER BY name`. The stored model path keeps its authored extension; the definition uses the `.inx` sibling (also for NPCs). Drops resolve item codes through the runtime catalog by `CatalogKey`; unresolved main drops stay as empty slots that keep their probability |
-| `ToNpcDefinitions` | Runtime code = 1-based index in `ORDER BY name`. Services from `npc_services` ordered by `ordinal`; unknown kinds skipped; falls back to `svc_*` flags only when the NPC has no service rows; `Shop` removed when no stock code maps to a runtime item |
-| `ToFieldSpawnData` | Resolves monster and NPC names to runtime codes; entries whose name is unknown are dropped; `spawn_hours` CSV parsed to hours |
+| `ToItemDefinitions`, `ToQuestVariantDefinitions`, `ToNamedUniqueDefinitions` | The regular, quest and named-unique definitions (`variant`); a code `ItemCodes` cannot parse is skipped. Runtime item code = `ItemCodes.Parse(code)`; `CatalogKey` = `code`; `Name` = the English name, else the code. The shop form takes the low end of every range; a named unique's `UniqueVariant` is its `variant_ordinal` |
+| `ToMonsterDefinitions` | Runtime code = the record's `id`; event forms take the codes after the highest id. `Key` = `key`, `Name` = the English name, else the key. The stored model path keeps its authored extension; the definition uses the `.inx` sibling (also for NPCs). A drop line of items splits its weight among them with integer division; an item the runtime catalog lacks keeps its share as an empty slot. Bonus drops whose item is missing are dropped |
+| `ToNpcDefinitions` | Runtime code = the record's `id`; `Name` = `key`, `DisplayName` = the English name (empty without one). Services from `npc_services` ordered by `ordinal`; unknown kinds skipped; `Shop` removed when no stock code maps to a runtime item; `Dialog` = the English `npc_dialog_lines` |
+| `ToFieldSpawnData` | Only stages with a field code. Spawns, bosses, escorts and placements carry the monster and NPC ids, which are the runtime codes; boss hours from `field_boss_hours` |
 | `ToMotionTimings` | Groups `motion_slots` by table in row order, then maps each `motion_models.model_key` to its table |
 
 ## Dapper rules
@@ -78,8 +87,10 @@ Consumers: `Server/PristonTale.Server/Hosting/HostingExtensions.cs` (provider se
 - `DefaultTypeMap.MatchNamesWithUnderscores = true` is set by both providers: `snake_case` columns map to
   `PascalCase` members.
 - Records are positional. Dapper picks a constructor whose parameter count equals the column count and whose
-  parameter names match the columns in order. The selected column list must therefore follow the constructor order.
-  `item_templates` and `monsters` are read with `SELECT *`, so their physical column order is part of the contract.
+  parameter names match the columns in order. The selected column list must therefore follow the constructor order;
+  every read names its columns (no `SELECT *`), so the physical column order of a table is not part of the contract.
+  Child tables are read `ORDER BY id`, the order the importer wrote them in, so drop and spawn tables keep their order
+  on both providers.
 - JSON columns bind as `JsonText`, never as `string`: each provider registers a `JsonText` handler (`TEXT` on SQLite,
   `NpgsqlDbType.Jsonb` on PostgreSQL). A plain string parameter against a `jsonb` column fails on PostgreSQL.
 - SQL is shared by both providers: `INSERT ... RETURNING`, `INSERT ... ON CONFLICT ... DO UPDATE`, `excluded.*`,
@@ -106,23 +117,22 @@ and its account warehouse are always written together, so a gold or item move be
 
 | Column | Shape | Limits on restore |
 | --- | --- | --- |
-| `inventory` | `SavedItems` v1: items with `Anchor` (grid cell), `Slot = null`, plus `Revision`, inventory `Operations`, `ServiceOperations` | 72 items |
+| `inventory` | `SavedItems` v1: items with `Anchor` (grid cell), `Slot = null`, plus `Revision`, inventory `Operations`, `ServiceOperations`, `ShopPurchases`; the item in the hand has `Held = true` and `Anchor = -1` (written only when set) | 72 items |
 | `equipment` | `SavedItems` v1: items with `Slot` set and `Anchor = -1` | 72 items |
 | `skills` | `SavedSkills` v1: points, elite points, `(Code, Rank, Uses)`, progression `Revision` and `Operations` | 128 skills, points >= 0 |
 | `warehouses.items` | `SavedItems` v1 with anchors in the warehouse grid | `WarehouseStorage.MaxItems` |
-| `derived_stats` | `DerivedStatsDto`, written on save; nothing reads it | - |
 | `premium` | `SavedPremium` v1 (`PremiumStateCodec.cs`): premium timers `(Kind, Value, DurationSeconds, ExpiresAtSeconds)` with Unix-second expiry, item-use `Operations`, `GravityScrolls`, head mode (1-2 big head, 3 soccer ball) and expiry, `SavedAtSeconds` (the last tick's clock); `{}` is empty | 17 timers; expired timers and heads are dropped on restore; boosters and skill delay move their expiry by the time since `SavedAtSeconds` |
 | `quests` | `SavedQuests` v1: the running quest (`SavedQuest`), level and beginner logs, finished codes, `FinishedCount`, the redistribution offer, `Revision` and quest `Operations` (see [quests.md](quests.md)); `{}` reads as an idle journal | 32 finished codes, 64 operations, defined quest codes and timer kinds, non-negative counts |
 
 - Restore is strict: unknown JSON members are rejected, constructor parameters without defaults are required, max
-  depth 16, max 65536 characters, `Version` must be 1, instance ids must be unique and non-empty, the item code must
+  depth 16, at most `CharacterStateCodec.MaxStateLength` (4 MiB) characters, `Version` must be 1, instance ids must be unique and non-empty, the item code must
   exist in the runtime `ItemCatalog`, counts must fit `MaxStack`, `UpgradeLevel` must not be negative. Any violation
   throws `InvalidDataException`.
 - Each `SavedItem` carries the copy's `Roll` (`ItemRoll`: rolled stats, requirements, price, specialization and its
   bonuses). An item saved without one (older rows) restores in its shop form with its saved `JobSpecMask`;
   `RolledBonus` is read and ignored. Saved equipment only needs to fit its slot (`PlayerCharacter.CanHold`): a worn item
   whose requirements are no longer met is restored worn.
-- `[]` (inventory, skills, warehouse) and `{}` (equipment) are the empty legacy values and restore as empty state.
+- `[]` (inventory, skills, warehouse) and `{}` (equipment) are the blank values and restore as empty state.
 - An inventory item whose saved anchor no longer fits its footprint moves to the first free cell.
 - `SavedItem.Unique` is 2 for the quest variant of a code (quest weapons, the rank-up ring, Fury rewards); such an item
   restores as the code's quest variant, or as the regular definition when the catalog has no variant.
@@ -135,7 +145,7 @@ FluentMigrator scans `PristonTale.Persistence` for `[Migration(n)]` classes. Ver
 
 | Version | Class | Effect |
 | --- | --- | --- |
-| 13 | `M013Baseline` | Empty database: creates every table below except `npc_services`, then on PostgreSQL converts the JSON columns to `jsonb`. Database with an `accounts` table: requires `VersionInfo` to contain version 12, then adds `item_templates.max_stack/potion_space/magic_mastery`, `monsters.sound_code/model_scale`, `npcs.model_scale` and creates the three `world_*` source tables |
+| 13 | `M013Baseline` | Empty database: creates the tables of that release (M028 replaced its catalog), then on PostgreSQL converts the JSON columns to `jsonb`. Database with an `accounts` table: requires `VersionInfo` to contain version 12, then adds `item_templates.max_stack/potion_space/magic_mastery`, `monsters.sound_code/model_scale`, `npcs.model_scale` and creates the three `world_*` source tables |
 | 14 | `M014PortraitData` | `monsters.portrait_offset_y/z`; `npcs.display_name` (128), `npcs.portrait_offset_y/z`. Columns append in record constructor order |
 | 15 | `M015NpcServices` | `npc_services` table and index; `warehouses.revision`; `npcs.display_name` only if missing |
 | 16 | `M016QuestData` | `monsters.quest_code`, `event_item` (item code key, empty when none), `potion_count`, `potion_percent` |
@@ -144,14 +154,24 @@ FluentMigrator scans `PristonTale.Persistence` for `[Migration(n)]` classes. Ver
 | 22 | `M022MonsterExperience64` | PostgreSQL widens `monsters.exp` to `bigint` (two bosses give more than 2^31); re-import afterwards |
 | 23 | `M023ItemFootprints` | `item_templates.grid_width`, `grid_height` (default 1), the inventory footprint; re-import afterwards |
 | 24 | `M024WorldDataFields` | `monsters.hostile`, `size_level`, `res_magic`, `move_type`, `special_attack_pct`, `gold_min/max/pct`, `event_model`, `event_code`, `event_info`; `npcs.hostile`, `level`, `size_level`, `appear_slot`, `appear_cycle`; `item_templates.glow_r/g/b/a`, `glow_blink`, `glow_scale`, `display_effect`, `daily_drop_limit`, `set_code`, `set_pieces`; the `item_sets` table; re-import afterwards |
+| 25 | `M025ServerSettings` | `server_settings` table (`name` PK, `value`, `description`, `updated_at`); the server fills it at start |
+| 26 | `M026Contacts` | `character_contacts` table and its unique index |
+| 27 | `M027CatalogIdentities` | Drops and recreates `monsters`, `npcs` and every table that references them, keyed by id; adds `monster_labels`, `npc_labels`, `npc_dialog_lines`, `item_labels`; empties `world_entity_variants` and `world_import_unresolved_refs`; drops the `svc_*` columns and `npcs.dialog`. Import again afterwards. `Down` throws: restore a backup instead |
+| 28 | `M028WorldCatalog` | Drops every world catalog table of the earlier migrations and `mailboxes`; drops `warehouses.buy_area_count` and `characters.derived_stats`, which nothing read; creates `languages` (seeded with `en`) and the catalog [below](#world-catalog); empties `world_entity_variants` and `world_import_unresolved_refs`. Import again afterwards. `Down` throws: restore a backup instead |
+| 29 | `M029NpcPlacementFacts` | Drops `field_npcs.quest_trigger` and `size_level`: the class and size a placement record carries belong to the NPC file that lacks them, and the importer gives them to it. Import again afterwards |
+| 30 | `M030CharacterSaveSequence` | `characters.save_seq` (int64, default 0): the save sequence of the stored capture |
+| 31 | `M031GameLogs` | The game log tables (`item_transfers`, `currency_sinks`, `server_events`) and their indexes |
+| 32 | `M032StarterGifts` | `characters.starter_gifts_received` (int, default 5): the starter gifts a character received; characters stored before count as served |
+| 33 | `M033HelpPet` | `characters.help_pet` (int16, default 0) and `help_pet_hidden` (bool, default false): the beginner's helper pet and whether the player hid it |
+| 34 | `M034StarterOffHand` | The off-hand became the third starter gift: a `starter_gifts_received` of 3 or more rises by one, so a served character stays served |
 
-Legacy upgrade path: databases from the earlier migration set at version 12 upgrade in place. Databases at
+Upgrade path: databases from the earlier migration set at version 12 upgrade in place. Databases at
 versions 1-11 make `M013Baseline` throw; bring them to 12 with the previous release or back up and recreate them.
 After upgrading, run `import` again so existing rows receive the new columns (display names, services, portrait data).
 
 The PostgreSQL `jsonb` columns are exactly `M013Baseline.JsonColumns`: `characters.inventory`, `equipment`, `skills`,
-`quests`, `derived_stats`, `premium`, `warehouses.items`, `mailboxes.items`, `npcs.dialog`. The `*_json` columns of the
-`world_*` tables are plain text on both providers.
+`quests`, `premium`, `warehouses.items` (`derived_stats` and `mailboxes.items` until M028, `npcs.dialog` until M027). The `*_json`
+columns of the `world_*` tables are plain text on both providers.
 
 ## Schema
 
@@ -162,49 +182,81 @@ The PostgreSQL `jsonb` columns are exactly `M013Baseline.JsonColumns`: `characte
 | Table | Columns and constraints |
 | --- | --- |
 | `accounts` | `id` int64 identity PK; `user_id` unique; `password_hash` (`PasswordHasher` format); `is_blocked`, `is_tester` bool; `created_at` UTC default; `last_login_at` nullable; `gm_level` 0 to 4 (default 0, player) |
+| `server_settings` | `name` PK; `value` text; `description`; `updated_at` UTC default. Rows and meanings: [server.md](server.md#server-settings-table) |
 | `gm_audit` | `id` int64 identity PK; `account_id` int64 (indexed, no FK so the trail outlives the account); `user_id`, `character_name`, `gm_level`, `command`, `required_level`, `accepted` bool, `result`; `created_at` UTC default |
 
 ### Characters
 
 | Table | Columns and constraints |
 | --- | --- |
-| `characters` | `id` int64 identity PK; `account_id` FK `accounts`; `name` globally unique; `slot` int16, unique with `account_id`; `job_code` (`PlayerClass`); `level`, `exp` int64 holding the unsigned 64-bit experience's bit pattern (past 2^63 it reads negative in SQL), `money` int64, `brood`; attributes `strength`, `spirit`, `talent`, `agility`, `health`, `stat_points`; vitals `life`, `mana`, `stamina`; `field_id`, `pos_x`, `pos_z` float; `model_name`, `model_name2` (head model for the chosen face); `face_index`, `tier` int16, `hair_index`, `size_level`; JSON `inventory`, `equipment`, `skills`, `quests`, `derived_stats`, `premium`; `created_at`, `last_played_at` nullable. Index `characters_account_id_idx` |
+| `characters` | `id` int64 identity PK; `account_id` FK `accounts`; `name` globally unique; `slot` int16, unique with `account_id`; `job_code` (`PlayerClass`); `level`, `exp` int64 holding the unsigned 64-bit experience's bit pattern (past 2^63 it reads negative in SQL), `money` int64, `brood`; attributes `strength`, `spirit`, `talent`, `agility`, `health`, `stat_points`; vitals `life`, `mana`, `stamina`; `field_id`, `pos_x`, `pos_z` float; `model_name`, `model_name2` (head model for the chosen face); `face_index`, `tier` int16, `hair_index`, `size_level`; JSON `inventory`, `equipment`, `skills`, `quests`, `premium`; `save_seq` int64 (M030); `starter_gifts_received` int (M032; 0 for a new character, `StarterGifts.Count` once served); `help_pet` int16 (0 until
+drawn, 1 to 4) and `help_pet_hidden` bool (M033); `created_at`, `last_played_at` nullable. Index `characters_account_id_idx` |
+| `character_contacts` | `id` int64 identity PK (the order added); `character_id` FK `characters`; `list` int16 (`ContactList`); `name`; unique (`character_id`, `list`, `name`) (M026) |
 
 ### Inventory and warehouse
 
 | Table | Columns and constraints |
 | --- | --- |
-| `warehouses` | `account_id` PK and FK `accounts`; `money` int64; `revision` int64 (M015); `items` JSON; `buy_area_count` (no code reads or writes it) |
-| `mailboxes` | `account_id` PK and FK `accounts`; `items` JSON. Schema only; no code reads or writes it |
+| `warehouses` | `account_id` PK and FK `accounts`; `money` int64; `revision` int64 (M015); `items` JSON |
 
 Character inventory and equipment are JSON columns of `characters`, not tables.
 
 ### World catalog
 
-Written only by the importer. Natural keys are the authored identities, kept verbatim.
+Written only by the importer, which replaces it whole on every run. It models the game, not the source files: an item
+code and its definitions, monsters with their drop lines, NPCs, and fields keyed by their stage. Monsters and NPCs are
+keyed by the importer's stable id, which is also their runtime code, and named by a unique English key
+(`tools/PristonTale.WorldImport/Identities`, see [world-import.md](world-import.md#identities)); every reference to
+them holds the id. No Korean text is stored.
+
+Player-facing text lives in `*_texts` tables, one row per entity and language (`languages`, BCP-47 codes). Every
+entity has its English name (`en`, `CatalogLanguages.English`); another language is an optional translation added as
+`languages` and `*_texts` rows. The runtime reads English, and an entity without a name shows its code or key.
 
 | Table | Columns and constraints |
 | --- | --- |
-| `item_templates` | `code` (16) PK, authored 5-character code; `item_code_mask` int64 (the key's `ItemCodes` code; 0 = malformed key, excluded at runtime); `name`; `kind` (`ItemKind`); durability, weight, price; damage min/max low/high; attack rating, critical, defence, block, absorb, speed; mana/life/stamina regen (float) and add; requirements; potion restore min/max; `shooting_range`, `attack_speed`; `job_mask`, `unique_item` int64; `res_<element>_min/max` for bionic, earth, fire, ice, lighting, poison, water, wind; `max_stack`, `potion_space`, `magic_mastery`; `grid_width`, `grid_height` (inventory cells, from the item's sprite). A row keyed `<code>#Q` holds the code's quest variant (unique marker 2); it loads into `ItemCatalog.QuestVariants`, not the regular catalog |
-| `item_template_special` | `id` PK; `item_code` FK `item_templates`; `bonus_code`; `value0`, `value1` float |
-| `item_template_job_random` | `id` PK; `item_code` FK; `ordinal`; `job_bit_code` int64 |
-| `monsters` | `name` PK (identity, may contain leading or trailing spaces); `model`; combat stats; `sight` (raw authored reach); skill damage, distance, range, rating, curse; `move_speed`, `move_range`, `iq`, `group_min/max`, `exp` (64-bit), `active_hour` (+1 day, -1 night, 0 any); `nature`, `brood`, `class` int16; `res_<element>`; `stun_pct` (default 100); `display_name` (128); `sound_code`; `model_scale`; `portrait_offset_y/z`; `quest_code`, `event_item`, `potion_count`, `potion_percent` (M016) |
-| `monster_drops` | `monster_name` PK and FK; `max_items_per_kill`; `all_players_see` |
-| `monster_drop_items` | `id` PK; `monster_name` FK; `kind` (`DropKind`); `weight`; `item_code` nullable FK `item_templates` (set null); `gold_min/max` |
-| `monster_drops_plus` | `id` PK; `monster_name` FK; `weight`; `item_code` nullable FK (set null) |
-| `npcs` | `name` PK (identity); `model`; `linked_file`; 16 `svc_*` bools; `job_change_code`, `teleport_code`, `quest_code`, `quest_param`; `dialog` JSON string array; `sound_code`; `move_range` (default 64); `model_scale`; `display_name`; `portrait_offset_y/z` |
-| `npc_shop_stock` | `id` PK; `npc_name` FK; `tab` (0 weapons, 1 armour, 2 goods); `ordinal`; `item_code` FK `item_templates` |
-| `npc_services` | `id` PK; `npc_name` FK; `ordinal` (click order); `kind` (`NpcServiceKind`); `value`, `value2`; `text`. Index `npc_services_npc_idx` |
-| `fields` | `field_code` PK (`WorldCatalog` field code); `ase_base`; `max_concurrent_monsters` (10); `max_per_spawn_point` (3); `spawn_interval` (tick mask); `per_point_cooldown_ms` |
-| `field_spawn_points` | `id` PK; `field_code` FK; `point_index`; `state` (0 inactive); `x`, `z` world units |
-| `field_monster_spawns` | `id` PK; `field_code` FK; `monster_name` FK `monsters`; `weight` |
-| `field_boss_spawns` | `id` PK; `field_code` FK; `boss_monster_name` FK `monsters`; `escort_monster_name` nullable, no FK; `escort_count`; `spawn_hours` CSV |
-| `field_fixed_npcs` | `id` PK; `field_code` FK; `npc_name` FK `npcs`; `x`, `y`, `z` in 1/256 world units; `angle` (4096 per turn) |
+| `languages` | `code` (16) PK, BCP-47; `name`. Seeded with `en` English |
+| `items` | `code` (16) PK, the authored 5-character code; `kind` (`ItemKind`); `grid_width`, `grid_height` (inventory cells, from the item's sprite) |
+| `item_definitions` | `id` int64 identity PK; `item_code` FK `items`; `variant` int16 (`ItemVariant`: 0 regular, 1 named unique, 2 quest); `variant_ordinal` (the named unique's number, from 1; 0 otherwise); unique (`item_code`, `variant`, `variant_ordinal`); `unique_item`; `spec_class` int64 (the class `JobBitCode` the item is specialised for); durability, weight, price; damage min/max low/high; attack rating, critical, defence, block, absorb, move speed; life/mana/stamina regen (float) and add; requirements; restore life/mana/stamina min/max; `shooting_range`, `attack_speed`; `res_<element>_min/max` for bionic, earth, fire, ice, lightning, poison, water, wind; `max_stack`, `potion_space`, `magic_mastery_min/max`; `glow_r/g/b/a`, `glow_blink`, `glow_scale`; `display_effect`; `daily_drop_limit`; `set_code` nullable FK `item_sets` (set null); `set_pieces` |
+| `item_texts` | PK (`definition_id` FK `item_definitions`, `language` FK `languages`); `name` (128) |
+| `item_spec_bonuses` | PK (`definition_id` FK, `bonus` int16 `ItemSpecBonusKind`); `min_value`, `max_value` float: what the specialisation adds |
+| `item_spec_random_classes` | PK (`definition_id` FK, `ordinal`); `class` int64: the classes a drop may roll as its specialisation |
+| `item_sets` | `set_code` PK; `pieces` (worn for the bonus); `life`; `absorb`, `block`, `life_regen`, `mana_regen`, `stamina_regen` float |
+| `monsters` | `id` int32 PK (registry id); `key` (128) unique, English; `model`; combat stats; `sight` (raw authored reach); skill damage, distance, range, rating, curse; `move_speed`, `move_range`, `iq`, `group_min/max`, `exp` int64, `active_hour` (+1 day, -1 night, 0 any); `nature`, `brood`, `class` int16; `hostile`; `res_<element>`, `res_magic`; `size_level`; `stun_pct` (default 100); `sound_code`; `model_scale`; `portrait_offset_y/z`; `quest_code`; `event_item` nullable FK `items` (set null); `potion_count`, `potion_percent`; `move_type`, `special_attack_pct`, `gold_min/max/pct`, `event_model`, `event_code`, `event_info`; `max_drops_per_kill` (0 no cap); `drops_seen_by_all` |
+| `monster_texts` | PK (`monster_id` FK `monsters`, `language` FK); `name` (128) |
+| `monster_drop_lines` | PK (`monster_id` FK, `line`); `weight`; `kind` (`DropKind`); `gold_min/max` |
+| `monster_drop_line_items` | PK (`monster_id`, `line`, `ordinal`), FK (`monster_id`, `line`) `monster_drop_lines`; `item_code` nullable FK `items` (set null): the items a line splits its weight among |
+| `monster_bonus_drops` | PK (`monster_id` FK, `ordinal`); `chance`; `item_code` nullable FK `items` (set null): rolled on every kill besides the drop lines |
+| `npcs` | `id` int32 PK (registry id); `key` (128) unique, English; `model`; `level`; `hostile`; `size_level`; `move_range` (default 64); `model_scale`; `sound_code`; `portrait_offset_y/z`; `appear_slot`, `appear_cycle` |
+| `npc_texts` | PK (`npc_id` FK `npcs`, `language` FK); `name` (128) |
+| `npc_dialog_lines` | PK (`npc_id` FK, `language` FK, `ordinal`); `text`: at most 20 lines per NPC and language |
+| `npc_services` | PK (`npc_id` FK, `ordinal`: click order); `kind` (`NpcServiceKind`); `value`, `value2`; `text` |
+| `npc_shop_items` | PK (`npc_id` FK, `tab` (0 weapons, 1 armour, 2 goods), `ordinal`); `item_code` FK `items` |
+| `fields` | `stage` (64) PK, the stem of the stage model; `field_code` nullable unique (`WorldCatalog` field code; null for a stage no field uses); `max_concurrent_monsters` (10); `max_per_spawn_point` (3); `spawn_interval` (tick mask); `per_point_cooldown_ms` |
+| `field_spawn_points` | PK (`stage` FK `fields`, `point_index`); `active`; `x`, `z` world units |
+| `field_monster_spawns` | PK (`stage` FK, `ordinal`); `monster_id` FK `monsters`; `weight` |
+| `field_bosses` | PK (`stage` FK, `ordinal`); `monster_id` FK `monsters`; `escort_monster_id` nullable FK `monsters` (set null); `escort_count` |
+| `field_boss_hours` | PK (`stage`, `boss_ordinal`, `hour`), FK (`stage`, `boss_ordinal`) `field_bosses`: the hours the boss appears |
+| `field_npcs` | PK (`stage` FK, `record_index`); `npc_id` FK `npcs`; `x`, `y`, `z` in 1/256 world units; `angle` (4096 per turn) |
 | `motion_models` | `model_key` (256) PK, normalized model path; `motion_table_key` |
 | `motion_slots` | PK (`motion_table_key`, `slot`); `state`; `start_frame`, `end_frame`; `event_frame0..3` int64 holding unsigned 32-bit values; `repeat`; `key_code` (M021) |
 
-Child tables with an identity key have an index on their parent key (`<table>_<parent>_idx`). `motion_models` and
-`motion_slots` have no foreign key between them.
+Children are keyed by their parent and an ordinal, so the parent key leads every child primary key. The two
+composite foreign keys (`monster_drop_line_items`, `field_boss_hours`) are plain `CREATE TABLE` SQL in the migration,
+because FluentMigrator cannot add one on SQLite. `motion_models` and `motion_slots` have no foreign key between them
+and are the only catalog tables the importer upserts instead of replacing.
+
+### Game logs
+
+Rows only ever inserted, by the server's background writers, and deleted by age (`Logs:RetentionDays`,
+[server.md](server.md)). No foreign keys: a log outlives the characters, accounts and items it names.
+`IGameLogRepository` (`DapperGameLogRepository`) appends each kind in one transaction and prunes all three tables.
+
+| Table | Columns and constraints |
+| --- | --- |
+| `item_transfers` | `id` int64 identity PK; `occurred_at` UTC; `kind` int16 (`ItemTransferKind`: 0 trade, 1 personal shop, 2 warehouse deposit, 3 warehouse withdrawal, 4 ground throw, 5 ground pickup, 6 game-master gift); `transfer_id` (36: the rows of one transfer; a throw and the pickup of what it threw share the ground drop's id); `from_character_id`, `to_character_id` int64 nullable (null: the warehouse, the ground or a game master); `account_id` (the warehouse's account); `field_id`; `item_code` (16, the catalog key; null for gold); `instance_id` (36); `amount` int64 (items, or gold). Indexes on `occurred_at`, `from_character_id`, `to_character_id`, `instance_id` |
+| `currency_sinks` | `id` int64 identity PK; `occurred_at` UTC (end of the period); `sink` int16 (`CurrencySink`); `gold` int64. Index on `occurred_at` |
+| `server_events` | `id` int64 identity PK; `occurred_at` UTC; `kind` int16 (`ServerEventKind`: 0 started, 1 stopped); `server_name` (64); `detail`. Index on `occurred_at` |
 
 ### World source preservation
 
@@ -213,7 +265,7 @@ These tables keep what the catalog tables cannot express. They are rewritten on 
 | Table | Columns | Content |
 | --- | --- | --- |
 | `world_source_files` | `source_path` (1024) PK, `kind` (32), `sha256` (64), `content_base64`, `fields_json`, `field_count` | Every file under the source root, byte for byte. `kind` is the lower-cased first path segment (`openitem`, `monster`, `npc`, `field`). `fields_json` lists the `*key` lines of text files with line number and values |
-| `world_entity_variants` | `source_path` PK, `kind` (16: `item`, `monster`, `npc`), `identity_key` (256), `is_catalog_entry`, `data_json` | Every parsed definition, including duplicates and unkeyed files; `is_catalog_entry` marks the one written to the catalog |
+| `world_entity_variants` | `source_path` PK, `kind` (16: `item`, `monster`, `npc`), `identity_key` (256: the item code, or the monster's or NPC's English key; empty for an unkeyed file), `is_catalog_entry`, `data_json` | Every parsed definition, including duplicates and unkeyed files; `is_catalog_entry` marks the one written to the catalog |
 | `world_import_unresolved_refs` | `id` PK, `kind` (32), `owner_key`, `raw_reference`, `details_json` | References that did not resolve; kinds listed in [world-import.md](world-import.md) |
 
 ## Providers
@@ -234,6 +286,10 @@ Server configuration (`Server/PristonTale.Server/appsettings.json`): `Database:P
 `Postgres`), `Database:SqlitePath` (default `data/pristontale.db`), `ConnectionStrings:Postgres`. Any other provider
 value stops startup.
 
+The PostgreSQL pool holds at most `Database:MaxPoolSize` connections (`AddPristonPostgres`, default 20, replacing the
+connection string's `Maximum Pool Size`), below the server's default `max_connections` (100): a pool larger than the
+server answers "too many clients" under load.
+
 `docker-compose.yml` runs `postgres:17` as container `pristontale-postgres`, database, user and password
 `pristontale`, host port 5433 mapped to 5432, named volume `pristontale-pgdata`, health check `pg_isready`. Start with
 `docker compose up -d --wait`; `docker compose down -v` deletes the volume. The default connection string in
@@ -248,10 +304,9 @@ value stops startup.
    applied migration; `M013Baseline` has already run on existing databases.
 2. Record in `Persistence/PristonTale.Persistence.Abstractions/WorldData/`: append a constructor parameter with a
    default, at the end, so constructor order equals column order on new and upgraded databases.
-3. Repository `DapperWorldDataRepository`: add the column to the explicit select lists (`npcs`, `fields`, child
-   tables). `item_templates` and `monsters` use `SELECT *` and follow the column order.
-4. Importer `tools/PristonTale.WorldImport`: parsed DTO in `Parsers/Parsed*.cs`, the parser, and both the column
-   list and the `ON CONFLICT ... DO UPDATE SET` list of the upsert in `Importer.Write*Async`.
+3. Repository `DapperWorldDataRepository`: add the column to the explicit select list, in constructor order.
+4. Importer `tools/PristonTale.WorldImport`: parsed DTO in `Parsers/Parsed*.cs`, the parser, and the column and value
+   lists of the insert in `Importer.<Kind>.cs`.
 5. Runtime catalog: map it in `WorldDataFactory` into the Simulation definition (`ItemDefinition`,
    `MonsterDefinition`, `NpcDefinition`, `FieldSpawnData`).
 6. Both providers: new CLR types need a SQLite handler in `SqliteTypeMapping` if Microsoft.Data.Sqlite cannot bind
@@ -263,10 +318,11 @@ value stops startup.
 
 ### Add a world catalog table
 
-Steps 1, 4-8 above, plus: create the table with a natural or identity key, foreign keys with `OnDelete(Cascade)` to
-the parent, and an index on the parent key; add a record and an `IWorldDataRepository` method with
+Steps 1, 4-8 above, plus: create the table keyed by its parent's key and an ordinal (or a natural key), with
+foreign keys `OnDelete(Cascade)` to the parent; player-facing text goes in a `*_texts` table per language, never in a
+column. Add a record and an `IWorldDataRepository` method with
 `DapperWorldDataRepository` and every test double; load it in `WorldDataAppService.BuildAsync`; write it in the
-importer's transaction in foreign-key order; add it to `PrintRowCounts` in `tools/PristonTale.WorldImport/Program.cs`.
+importer's transaction in foreign-key order and to `Importer.CatalogTables` (children first); add it to `PrintRowCounts` in `tools/PristonTale.WorldImport/Program.cs`.
 
 ### Add a character column
 
@@ -285,20 +341,16 @@ old rows (`UnmappedMemberHandling.Disallow`); bump `Version` and add a conversio
 
 ## Pitfalls
 
-- Column order is a contract for `SELECT *` reads: a column added out of constructor order breaks `item_templates`
-  or `monsters` mapping at server start.
-- Runtime monster and NPC codes are recomputed from `ORDER BY name` at every catalog build. Adding or renaming a
-  monster shifts the codes of later names; never store them.
+- A select list out of constructor order breaks the record mapping at server start.
+- Runtime monster and NPC codes are the registry ids, the same on both providers and across imports; the event forms
+  of monsters take the codes after the highest id, so they move when a monster is registered.
 - `GetAllMotionSlotsAsync` must return rows ordered by `(motion_table_key, slot)`; `ToMotionTimings` groups
   consecutive rows and the first slot per state is the clip the client plays.
 - Dapper configuration is process-global (`MatchNamesWithUnderscores`, type handlers). Use one provider per
   process; the SQLite int and float handlers would also apply to PostgreSQL parameters.
 - A saved item whose code is missing from the runtime catalog makes the character or warehouse fail to load. Item
-  codes removed from the source, or whose key is malformed (`item_code_mask = 0`), affect existing saves.
-- `M013Baseline.Down` drops every table, including on a database that came through the legacy upgrade branch.
-- `M015NpcServices` checks `npcs.display_name` before adding it because `M014PortraitData` already adds it.
-- `svc_*` columns and their codes are still written by the importer; the runtime reads them only for an NPC with no
-  `npc_services` rows. Keep them in sync with `NpcParser.BuildServices` until they are removed.
+  codes removed from the source, or whose key `ItemCodes` cannot parse, affect existing saves.
+- `M013Baseline.Down` drops every table, including on a database that came through the upgrade branch.
 - The importer resolves a relative `--sqlite` path against the working directory, unlike the server and DevAccounts.
 
 ## Related

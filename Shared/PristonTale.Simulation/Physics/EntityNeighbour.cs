@@ -1,4 +1,5 @@
 using System.Numerics;
+using PristonTale.Contracts.World;
 
 namespace PristonTale.Simulation.Physics;
 
@@ -13,9 +14,17 @@ public readonly struct EntityNeighbour
         Radius = radius;
     }
 
-    public EntityNeighbour(Vector3 position, EntityCollisionKind kind)
+    public EntityNeighbour(Vector3 position, EntityKind kind)
     {
         Position = position;
         Radius = EntityCollisionRadii.ForKind(kind);
+    }
+
+    // Whether a body at position stands inside this one: within its radius on the ground plane and in height.
+    public bool Overlaps(Vector3 position)
+    {
+        var dx = Position.X - position.X;
+        var dz = Position.Z - position.Z;
+        return MathF.Abs(Position.Y - position.Y) < Radius && (dx * dx) + (dz * dz) < Radius * Radius;
     }
 }

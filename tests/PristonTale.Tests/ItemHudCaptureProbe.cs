@@ -14,6 +14,8 @@ using PristonTale.Gameplay.UI.Widgets;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.Items.Usable;
+using PristonTale.Contracts.Skills;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -43,7 +45,19 @@ internal sealed class ItemHudCaptureProbe : Game
         LuckyBagTooltip,
         PuzzleBoard,
         PuzzleComplete,
-        PuzzleExchange
+        PuzzleExchange,
+        // The crystal in the first cell carried over a free cell, over the gift box beside it, and over the weapon slot.
+        CarryFree,
+        CarryExchange,
+        CarrySlot,
+        // A stack of five potions carried above the window: the count box asks how many to drop.
+        ThrowCount,
+        // The gold coin clicked: the count box asks how much gold to drop.
+        GoldCount,
+        // The pointer over the weapon pair B button: it lights and shows its label.
+        PairHint,
+        // The special item box opened over the bag with three quest items, the pointer on its button (the close label).
+        QuestBox
     }
 
     private sealed record Scenario(string Name, Scene Scene, int Width = 800, int Height = 600, double WaitMs = 4200);
@@ -70,7 +84,14 @@ internal sealed class ItemHudCaptureProbe : Game
         new("item-tooltip-luckybag-800", Scene.LuckyBagTooltip, WaitMs: 300),
         new("puzzle-board-800", Scene.PuzzleBoard, WaitMs: 300),
         new("puzzle-complete-800", Scene.PuzzleComplete, WaitMs: 1500),
-        new("puzzle-exchange-800", Scene.PuzzleExchange, WaitMs: 300)
+        new("puzzle-exchange-800", Scene.PuzzleExchange, WaitMs: 300),
+        new("carry-free-800", Scene.CarryFree, WaitMs: 1200),
+        new("carry-exchange-800", Scene.CarryExchange, WaitMs: 1200),
+        new("carry-slot-800", Scene.CarrySlot, WaitMs: 1200),
+        new("throw-count-800", Scene.ThrowCount, WaitMs: 1200),
+        new("gold-count-800", Scene.GoldCount, WaitMs: 1200),
+        new("pair-hint-800", Scene.PairHint, WaitMs: 1200),
+        new("quest-box-800", Scene.QuestBox, WaitMs: 1200)
     ];
 
     private readonly string _assetRoot;
@@ -83,9 +104,13 @@ internal sealed class ItemHudCaptureProbe : Game
     private RenderTarget2D? _target;
     private OwnerState _owner = null!;
     private OwnerState _items = null!;
+    private OwnerState _stack = null!;
+    private OwnerState _boxed = null!;
     private OwnerState _board = null!;
     private OwnerState _complete = null!;
     private int _scenario;
+    private bool _carrying;
+    private bool _thrown;
     private int _frames;
     private bool _prepared;
     private double _startedMs;
@@ -136,6 +161,19 @@ internal sealed class ItemHudCaptureProbe : Game
                 Sized("BC106", "defiance Stone", 6), Sized(Puzzles.LuckyBagIcon, Puzzles.LuckyBagName, 24, "PZ101")
             }
         };
+        _stack = _items with
+        {
+            InventoryRevision = _items.InventoryRevision + 10,
+            Items = [.. _items.Items, Sized("PL101", "Mini Life Potion", 40) with { Kind = ItemKind.Potion, Count = 5 },
+                Sized("PM101", "Mini Mana Potion", -1) with { Kind = ItemKind.Potion, Count = 2, Slot = PotionBelt.FirstOwnerSlot + 1 }]
+        };
+        _boxed = _stack with
+        {
+            InventoryRevision = _stack.InventoryRevision + 1,
+            Items = [.. _stack.Items, Sized("QT101", "Letter", -1) with { Kind = ItemKind.Quest, Slot = QuestItemBox.FirstOwnerSlot },
+                Sized("QT106", "Old Ring", -1) with { Kind = ItemKind.Quest, Slot = QuestItemBox.FirstOwnerSlot + QuestItemBox.Columns },
+                Sized("MA201", "Honey", -1) with { Kind = ItemKind.Material, Slot = QuestItemBox.FirstOwnerSlot + 1 }]
+        };
         _board = _owner with { InventoryRevision = _owner.InventoryRevision + 2, Items = Puzzle(6).Append(Sized(Puzzles.LuckyBagIcon, Puzzles.LuckyBagName, 0, "PZ107")).ToArray() };
         _complete = _owner with { InventoryRevision = _owner.InventoryRevision + 3, Items = Puzzle(8).ToArray() };
         _clock.Start();
@@ -170,7 +208,10 @@ internal sealed class ItemHudCaptureProbe : Game
 
     private OwnerState Owner(Scene scene) => scene switch
     {
-        Scene.CrystalTooltip or Scene.GiftTooltip or Scene.ChocolateTooltip or Scene.CastleTooltip or Scene.LuckyBagTooltip => _items,
+        Scene.CrystalTooltip or Scene.GiftTooltip or Scene.ChocolateTooltip or Scene.CastleTooltip or Scene.LuckyBagTooltip
+            or Scene.CarryFree or Scene.CarryExchange or Scene.CarrySlot => _items,
+        Scene.ThrowCount or Scene.GoldCount or Scene.PairHint => _stack,
+        Scene.QuestBox => _boxed,
         Scene.PuzzleBoard => _board,
         Scene.PuzzleComplete or Scene.PuzzleExchange => _complete,
         _ => _owner
@@ -196,7 +237,11 @@ internal sealed class ItemHudCaptureProbe : Game
         {
             _target?.Dispose();
             _target = new RenderTarget2D(GraphicsDevice, scenario.Width, scenario.Height);
-            _hud.ClosePanel();
+            // Escape's order: one call closes one thing (a count box left open first).
+            while (_hud.ClosePanel())
+            {
+            }
+
             _hud.Statuses = scenario.Scene switch
             {
                 Scene.ItemBuffs => ItemBuffs(),
@@ -215,6 +260,7 @@ internal sealed class ItemHudCaptureProbe : Game
             _hud.Update(owner, default, default);
             var keys = scenario.Scene is Scene.OrbTooltip or Scene.PackageTooltip or Scene.CrystalTooltip or Scene.GiftTooltip or Scene.ChocolateTooltip
                 or Scene.CastleTooltip or Scene.LuckyBagTooltip or Scene.PuzzleBoard or Scene.PuzzleComplete
+                or Scene.CarryFree or Scene.CarryExchange or Scene.CarrySlot or Scene.ThrowCount or Scene.GoldCount or Scene.PairHint or Scene.QuestBox
                 ? new KeyboardState(Keys.I)
                 : default;
             _hud.Update(owner, keys, default);
@@ -247,6 +293,41 @@ internal sealed class ItemHudCaptureProbe : Game
 
             _startedMs = _clock.Elapsed.TotalMilliseconds;
             _prepared = true;
+            _carrying = false;
+            _thrown = false;
+        }
+
+        // The window takes clicks once it has slid fully open. The HUD reads the pointer against the back buffer's layout
+        // in Update (the capture target is bound only to draw).
+        if (scenario.Scene is Scene.CarryFree or Scene.CarryExchange or Scene.CarrySlot && !_carrying && _clock.Elapsed.TotalMilliseconds - _startedMs > 700)
+        {
+            var updateLayout = HudLayout.Create(GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
+            Click(updateLayout, HudInventoryLayout.Cell(HudInventoryLayout.Origin(updateLayout), 0).Center, _items);
+            _carrying = true;
+        }
+
+        if (scenario.Scene == Scene.ThrowCount && _clock.Elapsed.TotalMilliseconds - _startedMs > 700)
+        {
+            var updateLayout = HudLayout.Create(GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
+            if (!_carrying)
+            {
+                Click(updateLayout, HudInventoryLayout.Cell(HudInventoryLayout.Origin(updateLayout), 40).Center, _stack);
+                _carrying = true;
+            }
+            else if (!_thrown)
+            {
+                Click(updateLayout, new Point(400, HudInventoryLayout.Origin(updateLayout).Y + 150), _stack);
+                _thrown = true;
+            }
+        }
+
+        if (scenario.Scene is Scene.GoldCount or Scene.QuestBox && !_carrying && _clock.Elapsed.TotalMilliseconds - _startedMs > 700)
+        {
+            var updateLayout = HudLayout.Create(GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
+            var origin = HudInventoryLayout.Origin(updateLayout);
+            var button = scenario.Scene == Scene.GoldCount ? HudInventoryLayout.GoldButton(origin) : HudInventoryLayout.QuestBoxButton(origin);
+            Click(updateLayout, button.Center, Owner(scenario.Scene));
+            _carrying = true;
         }
 
         _hud.Update(Owner(scenario.Scene), default, Pointer(scenario, layout));
@@ -285,13 +366,14 @@ internal sealed class ItemHudCaptureProbe : Game
         _batch.Dispose();
     }
 
-    private void Click(HudLayout layout, Point logical)
+    private void Click(HudLayout layout, Point logical, OwnerState? owner = null)
     {
         var x = logical.X * layout.Scale;
         var y = logical.Y * layout.Scale;
-        _hud.Update(_owner, default, new MouseState(x, y, 0, ButtonState.Pressed, ButtonState.Released, ButtonState.Released, ButtonState.Released,
+        owner ??= _owner;
+        _hud.Update(owner, default, new MouseState(x, y, 0, ButtonState.Pressed, ButtonState.Released, ButtonState.Released, ButtonState.Released,
             ButtonState.Released));
-        _hud.Update(_owner, default, new MouseState(x, y, 0, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released,
+        _hud.Update(owner, default, new MouseState(x, y, 0, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released,
             ButtonState.Released));
     }
 
@@ -312,6 +394,11 @@ internal sealed class ItemHudCaptureProbe : Game
             Scene.ChocolateTooltip => HudInventoryLayout.Cell(origin, 4, 1, 1).Center,
             Scene.CastleTooltip => HudInventoryLayout.Cell(origin, 6, 1, 1).Center,
             Scene.LuckyBagTooltip => HudInventoryLayout.Cell(origin, 24, 1, 1).Center,
+            Scene.CarryFree => HudInventoryLayout.Cell(origin, 30, 1, 1).Center,
+            Scene.CarryExchange => HudInventoryLayout.Cell(origin, 2, 1, 1).Center,
+            Scene.CarrySlot => HudInventoryLayout.Equipment(origin, (int)EquipmentSlot.Weapon).Center,
+            Scene.PairHint => HudInventoryLayout.PairButton(origin, 1).Center,
+            Scene.QuestBox => HudInventoryLayout.QuestBoxButton(origin).Center,
             _ => new Point(layout.Width - 200, layout.Height / 2)
         };
         return new MouseState(point.X * layout.Scale, point.Y * layout.Scale, 0, ButtonState.Released, ButtonState.Released, ButtonState.Released,
@@ -353,7 +440,7 @@ internal sealed class ItemHudCaptureProbe : Game
     private static StatusBook CastleBuffs()
     {
         var book = new StatusBook();
-        void Add(uint code, int duration, int remaining) => book.Apply(new StatusEffectInfo(1, 1, code, PristonTale.Protocol.Packets.StatusEffectOp.Add, 1, 1, 0,
+        void Add(uint code, int duration, int remaining) => book.Apply(new StatusEffectInfo(1, 1, code, StatusEffectOp.Add, 1, 1, 0,
             0, duration, remaining, 0), BuffClockMs);
         Add(CastleItems.StatusBase + 1, 30_000, 20_000);
         Add(CastleItems.StatusBase + 6, 60_000, 45_000);
@@ -365,7 +452,7 @@ internal sealed class ItemHudCaptureProbe : Game
     private static StatusBook ItemBuffs()
     {
         var book = new StatusBook();
-        void Add(uint code, int duration, int remaining) => book.Apply(new StatusEffectInfo(1, 1, code, PristonTale.Protocol.Packets.StatusEffectOp.Add, 1, 1, 0,
+        void Add(uint code, int duration, int remaining) => book.Apply(new StatusEffectInfo(1, 1, code, StatusEffectOp.Add, 1, 1, 0,
             0, duration, remaining, 0), BuffClockMs);
         Add(ItemScrolls.For(ScrollEffectKind.Invulnerability).StatusCode, 30_000, 12_000);
         Add(ItemScrolls.For(ScrollEffectKind.Critical).StatusCode, 3_600_000, 3_000_000);

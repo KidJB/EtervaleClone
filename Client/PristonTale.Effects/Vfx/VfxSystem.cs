@@ -3,7 +3,7 @@ using Microsoft.Xna.Framework;
 
 namespace PristonTale.Effects.Vfx;
 
-// Positions the effects attach to. Entity ids are the server serials; positions are client world space.
+// Positions the effects attach to. Entity ids are the server entityIds; positions are client world space.
 public interface IVfxAnchors
 {
     bool TryGetPosition(ulong entityId, out Vector3 position);
@@ -16,6 +16,24 @@ public interface IVfxAnchors
         var found = TryGetBone(entityId, bone, out var position);
         world = Matrix.CreateTranslation(position);
         return found;
+    }
+}
+
+// For scenes whose effects attach to points only.
+public sealed class VfxNoAnchors : IVfxAnchors
+{
+    public static readonly VfxNoAnchors Instance = new();
+
+    public bool TryGetPosition(ulong entityId, out Vector3 position)
+    {
+        position = default;
+        return false;
+    }
+
+    public bool TryGetBone(ulong entityId, string bone, out Vector3 position)
+    {
+        position = default;
+        return false;
     }
 }
 
@@ -90,19 +108,19 @@ public sealed class VfxSystem
         }
     }
 
-    public VfxInstance? Spawn(CompiledVfx effect, in VfxSpawn spawn)
+    public VfxHandle Spawn(CompiledVfx effect, in VfxSpawn spawn)
     {
         ArgumentNullException.ThrowIfNull(effect);
         if (_live.Count >= MaxInstances)
         {
-            return null;
+            return default;
         }
 
         var instance = _free.Count > 0 ? _free.Pop() : new VfxInstance();
         _seed = unchecked(_seed * 1664525u + 1013904223u);
         instance.Begin(effect, spawn, _seed);
         _live.Add(instance);
-        return instance;
+        return new VfxHandle(instance);
     }
 
     public void Update(float seconds)
@@ -126,12 +144,12 @@ public sealed class VfxSystem
         }
     }
 
-    internal VfxInstance? SpawnChild(VfxInstance parent, int index, Vector3 point)
+    internal VfxHandle SpawnChild(VfxInstance parent, int index, Vector3 point)
     {
         var child = _library?.Child(parent.Effect, index);
         if (child is null)
         {
-            return null;
+            return default;
         }
 
         var layer = parent.Effect.Definition.Children[index];
@@ -139,20 +157,20 @@ public sealed class VfxSystem
         return Spawn(child, new VfxSpawn(parent.Spawn.CasterId, parent.Spawn.TargetId, point, facing));
     }
 
-    // A named effect looked up once and cached by the caller.
+    // A named effect cached by the caller once found (see VfxLibrary.Child: a miss is looked up again).
     internal CompiledVfx? Resolve(string name, ref CompiledVfx? cached, ref bool resolved)
     {
-        if (!resolved)
+        if (!resolved && _library is not null && _library.TryGet(name, out var effect))
         {
             resolved = true;
-            cached = _library is not null && _library.TryGet(name, out var effect) ? effect : null;
+            cached = effect;
         }
 
         return cached;
     }
 
     // An effect started by a part of another (an impact where a part lands, dust behind it), with its facing.
-    internal VfxInstance? SpawnFrom(VfxInstance parent, CompiledVfx effect, Vector3 point) =>
+    internal VfxHandle SpawnFrom(VfxInstance parent, CompiledVfx effect, Vector3 point) =>
         Spawn(effect, new VfxSpawn(parent.Spawn.CasterId, parent.Spawn.TargetId, point, parent.Spawn.Facing));
 
     public void Clear()
@@ -174,7 +192,7 @@ public sealed class VfxInstance
     internal ComponentState[] ComponentStates = [];
     internal SequenceState[] SequenceStates = [];
     internal PartState[] PartStates = [];
-    private VfxInstance?[] _children = [];
+    private VfxHandle[] _children = [];
     private bool[] _lightsFired = [];
     private bool[] _soundsFired = [];
     private bool[] _childrenFired = [];
@@ -297,7 +315,7 @@ public sealed class VfxInstance
 
         if (_children.Length != definition.Children.Length)
         {
-            _children = new VfxInstance?[definition.Children.Length];
+            _children = new VfxHandle[definition.Children.Length];
         }
         else
         {
@@ -325,12 +343,12 @@ public sealed class VfxInstance
         var children = Effect.Definition.Children;
         for (var index = 0; index < _children.Length; index++)
         {
-            if (_children[index] is { } child && children[index].StopWithParent)
+            if (children[index].StopWithParent)
             {
-                child.Stop();
+                _children[index].Stop();
             }
 
-            _children[index] = null;
+            _children[index] = default;
         }
     }
 
@@ -452,21 +470,16 @@ public sealed class VfxInstance
         for (var index = 0; index < _children.Length; index++)
         {
             var child = _children[index];
-            if (child is null)
-            {
-                continue;
-            }
-
             if (!child.Alive)
             {
-                _children[index] = null;
+                _children[index] = default;
                 continue;
             }
 
             var layer = children[index];
             if (layer.Follow)
             {
-                child.Spawn = child.Spawn with { Point = AnchorPosition(layer.Anchor, layer.Bone, VfxDefinition.Vec3(layer.Offset), anchors) };
+                child.MoveTo(AnchorPosition(layer.Anchor, layer.Bone, VfxDefinition.Vec3(layer.Offset), anchors));
             }
 
             // A child that stops with its parent ends when the parent's emission ends: by Stop or by its duration.
@@ -486,9 +499,9 @@ public sealed class VfxInstance
         var children = Effect.Definition.Children;
         for (var index = 0; index < _children.Length; index++)
         {
-            if (_children[index] is { } child && child.Alive && children[index].StopWithParent)
+            if (children[index].StopWithParent)
             {
-                child.StopNow();
+                _children[index].StopNow();
             }
         }
     }

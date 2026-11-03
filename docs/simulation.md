@@ -23,7 +23,8 @@ progression, regeneration and movement rates. `World/`, `Physics/` and `Skills/`
 | `PristonTale.Simulation.csproj` | net10.0, references only `PristonTale.Geometry`; embeds `Skills/Data/Classes/*.json` |
 | `SimulationCore.cs` | Description constant only |
 | `Actors/ActorDefinitions.cs` | `PlayerCompositionFactory` and bone socket names; not referenced by other projects |
-| `Characters/CharacterEnums.cs` | `PlayerClass`, `CharacterBrood`, `JobBitCode`, `CharacterMotionName`, `EquipmentSlot` |
+| `Characters/CharacterEnums.cs` | `CharacterBrood`, `JobBitCode`, `EquipmentSlot` (`PlayerClass` is in Contracts) |
+| `Characters/JobBits.cs` | The one map between `PlayerClass` and its `JobBitCode`, both ways |
 | `Characters/CharacterStats.cs` | `CharacterAttributes` (five attributes), `CharacterFunctionProfile` (formula selectors) |
 | `Characters/CharacterClass*.cs`, `Classes/` | Class base type, `CharacterClassDef`, `CharacterClassRegistry`, one file per class |
 | [`Characters/PlayerCharacter.cs`](../Shared/PristonTale.Simulation/Characters/PlayerCharacter.cs) | Character aggregate: progress, pools, gear, effects, recompute |
@@ -31,6 +32,8 @@ progression, regeneration and movement rates. `World/`, `Physics/` and `Skills/`
 | `Characters/Regeneration.cs` | Per-second life/mana/stamina recovery and the `RegenerationState` accumulator |
 | `Characters/Locomotion.cs`, `AnimationRate.cs` | Move-speed stat to world units per second; walk/run/attack animation rates |
 | `Characters/DestinationMovement.cs` | Straight-line step toward a destination (client player and NPC walking) |
+| `Characters/HelpPets.cs` | The beginner's helper pet: one of the four helper dragons drawn below level 10 (`PlayerCharacter.MeetHelpPet`), active while shown and below level 10 behind a premium helper pet (`HelpPets.Active`), its chat commands |
+| `Characters/StarterGifts.cs` | The starter gifts of a new character: the class's weapon, armour and off-hand and the crystals, created perfect with the class's specialization, their pace and chat line |
 | `Characters/OwnerState.cs` | `OwnerState.Capture`: the owner-only character snapshot sent to the client |
 | `Characters/CharacterHead*.cs`, `CharacterVisuals.cs` | Head/face/hair model path resolution per class and tier; `CharacterVisualSet` |
 | `Characters/CharacterSlots.cs` | Characters per account (6) |
@@ -41,13 +44,19 @@ progression, regeneration and movement rates. `World/`, `Physics/` and `Skills/`
 | `Items/ItemUsability.cs`, `CarriedWeight.cs` | Requirement and class checks; carried weight and the weight limit checks |
 | `Items/ItemAbsorbCorrection.cs` | Absorb added to armor, robes, boots, gloves and shields by catalog number |
 | `Items/ItemDetailView.cs`, `ItemRuleMessages.cs` | Owner view of one copy; the texts of item refusals |
-| `Items/Inventory.cs` | Bitmask grid with anchors, stacking, move/split/merge/exchange |
+| `Items/Inventory.cs` | Bitmask grid with anchors, stacking, move/split/merge/exchange; an item added without a place goes to the first free space down each column from the left |
+| `Items/StoreGrid.cs` | The 9x9 store grid of the warehouse and the shops |
 | `Items/InventoryCommand.cs` | `InventoryCommand` and `InventoryCommands.Apply` |
-| `Items/ItemCodes.cs` | Catalog key (`WA101`) to 32-bit item code and back, for every item family |
+| `Items/ItemCodes.cs` | Catalog key (`WA101`) to 32-bit item code and back, for every item family; `KeyOf` gives the key or "" for an empty slot |
 | `Items/ItemEquipmentMetadata.cs` | Kind and slot by catalog family; the two-handed list taken from the item table |
+| `Items/ItemKinds.cs` | `Classify`: the kind of any item key (wearable families, then the non-wearable groups); the importer stores it |
 | `Items/ItemClassRestrictions.cs` | Class/gender restriction masks for armor, robes and orbs by catalog key |
 | `Items/ItemCatalog.cs`, `PotionDefinition.cs` | Definition lookup by code; potion restore ranges |
 | `Items/Usable/` | Usable item rules, premium timers and their effects, pets, scrolls, force orbs ([special-items.md](special-items.md)) |
+| `Trades/` | Trades: `TradeRules` (what may pass, the 9x4 grid, an offer's check and the exchange of two offers on candidates), `TradeOffer`, `TradeStatus` and the original's `TradeMessages` |
+| `Social/ContactBook.cs` | A character's friends and ignored players: the lists' rules (`ContactLimits`), `ContactStatus` and `ContactMessages` |
+| `Parties/` | Parties: `PartyRules` (level gap, experience shares, share range, gold split, request time) and the original's `PartyMessages` |
+| `PersonalShops/` | Personal shops: `PersonalShopRules` (listing, opening, a sale on candidates), `PersonalShop` (an open listing), purchases, outcomes, listings and texts |
 | [`Combat/CombatResolver.cs`](../Shared/PristonTale.Simulation/Combat/CombatResolver.cs) | Hit, block, damage, critical, element and absorption resolution |
 | `Combat/CombatProfiles.cs`, `CombatProfileFactory.cs` | `AttackProfile`/`DefenderProfile` and how they are built from characters and monsters |
 | `Combat/WeaponDamage.cs` | Weapon damage range of a player |
@@ -95,7 +104,12 @@ progression, regeneration and movement rates. `World/`, `Physics/` and `Skills/`
 
 ## Classes
 
-`CharacterClassRegistry` builds the ten classes; each `Classes/<Name>Class.cs` calls `CharacterClass.BuildDefinition`.
+`CharacterClassRegistry` builds the ten classes; each `Classes/<Name>Class.cs` calls `CharacterClass.BuildDefinition`
+and declares the class's `ClassProfile` (`Characters/ClassProfile.cs`, looked up with `ClassProfiles.Of(class)` or
+`CharacterClassDef.Profile`): the four tier titles, the fallback motion timing (`PlayerMotionFallback`), the favoured
+weapon (`WeaponDamage`'s level / 6 bonus), the casting weapon that attacks at range (`PlayerAttackReach`), the
+requirement shift of items specialised for it (`ItemRoller`), and the quest weapon, beginner weapon, hunt and rank-up
+ring (`QuestClasses`). A per-class fact belongs in the profile, not in a switch over `PlayerClass`.
 The class also loads its skill window from `ClassSkillCatalog.For(class)` (see [skills.md](skills.md)).
 
 | Class | Id | `JobBitCode` | Brood | Str/Spi/Tal/Agi/Hlt | Sight | Life/Mana/Sta/Melee/Ranged/Magic fn |
@@ -112,7 +126,8 @@ The class also loads its skill window from `ClassSkillCatalog.For(class)` (see [
 | Shaman | 10 | 0x100000 | Morion | 15/27/20/15/22 | 190 | 5/1/3/3/2/1 |
 
 - Two job masks exist: `JobBitCode` (non-sequential bits) is used for item class restrictions and item specialization;
-  `CharacterClassDef.MotionJobMask = 1 << (JobCode - 1)` is used for animation tables. Do not mix them.
+  `CharacterClassDef.MotionJobMask = 1 << (Class - 1)` is used for animation tables. Do not mix them. A class's
+  `JobBitCode` comes from `JobBits.Of`; nothing else maps a class to its bit.
 - `GrowthPerLevel` is empty for every class: attributes grow only through allocated status points (5 per level).
 - `Tier` (0..3) is the class rank. It opens skill-window rows, selects head models (`CharacterHead`) and gates
   experience above level 100. Nothing in this project changes it; it is restored from persistence.
@@ -152,7 +167,8 @@ a transaction candidate) is the only writer.
    move speed, attack speed, shooting range, life/mana/stamina regeneration, added life/mana/stamina, resistances; an
    item set whose pieces are worn (each ring counts; `ItemCatalog` attaches the `ItemSetDefinition` to its items) adds
    its bonus once: added life, absorb, block and the three regenerations;
-   magic mastery and belt capacity (`PotionSpace`) are set by the last item that has one. A copy whose `SpecJob`
+   magic mastery (the copy's, `ItemInstance.MagicMastery`) and belt capacity (`PotionSpace`) are set by the last item
+   that has one. A copy whose `SpecJob`
    includes the class bit also adds its `ItemSpecBonus`: absorb (cut the same way), defence, speed, block, attack
    speed, critical, range, magic mastery, `Level / divisor` life, mana, attack rating and maximum damage, and half of
    its life, mana and stamina regeneration. `AbsorbItems` counts the copies (and specializations) with an absorb of
@@ -177,7 +193,7 @@ Level `L`, attributes `Str Spi Tal Agi Hlt`; float arithmetic, truncated at the 
 | AttackRating | `trunc(items.AR + Agi*3.1 + L*1.9 + Tal*1.5) + items.LevelAttackRating` |
 | Defence | `Agi/2 + Tal/4 + L*1.4 + items.Defence` |
 | Absorption | `trunc(Defence/100 + L/10 + items.Absorb + (Str+Tal)/40) + 1 + min(2, items.AbsorbItems/2)` (truncated defence) |
-| MaxWeight | `(short)(Str*2 + Hlt*1.5 + L*3 + 60)` |
+| MaxWeight | `(int)(Str*2 + Hlt*1.5 + L*3 + 60)` |
 | MoveSpeed | `trunc((Tal + Hlt + L + 60) / 150 - carried/MaxWeight + items.MoveSpeed) + 1` |
 | MaxLife fn 1 / 2 | `L*2.1 + Hlt*2.4 + Str*0.8 - 10` / `L*2.1 + Hlt*2.2 + Str*0.6 - 5` |
 | MaxLife fn 3 / 4 / 5 | `L*1.8 + Hlt*2.1 + Str*0.3` / `L*1.5 + Hlt*2.1` / `L*1.5 + Hlt*1.9` |
@@ -193,10 +209,11 @@ Level `L`, attributes `Str Spi Tal Agi Hlt`; float arithmetic, truncated at the 
 | LifeRegen, ManaRegen, StaminaRegen | item regeneration in points per second, added by `Regeneration` |
 | PotionSpace | the last worn item's belt capacity, else 2 |
 
-Life, mana and stamina are cast through `short`, then gain `(short)(items.LevelLife + items.AddLife)`, the mana
-`(short)(items.AddMana)` for mana function 1 and `(short)(items.LevelMana + items.AddMana)` otherwise, and the stamina
-`(short)items.AddStamina`. `CarriedWeight` is `CarriedWeight.Of(character)`: every owned item, worn ones included; a
-potion weighs one per unit, other items their weight per unit, gold nothing.
+Life, mana and stamina are truncated to whole numbers (32-bit, never narrowed), then gain
+`(int)(items.LevelLife + items.AddLife)`, the mana `(int)(items.AddMana)` for mana function 1 and
+`(int)(items.LevelMana + items.AddMana)` otherwise, and the stamina `(int)items.AddStamina`. `CarriedWeight` is
+`CarriedWeight.Of(character)`: every owned item, worn ones included; a potion weighs one per unit, other items their
+weight per unit, gold nothing.
 
 ### Weapon damage (`WeaponDamage.Compute`)
 
@@ -314,8 +331,11 @@ totals.
   the importer measured (`grid_width`, `grid_height`), applies `ItemClassRestrictions.AllowedJobs` and
   `ItemEquipmentMetadata.Apply`, sets `BaseStats`, `Resistances` and
   `MaxDurability` to the low end of each range and keeps every authored range in `Template` (`ItemTemplate`, with the
-  specialization bonuses in `ItemSpecTemplate`). `Critical`, `ShootingRange`, `PotionSpace`, `MagicMastery`,
-  `UniqueItem` and `BaseStats.AttackSpeed` are fixed per kind. A range whose upper value is 0 is a fixed value.
+  specialization bonuses in `ItemSpecTemplate`). `Critical`, `ShootingRange`, `PotionSpace`, `UniqueItem` and
+  `BaseStats.AttackSpeed` are fixed per kind. A range whose upper value is 0 is a fixed value. Magic
+  mastery is authored as a range: the definition holds its low end, and a dropped copy rolls whole points up to the
+  top (`ItemRoll.MagicMasteryBonus`, the last draw of the roll; the middle mode trims it like every whole-number
+  range); the shop form adds nothing and the best copy the whole span. The item tooltip shows it as `Magic APT`.
 - `Code` is the 32-bit item code; `CatalogKey` is the 5-character key (`WA101`). A key is a family of two letters and a
   letter or digit (`WA1`, `DA3`) plus a two-digit ordinal. `ItemCodes.TryParse` gives `family << 8 | ordinal`, where the
   family number is `(first * 26 + second) * 36 + third + 1` (letters A-Z = 0-25; third character 0-9 then A-Z = 10-35),
@@ -353,8 +373,8 @@ totals.
   half of it and it; every other range rolled inclusive (absorb, move speed and regeneration in tenths, block in
   hundredths). A kind with a fixed or random specialization specializes four times in ten (`rng 0..9 <= 3`); then,
   three times in ten when it has random classes, one random class replaces the fixed one. A specialized copy costs a
-  fifth more, its requirements shift by a random percent of its class's range (strength, spirit, talent, agility; see
-  `ItemRoller.RequirementShift`) and its bonus ranges are rolled in hundredths. Unspecialized copies carry no bonus.
+  fifth more, its requirements shift by a random percent of its class's range (strength, spirit, talent, agility; see the
+  class's `ClassProfile.Shift`) and its bonus ranges are rolled in hundredths. Unspecialized copies carry no bonus.
 - `ItemUsability.CanUse`: level and the five attribute requirements of the copy, and `AllowedJobs`.
 - Weight: `CarriedWeight.CanTake(character, weight)` allows carried + weight up to `MaxWeight`; `IsOverweight` is
   carried above it. See [Equipment rules](#equipment-rules-playercharactercanequip) and the NPC rules in
@@ -362,23 +382,29 @@ totals.
 - Prices: the copy's `Price` (`Roll.Price`), weight and durability feed `NpcShopRules` and `MoneyLimits.CarryLimit`
   in `World/Npcs` (see [world.md](world.md)).
 - `PotionDefinition.Restore` adds `NextExclusive(min, max)` (upper bound excluded unless min == max) to each pool,
-  clamped to the maximum; does nothing to a dead character.
+  clamped to the maximum; does nothing to a dead character. The authored data gives potions no stack size; the catalog
+  (`WorldDataFactory.ToItemDefinition`) stacks them to `PotionDefinition.StackSize` (9999), as the original counts the
+  potions of one bag item without a limit of its own.
 
 ### Inventory grid
 
 - `Inventory()` is the 12x6 carried grid (72 cells); `Inventory(width, height)` builds any grid up to 32x32 (the
-  warehouse uses 9x9). Cell index = `y * Width + x`; an item is stored only at its top-left anchor and its footprint
-  (`GridWidth x GridHeight`) is tracked in one `uint` bit row per grid row.
+  warehouse and the shops use the 9x9 `StoreGrid`). Cell index = `y * Width + x`; an item is stored only at its top-left
+  anchor and its footprint (`GridWidth x GridHeight`) is tracked in one `uint` bit row per grid row.
 - `TryAdd` first tops up compatible stacks, then places new stacks first-fit by anchor index; it plans everything
   before mutating and fails without change. Compatible stacks need a stackable, equal definition and identical
   upgrade, durability and roll.
-- `TryPlace`, `TryMove`, `TrySplit` (new instance id), `TryMerge`, `TryExchange` (put a replacement at the same anchor
-  or first fit), `TakeAt`, `ConsumeAt`. Every change bumps `Version` and raises `Changed`.
+- `TryPlace`, `TryMove`, `TrySplit` (new instance id), `TryMerge`, `TryJoin` (a whole stack onto a compatible one),
+  `TrySwap`, `TryExchange` (take an item out and put a replacement at a given cell, or at the same anchor or first fit;
+  `CanExchange` checks it without changing anything), `TakeAt`, `TakeFrom` (`ItemInstance.Split` for part of a stack),
+  `TryPlaceFirstFree` (no stacking), `ConsumeAt`. `Covered` names the one item a footprint would lie over. `Occupied`,
+  `Items` and `CopyFrom` walk or copy a grid. Every change bumps `Version` and raises `Changed`.
 
 ### Equipment rules (`PlayerCharacter.CanEquip`)
 
 - `CanHold`: count 1, matching slot (rings fit either ring slot), the same instance not in another slot, and no
-  two-handed weapon together with an off-hand item. `Equip` (and save restore) needs only this: a worn item whose
+  two-handed weapon together with an off-hand item (`PairAllows`, also the stored pair's rule in `RestoreStored`).
+  `Equip` (and save restore) needs only this: a worn item whose
   requirements stop being met stays worn and adds nothing.
 - `CanEquip` adds `ItemUsability.CanUse`; `CanWear` is `CanEquip` without the hand rule. Aged copies
   (`UpgradeLevel > 0`) equip like any other.
@@ -386,17 +412,75 @@ totals.
   to the bag (first free place); an off-hand item first sends a held two-handed weapon there; then the item in the
   slot takes the bag cell. Without room nothing changes. `InventoryCommands.Refusal` names an unusable item
   (`ItemRuleMessages.CannotUse`).
+- An item the character receives (`TryReceive`: a pickup, a starter or game master's gift, a quest grant, a prize)
+  goes on the first empty slot that `CanEquip` allows (`TryWearReceived`), as the original's client wears what it
+  receives: an armour on an empty armour slot, rings on either free ring slot, never a two-handed weapon beside an
+  off-hand item or an item whose requirements are not met. A full bag does not keep it off an empty slot; otherwise
+  it goes to the bag.
 - `TryUnequip` needs inventory space and is refused while the character is overweight (`ItemRuleMessages.OverWeight`).
-- `ReceiveGroundLoot` refuses an item that would carry the character over the weight limit.
+- `ReceiveGroundLoot` refuses an item that would carry the character over the weight limit. With `intoBag` (a pickup
+  with the inventory open, `InventoryCommand.PickupToBag`) the item goes into the page shown's first free cells as a
+  stack of its own, for the client to carry, or with no room there to the hand (`PlayerCharacter.Held`), as the
+  original puts every such pickup on the mouse; an item the special item box keeps, or one that finds the hand full, is
+  received as any item (`TryReceive`). `TryReceive` tries the page shown, then the other page (the original tries the
+  page shown only and leaves the item on the ground).
+- The hand (`PlayerCharacter.Held.cs`): one item on neither page. It is owned (weight, quests, logs), saved
+  (`SavedItem.Held`), stays held across `SwitchBagPage`, and leaves by `Move`, `Merge` or `Swap` naming it
+  (`TryPutDownHeld`: onto free cells of the page shown, all of it onto a stack of its kind, or over exactly one item,
+  which is held instead) or by `Drop` (`TakeHeld`). Owner views give it the slot `OwnedItemView.HeldSlot`
+  (`OwnedItemView.Held`).
 - `EquipmentSlot` has no helmet and keeps `Sheltom` separate (the persisted equipment order).
 
 ## Commands, revisions and transactions
 
-- `InventoryCommand` and `ProgressionCommand` carry an `OperationId` (non-empty) and `ExpectedRevision`; they apply
-  only when it equals the current `InventoryRevision`/`ProgressionRevision`. The last 64 applied operations of each
-  kind (plus NPC service operations) are kept for idempotent replay and persisted with the character.
+- `InventoryCommand` and `ProgressionCommand` carry an `OperationId` (non-empty) and `ExpectedRevision`; they apply only
+  when it equals the current `InventoryRevision`/`ProgressionRevision`. The last 64 applied operations of each kind
+  (plus NPC service operations, personal shop purchases, item uses and quest operations) are kept for idempotent replay
+  and persisted with the character, each in an `OperationHistory<T>` (`Characters/OperationHistory.cs`: `Find`,
+  `Record`, `Restore` with the kind's own validity check). Applied records implement `IAppliedOperation` explicitly, so
+  their stored JSON is only their own members.
 - `InventoryRevision` counts changes, not commands: one equip can bump it more than once. Clients must adopt the
   revision returned in the outcome.
+- `InventoryAction.Swap` sets an item down over exactly one other bag item (`Inventory.TrySwap`), which moves to where
+  the first one was, or to the first free space; anything else refuses it.
+- The two sides (`PlayerCharacter.Sides.cs`), as the original's E and W keys: a second bag page (`HiddenBag`, swapped
+  whole with `Inventory` by `SwitchBagPage`, which also takes the item on the cursor, when the command names one, to the
+  page shown's first free cells and is refused without room there; `BagPage` 0 A, 1 B) and a second weapon and off-hand pair (`StoredWeapon`,
+  `StoredOffHand`, swapped with the held pair by `SwitchWeaponSet`; `WeaponSet`). Hidden items are still owned (weight,
+  `FindOwnedItem`) and saved: `SavedItem.Hidden` and `SavedItems.ActiveSide` (the shown page in the inventory list, the
+  held pair in the equipment list). Commands act on the shown page only; owner views carry `BagPage` and `WeaponSet`.
+- The potion belt (`PotionBelt`, `PlayerCharacter.Belt`): three boxes of one potion stack each, of at most
+  `Derived.PotionSpace` potions. `BeltPut` fills a box from the bag or another box (count 0: as many as fit; a box of
+  another potion sends its stack to the bag first, or two boxes change places), `BeltTake` returns a box to the bag,
+  `ConsumePotion` drinks from a box as from the bag, and an equip or unequip that lowers the space sends the excess
+  back to the bag (`FitBeltToPotionSpace`). A potion the character receives (`TryReceive`, so a pickup too) goes to the
+  belt first (`TryReceiveOnBelt`): it fills the boxes of the same potion up to the space, then the empty boxes in
+  order, and the bag takes the rest; when the bag has no room for the rest, nothing moves and the receive fails. The
+  original takes the boxes strictly in order (an empty first box before a half-full second one of the same potion) and
+  sends a box's overflow straight to the bag. Owner views give a belt item the slot `PotionBelt.FirstOwnerSlot` + box
+  (`OwnedItemView.BeltBox`); saved items carry `Belt` and restore after the gear that sets the space.
+- The special item box (`QuestItemBox`, `PlayerCharacter.QuestBox`): 18 boxes of one unit each (6 columns by 3 rows)
+  for the quest items QT101 to QT116 and the ingredients MA101, MA201 and MA202 (`QuestItems.Boxed`) and the wings
+  QW101 to QW106 (`WingGates.IsWing`), which the wing gate reads there too. What the character
+  receives (`TryReceive`: pickups, quest grants and drops, prizes) goes into the first free box down each column, then
+  the next column, and when the box is full or does not keep it to the potion belt (a potion) or the bag;
+  `StoreQuestItem` moves such an item left in the bag into a freed box. Quests count and remove items there and on both
+  bag pages (`BagPages`). Owner views give a
+  box item the slot `QuestItemBox.FirstOwnerSlot` + box (`OwnedItemView.QuestBox`); saved items carry `QuestBox`.
+  `ItemSlots` is the row of one-item boxes the belt and this box share (`Find`, `TakeAt`, `Occupied`).
+- `InventoryAction.Drop` and `DropGold` are handled by the Application (`GroundThrowTransactions`), as `Pickup` is;
+  `Inventory.TakeFrom` takes all of an item or splits a new stack from it. `BoundItems` is what never leaves the
+  character, neither on the ground nor in the warehouse: quest items, the quest's bound weapon and ring, the `MA1`,
+  `MA2` and `QW1` families and `GF101`. `ItemDropRules` adds the `BI1` and `BI2` families and the original's premium,
+  event and time-limited keys. `ItemCodes.FamilyOf` and `InFamily` read a key's family (its first three characters).
+- Personal shops (`PersonalShops/`): a character in a town lays up to 30 bag items (`PersonalShopLimits`, Contracts) on
+  the store grid, each at a price per unit from 1 to 100,000,000, under a sign of at most 128 UTF-8 bytes. Only items
+  `ItemDropRules` lets go sell, never the `PZ1` and `PZ2` puzzle pieces, and the character's gold with the whole listing
+  sold must stay within `MoneyLimits.CarryLimit` (`TryOpen`). The items stay in the seller's bag; `PersonalShop.Prune`
+  drops an entry whose item left it. `TrySell` moves `Count` units and their price between two candidates when the
+  unit price and the units are the ones the buyer was shown (`PriceChanged`, `CountChanged`, `SoldOut` otherwise),
+  the buyer has the gold, room and weight, and the seller may carry the gold. The buyer records the purchase
+  (`ShopPurchases`, `AppliedShopPurchase`).
 - `InventoryAction.ConsumePotion` only removes one potion; the restore is applied later by the Application when the
   eat motion reaches its event (`WorldPlayer`). `Pickup` is handled by `GroundPickupTransactions`, not here.
 - The Application validates on a copy: `CloneForInventoryOperation` (inventory, equipment, progress, skills, pools,
@@ -447,7 +531,8 @@ server steps it per player in `FieldSkills.StepEffects` and resets it on death. 
 - `Shared/PristonTale.Application` drives everything on the authoritative tick (`FieldCombat`, `FieldSkills.*`,
   `WorldPlayer`, transactions); see [application.md](application.md).
 - The client uses `Locomotion`, `AnimationRate`, `DestinationMovement`, `CharacterHead` and `OwnerState`
-  (`OwnerState.Capture` reuses unchanged lists by revision); see [client.md](client.md).
+  (`OwnerState.Capture` reuses unchanged lists by revision and returns the previous instance when the new capture is
+  equal as a record, so the encoder sends only changes); see [client.md](client.md).
 
 ## How to
 
@@ -469,8 +554,8 @@ server steps it per player in `FieldSkills.StepEffects` and resets it on death. 
   tooltip ([protocol.md](protocol.md), [client.md](client.md)).
 - Add an `ItemKind`: append it, update `ItemDefinition.IsWeapon`, `WeaponDamage` favoured kinds,
   `PlayerAttackReach` and the client item presentation.
-- Add a class: new `Classes/<Name>Class.cs`, register it in `CharacterClassRegistry`, add `PlayerClass`/`JobBitCode`,
-  head patterns in `CharacterHeadModels`, the favoured weapon in `WeaponDamage`, restrictions in
+- Add a class: new `Classes/<Name>Class.cs`, register it in `CharacterClassRegistry`, add `PlayerClass` (Contracts), its `JobBitCode` and the `JobBits` row,
+  its `ClassProfile` in the class file and the `ClassProfiles.Of` row, head patterns in `CharacterHeadModels`, restrictions in
   `ItemClassRestrictions`, and the skill data ([skills.md](skills.md)).
 - Change level rewards or training: `PlayerCharacter.LevelUp`, `ExperienceTable`, `SkillLearning`; tests in
   `ProgressionDataTests`, `ProgressionTransactionTests`.

@@ -16,7 +16,7 @@ conventions and the C# classes that own each effect. The frame graph that runs t
 | Path | Responsibility |
 |---|---|
 | `Client/PristonTale/Content/Content.mgcb` | Content project: `/platform:DesktopVK`, `/profile:HiDef`, one `#begin` block per effect with `SpirvEffectProcessor`; `Surface.fx` is built twice. |
-| `Shaders/Core/` | `Common.hlsli` (constants, `SafeNormalize`, half-float cap), `Color.hlsli` (exact sRGB curves, PBR Neutral, `DisplayEncode`), `Frame.hlsli` (`FRAME_CONSTANTS`), `Fullscreen.hlsli` (full-screen triangle). |
+| `Shaders/Core/` | `Common.hlsli` (constants, `SafeNormalize`, half-float cap, `SkyDepth` written for sky pixels and `SkyDepthThreshold` beyond which a view depth is sky; passes never declare their own; `InterleavedGradientNoise`, the one per-pixel jitter), `Color.hlsli` (exact sRGB curves, PBR Neutral, `DisplayEncode`), `Frame.hlsli` (`FRAME_CONSTANTS`), `Fullscreen.hlsli` (full-screen triangle). |
 | `Shaders/Lighting/` | `Octahedral.hlsli` (direction mapping), `Brdf.hlsli` (GGX, height-correlated Smith visibility, Schlick, specular anti-aliasing), `LightingDecl.hlsli` (`LIGHTING_CONSTANTS`, `LIGHTING_RESOURCES`), `Shading.hlsli` (cascaded sun shadows PCF/PCSS, lamp cube shadows, screen-space occlusion, tiled local lights, image-based and hemispherical ambient, specular occlusion). |
 | `Shaders/Atmosphere/` | `FogDecl.hlsli`, `Fog.hlsli`: distance fog toward the captured sky with a forward-scattering sun term. |
 | `Shaders/Materials/` | `MaterialDecl.hlsli` (`MATERIAL_CONSTANTS`, `MATERIAL_RESOURCES`, shading model and layer mode codes), `Material.hlsli` (`SampleSurface`: base colour, second layer, alpha test, visible-face normal). |
@@ -33,8 +33,10 @@ Each `.fx` in `Passes/` builds to `Effects/<Name>` (the asset name the C# owner 
 
 | Asset | Source | Techniques | C# owner | Computes |
 |---|---|---|---|---|
-| `Effects/StaticSurface`, `Effects/SkinnedSurface` | `Surface.fx` (`SKINNED` define for the second) | `Prepass`, `PrepassMasked`, `Opaque`, `Masked`, `Sky` and `ShadowClear` (static only), `ShadowCaster`, `ShadowCasterMasked` | `PristonShaderLibrary` | Stage, scenery, sky-layer and actor surfaces: depth pre-pass, lit HDR forward pass with motion output, sun and lamp shadow casters. |
-| `Effects/Unlit` | `Unlit.fx` | `Unlit` | `PristonUnlitEffect` (`GlowRenderer`, `PristonMeshEffect`, Effects `ParticleRenderer`, Gameplay `LegacyReturnEffect`) | Unlit textured `VertexPositionColorTexture` geometry; sRGB decode, `Tint` scales into radiance. |
+| `Effects/StaticSurface`, `Effects/SkinnedSurface` | `Surface.fx` (`SKINNED` define for the second) | `Prepass`, `PrepassMasked`, `Opaque`, `Masked`, `Sky` and `ShadowClear` (static only), `Outline` and `OutlineMasked` (skinned only), `ShadowCaster`, `ShadowCasterMasked` | `PristonShaderLibrary` | Stage, scenery, sky-layer and actor surfaces: depth pre-pass, lit HDR forward pass with motion output, sun and lamp shadow casters, and the hover outline (the actor flat in `OutlineColor`, shifted on screen by `OutlineParams.xy` and pushed back `OutlineParams.w` world units). |
+| `Effects/Unlit` | `Unlit.fx` | `Unlit` | `PristonUnlitEffect` (`GlowRenderer`, `PristonMeshEffect`) | Unlit textured `VertexPositionColorTexture` geometry; vertex colour sRGB decode, `Tint` scales into radiance. |
+| `Effects/Atmosphere` | `Atmosphere.fx` | `Transmittance`, `Multiple`, `SkyView`, `Clouds`, `CloudMerge`, `CloudShadow`, `Sky` | `Atmosphere/PristonPhysicalSky` | The realistic sky: atmosphere lookup tables, the volumetric clouds' hemisphere (a quarter marched each frame into a packed target, merged into its reprojected history) and shadow, and the sky with the sun, moon, stars, aurora, cirrus, clouds and rainbow into the sky target ([rendering.md](rendering.md#realistic-sky)). |
+| `Effects/Rain` | `Rain.fx` | `Drops`, `Splashes` | `Weather/PristonRain` | Rain streaks placed, wrapped, stretched and widened to a least pixel width in the vertex shader from seeds and time; streak parts under the occlusion map's surface discarded; procedural splash rings and sprays ([rendering.md](rendering.md#weather)). |
 | `Effects/Vfx` | `Vfx.fx` | `Vfx` | `PristonVfxEffect` (Effects `VfxRenderer`) | Skill and combat sprites in linear colour with the soft-particle fade against the pre-pass linear depth; `Mode` selects radiance, squared radiance (colour blends) or a multiplier / inverse multiplier for darkening blends. |
 | `Effects/SkyComposite` | `SkyComposite.fx` | `SkyComposite`, `Background` | `PristonSceneTargets` | First pass of every scene: decodes the 8-bit sky dome (or a flat radiance) into all scene targets, sky motion marker and depth. |
 | `Effects/AmbientOcclusion` | `AmbientOcclusion.fx` | `Occlusion`, `Blur` | `Post/PristonScreenOcclusion` | Half-resolution GTAO (two slices, three horizon steps each way) and contact shadows toward the sun; 4x4 depth-aware blur. Output x AO, y contact visibility, z view depth. |
@@ -42,7 +44,7 @@ Each `.fx` in `Passes/` builds to `Effects/<Name>` (the asset name the C# owner 
 | `Effects/Environment` | `Environment.fx` | `Irradiance` (compute), `Octahedral`, `Prefilter` | `Lighting/PristonEnvironmentLighting` | Order-2 SH irradiance of the dome's six faces (Lanczos-windowed), HDR octahedral map, five GGX-prefiltered levels in one atlas. |
 | `Effects/Reflections` | `Reflections.fx` | `Copy`, `Reflect` | `Post/PristonScreenReflections` | Scene copy, then 24 jittered screen-space steps plus binary refinement; adds Fresnel x confidence x (hit - environment). |
 | `Effects/Volumetric` | `Volumetric.fx` | `March`, `Accumulate`, `Composite` | `Lighting/PristonVolumetricLight` | Quarter-resolution height-fog in-scatter (16 shadowed segments, exact optical depth), reprojected accumulation, joint bilateral composite. |
-| `Effects/PostTemporal` | `PostTemporal.fx` | `Resolve` | `Post/PristonTemporalAntiAliasing` | TAA resolve on pre-exposed HDR: Gaussian current sample, closest-depth motion, Catmull-Rom history clipped to a YCoCg variance box, depth disocclusion. |
+| `Effects/PostTemporal` | `PostTemporal.fx` | `Resolve` | `Post/PristonTemporalAntiAliasing` | TAA resolve on pre-exposed HDR: Gaussian current sample and variance box over 3x3, closest-depth motion, Catmull-Rom history clipped to a YCoCg variance box, depth disocclusion. |
 | `Effects/PostExposure` | `PostExposure.fx` | `Histogram`, `Adapt` (compute) | `Post/PristonAutoExposure` | 128-bin log2 luminance histogram (2^-12 to 2^20 cd/m^2), percentile average, blend with the incident reading, asymmetric adaptation; state buffer read by the final pass. |
 | `Effects/PostBloom` | `PostBloom.fx` | `DownsampleKaris`, `Downsample`, `Upsample` | `Post/PristonBloom` | Dual-filter pyramid without threshold; first downsample Karis-weighted; convex upsample blend. |
 | `Effects/PostFinal` | `PostFinal.fx` | `Tonemap`, `Fxaa` | `Post/PristonPostProcessor` | Sharpening, scene + bloom, mesopic vision, exposure, PBR Neutral/AgX/ACES, sRGB, 3D LUT grade, dither, luma in alpha; FXAA on the 8-bit image. |
@@ -61,7 +63,7 @@ the radiance (clamped at 0) and multiplies the output alpha by `a` after the alp
 | Slot | Resource |
 |---|---|
 | t0 / t1 | Base colour, second layer (anisotropic, wrap) |
-| t2 | Sun cascade atlas (R32F, point) |
+| t2 | Sun cascade atlas (D32F depth surface, point) |
 | t3 | Fog sky capture |
 | t4 | Screen-space occlusion (half resolution) |
 | t5 | Lamp cube-shadow atlas |
@@ -94,15 +96,17 @@ Material codes (`MaterialDecl.hlsli`, mirrored by `PristonMaterialDescription.cs
   nominal display scale (`PristonFrameContext.Exposure`), so they show at their authored level when the automatic
   exposure sits at the light model's reading. Self-illumination at night is a light source of fixed luminance
   (`EmissionScale`), except on characters and monsters, which stay at the display level.
-- Legacy textures and vertex colours are sRGB-encoded 8-bit values and are decoded exactly in the shader. VFX vertex
-  colours are the exception: already linear.
+- Original textures and vertex colours are sRGB-encoded 8-bit values. Scene textures upload as `ColorSRgb`, so the
+  sampler decodes each texel before filtering (mips are averaged in linear light by `PristonMipChain`); vertex colours
+  are decoded exactly in the shader, except VFX vertex colours, already linear. The sky's textures stay `Color`: its
+  layers are composed display-referred (`PristonTextureLoader` with `displayReferred`), as are UI textures.
 - The vertex colour scales the albedo in linear light on both paths: stage geometry carries its authored light; scenery
   models take the stage's light per texture (`PristonStageBakedLight`); skinned actors take the floor light through the
   `DrawLight` constant (`PristonStageLightField`). That light also occludes the sky's reflections.
 - Stage lamps fall off with the inverse square from `LampReferenceDistance` = 150 units (`Shading.hlsli`), constant
   inside `LampMinDistance`, windowed to zero at the radius by (1 - (d/r)^4)^2. Transient combat lights stay radial
   (normal-independent).
-- The legacy sphere-mapped shine (layer mode 3) reflects the sky and a quarter of the sun, occluded and shadowed, and
+- The original sphere-mapped shine (layer mode 3) reflects the sky and a quarter of the sun, occluded and shadowed, and
   counts as specular light.
 - The sky dome is reflected at most at its visible level; the rest of the sky light is a uniform fill over the upper
   hemisphere in the sky light's colour (irradiance and reflections alike), so the dark night dome's horizon glow and
@@ -131,7 +135,8 @@ Material codes (`MaterialDecl.hlsli`, mirrored by `PristonMaterialDescription.cs
   `StructuredBuffer` take t registers in any stage, `RW*` resources u registers in compute shaders only
   (`monogame/issues/005-compute-and-uav.md`, `006-structured-buffers.md`, `007-mgcb-profiles.md`,
   `008-shader-model-6.5.md`).
-- **Clip space and uv:** D3D clip space, +Y up, depth 0 to 1 (XNA projection matrices produce it directly). Render
+- **Clip space and uv:** D3D clip space, +Y up, depth 0 to 1. Scene and portrait depth is reversed, 1 at the near
+  plane (`PristonDepth.Perspective`); shadow casters use the ordinary XNA range. Render
   target and texture coordinates start top-left, so a projected position maps to uv = (x, -y) * 0.5 + 0.5 (sun shadow
   lookup, full-screen triangle).
 - **Matrices** are XNA row-vector matrices used as `mul(v, M)`. World space is Y-up, in Priston units.
@@ -187,14 +192,14 @@ transmittance + in-scatter with the exact optical depth). Sources: `tests/Pristo
 - Uniform initialisers and sampler-state defaults on uniforms are dropped; set values from C#.
 - The surface effect's whole stage cbuffer re-uploads on any parameter change; redundant `SetValue` calls cost GPU
   bandwidth, not just CPU.
-- The sky layers are display-referred art blended with legacy modes into an 8-bit target and decoded by
+- The sky layers are display-referred art blended with original modes into an 8-bit target and decoded by
   `SkyComposite.fx`; do not move them into the HDR target or their additive glows change.
 - Self-illuminated and additive materials take shading model 1; their brightness is display-referred by day and a fixed
   luminance at night. Changing `EmissiveLuminance` (`PristonRenderer`) changes night glows, not day ones, and never
   characters or monsters.
-- The transient-light falloff (radial, legacy (1 - d/r)^2 range) differs from the stage-lamp inverse square on purpose.
-- Skinned meshes are drawn two-sided (their winding is opposite to the stage); `VisibleFaceNormal` in `Material.hlsli`
-  shades the side being seen, so do not reintroduce back-face culling for actors.
+- The transient-light falloff (radial, original (1 - d/r)^2 range) differs from the stage-lamp inverse square on purpose.
+- Skinned meshes cull back faces like the stage unless the material is two-sided; `VisibleFaceNormal` in
+  `Material.hlsli` shades the side being seen of two-sided faces.
 - Values shared between HLSL and C# with no compile-time link: `MAX_LOCAL_LIGHTS` (32, in `LightingDecl.hlsli` and
   `LightCull.fx`) / `PristonShaderLibrary.MaxLocalLightCount`, `MAX_BONES` (64) / `PristonShaderLibrary.MaxBones`,
   `TILE_SIZE` (16) / `PristonLightCulling.TileSize`, `BINS` (128) / `PristonAutoExposure.Bins`, `MAX_CASCADES` (4) /

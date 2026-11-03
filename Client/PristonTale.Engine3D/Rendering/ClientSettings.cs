@@ -20,6 +20,12 @@ public sealed record ClientSettings
     public int WindowWidth { get; init; } = 1280;
     public int WindowHeight { get; init; } = 720;
     public WindowMode WindowMode { get; init; }
+    // Where the window was left in windowed mode: its client area's top-left in desktop coordinates (Window.Position)
+    // while not maximized, and whether it was maximized. Without a position the window opens centred. Not part of the
+    // display: moving or maximizing the window applies nothing.
+    public int? WindowX { get; init; }
+    public int? WindowY { get; init; }
+    public bool WindowMaximized { get; init; }
     public int RefreshRate { get; init; }
     public bool VerticalSync { get; init; }
     public bool MusicEnabled { get; init; } = true;
@@ -44,6 +50,16 @@ public sealed record ClientSettings
     public bool ShadowsEnabled { get; init; } = true;
     // Classic: the target HP bar appears only after you attack a monster at full HP, without numbers.
     public bool ClassicTargetHealthBar { get; init; }
+    // Classic: the name boxes over monsters and NPCs use the speech bubble frame and the HUD text size, and a monster's
+    // life bar shows while the cursor is on it; otherwise a compact box, the bar once the monster was clicked or attacked.
+    public bool ClassicNamePlates { get; init; }
+    // The level guide's notice on reaching a level it has a guide for (its On/Off switch in the guide window).
+    public bool LevelGuide { get; init; } = true;
+    // The weather the server sends: clouds, rain, lightning and their sounds; off keeps the sky clear.
+    public bool WeatherEnabled { get; init; } = true;
+    // The physical sky (sun, moon, stars, volumetric clouds) instead of the original's painted domes, and its clouds.
+    public bool RealisticSky { get; init; } = true;
+    public CloudQuality CloudQuality { get; init; } = CloudQuality.Medium;
     // Atmospheric fades distant geometry toward the captured sky up to a capped opacity; Classic is still accepted but
     // is drawn as Atmospheric; Off disables it.
     public DistanceFogMode DistanceFog { get; init; } = DistanceFogMode.Atmospheric;
@@ -90,6 +106,7 @@ public sealed record ClientSettings
             LampShadowTileSize = LampShadowTileSize is 256 or 512 or 1024 ? LampShadowTileSize : defaults.LampShadowTileSize,
             ShadowUpdateRate = ShadowUpdateRate is 0 or 30 or 60 or 120 ? ShadowUpdateRate : defaults.ShadowUpdateRate,
             DistanceFog = Enum.IsDefined(DistanceFog) ? DistanceFog : defaults.DistanceFog,
+            CloudQuality = Enum.IsDefined(CloudQuality) ? CloudQuality : defaults.CloudQuality,
             DebugView = Enum.IsDefined(DebugView) ? DebugView : defaults.DebugView,
             Quality = Enum.IsDefined(Quality) ? Quality : defaults.Quality,
             AntiAliasing = Enum.IsDefined(AntiAliasing) ? AntiAliasing : defaults.AntiAliasing,
@@ -133,6 +150,7 @@ public sealed record ClientSettings
             AntiAliasing = AntiAliasingMode.Off,
             ShadowMapSize = 2048,
             ShadowUpdateRate = 30,
+            CloudQuality = CloudQuality.Low,
             ShadowsEnabled = true,
             Bloom = BloomQuality.Off,
             AutoExposure = true,
@@ -154,6 +172,7 @@ public sealed record ClientSettings
             AntiAliasing = AntiAliasingMode.Smaa,
             ShadowMapSize = 2048,
             ShadowUpdateRate = 60,
+            CloudQuality = CloudQuality.Low,
             ShadowsEnabled = true,
             Bloom = BloomQuality.High,
             AutoExposure = true,
@@ -175,6 +194,7 @@ public sealed record ClientSettings
             AntiAliasing = AntiAliasingMode.Taa,
             ShadowMapSize = 4096,
             ShadowUpdateRate = 60,
+            CloudQuality = CloudQuality.Medium,
             ShadowsEnabled = true,
             Bloom = BloomQuality.High,
             AutoExposure = true,
@@ -196,6 +216,7 @@ public sealed record ClientSettings
             AntiAliasing = AntiAliasingMode.Taa,
             ShadowMapSize = 4096,
             ShadowUpdateRate = 0,
+            CloudQuality = CloudQuality.High,
             ShadowsEnabled = true,
             Bloom = BloomQuality.High,
             AutoExposure = true,
@@ -232,7 +253,9 @@ public sealed record ClientSettings
             && ImageBasedLighting == other.ImageBasedLighting
             && ScreenSpaceReflections == other.ScreenSpaceReflections
             && CalibrationSpheres == other.CalibrationSpheres
-            && VolumetricLight == other.VolumetricLight;
+            && VolumetricLight == other.VolumetricLight
+            && RealisticSky == other.RealisticSky
+            && CloudQuality == other.CloudQuality;
     }
 
     public bool HasSameDisplay(ClientSettings other)

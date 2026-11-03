@@ -1,6 +1,7 @@
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Quests;
 using PristonTale.Simulation.World;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Simulation.Progression;
 
@@ -9,7 +10,8 @@ namespace PristonTale.Simulation.Progression;
 public readonly record struct RestartOffer(bool FieldOpen, bool Scroll, ulong ExperienceShare, long GoldShare);
 
 // What dying costs. From level 11 a death takes a share of the level's experience span and of the carried gold (a
-// thirty-third, a fiftieth from level 85 after the level 85 quest, nothing in the castle field), and standing up again in
+// thirty-third, a fiftieth from level 85 after the level 85 quest or wearing the aging ring at +6, a hundredth wearing it
+// at +8, nothing in the castle field), and standing up again in
 // the field where the player fell takes a hundredth more. A Resurrection Scroll carried at death is used up instead and
 // waives both. Experience never drops below the start of the current level.
 public static class DeathPenalty
@@ -24,8 +26,30 @@ public static class DeathPenalty
     public const float RestartGuardMs = 10_000f;
 
     // The divisor of a death's share; 0 takes nothing.
-    public static int Divisor(PlayerCharacter character, FieldState field) =>
-        field == FieldState.Castle ? 0 : QuestRewards.ReducedDeathPenalty(character) ? ReducedDivisor : StandardDivisor;
+    public static int Divisor(PlayerCharacter character, FieldState field)
+    {
+        if (field == FieldState.Castle)
+        {
+            return 0;
+        }
+
+        var ring = AgedRingLevel(character);
+        return ring >= 8 ? FieldDivisor : ring >= 6 || QuestRewards.ReducedDeathPenalty(character) ? ReducedDivisor : StandardDivisor;
+    }
+
+    public static int AgedRingLevel(PlayerCharacter character)
+    {
+        var level = 0;
+        foreach (var slot in (ReadOnlySpan<EquipmentSlot>)[EquipmentSlot.RingLeft, EquipmentSlot.RingRight])
+        {
+            if (character.Equipment.TryGetValue(slot, out var ring) && Items.Aging.AgingRules.CounterOf(ring) == Items.Aging.AgingCounter.Time)
+            {
+                level = Math.Max(level, ring.UpgradeLevel);
+            }
+        }
+
+        return level;
+    }
 
     // The share of the level's experience span a divisor takes (the last level spans up to the experience ceiling).
     public static ulong ExperienceShare(int level, int divisor)
@@ -83,9 +107,9 @@ public static class DeathPenalty
     // The inventory anchor of a carried Resurrection Scroll, or -1.
     public static int ScrollAnchor(PlayerCharacter character)
     {
-        for (var anchor = 0; anchor < character.Inventory.Capacity; anchor++)
+        foreach (var (anchor, item) in character.Inventory.Occupied())
         {
-            if (character.Inventory[anchor] is { } item && item.Definition.CatalogKey == ResurrectionScroll)
+            if (item.Definition.CatalogKey == ResurrectionScroll)
             {
                 return anchor;
             }
@@ -94,7 +118,8 @@ public static class DeathPenalty
         return -1;
     }
 
-    // The town a player stands up in: Ricarten for the Tempskron classes and the assassin, Pillai for the Morion classes.
+    // The town of a class, where a new character starts and a player stands up: Ricarten for the Tempskron classes and
+    // the assassin, Pillai for the Morion classes.
     public static int TownField(PlayerClass playerClass) =>
-        (int)playerClass <= (int)PlayerClass.Pikeman || playerClass == PlayerClass.Assassin ? QuestClasses.RicartenField : QuestClasses.PillaiField;
+        (int)playerClass <= (int)PlayerClass.Pikeman || playerClass == PlayerClass.Assassin ? FieldCodes.Ricarten : FieldCodes.Pillai;
 }

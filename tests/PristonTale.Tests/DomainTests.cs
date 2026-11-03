@@ -11,6 +11,8 @@ using PristonTale.Simulation.Items;
 using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -50,7 +52,7 @@ internal static class DomainTests
         var repository = new MemoryCharacters(record);
         var registry = new SessionRegistry();
         var session = registry.Create(1, "test");
-        var service = new SessionAppService(registry, classes, repository, new WorldCatalog());
+        var service = new SessionAppService(registry, classes, repository, new ImmediateSaves(repository), new WorldCatalog());
         Assert.True((await service.EnterWorldAsync(session.SessionToken, record.Name)).Ok, "entry failed");
         Assert.True(await service.SaveCharacterAsync(session.SessionToken), "save failed");
         Assert.True(repository.Record.Strength == 123 && repository.Record.Health == 127, "saved attributes changed");
@@ -86,7 +88,7 @@ internal static class DomainTests
         };
         var registry = new SessionRegistry();
         var repository = new MemoryCharacters(record);
-        var service = new SessionAppService(registry, classes, repository, new WorldCatalog());
+        var service = new SessionAppService(registry, classes, repository, new ImmediateSaves(repository), new WorldCatalog());
         var first = registry.Create(1, "same-account");
         var second = registry.Create(1, "same-account");
         var outcomes = await Task.WhenAll(
@@ -104,7 +106,7 @@ internal static class DomainTests
 
         var closingRegistry = new ClosingRegistry();
         var closingSession = closingRegistry.Create(1, "closing");
-        var closingService = new SessionAppService(closingRegistry, classes, repository, new WorldCatalog());
+        var closingService = new SessionAppService(closingRegistry, classes, repository, new ImmediateSaves(repository), new WorldCatalog());
         var closedEntry = await closingService.EnterWorldAsync(closingSession.SessionToken, record.Name);
         Assert.True(!closedEntry.Ok && !closingSession.TryBeginPlay(), "closed session became ready after hydration");
         var replacement = closingRegistry.Create(1, "replacement");
@@ -199,9 +201,9 @@ internal static class DomainTests
         Assert.True(!join.IsCompleted && world.PlayerCount == 0, "caller mutated world outside tick");
         Assert.True(await Tick(world, join), "join rejected");
         Assert.True(!await Tick(world, world.JoinAsync(3, player, second.Writer)), "duplicate writer replaced owner");
-        Assert.True(!await Tick(world, world.LeaveAsync(3, player.EntityId, second.Writer)), "non-owner removed player");
+        Assert.True(!(await Tick(world, world.LeaveAsync(3, player.EntityId, second.Writer))).Left, "non-owner removed player");
         Assert.True(world.PlayerCount == 1, "wrong roster after rejected cleanup");
-        Assert.True(await Tick(world, world.LeaveAsync(3, player.EntityId, first.Writer)), "owner could not leave");
+        Assert.True((await Tick(world, world.LeaveAsync(3, player.EntityId, first.Writer))).Left, "owner could not leave");
         Assert.True(world.PlayerCount == 0, "leave not published");
     }
 
@@ -216,6 +218,8 @@ internal static class DomainTests
         Assert.True(!await Tick(world, world.MoveToFieldAsync(3, 5, player, Vector3.Zero, writer)), "level gate bypassed");
         Assert.True(await Tick(world, world.MoveToFieldAsync(3, 4, player, new Vector3(99999), writer)), "valid gate rejected");
         Assert.True(player.Position == new Vector3(100, 0, 100), "gate trusted requested placement");
+        Assert.True(await Tick(world, world.MoveToFieldAsync(3, 4, player, new Vector3(99999), writer)) && player.Position == new Vector3(100, 0, 100),
+            "a report still naming the field the player already moved to was refused or moved it again");
         Assert.True(player.ReportMovement(new Vector3(150, 0, 100), 0f, true, false, 0, 1000) == MovementVerdict.Accepted && player.Position.X == 150,
             "walk report after a gate rejected");
         player.ApplyDamage(int.MaxValue);
@@ -240,13 +244,13 @@ internal static class DomainTests
         Assert.True(await Tick(world, world.ReportMovementAsync(3, player.EntityId, target, 0f, true, true, 0)) == MovementVerdict.Accepted,
             "run report rejected");
         Assert.True(await Tick(world, world.MoveToFieldAsync(3, 4, player, new Vector3(99999), writer)), "gate rejected");
-        Assert.True(player.Position == target && player.MoveState == MoveStateView.Running, "gate stopped reported running");
+        Assert.True(player.Position == target && player.MoveState == MotionState.Run, "gate stopped reported running");
         for (uint tick = 2; tick < 62; tick++)
         {
             world.Tick(0.05f, tick);
         }
 
-        Assert.True(player.Position == target && player.MoveState == MoveStateView.Idle, "a silent client kept running after the gate");
+        Assert.True(player.Position == target && player.MoveState == MotionState.Stand, "a silent client kept running after the gate");
     }
 
     private static Task MovementAsync()
@@ -316,7 +320,7 @@ internal static class DomainTests
             {
                 TargetId = 1,
                 AiState = MonsterAiState.Chase,
-                Motion = MonsterMotionState.Walk,
+                Motion = MotionState.Walk,
                 MoveTarget = prey.Candidates[0].Position
             };
         }

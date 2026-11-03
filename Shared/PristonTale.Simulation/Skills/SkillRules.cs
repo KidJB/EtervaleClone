@@ -1,6 +1,7 @@
 using System.Text.Json;
 using PristonTale.Simulation.Combat;
 using PristonTale.Simulation.Modifiers;
+using PristonTale.Simulation.World.Monsters;
 
 namespace PristonTale.Simulation.Skills;
 
@@ -122,6 +123,10 @@ public sealed partial record SkillDamageRule
     public int WeaponDivisor { get; init; }
     public int SpiritMinDivisor { get; init; }
     public int SpiritMaxDivisor { get; init; }
+
+    // A spell: its power grows with the caster's spirit or spell power, so the target's magic resistance applies to it.
+    public bool Magic => SpellPower || SpiritMinDivisor > 0 || SpiritMaxDivisor > 0;
+
     // Areas: percent of the rolled power each target in the area receives, plus MainPercent more for the main target.
     public int AreaPercent { get; init; } = 100;
     public int MainPercent { get; init; }
@@ -140,7 +145,7 @@ public sealed partial record SkillDamageRule
     // Bolts and areas: the weapon term (WeaponDivisor) uses the caster's attack damage instead of the weapon's own.
     public bool WeaponFromAttack { get; init; }
     // Extra percent against monster broods ("Undead", "Demon", "Mutant", "Normal", "Mechanic").
-    public string[] BonusBroods { get; init; } = [];
+    public MonsterBrood[] BonusBroods { get; init; } = [];
     public int BonusPercent { get; init; }
 }
 
@@ -184,7 +189,7 @@ public sealed record SkillPassiveRule
 // and expires after LifetimeMs. One summon per owner: a new one replaces the old.
 public sealed record SkillSummonRule
 {
-    // The catalog monster (display name) that gives the model, motions, sight, reach and attack speed.
+    // The catalog monster (its key, else its display name) that gives the model, motions, sight, reach and attack speed.
     public string Monster { get; init; } = "";
     public int LifetimeMs { get; init; }
     // Per-rank values; an empty table keeps the definition's value.
@@ -258,7 +263,7 @@ public sealed record SkillCompanionRule
     public uint BorrowSkill { get; init; }
     public int[] Percent { get; init; } = [];
     public Element Element { get; init; } = Element.Bionic;
-    public string[] BonusBroods { get; init; } = [];
+    public MonsterBrood[] BonusBroods { get; init; } = [];
     public int BonusPercent { get; init; }
 }
 
@@ -269,7 +274,7 @@ public sealed record SkillCounterRule
     public uint BorrowSkill { get; init; }
     public int[] Percent { get; init; } = [];
     public Element Element { get; init; } = Element.Bionic;
-    public string[] BonusBroods { get; init; } = [];
+    public MonsterBrood[] BonusBroods { get; init; } = [];
     public int BonusPercent { get; init; }
 }
 

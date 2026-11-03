@@ -18,6 +18,10 @@ using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Fields;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Assets;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -37,7 +41,7 @@ internal sealed class RenderBenchmarkProbe : Game
         Distribution UpdateMs, Distribution DrawMs, Distribution PresentMs, double AllocatedBytesPerFrame,
         int SunShadowUpdates, int LampShadowMapUpdates, long ShadowDrawCalls, PristonRenderStats LastFrame,
         Dictionary<string, double> CpuSectionsMs, Dictionary<string, double> GpuSectionsMs, int GpuResultsMissed);
-    private sealed record PreparedActor(PristonActor Actor, Matrix World, PristonActorMotion Motion);
+    private sealed record PreparedActor(PristonActor Actor, Matrix World, MotionCode Motion);
     private sealed record PreparedScene(PristonStage Stage, PristonModel[] Models, Vector3 Focus, PreparedActor[] Actors);
 
     private const int SampleCapacity = 360_000;
@@ -86,6 +90,11 @@ internal sealed class RenderBenchmarkProbe : Game
     private bool _actorsPublished;
     private int _renderActorCount;
     private const int LogicalEntityCount = 25;
+    // Extra walking actors spread out to the edge of the view, for the crowd level of detail.
+    private readonly int _crowd;
+    private const float CrowdInnerRadius = 150f;
+    private const float CrowdOuterRadius = 1000f;
+    private static readonly float GoldenAngle = MathF.PI * (3f - MathF.Sqrt(5f));
 
     public RenderBenchmarkProbe(string root, string content, string output, string fieldId, string settingsPath,
         double duration = 60,
@@ -96,7 +105,8 @@ internal sealed class RenderBenchmarkProbe : Game
         float cameraPitch = float.NaN,
         float focusX = float.NaN,
         float focusZ = float.NaN,
-        float cameraYaw = 0f)
+        float cameraYaw = 0f,
+        int crowd = 0)
     {
         if (duration is < 1 or > 600 || repeat is < 1 or > 10 || hour is < 0 or > 23)
         {
@@ -104,6 +114,7 @@ internal sealed class RenderBenchmarkProbe : Game
         }
 
         _assetRoot = root;
+        _crowd = crowd;
         _output = Path.GetFullPath(output);
         _field = new WorldCatalog().AllFields.Single(field => field.Id == fieldId);
         if (fieldId is not "fore-1" and not "village-2")
@@ -220,7 +231,7 @@ internal sealed class RenderBenchmarkProbe : Game
         }));
         _hud.Combat.Observe(new PresenceUpdate(
             1,
-            [new EntitySpawnInfo(2, RemoteEntityKind.Monster, false, default, 0, RemoteMoveState.Attack, 35, 50, null, 1)],
+            [new EntitySpawnInfo(2, EntityKind.Monster, false, default, 0, MotionState.Attack, 35, 50, null, 1)],
             [],
             [],
             []));
@@ -558,8 +569,8 @@ internal sealed class RenderBenchmarkProbe : Game
         var collision = new PristonCollisionWorld(stage);
         var result = new List<PreparedActor>(26);
         var playerWorld = ActorWorld(collision, focus, Vector2.Zero, 0f, 1f);
-        result.Add(new PreparedActor(body, playerWorld, PristonActorMotion.Run));
-        result.Add(new PreparedActor(head, playerWorld, PristonActorMotion.Run));
+        result.Add(new PreparedActor(body, playerWorld, MotionCode.Run));
+        result.Add(new PreparedActor(head, playerWorld, MotionCode.Run));
 
         for (var entity = 0; entity < 24; entity++)
         {
@@ -571,13 +582,22 @@ internal sealed class RenderBenchmarkProbe : Game
             var motion = template.Monster
                 ? (entity % 3) switch
                 {
-                    0 => PristonActorMotion.Walk,
-                    1 => PristonActorMotion.Run,
-                    _ => PristonActorMotion.Attack
+                    0 => MotionCode.Walk,
+                    1 => MotionCode.Run,
+                    _ => MotionCode.Attack
                 }
-                : PristonActorMotion.Stand;
+                : MotionCode.Stand;
             var scale = template.Monster && entity % templates.Count == templates.Count - 1 ? 0.75f : 1f;
             result.Add(new PreparedActor(template.Actor, ActorWorld(collision, focus, offset, angle + MathHelper.Pi, scale), motion));
+        }
+
+        for (var extra = 0; extra < _crowd; extra++)
+        {
+            var template = templates[extra % templates.Count];
+            var angle = extra * GoldenAngle;
+            var radius = CrowdInnerRadius + (CrowdOuterRadius - CrowdInnerRadius) * MathF.Sqrt((extra + 0.5f) / _crowd);
+            var offset = new Vector2(MathF.Sin(angle), MathF.Cos(angle)) * radius;
+            result.Add(new PreparedActor(template.Actor, ActorWorld(collision, focus, offset, angle, 1f), extra % 2 == 0 ? MotionCode.Walk : MotionCode.Run));
         }
 
         return result.ToArray();
@@ -602,5 +622,5 @@ internal sealed class RenderBenchmarkProbe : Game
         return Matrix.CreateScale(scale) * Matrix.CreateRotationY(facing) * Matrix.CreateTranslation(position);
     }
 
-    private string Resolve(string relative) => PristonFileResolver.Resolve(Path.Combine(_assetRoot, relative));
+    private string Resolve(string relative) => AssetFiles.Resolve(Path.Combine(_assetRoot, relative));
 }

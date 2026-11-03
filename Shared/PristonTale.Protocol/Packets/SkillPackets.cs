@@ -1,15 +1,16 @@
 using PristonTale.Protocol.Binary;
+using PristonTale.Contracts.Skills;
 
 namespace PristonTale.Protocol.Packets;
 
-// Etervale skill messages. Every body starts with {ushort Version, ushort Flags}; readers accept newer versions that
-// append fields after the ones they know. Positions are play-data fixed point and angles are 4096 per turn.
-// Flags (version 2) carry the command: 0 a new cast, 1 the release of a held charge, 2 and 3 order the caster's summon
-// to fight only its owner's target or to pick its own (SkillCastFlags).
-// {header, uint16 Version = 3, uint16 Flags, uint32 Sequence, SkillCode, uint64 TargetSerial, int32 X, Y, Z, int16 Angle,
+// Etervale skill messages. Every body but the event lists (EventWire) starts with {ushort Version, ushort Flags}; readers
+// accept newer versions that append fields after the ones they know. Positions are play-data fixed point and angles are 4096 per turn.
+// Flags (version 2) carry the SkillCastCommand: 0 a new cast, 1 the release of a held charge, 2 and 3 order the caster's
+// summon to fight only its owner's target or to pick its own.
+// {header, uint16 Version = 3, uint16 Flags, uint32 Sequence, SkillCode, uint64 TargetId, int32 X, Y, Z, int16 Angle,
 // int16 0, uint32 ClientTimeMs}.
-public readonly record struct SkillCastPacket(uint Sequence, uint SkillCode, ulong TargetSerial, int X, int Y, int Z, short Angle, uint ClientTimeMs,
-    ushort Flags = 0)
+public readonly record struct SkillCastPacket(uint Sequence, uint SkillCode, ulong TargetId, int X, int Y, int Z, short Angle, uint ClientTimeMs,
+    SkillCastCommand Command = SkillCastCommand.Cast) : IFramePacket
 {
     public const ushort CurrentVersion = 3;
     public const int Size = 8 + 4 + 4 * 2 + 8 + 4 * 3 + 4 + 4;
@@ -18,10 +19,10 @@ public readonly record struct SkillCastPacket(uint Sequence, uint SkillCode, ulo
     {
         var writer = new PacketWriter(destination, EtervaleOpcodes.SkillCast);
         writer.UInt16(CurrentVersion);
-        writer.UInt16(Flags);
+        writer.UInt16((ushort)Command);
         writer.UInt32(Sequence);
         writer.UInt32(SkillCode);
-        writer.UInt64(TargetSerial);
+        writer.UInt64(TargetId);
         writer.Int32(X);
         writer.Int32(Y);
         writer.Int32(Z);
@@ -35,8 +36,8 @@ public readonly record struct SkillCastPacket(uint Sequence, uint SkillCode, ulo
     {
         var reader = new PacketReader(packet, Size);
         var version = reader.UInt16();
-        var flags = reader.UInt16();
-        if (version < CurrentVersion || flags > SkillCastFlags.SummonAggressive)
+        var command = reader.UInt16();
+        if (version < CurrentVersion || command > (ushort)SkillCastCommand.SummonAggressive)
         {
             throw new InvalidDataException("Skill cast has an older layout or an unknown command.");
         }
@@ -49,39 +50,12 @@ public readonly record struct SkillCastPacket(uint Sequence, uint SkillCode, ulo
         var z = reader.Int32();
         var angle = reader.Int16();
         reader.Skip(2);
-        return new SkillCastPacket(sequence, code, target, x, y, z, angle, reader.UInt32(), flags);
+        return new SkillCastPacket(sequence, code, target, x, y, z, angle, reader.UInt32(), (SkillCastCommand)command);
     }
 }
 
-public static class SkillCastFlags
-{
-    public const ushort Cast = 0;
-    public const ushort Release = 1;
-    public const ushort SummonPassive = 2;
-    public const ushort SummonAggressive = 3;
-}
-
-public enum SkillCastStatus : byte
-{
-    Accepted = 0,
-    NotLearned = 1,
-    NotCastable = 2,
-    Cooldown = 3,
-    NotEnoughMana = 4,
-    NotEnoughStamina = 5,
-    InvalidTarget = 6,
-    OutOfRange = 7,
-    Busy = 8,
-    Dead = 9,
-    WeaponNotAllowed = 10,
-    Stale = 11,
-    InVillage = 12,
-    Rejected = 13,
-    AlreadyActive = 14
-}
-
 // Answer to the caster's own SkillCast, correlated by Sequence. CooldownMs is the full cooldown that started.
-public readonly record struct SkillCastResultPacket(uint Sequence, uint SkillCode, SkillCastStatus Status, byte Rank, uint CooldownMs, uint RemainingMs,
+public readonly record struct SkillCastResultPacket(uint Sequence, uint SkillCode, SkillCastVerdict Status, byte Rank, uint CooldownMs, uint RemainingMs,
     int Mana, int Stamina, uint ServerTick)
 {
     public const ushort CurrentVersion = 1;
@@ -90,8 +64,7 @@ public readonly record struct SkillCastResultPacket(uint Sequence, uint SkillCod
     public int Write(Span<byte> destination)
     {
         var writer = new PacketWriter(destination, EtervaleOpcodes.SkillCastResult);
-        writer.UInt16(CurrentVersion);
-        writer.UInt16(0);
+        WireHeader.Write(ref writer, CurrentVersion);
         writer.UInt32(Sequence);
         writer.UInt32(SkillCode);
         writer.Byte((byte)Status);
@@ -114,55 +87,24 @@ public readonly record struct SkillCastResultPacket(uint Sequence, uint SkillCod
         var status = reader.Byte();
         var rank = reader.Byte();
         reader.Skip(2);
-        if (!Enum.IsDefined((SkillCastStatus)status))
+        if (!Enum.IsDefined((SkillCastVerdict)status))
         {
             throw new InvalidDataException("Skill cast result has an unknown status.");
         }
 
-        return new SkillCastResultPacket(sequence, code, (SkillCastStatus)status, rank, reader.UInt32(), reader.UInt32(), reader.Int32(), reader.Int32(),
+        return new SkillCastResultPacket(sequence, code, (SkillCastVerdict)status, rank, reader.UInt32(), reader.UInt32(), reader.Int32(), reader.Int32(),
             reader.UInt32());
     }
 }
 
-public enum SkillEventPhase : byte
-{
-    // The caster begins the skill motion; the impact follows HitAtMs after this event's server time.
-    Start = 1,
-    // The skill's effect resolves at the position; damage and heals follow as combat events.
-    Impact = 2,
-    // The cast ended before its impact (death, field change).
-    Cancel = 3,
-    // A held charge was released early: the motion jumps ahead; DurationMs and HitAtMs give the remaining timeline.
-    Release = 4
-}
-
-public static class SkillEventFlags
-{
-    public const ushort Area = 1;
-    public const ushort Projectile = 2;
-    public const ushort SelfCast = 4;
-    // A link of a chain: the impact runs from the previous link's target (Position) to Target.
-    public const ushort Chain = 8;
-    // A strike of the caster's familiar (a falcon, orbs, a spirit or phantom weapon) at Target.
-    public const ushort Companion = 16;
-    // A support effect reached an ally (Target) other than the caster.
-    public const ushort Ally = 32;
-    // A shield's counter strike, a fully charged resolution; two bits name the cast's mode.
-    public const ushort Counter = 64;
-    public const ushort Charged = 128;
-    public const ushort ModeShift = 8;
-    public const ushort ModeMask = 0x300;
-}
-
-// {uint64 Caster, Target, uint32 SkillCode, uint8 Phase, Rank, uint16 Flags, float32 DurationMs, HitAtMs, int32 X, Y, Z,
-// int16 Angle, uint16 TargetCount, int32 Radius, int32 0}.
+// A skill's start, impact, cancel or release. Positions are fixed point (x256); the wire holds them at 1/8 of a unit.
 public readonly record struct SkillEventEntry(
     ulong Caster,
     ulong Target,
     uint SkillCode,
     SkillEventPhase Phase,
     byte Rank,
-    ushort Flags,
+    SkillEventFlags Flags,
     float DurationMs,
     float HitAtMs,
     int X,
@@ -170,105 +112,120 @@ public readonly record struct SkillEventEntry(
     int Z,
     short Angle,
     ushort TargetCount,
-    int Radius)
+    int Radius) : IEventEntry<SkillEventEntry>
 {
-    public const int Size = 56;
+    // {uint8 Phase, Fields, varuint Flags, uint32 SkillCode, uint8 Rank, entity Caster}, then what Fields names, in its bit
+    // order (EventWire).
+    public const int MinSize = 9;
+    public const int MaxSize = 2 + VarInt.MaxBytes16 + 4 + 1 + EventWire.MaxEntityBytes * 2 + EventWire.MaxTimeBytes * 2 + EventWire.PointBytes
+        + VarInt.MaxBytes16 * 2 + VarInt.MaxBytes32;
 
-    public void Write(ref PacketWriter writer)
+    static int IEventEntry<SkillEventEntry>.MinSize => MinSize;
+
+    static int IEventEntry<SkillEventEntry>.MaxSize => MaxSize;
+
+    [Flags]
+    private enum Fields : byte
     {
-        writer.UInt64(Caster);
-        writer.UInt64(Target);
-        writer.UInt32(SkillCode);
-        writer.Byte((byte)Phase);
-        writer.Byte(Rank);
-        writer.UInt16(Flags);
-        writer.Single(DurationMs);
-        writer.Single(HitAtMs);
-        writer.Int32(X);
-        writer.Int32(Y);
-        writer.Int32(Z);
-        writer.Int16(Angle);
-        writer.UInt16(TargetCount);
-        writer.Int32(Radius);
-        writer.Zero(4);
+        Target = 1,
+        Timing = 2,
+        Point = 4,
+        Angle = 8,
+        TargetCount = 16,
+        Radius = 32,
+        All = 63
     }
 
-    public static SkillEventEntry Read(ref PacketReader reader)
+    public void Write(ref PacketWriter writer, IEventHandleWriter handles)
     {
-        var caster = reader.UInt64();
-        var target = reader.UInt64();
-        var code = reader.UInt32();
+        var fields = (Target != 0 ? Fields.Target : 0)
+            | (DurationMs != 0f || HitAtMs != 0f ? Fields.Timing : 0)
+            | (X != 0 || Y != 0 || Z != 0 ? Fields.Point : 0)
+            | (Angle != 0 ? Fields.Angle : 0)
+            | (TargetCount != 0 ? Fields.TargetCount : 0)
+            | (Radius != 0 ? Fields.Radius : 0);
+        writer.Byte((byte)Phase);
+        writer.Byte((byte)fields);
+        writer.VarUInt((ushort)Flags);
+        writer.UInt32(SkillCode);
+        writer.Byte(Rank);
+        EventWire.WriteEntity(ref writer, Caster, handles);
+        if ((fields & Fields.Target) != 0)
+        {
+            EventWire.WriteEntity(ref writer, Target, handles);
+        }
+
+        if ((fields & Fields.Timing) != 0)
+        {
+            EventWire.WriteTime(ref writer, DurationMs);
+            EventWire.WriteTime(ref writer, HitAtMs);
+        }
+
+        if ((fields & Fields.Point) != 0)
+        {
+            EventWire.WritePoint(ref writer, X, Y, Z);
+        }
+
+        if ((fields & Fields.Angle) != 0)
+        {
+            writer.VarInt(Angle);
+        }
+
+        if ((fields & Fields.TargetCount) != 0)
+        {
+            writer.VarUInt(TargetCount);
+        }
+
+        if ((fields & Fields.Radius) != 0)
+        {
+            writer.VarInt(Radius);
+        }
+    }
+
+    public static SkillEventEntry Read(ref PacketReader reader, IEventHandleReader handles)
+    {
         var phase = reader.Byte();
         if (phase is < (byte)SkillEventPhase.Start or > (byte)SkillEventPhase.Release)
         {
             throw new InvalidDataException("Skill event has an unknown phase.");
         }
 
-        var entry = new SkillEventEntry(caster, target, code, (SkillEventPhase)phase, reader.Byte(), reader.UInt16(), reader.Single(), reader.Single(),
-            reader.Int32(), reader.Int32(), reader.Int32(), reader.Int16(), reader.UInt16(), reader.Int32());
-        reader.Skip(4);
-        if (!float.IsFinite(entry.DurationMs) || !float.IsFinite(entry.HitAtMs) || entry.DurationMs < 0f || entry.HitAtMs < 0f)
+        var fields = (Fields)reader.Byte();
+        var flags = reader.VarUInt32();
+        if (flags > ushort.MaxValue || (fields & ~Fields.All) != 0)
         {
-            throw new InvalidDataException("Skill event has invalid timing.");
+            throw new InvalidDataException("Skill event flags exceed 16 bits or name unknown fields.");
         }
 
-        return entry;
+        var code = reader.UInt32();
+        var rank = reader.Byte();
+        var caster = EventWire.ReadEntity(ref reader, handles);
+        var target = (fields & Fields.Target) != 0 ? EventWire.ReadEntity(ref reader, handles) : 0;
+        var (duration, hitAt) = (fields & Fields.Timing) != 0 ? (EventWire.ReadTime(ref reader), EventWire.ReadTime(ref reader)) : (0f, 0f);
+        var (x, y, z) = (fields & Fields.Point) != 0 ? EventWire.ReadPoint(ref reader) : (0, 0, 0);
+        var angle = (fields & Fields.Angle) != 0 ? reader.VarInt() : 0;
+        var targets = (fields & Fields.TargetCount) != 0 ? reader.VarUInt32() : 0;
+        if (angle is < short.MinValue or > short.MaxValue || targets > ushort.MaxValue)
+        {
+            throw new InvalidDataException("Skill event value is out of range.");
+        }
+
+        var radius = (fields & Fields.Radius) != 0 ? reader.VarInt() : 0;
+        return new SkillEventEntry(caster, target, code, (SkillEventPhase)phase, rank, (SkillEventFlags)flags, duration, hitAt, x, y, z, (short)angle,
+            (ushort)targets, radius);
     }
 }
 
-// {size, code, Version, Flags, Count, entries}: skill starts and impacts on the presence timeline of the last clock.
+// Skill starts and impacts on the presence timeline of the last clock (EventWire, version 4).
 public static class SkillEventList
 {
-    public const ushort CurrentVersion = 3;
-    public const int HeaderSize = 8 + 4 + 4;
-    public const int MaxEvents = (FrameCodec.MaxFrameSize - HeaderSize) / SkillEventEntry.Size;
+    public const ushort CurrentVersion = 4;
 
-    public static int Write(Span<byte> destination, ReadOnlySpan<SkillEventEntry> events)
-    {
-        if (events.Length > MaxEvents)
-        {
-            throw new ArgumentOutOfRangeException(nameof(events));
-        }
+    public static int Write(Span<byte> destination, ReadOnlySpan<SkillEventEntry> events, IEventHandleWriter handles, out int written) =>
+        EventWire.Write(destination, EtervaleOpcodes.SkillEvents, CurrentVersion, events, handles, out written);
 
-        var writer = new PacketWriter(destination, EtervaleOpcodes.SkillEvents);
-        writer.UInt16(CurrentVersion);
-        writer.UInt16(0);
-        writer.Int32(events.Length);
-        foreach (var entry in events)
-        {
-            entry.Write(ref writer);
-        }
-
-        return writer.Finish();
-    }
-
-    public static SkillEventEntry[] Read(ReadOnlySpan<byte> packet)
-    {
-        var reader = new PacketReader(packet, HeaderSize);
-        SkillWire.ReadVersion(ref reader, "Skill event list");
-        var count = reader.Int32();
-        if (count < 0 || count > MaxEvents || reader.Remaining != count * SkillEventEntry.Size)
-        {
-            throw new InvalidDataException("Skill event list has an invalid count.");
-        }
-
-        var events = new SkillEventEntry[count];
-        for (var index = 0; index < count; index++)
-        {
-            events[index] = SkillEventEntry.Read(ref reader);
-        }
-
-        return events;
-    }
-}
-
-public enum StatusEffectOp : byte
-{
-    Add = 1,
-    Refresh = 2,
-    Remove = 3,
-    // A periodic effect applied its value (damage or restore) this tick.
-    Tick = 4
+    public static SkillEventEntry[] Read(ReadOnlySpan<byte> packet, IEventHandleReader handles) =>
+        EventWire.Read<SkillEventEntry>(packet, CurrentVersion, "Skill event list", handles);
 }
 
 public static class StatusEffectFlags
@@ -281,8 +238,6 @@ public static class StatusEffectFlags
 // One change of a modifier effect on an entity. The layout is source-agnostic: SourceKind tells items, player skills,
 // monster skills, consumables and auras apart, and Control carries the control states (stun, root, silence, slow,
 // hidden) the effect imposes. Value is the periodic amount for Tick entries and the main magnitude otherwise.
-// {uint64 Entity, Source, uint32 StatusCode, uint8 Op, Stacks, SourceKind, Control, uint16 Flags, int16 0, int32 DurationMs,
-// RemainingMs, Value}.
 public readonly record struct StatusEffectEntry(
     ulong Entity,
     ulong Source,
@@ -294,102 +249,142 @@ public readonly record struct StatusEffectEntry(
     ushort Flags,
     int DurationMs,
     int RemainingMs,
-    int Value)
+    int Value) : IEventEntry<StatusEffectEntry>
 {
-    public const int Size = 40;
+    // {uint8 Op, Fields, uint32 StatusCode, entity Entity}, then what Fields names, in its bit order (EventWire).
+    public const int MinSize = 7;
+    public const int MaxSize = 2 + 4 + EventWire.MaxEntityBytes * 2 + 3 + VarInt.MaxBytes16 + VarInt.MaxBytes32 * 3;
 
-    public void Write(ref PacketWriter writer)
+    static int IEventEntry<StatusEffectEntry>.MinSize => MinSize;
+
+    static int IEventEntry<StatusEffectEntry>.MaxSize => MaxSize;
+
+    [Flags]
+    private enum Fields : byte
     {
-        writer.UInt64(Entity);
-        writer.UInt64(Source);
-        writer.UInt32(StatusCode);
-        writer.Byte((byte)Op);
-        writer.Byte(Stacks);
-        writer.Byte(SourceKind);
-        writer.Byte(Control);
-        writer.UInt16(Flags);
-        writer.Zero(2);
-        writer.Int32(DurationMs);
-        writer.Int32(RemainingMs);
-        writer.Int32(Value);
+        Source = 1,
+        Stacks = 2,
+        SourceKind = 4,
+        Control = 8,
+        Flags = 16,
+        Duration = 32,
+        Remaining = 64,
+        Value = 128
     }
 
-    public static StatusEffectEntry Read(ref PacketReader reader)
+    public void Write(ref PacketWriter writer, IEventHandleWriter handles)
     {
-        var entity = reader.UInt64();
-        var source = reader.UInt64();
-        var code = reader.UInt32();
+        var fields = (Source != 0 ? Fields.Source : 0)
+            | (Stacks != 0 ? Fields.Stacks : 0)
+            | (SourceKind != 0 ? Fields.SourceKind : 0)
+            | (Control != 0 ? Fields.Control : 0)
+            | (Flags != 0 ? Fields.Flags : 0)
+            | (DurationMs != 0 ? Fields.Duration : 0)
+            | (RemainingMs != 0 ? Fields.Remaining : 0)
+            | (Value != 0 ? Fields.Value : 0);
+        writer.Byte((byte)Op);
+        writer.Byte((byte)fields);
+        writer.UInt32(StatusCode);
+        EventWire.WriteEntity(ref writer, Entity, handles);
+        if ((fields & Fields.Source) != 0)
+        {
+            EventWire.WriteEntity(ref writer, Source, handles);
+        }
+
+        if ((fields & Fields.Stacks) != 0)
+        {
+            writer.Byte(Stacks);
+        }
+
+        if ((fields & Fields.SourceKind) != 0)
+        {
+            writer.Byte(SourceKind);
+        }
+
+        if ((fields & Fields.Control) != 0)
+        {
+            writer.Byte(Control);
+        }
+
+        if ((fields & Fields.Flags) != 0)
+        {
+            writer.VarUInt(Flags);
+        }
+
+        if ((fields & Fields.Duration) != 0)
+        {
+            writer.VarUInt((uint)DurationMs);
+        }
+
+        if ((fields & Fields.Remaining) != 0)
+        {
+            writer.VarUInt((uint)RemainingMs);
+        }
+
+        if ((fields & Fields.Value) != 0)
+        {
+            writer.VarInt(Value);
+        }
+    }
+
+    public static StatusEffectEntry Read(ref PacketReader reader, IEventHandleReader handles)
+    {
         var op = reader.Byte();
         if (op is < (byte)StatusEffectOp.Add or > (byte)StatusEffectOp.Tick)
         {
             throw new InvalidDataException("Status effect has an unknown operation.");
         }
 
-        var stacks = reader.Byte();
-        var sourceKind = reader.Byte();
-        var control = reader.Byte();
-        var flags = reader.UInt16();
-        reader.Skip(2);
-        var entry = new StatusEffectEntry(entity, source, code, (StatusEffectOp)op, stacks, sourceKind, control, flags, reader.Int32(), reader.Int32(),
-            reader.Int32());
-        if (entry.DurationMs < 0 || entry.RemainingMs < 0 || entry.RemainingMs > entry.DurationMs)
+        var fields = (Fields)reader.Byte();
+        var code = reader.UInt32();
+        var entity = EventWire.ReadEntity(ref reader, handles);
+        var source = (fields & Fields.Source) != 0 ? EventWire.ReadEntity(ref reader, handles) : 0;
+        var stacks = (fields & Fields.Stacks) != 0 ? reader.Byte() : (byte)0;
+        var sourceKind = (fields & Fields.SourceKind) != 0 ? reader.Byte() : (byte)0;
+        var control = (fields & Fields.Control) != 0 ? reader.Byte() : (byte)0;
+        var flags = (fields & Fields.Flags) != 0 ? reader.VarUInt32() : 0;
+        var duration = (fields & Fields.Duration) != 0 ? reader.VarUInt31() : 0;
+        var remaining = (fields & Fields.Remaining) != 0 ? reader.VarUInt31() : 0;
+        var value = (fields & Fields.Value) != 0 ? reader.VarInt() : 0;
+        if (flags > ushort.MaxValue || remaining > duration)
         {
-            throw new InvalidDataException("Status effect has invalid timers.");
+            throw new InvalidDataException("Status effect has invalid flags or timers.");
         }
 
-        return entry;
+        return new StatusEffectEntry(entity, source, code, (StatusEffectOp)op, stacks, sourceKind, control, (ushort)flags, duration, remaining, value);
     }
 }
 
-// {size, code, Version, Flags, Count, entries}: status changes on the presence timeline of the last clock.
+// Status changes on the presence timeline of the last clock (EventWire, version 3).
 public static class StatusEffectList
 {
-    public const ushort CurrentVersion = 2;
-    public const int HeaderSize = 8 + 4 + 4;
-    public const int MaxEntries = (FrameCodec.MaxFrameSize - HeaderSize) / StatusEffectEntry.Size;
+    public const ushort CurrentVersion = 3;
 
-    public static int Write(Span<byte> destination, ReadOnlySpan<StatusEffectEntry> entries)
-    {
-        if (entries.Length > MaxEntries)
-        {
-            throw new ArgumentOutOfRangeException(nameof(entries));
-        }
+    public static int Write(Span<byte> destination, ReadOnlySpan<StatusEffectEntry> entries, IEventHandleWriter handles, out int written) =>
+        EventWire.Write(destination, EtervaleOpcodes.StatusEffects, CurrentVersion, entries, handles, out written);
 
-        var writer = new PacketWriter(destination, EtervaleOpcodes.StatusEffects);
-        writer.UInt16(CurrentVersion);
-        writer.UInt16(0);
-        writer.Int32(entries.Length);
-        foreach (var entry in entries)
-        {
-            entry.Write(ref writer);
-        }
-
-        return writer.Finish();
-    }
-
-    public static StatusEffectEntry[] Read(ReadOnlySpan<byte> packet)
-    {
-        var reader = new PacketReader(packet, HeaderSize);
-        SkillWire.ReadVersion(ref reader, "Status effect list");
-        var count = reader.Int32();
-        if (count < 0 || count > MaxEntries || reader.Remaining != count * StatusEffectEntry.Size)
-        {
-            throw new InvalidDataException("Status effect list has an invalid count.");
-        }
-
-        var entries = new StatusEffectEntry[count];
-        for (var index = 0; index < count; index++)
-        {
-            entries[index] = StatusEffectEntry.Read(ref reader);
-        }
-
-        return entries;
-    }
+    public static StatusEffectEntry[] Read(ReadOnlySpan<byte> packet, IEventHandleReader handles) =>
+        EventWire.Read<StatusEffectEntry>(packet, CurrentVersion, "Status effect list", handles);
 }
 
-public readonly record struct SkillCooldownEntry(uint SkillCode, uint RemainingMs, uint DurationMs)
+public readonly record struct SkillCooldownEntry(uint SkillCode, uint RemainingMs, uint DurationMs) : IWireEntry<SkillCooldownEntry>
 {
     public const int Size = 12;
+
+    static int IWireEntry<SkillCooldownEntry>.Size => Size;
+
+    public void Write(ref PacketWriter writer)
+    {
+        writer.UInt32(SkillCode);
+        writer.UInt32(RemainingMs);
+        writer.UInt32(DurationMs);
+    }
+
+    public static SkillCooldownEntry Read(ref PacketReader reader)
+    {
+        var entry = new SkillCooldownEntry(reader.UInt32(), reader.UInt32(), reader.UInt32());
+        return entry.RemainingMs <= entry.DurationMs ? entry : throw new InvalidDataException("Skill cooldown remains longer than its duration.");
+    }
 }
 
 // The owner's running cooldowns at ServerTick: {size, code, Version, Flags, ServerTick, Count, entries}. A skill that is
@@ -408,16 +403,9 @@ public sealed record SkillCooldownsPacket(uint ServerTick, IReadOnlyList<SkillCo
         }
 
         var writer = new PacketWriter(destination, EtervaleOpcodes.SkillCooldowns);
-        writer.UInt16(CurrentVersion);
-        writer.UInt16(0);
+        WireHeader.Write(ref writer, CurrentVersion);
         writer.UInt32(ServerTick);
-        writer.Int32(Cooldowns.Count);
-        foreach (var entry in Cooldowns)
-        {
-            writer.UInt32(entry.SkillCode);
-            writer.UInt32(entry.RemainingMs);
-            writer.UInt32(entry.DurationMs);
-        }
+        WireList.Write(ref writer, Cooldowns);
 
         return writer.Finish();
     }
@@ -427,37 +415,11 @@ public sealed record SkillCooldownsPacket(uint ServerTick, IReadOnlyList<SkillCo
         var reader = new PacketReader(packet, HeaderSize);
         SkillWire.ReadVersion(ref reader, "Skill cooldowns");
         var tick = reader.UInt32();
-        var count = reader.Int32();
-        if (count < 0 || count > MaxEntries || reader.Remaining != count * SkillCooldownEntry.Size)
-        {
-            throw new InvalidDataException("Skill cooldown list has an invalid count.");
-        }
-
-        var entries = new SkillCooldownEntry[count];
-        for (var index = 0; index < count; index++)
-        {
-            var entry = new SkillCooldownEntry(reader.UInt32(), reader.UInt32(), reader.UInt32());
-            if (entry.RemainingMs > entry.DurationMs)
-            {
-                throw new InvalidDataException("Skill cooldown remains longer than its duration.");
-            }
-
-            entries[index] = entry;
-        }
-
-        return new SkillCooldownsPacket(tick, entries);
+        return new SkillCooldownsPacket(tick, WireList.Read<SkillCooldownEntry>(ref reader, MaxEntries, "Skill cooldown list"));
     }
 }
 
 internal static class SkillWire
 {
-    public static void ReadVersion(ref PacketReader reader, string name)
-    {
-        var version = reader.UInt16();
-        reader.Skip(2);
-        if (version == 0)
-        {
-            throw new InvalidDataException($"{name} has version 0.");
-        }
-    }
+    public static void ReadVersion(ref PacketReader reader, string name) => WireHeader.Read(ref reader, name);
 }

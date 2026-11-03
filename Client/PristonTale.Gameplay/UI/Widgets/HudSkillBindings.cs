@@ -11,7 +11,6 @@ public sealed class HudSkillBindings
     public const uint BasicAttackId = 0x11111111;
     public static readonly HudSkillChoice BasicAttack = new(BasicAttackId, "Basic attack", 1, SkillMouseUse.Both);
     private readonly Dictionary<uint, HudSkillChoice> _choices = new() { [BasicAttackId] = BasicAttack };
-    private readonly HudSkillShortcut[] _shortcuts = new HudSkillShortcut[8];
     private KeyboardState _previousKeys;
     private MouseState _previousMouse;
     private uint _pressedSkill;
@@ -23,7 +22,20 @@ public sealed class HudSkillBindings
     public uint RightSkillId { get; private set; } = BasicAttackId;
     public HudSkillChoice Left => _choices.GetValueOrDefault(LeftSkillId);
     public HudSkillChoice Right => _choices.GetValueOrDefault(RightSkillId);
-    public HudSkillShortcut Shortcut(int index) => _shortcuts[index];
+    public HudSkillChoice Choice(uint skillId) => _choices.GetValueOrDefault(skillId);
+
+    // The short keys are the action bar's: its shown page's skill shortcuts.
+    public HudActionBarSlots Slots { get; } = new();
+
+    public HudSkillShortcut Shortcut(int index) => Slots[index] is { Kind: HudActionKind.Skill } slot ? new HudSkillShortcut(slot.SkillId, slot.Side) : default;
+
+    // The skill pressed in the skill window and its button, until that button is released; the action bar takes it
+    // when it is released over one of its keys.
+    public uint PressedSkill => _pressedSkill;
+    public SkillMouseUse PressedSide => _pressedSide;
+
+    // An item shortcut's key was pressed: the catalog key of the item to use.
+    public event Action<string> ItemRequested;
 
     // Set when a click asked for a socket the skill cannot use; Refusals counts them so the HUD shows each once.
     public string Refusal { get; private set; } = "";
@@ -60,24 +72,22 @@ public sealed class HudSkillBindings
         }
     }
 
-    public bool Assign(int index, uint skillId, SkillMouseUse side)
+    // One key per skill on a page, and one shortcut per key.
+    public bool Assign(int index, uint skillId, SkillMouseUse side) =>
+        HudActionBarSlots.Valid(index) && CanSelect(skillId, side) && Slots.AssignSkill(index, skillId, side);
+
+    // A shortcut's key or a right click on it: a skill goes to its socket, an item is asked for.
+    public void Activate(int index)
     {
-        if (index < 0 || index >= _shortcuts.Length || !CanSelect(skillId, side))
+        var slot = Slots[index];
+        if (slot.Kind == HudActionKind.Skill)
         {
-            return false;
+            Select(slot.SkillId, slot.Side);
         }
-
-        // Original keeps one shortcut per skill and one skill per function key.
-        for (var other = 0; other < _shortcuts.Length; other++)
+        else if (slot.Kind == HudActionKind.Item)
         {
-            if (_shortcuts[other].SkillId == skillId)
-            {
-                _shortcuts[other] = default;
-            }
+            ItemRequested?.Invoke(slot.ItemKey);
         }
-
-        _shortcuts[index] = new HudSkillShortcut(skillId, side);
-        return true;
     }
 
     public bool Select(uint skillId, SkillMouseUse side)
@@ -110,10 +120,12 @@ public sealed class HudSkillBindings
             BeginPress(hoveredSkill, SkillMouseUse.Right);
         }
 
-        var control = keyboard.IsKeyDown(Keys.LeftControl) || keyboard.IsKeyDown(Keys.RightControl);
-        for (var index = 0; index < _shortcuts.Length && !control; index++)
+        // Ctrl chords are the debug keys and Alt with 1 to 3 turns the bar's page.
+        var chord = keyboard.IsKeyDown(Keys.LeftControl) || keyboard.IsKeyDown(Keys.RightControl)
+            || keyboard.IsKeyDown(Keys.LeftAlt) || keyboard.IsKeyDown(Keys.RightAlt);
+        for (var index = 0; index < HudActionBarSlots.SlotCount && !chord; index++)
         {
-            var key = Keys.F1 + index;
+            var key = HudActionBarSlots.HotKeys[index];
             if (!keyboard.IsKeyDown(key) || _previousKeys.IsKeyDown(key))
             {
                 continue;
@@ -129,8 +141,7 @@ public sealed class HudSkillBindings
             }
             else
             {
-                var shortcut = _shortcuts[index];
-                Select(shortcut.SkillId, shortcut.Side);
+                Activate(index);
             }
         }
 

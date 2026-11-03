@@ -1,4 +1,5 @@
 using PristonTale.Protocol.Binary;
+using PristonTale.Contracts.Units;
 
 namespace PristonTale.Protocol.Packets;
 
@@ -19,15 +20,14 @@ public static class WorldEntryWire
 }
 
 // C->S {header, uint16 Version = 1, uint16 0, text Name (64 B)}.
-public readonly record struct EnterWorldPacket(string Name)
+public readonly record struct EnterWorldPacket(string Name) : IFramePacket
 {
     public const int MaxSize = 8 + 4 + 2 + WorldEntryWire.MaxNameBytes;
 
     public int Write(Span<byte> destination)
     {
         var writer = new PacketWriter(destination, EtervaleOpcodes.EnterWorld);
-        writer.UInt16(WorldEntryWire.CurrentVersion);
-        writer.UInt16(0);
+        WireHeader.Write(ref writer, WorldEntryWire.CurrentVersion);
         Utf8Text.Write(ref writer, Name, WorldEntryWire.MaxNameBytes);
         return writer.Finish();
     }
@@ -57,8 +57,8 @@ public readonly record struct WorldEntryPacket(byte Status, ulong EntityId, int 
         writer.Byte(0);
         writer.UInt64(EntityId);
         writer.Int32(Field);
-        writer.Int32(PristonUnits.ToFixed(X));
-        writer.Int32(PristonUnits.ToFixed(Z));
+        writer.Int32(GameUnits.ToFixed(X));
+        writer.Int32(GameUnits.ToFixed(Z));
         return writer.Finish();
     }
 
@@ -70,20 +70,19 @@ public readonly record struct WorldEntryPacket(byte Status, ulong EntityId, int 
         reader.Skip(1);
         var entity = reader.UInt64();
         var field = reader.Int32();
-        return new WorldEntryPacket(status, entity, field, PristonUnits.FromFixed(reader.Int32()), PristonUnits.FromFixed(reader.Int32()));
+        return new WorldEntryPacket(status, entity, field, GameUnits.FromFixed(reader.Int32()), GameUnits.FromFixed(reader.Int32()));
     }
 }
 
 // C->S {header, uint16 Version = 1, uint16 0, uint64 EntityId}: EntityId must be the one WorldEntry handed out.
-public readonly record struct JoinWorldPacket(ulong EntityId)
+public readonly record struct JoinWorldPacket(ulong EntityId) : IFramePacket
 {
     public const int Size = 8 + 4 + 8;
 
     public int Write(Span<byte> destination)
     {
         var writer = new PacketWriter(destination, EtervaleOpcodes.JoinWorld);
-        writer.UInt16(WorldEntryWire.CurrentVersion);
-        writer.UInt16(0);
+        WireHeader.Write(ref writer, WorldEntryWire.CurrentVersion);
         writer.UInt64(EntityId);
         return writer.Finish();
     }
@@ -130,7 +129,7 @@ public readonly record struct WorldJoinedPacket(ulong EntityId, long ServerTimeM
 
 // Both directions {header, uint16 Version = 1, uint8 Saved, uint8 0}: the client asks to leave (Saved 0); the server
 // answers with Saved 1 once the character is stored.
-public readonly record struct LeaveWorldPacket(bool Saved)
+public readonly record struct LeaveWorldPacket(bool Saved) : IFramePacket
 {
     public const int Size = 8 + 4;
 

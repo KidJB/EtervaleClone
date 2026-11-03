@@ -2,12 +2,13 @@ using System.Globalization;
 using PristonTale.Application.GameMasters;
 using PristonTale.Application.World;
 using PristonTale.Simulation.Social;
+using PristonTale.Contracts.Social;
 
 namespace PristonTale.Application.Chat;
 
 // The chat on the server. A spoken line reaches the players near the speaker with the speaker's name in front; lines
-// that start with a slash are commands: whispers, the trade and clan channels, whisper refusal, the boss minute, then the
-// game-master commands. A slash line is never spoken. Runs on the caller's thread; positions come from the tick.
+// that start with a slash are commands: whispers, the trade and clan channels, whisper refusal, the boss minute, a party
+// request by name, then the game-master commands. A slash line is never spoken, nor is a yahoo word, which cheers instead. Runs on the caller's thread; positions come from the tick.
 public sealed class ChatAppService
 {
     private const string WhisperRefused = "Unable to send private messages";
@@ -19,13 +20,19 @@ public sealed class ChatAppService
         Directory = directory;
         World = world;
         GameMasters = gameMasters;
-        _parties = parties ?? NoParties.Instance;
+        _parties = parties ?? world.Parties;
         _clans = clans ?? NoClans.Instance;
     }
 
     public ChatDirectory Directory { get; }
     public WorldServer World { get; }
     public GameMasterCommands GameMasters { get; }
+    public Func<long> NowMs { get; init; } = static () => Environment.TickCount64;
+
+    // The client's flood rules, checked again on lines that reach other players. A party, trade or clan line counts
+    // toward the rapid-line rule only, as the client counts its channel lines; commands and the yahoo word are free.
+    private bool Floods(ChatMember member, string line, bool channel) =>
+        member.Flood.Check(line, channel, whisper: false, NowMs()) != ChatFloodVerdict.Allowed;
 
     // A line typed in the chat input.
     public async Task SayAsync(ulong entityId, string text)
@@ -41,9 +48,37 @@ public sealed class ChatAppService
             return;
         }
 
+        if (YahooRules.IsWord(text))
+        {
+            try
+            {
+                await World.YahooAsync(entityId, key: false);
+            }
+            catch (WorldBusyException)
+            {
+                // A full tick queue drops the cheer, as it drops a spoken line.
+            }
+
+            return;
+        }
+
         if (!ChatRules.IsCommand(text))
         {
             await SpeakAsync(member, text);
+            return;
+        }
+
+        if (Simulation.Characters.HelpPets.Commands.Any(command => ChatCommandText.Match(command, text) > 0))
+        {
+            try
+            {
+                await World.ToggleHelpPetAsync(entityId);
+            }
+            catch (WorldBusyException)
+            {
+                // A full tick queue drops the command, as it drops a spoken line.
+            }
+
             return;
         }
 
@@ -53,7 +88,7 @@ public sealed class ChatAppService
         }
     }
 
-    // A party line: every other member of the speaker's party receives it (nobody while there are no parties).
+    // A party line: every other member of the speaker's party receives it.
     public Task PartyAsync(ulong entityId, string text)
     {
         if (!Directory.TryGet(entityId, out var member))
@@ -62,7 +97,7 @@ public sealed class ChatAppService
         }
 
         text = ChatRules.ClipToCapacity(ChatCommandText.Clean(text));
-        if (text.Length == 0)
+        if (text.Length == 0 || Floods(member, text, channel: true))
         {
             return Task.CompletedTask;
         }
@@ -90,6 +125,11 @@ public sealed class ChatAppService
 
     private async Task SpeakAsync(ChatMember member, string text)
     {
+        if (Floods(member, text, channel: false))
+        {
+            return;
+        }
+
         var line = new ChatLine(ChatKind.Player, member.EntityId, ChatRules.Shorten(ChatRules.Compose(member.Name, text)));
         ulong[] near;
         try
@@ -121,7 +161,7 @@ public sealed class ChatAppService
         if (ChatCommandText.Match("/TRADE>", text) is var trade and > 0)
         {
             var message = ChatCommandText.Rest(text, trade);
-            if (message.Length > 0)
+            if (message.Length > 0 && !Floods(member, message, channel: true))
             {
                 Directory.Broadcast(new ChatLine(ChatKind.Trade, 0, ChatRules.ClipToCapacity(ChatRules.Compose(member.Name, message))));
             }
@@ -149,11 +189,16 @@ public sealed class ChatAppService
             return Task.FromResult(true);
         }
 
+        if (PartyRequestLength(text) is var party and > 0)
+        {
+            return InviteToPartyAsync(member, text, party);
+        }
+
         var clan = _clans.ClanOf(member.EntityId);
         if (clan != 0 && ChatCommandText.Match("/CLAN>", text) is var clanLength and > 0)
         {
             var message = ChatCommandText.Rest(text, clanLength);
-            if (message.Length > 0)
+            if (message.Length > 0 && !Floods(member, message, channel: true))
             {
                 var line = new ChatLine(ChatKind.Clan, 0, ChatRules.ClipToCapacity(member.Name + "> " + message));
                 foreach (var other in Directory.Members)
@@ -171,8 +216,30 @@ public sealed class ChatAppService
         return Task.FromResult(false);
     }
 
+    private static int PartyRequestLength(string text) => Math.Max(ChatCommandText.Match("//party", text), ChatCommandText.Match("//PARTY", text));
+
+    // "//party name": the original's party request, also what the button under a player's portrait sends.
+    private async Task<bool> InviteToPartyAsync(ChatMember member, string text, int length)
+    {
+        var name = ChatCommandText.ReadWord(text, ref length);
+        if (name.Length == 0)
+        {
+            return true;
+        }
+
+        try
+        {
+            Directory.Deliver(await World.InviteToPartyByNameAsync(member.Session, name));
+        }
+        catch (WorldBusyException)
+        {
+        }
+
+        return true;
+    }
+
     // "/:name text" or "/;name text": the sender sees "To> name: text", the receiver "From> sender: text". A receiver who
-    // refuses whispers, or a missing text, gets the sender a server line instead.
+    // refuses whispers or ignores the sender, or a missing text, gets the sender a server line instead.
     private void Whisper(ChatMember sender, string text)
     {
         var index = 2;
@@ -186,6 +253,12 @@ public sealed class ChatAppService
                 sender.Link.Deliver(ChatLine.Reply(name + " is currently offline, or cannot be found"));
             }
 
+            return;
+        }
+
+        if (target.Contacts.Ignores(sender.Name))
+        {
+            sender.Link.Deliver(ChatLine.Reply(ContactMessages.WhisperRefused));
             return;
         }
 

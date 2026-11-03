@@ -2,6 +2,8 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using PristonTale.Client.Net.Presence;
 using PristonTale.Simulation.Social;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Social;
 
 namespace PristonTale.Gameplay.UI.Chat;
 
@@ -24,13 +26,16 @@ public sealed class HudChat
     public Func<string, bool, Task> Send { get; set; }
 
     // What the client knows of an entity in view (HudCombat): its kind and a summon's owner.
-    public Func<ulong, (RemoteEntityKind Kind, ulong OwnerId)> Lookup { get; set; } = static _ => (RemoteEntityKind.Unspecified, 0);
+    public Func<ulong, (EntityKind Kind, ulong OwnerId)> Lookup { get; set; } = static _ => (EntityKind.None, 0);
 
     public string PlayerName { get; set; } = "";
     public ulong SelfId { get; set; }
 
     // Raised when a whisper or notice opens the closed window (the whisper sound).
     public event Action WhisperArrived;
+
+    // The other side of each whisper line, sent or received (the friends page's recent players).
+    public Action<string> WhisperPartner { get; set; }
 
     // Raised when the server asks the client to save and quit.
     public event Action CloseRequested;
@@ -52,20 +57,25 @@ public sealed class HudChat
 
     public void Receive(ChatLineInfo line, double nowMs)
     {
-        var (kind, _) = line.SpeakerId == 0 ? (RemoteEntityKind.Unspecified, 0u) : Lookup(line.SpeakerId);
-        if (kind != RemoteEntityKind.Unspecified && line.Kind != HudChatLog.PartyKind)
+        var (kind, _) = line.SpeakerId == 0 ? (EntityKind.None, 0u) : Lookup(line.SpeakerId);
+        if (kind != EntityKind.None && line.Kind != ChatKind.Party)
         {
             Bubbles.Say(line.SpeakerId, line.Text, nowMs, ChatRules.OtherBubbleMs);
-            if (kind == RemoteEntityKind.Player)
+            if (kind == EntityKind.Player)
             {
-                Window.Log.Add(line.Text, HudChatLog.PlayerKind);
+                Window.Log.Add(line.Text, ChatKind.Player);
             }
 
             return;
         }
 
         Window.Log.Add(line.Text, line.Kind);
-        if (line.Kind is HudChatLog.WhisperKind or HudChatLog.NoticeKind && !Window.Open)
+        if (HudChatWindow.WhisperPartnerOf(line.Kind, line.Text) is { } partner)
+        {
+            WhisperPartner?.Invoke(partner);
+        }
+
+        if (line.Kind is ChatKind.Whisper or ChatKind.Notice && !Window.Open)
         {
             Window.Reveal();
             WhisperArrived?.Invoke();
@@ -77,12 +87,12 @@ public sealed class HudChat
     {
         if (!string.IsNullOrWhiteSpace(text))
         {
-            Window.Log.Add(text, HudChatLog.ServerKind);
+            Window.Log.Add(text, ChatKind.Server);
         }
     }
 
     // A quest hint in the assistant's colour and page.
-    public void Assist(string text) => Window.Log.Add(text, HudChatLog.AssistKind);
+    public void Assist(string text) => Window.Log.Add(text, ChatKind.Assist);
 
     // Enter opens the input or sends its line (Escape closes the window through the HUD); Page Up and Page Down scroll; Up and Down recall
     // commands. Typed characters (backspace included) arrive from the window's text input.
@@ -161,32 +171,35 @@ public sealed class HudChat
         switch (line.Kind)
         {
             case HudChatSendKind.Spoken:
-                Window.Log.Add(line.Shown, HudChatLog.OwnKind);
+                Window.Log.Add(line.Shown, ChatKind.Player);
                 Bubbles.Say(SelfId, line.Shown, nowMs, ChatRules.SelfBubbleMs);
                 break;
             case HudChatSendKind.Party:
-                Window.Log.Add(line.Shown, HudChatLog.PartyKind);
+                Window.Log.Add(line.Shown, ChatKind.Party);
                 break;
         }
 
         _ = Send?.Invoke(line.Text, line.Kind == HudChatSendKind.Party);
     }
 
+    // Whether a player is in the local player's party (its name takes the party colour).
+    public Func<ulong, bool> InParty { get; set; } = static _ => false;
+
     // The colour of a speaker's name in a bubble: players, the party and owned summons, monsters, NPCs; the hovered or
     // selected speaker is drawn brighter.
     public Color NameColor(ulong id, ulong hovered)
     {
-        var (kind, owner) = id == SelfId ? (RemoteEntityKind.Player, 0u) : Lookup(id);
+        var (kind, owner) = id == SelfId ? (EntityKind.Player, 0u) : Lookup(id);
         if (id == hovered)
         {
-            return kind == RemoteEntityKind.Monster && owner == 0 ? HoveredMonster : HoveredName;
+            return kind == EntityKind.Monster && owner == 0 ? HoveredMonster : HoveredName;
         }
 
         return kind switch
         {
-            RemoteEntityKind.Monster => owner != 0 ? PartyName : MonsterName,
-            RemoteEntityKind.Npc => NpcName,
-            _ => PlayerNameColor
+            EntityKind.Monster => owner != 0 ? PartyName : MonsterName,
+            EntityKind.Npc => NpcName,
+            _ => InParty(id) ? PartyName : PlayerNameColor
         };
     }
 }

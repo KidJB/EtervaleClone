@@ -20,10 +20,18 @@ public sealed record SavedItem(
     ItemStatBlock RolledBonus = default,
     ItemRoll? Roll = null,
     int Unique = 0,
-    bool Sealed = false);
+    bool Sealed = false,
+    Simulation.Items.Aging.AgingMaturity? Maturity = null,
+    int MixSheltom = 0,
+    Simulation.Items.Mixing.MixStat MixStats = Simulation.Items.Mixing.MixStat.None,
+    int? Belt = null,
+    bool Hidden = false,
+    int? QuestBox = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Held = false);
 
+// ActiveSide: the bag page shown (inventory) or the weapon pair held (equipment); Hidden items are on the other side.
 public sealed record SavedItems(int Version, SavedItem[] Items, long Revision = 0, AppliedInventoryOperation[]? Operations = null,
-    AppliedServiceOperation[]? ServiceOperations = null);
+    AppliedServiceOperation[]? ServiceOperations = null, int ActiveSide = 0, Simulation.PersonalShops.AppliedShopPurchase[]? ShopPurchases = null);
 public sealed record SavedSkill(uint Code, int Rank, int Uses = 0);
 public sealed record SavedSkills(int Version, int Points, int ElitePoints, SavedSkill[] Skills,
     long Revision = 0, AppliedProgressionOperation[]? Operations = null);
@@ -46,12 +54,17 @@ public static class CharacterStateCodec
         // The column holds the unsigned experience's 64-bit pattern (CharacterRecordFactory).
         character.RestoreProgress(unchecked((ulong)record.Exp), record.Money, record.StatPoints, record.Tier, skills.Points, skills.ElitePoints);
         character.RestoreQuests(QuestStateCodec.Read(record.Quests));
+        character.RestoreStarterGifts(record.StarterGiftsReceived);
+        character.RestoreHelpPet(record.HelpPet, record.HelpPetHidden);
 
-        foreach (var saved in inventory.Items)
+        character.RestoreSides(inventory.ActiveSide, equipment.ActiveSide);
+        // Gear restores first: the potion space it gives bounds the belt's stacks.
+        foreach (var saved in inventory.Items.Where(static saved => saved.Belt is null && saved.QuestBox is null && !saved.Held))
         {
             var item = RestoreItem(saved, catalog, identities);
+            var bag = saved.Hidden ? character.HiddenBag : character.Inventory;
             // Footprints follow the item table; an item saved where its footprint no longer fits moves to the first free place.
-            if (saved.Slot.HasValue || !character.Inventory.TryPlace(item, saved.Anchor) && !PlaceInFirstFree(character.Inventory, item))
+            if (saved.Slot.HasValue || !bag.TryPlace(item, saved.Anchor) && !bag.TryPlaceFirstFree(item))
             {
                 throw new InvalidDataException("Invalid saved inventory footprint.");
             }
@@ -60,13 +73,52 @@ public static class CharacterStateCodec
         foreach (var saved in equipment.Items)
         {
             var item = RestoreItem(saved, catalog, identities);
-            if (!saved.Slot.HasValue || saved.Anchor != -1 || character.GetEquipped(saved.Slot.Value) is not null
-                || !character.CanHold(saved.Slot.Value, item))
+            if (!saved.Slot.HasValue || saved.Anchor != -1)
+            {
+                throw new InvalidDataException("Invalid saved equipment.");
+            }
+
+            if (saved.Hidden)
+            {
+                if (!character.RestoreStored(saved.Slot.Value, item))
+                {
+                    throw new InvalidDataException("Invalid saved weapon pair.");
+                }
+
+                continue;
+            }
+
+            if (character.GetEquipped(saved.Slot.Value) is not null || !character.CanHold(saved.Slot.Value, item))
             {
                 throw new InvalidDataException("Invalid saved equipment.");
             }
 
             character.Equip(saved.Slot.Value, item);
+        }
+
+        foreach (var saved in inventory.Items.Where(static saved => saved.QuestBox is not null))
+        {
+            if (saved.Slot.HasValue || saved.Anchor != -1 || !character.RestoreQuestBox(saved.QuestBox!.Value, RestoreItem(saved, catalog, identities)))
+            {
+                throw new InvalidDataException("Invalid saved special item box.");
+            }
+        }
+
+        foreach (var saved in inventory.Items.Where(static saved => saved.Held))
+        {
+            if (saved.Slot.HasValue || saved.Anchor != -1 || saved.Belt is not null || saved.QuestBox is not null
+                || !character.RestoreHeld(RestoreItem(saved, catalog, identities)))
+            {
+                throw new InvalidDataException("Invalid saved held item.");
+            }
+        }
+
+        foreach (var saved in inventory.Items.Where(static saved => saved.Belt is not null))
+        {
+            if (saved.Slot.HasValue || saved.Anchor != -1 || !character.RestoreBelt(saved.Belt!.Value, RestoreItem(saved, catalog, identities)))
+            {
+                throw new InvalidDataException("Invalid saved potion belt.");
+            }
         }
 
         foreach (var skill in skills.Skills)
@@ -76,47 +128,45 @@ public static class CharacterStateCodec
 
         character.RestoreInventoryHistory(inventory.Revision, inventory.Operations ?? []);
         character.RestoreServiceHistory(inventory.ServiceOperations ?? []);
+        character.RestorePurchaseHistory(inventory.ShopPurchases ?? []);
         character.RestoreProgressionHistory(skills.Revision, skills.Operations ?? []);
-    }
-
-    private static bool PlaceInFirstFree(Inventory inventory, ItemInstance item)
-    {
-        for (var anchor = 0; anchor < inventory.Capacity; anchor++)
-        {
-            if (inventory.TryPlace(item, anchor))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     public static SavedItems CaptureInventory(PlayerCharacter character)
     {
         var items = new List<SavedItem>();
-        for (var anchor = 0; anchor < character.Inventory.Capacity; anchor++)
+        items.AddRange(character.Inventory.Occupied().Select(static cell => CaptureItem(cell.Item, cell.Anchor, null)));
+        items.AddRange(character.HiddenBag.Occupied().Select(static cell => CaptureItem(cell.Item, cell.Anchor, null) with { Hidden = true }));
+        items.AddRange(character.Belt.Occupied().Select(static box => CaptureItem(box.Item, -1, null) with { Belt = box.Slot }));
+        items.AddRange(character.QuestBox.Occupied().Select(static box => CaptureItem(box.Item, -1, null) with { QuestBox = box.Slot }));
+        if (character.Held is { } held)
         {
-            if (character.Inventory[anchor] is { } item)
-            {
-                items.Add(CaptureItem(item, anchor, null));
-            }
+            items.Add(CaptureItem(held, -1, null) with { Held = true });
         }
 
-        return new SavedItems(1, items.ToArray(), character.InventoryRevision, character.InventoryOperations.ToArray(),
-            character.ServiceOperations.ToArray());
+        return new SavedItems(1, items.ToArray(), character.InventoryRevision, StoredHistory.Newest(character.InventoryOperations),
+            StoredHistory.Newest(character.ServiceOperations), character.BagPage, StoredHistory.Newest(character.ShopPurchases));
     }
 
     public static SavedItems CaptureEquipment(PlayerCharacter character)
     {
-        var items = new SavedItem[character.Equipment.Count];
-        var index = 0;
+        var items = new List<SavedItem>(character.Equipment.Count + 2);
         foreach (var equipped in character.Equipment)
         {
-            items[index++] = CaptureItem(equipped.Value, -1, equipped.Key);
+            items.Add(CaptureItem(equipped.Value, -1, equipped.Key));
         }
 
-        return new SavedItems(1, items);
+        if (character.StoredWeapon is { } weapon)
+        {
+            items.Add(CaptureItem(weapon, -1, EquipmentSlot.Weapon) with { Hidden = true });
+        }
+
+        if (character.StoredOffHand is { } offHand)
+        {
+            items.Add(CaptureItem(offHand, -1, EquipmentSlot.OffHand) with { Hidden = true });
+        }
+
+        return new SavedItems(1, items.ToArray(), ActiveSide: character.WeaponSet);
     }
 
     public static SavedItems ReadEquipment(JsonText equipment)
@@ -134,14 +184,14 @@ public static class CharacterStateCodec
         }
 
         return new SavedSkills(1, character.SkillPoints, character.EliteSkillPoints, skills,
-            character.ProgressionRevision, character.ProgressionOperations.ToArray());
+            character.ProgressionRevision, StoredHistory.Newest(character.ProgressionOperations));
     }
 
     internal static SavedItem CaptureItem(ItemInstance item, int anchor, EquipmentSlot? slot)
     {
         return new SavedItem(item.InstanceId, item.Definition.Code, item.Count, anchor, slot, item.UpgradeLevel,
             item.DurabilityCurrent, item.DurabilityMax, item.JobSpecMask, default, item.Roll,
-            item.Definition.SavedUnique, item.Sealed);
+            item.Definition.SavedUnique, item.Sealed, item.Maturity, item.MixSheltom, item.MixStats);
     }
 
     internal static ItemInstance RestoreItem(SavedItem saved, ItemCatalog catalog, HashSet<Guid> identities)
@@ -159,7 +209,10 @@ public static class CharacterStateCodec
             UpgradeLevel = saved.UpgradeLevel,
             DurabilityCurrent = saved.DurabilityCurrent,
             DurabilityMax = saved.DurabilityMax,
-            Sealed = saved.Sealed
+            Sealed = saved.Sealed,
+            Maturity = saved.Maturity,
+            MixSheltom = Math.Max(0, saved.MixSheltom),
+            MixStats = saved.MixStats
         };
 
         // Copies saved before per-copy values existed take the shop form of their item with the saved specialization.
@@ -167,15 +220,16 @@ public static class CharacterStateCodec
         return item;
     }
 
-    private static SavedItems ReadItems(JsonText json, JsonValueKind legacyKind)
+    private static SavedItems ReadItems(JsonText json, JsonValueKind blankKind)
     {
-        if (IsLegacyEmpty(json, legacyKind))
+        if (IsBlank(json, blankKind))
         {
             return new SavedItems(1, []);
         }
 
         var state = JsonSerializer.Deserialize<SavedItems>(json.Value, Options);
-        if (state is null || state.Version != 1 || state.Items is null || state.Items.Length > 72)
+        if (state is null || state.Version != 1 || state.Items is null || state.Items.Length > PlayerCharacter.Sides * Inventory.DefaultWidth * Inventory.DefaultHeight + PotionBelt.Boxes
+            || state.ActiveSide is < 0 or >= PlayerCharacter.Sides)
         {
             throw new InvalidDataException("Unsupported item-state version or size.");
         }
@@ -185,7 +239,7 @@ public static class CharacterStateCodec
 
     private static SavedSkills ReadSkills(JsonText json)
     {
-        if (IsLegacyEmpty(json, JsonValueKind.Array))
+        if (IsBlank(json, JsonValueKind.Array))
         {
             return new SavedSkills(1, 0, 0, []);
         }
@@ -199,9 +253,12 @@ public static class CharacterStateCodec
         return state;
     }
 
-    internal static bool IsLegacyEmpty(JsonText json, JsonValueKind expected)
+    // Longer owned-state JSON is corrupt: a full bag, belt and warehouse with their histories take a small part of it.
+    internal const int MaxStateLength = 4 * 1024 * 1024;
+
+    internal static bool IsBlank(JsonText json, JsonValueKind expected)
     {
-        if (string.IsNullOrWhiteSpace(json.Value) || json.Value.Length > 65536)
+        if (string.IsNullOrWhiteSpace(json.Value) || json.Value.Length > MaxStateLength)
         {
             throw new InvalidDataException("Invalid owned-state JSON size.");
         }

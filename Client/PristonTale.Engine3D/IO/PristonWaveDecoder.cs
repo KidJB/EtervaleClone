@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using PristonTale.Assets;
 
 namespace PristonTale.Engine3D.IO;
 
@@ -8,7 +9,7 @@ public static class PristonWaveDecoder
 
     public static Stream OpenRead(string path)
     {
-        var bytes = PristonFileResolver.ReadAllBytes(path);
+        var bytes = AssetFiles.ReadAllBytes(path);
         NormalizeHeader(bytes);
         return new MemoryStream(bytes, writable: false);
     }
@@ -33,7 +34,7 @@ public static class PristonWaveDecoder
 
         if (!bytes[..4].SequenceEqual("JODO"u8))
         {
-            throw new InvalidDataException("Unsupported legacy WAVE signature.");
+            throw new InvalidDataException("Unsupported original WAVE signature.");
         }
 
         "RIFF"u8.CopyTo(bytes);

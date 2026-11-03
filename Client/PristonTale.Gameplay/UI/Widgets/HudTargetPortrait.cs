@@ -46,7 +46,7 @@ public sealed class HudTargetPortrait : IDisposable
     private static readonly Vector3 RimColor = new(0.7f, 0.74f, 0.82f);
 
     private readonly GraphicsDevice _device;
-    private readonly RenderTargetBinding[] _previous = new RenderTargetBinding[1];
+    private readonly PristonBoundTargets _previous = new();
     private RenderTarget2D _target;
     private PristonPortraitAnchor _anchor;
     private ulong _anchorEntity;
@@ -103,7 +103,13 @@ public sealed class HudTargetPortrait : IDisposable
         }
 
         var renderer = scene?.Renderer;
-        if (renderer is null || subject.EntityId == 0)
+        if (renderer is null)
+        {
+            return;
+        }
+
+        renderer.PortraitActor = ActorHandle.None;
+        if (subject.EntityId == 0)
         {
             return;
         }
@@ -116,6 +122,8 @@ public sealed class HudTargetPortrait : IDisposable
         }
 
         handles = handles[..Math.Min(count, MaxHandles)];
+        // Close up, the crowd's slower pose sampling of a far actor would show as a halting animation.
+        renderer.PortraitActor = handles[0];
         if (!_hasAnchor)
         {
             _hasAnchor = renderer.TryGetActorPortraitAnchor(handles[0], HeadBone, out _anchor);
@@ -135,31 +143,19 @@ public sealed class HudTargetPortrait : IDisposable
         var camera = Camera(_anchor, world, subject, frame, layout.Height);
         EnsureTarget(frame.Width * layout.Scale, frame.Height * layout.Scale);
         var view = Matrix.CreateLookAt(camera.Position, camera.Target, camera.Up);
-        var projection = Matrix.CreatePerspectiveFieldOfView(camera.FieldOfView, camera.AspectRatio, camera.Near, camera.Far);
+        var projection = PristonDepth.Perspective(camera.FieldOfView, camera.AspectRatio, camera.Near, camera.Far);
         var light = Lighting(camera);
-        var restore = _device.RenderTargetCount == 1;
-        if (restore)
-        {
-            _device.GetRenderTargets(_previous);
-        }
-
+        _previous.Save(_device);
         _device.SetRenderTarget(_target);
         try
         {
-            _device.Clear(ClearOptions.Target | ClearOptions.DepthBuffer, Color.Transparent, 1f, 0);
+            _device.Clear(ClearOptions.Target | ClearOptions.DepthBuffer, Color.Transparent, PristonDepth.Clear, 0);
             renderer.DrawActorPortrait(handles, view, projection, camera.Position, light);
         }
         finally
         {
-            if (restore)
-            {
-                _device.SetRenderTargets(_previous);
-                _previous[0] = default;
-            }
-            else
-            {
-                _device.SetRenderTarget(null);
-            }
+            _previous.Restore(_device);
+            _previous.Forget();
         }
 
         _drawnEntity = subject.EntityId;
@@ -173,7 +169,7 @@ public sealed class HudTargetPortrait : IDisposable
         }
 
         _target?.Dispose();
-        _target = new RenderTarget2D(_device, width, height, false, SurfaceFormat.Color, DepthFormat.Depth24, MultiSampleCount,
+        _target = new RenderTarget2D(_device, width, height, false, SurfaceFormat.Color, PristonDepth.Format, MultiSampleCount,
             RenderTargetUsage.PreserveContents);
     }
 

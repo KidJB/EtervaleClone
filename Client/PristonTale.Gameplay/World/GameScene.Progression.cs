@@ -3,6 +3,7 @@ using PristonTale.Client.Net.Presence;
 using PristonTale.Gameplay.Effects;
 using PristonTale.Simulation.Items.Usable;
 using PristonTale.Simulation.World.Npcs;
+using PristonTale.Contracts.Combat;
 
 namespace PristonTale.Gameplay.World;
 
@@ -15,12 +16,12 @@ public sealed partial class GameScene
     // A wolverine leaving at dawn warps out in the return sparkle with the skill-learn sound.
     private void OnMonsterWarp(MonsterActorView monster)
     {
-        if (monster.SoundCode != LegacyNpcSoundCode.Wolverine)
+        if (monster.SoundCode != CharacterSoundCodes.Wolverine)
         {
             return;
         }
 
-        _returnEffect?.Start(monster.Position + Vector3.Up * GroundTraversal.VisualOffset);
+        PlayReturn(monster.Position);
         _itemEffects?.Play(ItemEffectKind.Return, monster.EntityId, 0, monster.Position, PlayerPosition, _skillClockMs);
     }
 
@@ -28,13 +29,13 @@ public sealed partial class GameScene
     {
         foreach (var combatEvent in update.Events)
         {
-            if (combatEvent.Kind is not (RemoteCombatEventKind.LevelUp or RemoteCombatEventKind.SkillLearned)
+            if (combatEvent.Kind is not (CombatEventKind.LevelUp or CombatEventKind.SkillLearned)
                 || ItemAnchor(combatEvent.TargetId) is not { } position)
             {
                 continue;
             }
 
-            if (combatEvent.Kind == RemoteCombatEventKind.LevelUp)
+            if (combatEvent.Kind == CombatEventKind.LevelUp)
             {
                 _skillFx?.Spawn(LevelUpEffect, combatEvent.TargetId, combatEvent.TargetId, position);
             }

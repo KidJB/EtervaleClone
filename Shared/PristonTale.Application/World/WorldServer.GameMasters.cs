@@ -28,10 +28,12 @@ public sealed partial class WorldServer
     // The minute of each hour at which scheduled bosses appear today (an int is read atomically off the tick).
     public int BossMinute => _bossSchedule.Minute;
 
-    // The server's clock, local and in Unix seconds, as the world reads it.
+    // The server's clock, local and in Unix seconds or milliseconds, as the world reads it.
     public DateTimeOffset LocalNow => _clock.GetLocalNow();
 
     public long UnixSeconds => _clock.GetUtcNow().ToUnixTimeSeconds();
+
+    private long UnixNowMs => _clock.GetUtcNow().ToUnixTimeMilliseconds();
 
     // The display name of a field (the catalog is immutable, so any thread may read it).
     public string FieldName(int fieldId) => _catalog.TryGetFieldByCode(fieldId, out var definition) ? definition.Name : fieldId.ToString();
@@ -56,6 +58,15 @@ public sealed partial class WorldServer
                 break;
             case Simulation.World.Npcs.NpcServiceAction.Teleport:
                 Currency.Record(CurrencySink.Teleports, spent);
+                break;
+            case Simulation.World.Npcs.NpcServiceAction.Age:
+                Currency.Record(CurrencySink.Aging, spent);
+                break;
+            case Simulation.World.Npcs.NpcServiceAction.Mix:
+                Currency.Record(CurrencySink.Mixing, spent);
+                break;
+            case Simulation.World.Npcs.NpcServiceAction.Refine:
+                Currency.Record(CurrencySink.ForceOrbs, spent);
                 break;
         }
     }
@@ -116,15 +127,11 @@ public sealed partial class WorldServer
                 return null;
             }
 
-            var player = connection.Player;
-            var target = GetField(destination.FieldId);
-            TransferPlayer(player, _fields[connection.FieldId], target);
-            var position = onFloor ? target.Terrain.PlaceOnFloor(requested) : target.Terrain.SettleNear(requested, FieldTerrain.DropTolerance * 2f);
+            var terrain = GetField(destination.FieldId).Terrain;
+            var position = onFloor ? terrain.PlaceOnFloor(requested) : terrain.SettleNear(requested, FieldTerrain.DropTolerance * 2f);
             var inVillage = definition.State == FieldState.Village;
-            player.EnterField(position, inVillage);
-            _membershipChanged = true;
-            _connections[player.EntityId] = connection with { FieldId = destination.FieldId };
-            UpdatePlacement(connection.Session, destination.FieldId, position, inVillage);
+            Relocate(connection, destination.FieldId, position, inVillage);
+            connection.Player.EnterField(position, inVillage);
             return new GmPlacement(destination.FieldId, position);
         });
     }
@@ -167,20 +174,32 @@ public sealed partial class WorldServer
                 return new GmSpawnResult(false, 0);
             }
 
+            // The first beside the caller, the extra ones scattered around; pets as many as monsters, none replacing another.
             var origin = connection.Player.Position;
             if (pet)
             {
                 field.CallGameMasterPet(connection.Player, definition, GameMasterPetLifetimeMs);
-                return new GmSpawnResult(true, 1);
+            }
+            else
+            {
+                field.SpawnForGameMaster(definition, origin, drops);
             }
 
-            field.SpawnForGameMaster(definition, origin, drops);
             var spawned = 1;
             for (var index = 0; index < extra; index++)
             {
                 var x = field.Rng.NextUnit() * 2f * GameMasterSpawnScatter - GameMasterSpawnScatter;
                 var z = field.Rng.NextUnit() * 2f * GameMasterSpawnScatter - GameMasterSpawnScatter;
-                field.SpawnForGameMaster(definition, origin + new Vector3(x, 0f, z), drops);
+                var position = origin + new Vector3(x, 0f, z);
+                if (pet)
+                {
+                    field.CallGameMasterPet(connection.Player, definition, GameMasterPetLifetimeMs, position);
+                }
+                else
+                {
+                    field.SpawnForGameMaster(definition, position, drops);
+                }
+
                 spawned++;
             }
 
@@ -341,21 +360,13 @@ public sealed partial class WorldServer
     {
         return EnqueueAsync<PreparedCharacterOperation<bool>?>(requesterId, () =>
         {
-            if (!session.IsPlaying || session.Character is null || session.Loaded is null
-                || !_connections.TryGetValue(session.EntityId, out var connection) || !ReferenceEquals(connection.Session, session))
+            if (session.Loaded is null || !TryGetPlaying(session, out var connection))
             {
                 return null;
             }
 
-            var original = session.Character;
-            var candidate = original.CloneForInventoryOperation();
-            if (!candidate.ReceiveGroundLoot(make(_fields[connection.FieldId].Rng), 0))
-            {
-                return new PreparedCharacterOperation<bool>(original, null, null, false);
-            }
-
-            var snapshot = CharacterRecordFactory.Capture(session.Loaded, candidate, connection.FieldId, connection.Player.Position);
-            return new PreparedCharacterOperation<bool>(original, candidate, snapshot, true);
+            var (candidate, snapshot) = Receive(session, connection, make(_fields[connection.FieldId].Rng), null);
+            return new PreparedCharacterOperation<bool>(connection.Player.Character, candidate, snapshot, candidate is not null);
         });
     }
 
@@ -363,12 +374,14 @@ public sealed partial class WorldServer
     {
         return EnqueueAsync(NoOwner, () =>
         {
-            if (!ReferenceEquals(session.Character, operation.Original) || operation.Candidate is null)
+            var candidate = CheckReceived(session, operation, "a game master's gift");
+            if (Transfer(Persistence.Abstractions.GameLogs.ItemTransferKind.GameMasterGift, Guid.NewGuid(), session.FieldId) is { } log)
             {
-                throw new InvalidOperationException("Character ownership changed during a game master's gift.");
+                log.Arrived(operation.Original, candidate, null, CharacterIdOf(session));
+                Log(log);
             }
 
-            operation.Original.CommitInventoryOperation(operation.Candidate);
+            operation.Original.CommitInventoryOperation(candidate);
             return true;
         }, waitForCapacity: true);
     }
@@ -395,13 +408,8 @@ public sealed partial class WorldServer
             }
 
             var potions = new int[3, 4];
-            for (var anchor = 0; anchor < character.Inventory.Capacity; anchor++)
+            foreach (var item in character.Inventory.Items())
             {
-                if (character.Inventory[anchor] is not { } item)
-                {
-                    continue;
-                }
-
                 var key = item.Definition.CatalogKey;
                 var kind = key.StartsWith("PL", StringComparison.OrdinalIgnoreCase) ? 0
                     : key.StartsWith("PM", StringComparison.OrdinalIgnoreCase) ? 1

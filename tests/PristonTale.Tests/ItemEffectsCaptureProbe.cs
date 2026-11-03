@@ -2,7 +2,6 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using PristonTale.Client.Net.Presence;
 using PristonTale.Client.Net.WorldCatalog;
-using PristonTale.Effects;
 using PristonTale.Engine3D.Diagnostics;
 using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.IO;
@@ -16,6 +15,12 @@ using PristonTale.Simulation.Items.Usable;
 using PristonTale.Simulation.Skills;
 using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Skills;
+using PristonTale.Assets;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -58,9 +63,8 @@ internal sealed class ItemEffectsCaptureProbe : Game
     private PristonSkyLibrary _sky = null!;
     private PristonCamera _camera = null!;
     private RemoteEntityManager _remote = null!;
-    private LegacyEffectLibrary _library = null!;
-    private EffectsEngine _effects = null!;
-    private LegacyItemEffects _items = null!;
+    private EffectLibrary _library = null!;
+    private ItemUseEffects _items = null!;
     private PremiumPetPresentation _pets = null!;
     private SkillPresentation _skills = null!;
     private ForceOrbPresentation _orbs = null!;
@@ -70,10 +74,6 @@ internal sealed class ItemEffectsCaptureProbe : Game
     private int _shot;
     private double _seconds;
     private bool _begun;
-    private LegacyReturnEffect _return = null!;
-    private SpriteBatch _batch = null!;
-    private SpriteFont _font = null!;
-    private Texture2D _pixel = null!;
     private PristonCollisionWorld _collision = null!;
 
     public ItemEffectsCaptureProbe(string assetRoot, string contentRoot, string output)
@@ -97,7 +97,7 @@ internal sealed class ItemEffectsCaptureProbe : Game
         var field = new WorldCatalog().AllFields.Single(candidate => candidate.Id == "village-2");
         _sky = PristonSkyLibrary.LoadBootstrap(GraphicsDevice, _assetRoot);
         _renderer = new PristonRenderer(GraphicsDevice, Content, presentation: _presentation) { Sky = _sky, DayLengthSeconds = 0 };
-        _renderer.SetTimeOfDay(21f);
+        _renderer.SetTimeOfDay(23.5f);
         _renderer.SkyProfiles = new PristonSkyProfiles(PristonSkyProfiles.Resolve(field.Backdrop.Day),
             PristonSkyProfiles.Resolve(field.Backdrop.Glow), PristonSkyProfiles.Resolve(field.Backdrop.Night));
         var reader = new PristonSmdReader();
@@ -123,49 +123,44 @@ internal sealed class ItemEffectsCaptureProbe : Game
             new CharacterClassRegistry(), _assetRoot, catalog, ConsoleClientLog.Instance);
         _remote.Apply(new PresenceUpdate(1,
         [
-            new(SelfId, RemoteEntityKind.Player, false, Numeric(_focus), 0f, RemoteMoveState.Idle, 64, 64,
-                new PlayerAppearanceInfo("Panzer", 2, 0, 0, 0, "", "", 40), 0),
-            new(HopyId, RemoteEntityKind.Monster, false, Numeric(Floor(collision, _focus + new Vector3(-90f, 0f, 30f))), 1.2f, RemoteMoveState.Idle, 31, 50,
+            new(SelfId, EntityKind.Player, false, Numeric(_focus), 0f, MotionState.Stand, 64, 64,
+                new PlayerAppearanceInfo("Panzer", PlayerClass.Mechanician, 0, 0, 0, "", "", 40), 0),
+            new(HopyId, EntityKind.Monster, false, Numeric(Floor(collision, _focus + new Vector3(-90f, 0f, 30f))), 1.2f, MotionState.Stand, 31, 50,
                 null, 1, Name: "Hopy", Level: 3),
-            new(FriendId, RemoteEntityKind.Player, false, Numeric(Floor(collision, _focus + new Vector3(110f, 0f, -40f))), 2.6f, RemoteMoveState.Idle, 900,
-                1000, new PlayerAppearanceInfo("Lyra", 8, 0, 1, 0, "", "", 37) { BigHead = 2 }, 0),
-            new(KickerId, RemoteEntityKind.Player, false, Numeric(Floor(collision, _focus + new Vector3(-40f, 0f, -70f))), 0.6f, RemoteMoveState.Idle, 900,
-                1000, new PlayerAppearanceInfo("Kicker", 1, 0, 0, 0, "", "", 52) { BigHead = CharacterHead.SoccerLook }, 0)
+            new(FriendId, EntityKind.Player, false, Numeric(Floor(collision, _focus + new Vector3(110f, 0f, -40f))), 2.6f, MotionState.Stand, 900,
+                1000, new PlayerAppearanceInfo("Lyra", PlayerClass.Priestess, 0, 1, 0, "", "", 37) { BigHead = 2 }, 0),
+            new(KickerId, EntityKind.Player, false, Numeric(Floor(collision, _focus + new Vector3(-40f, 0f, -70f))), 0.6f, MotionState.Stand, 900,
+                1000, new PlayerAppearanceInfo("Kicker", PlayerClass.Fighter, 0, 0, 0, "", "", 52) { BigHead = CharacterHead.SoccerLook }, 0)
         ], [], [], []));
-        _library = LegacyEffectLibrary.LoadBootstrap(GraphicsDevice, Content, _assetRoot, ConsoleClientLog.Instance);
-        _effects = new EffectsEngine(GraphicsDevice, Content);
+        _library = EffectLibrary.LoadBootstrap(GraphicsDevice, Content, _assetRoot, ConsoleClientLog.Instance);
         _sounds = new SkillSoundBank(_assetRoot, ConsoleClientLog.Instance) { Enabled = false };
-        _items = new LegacyItemEffects(_library, _assetRoot, _effects, _renderer.TransientLights, _sounds);
         _skills = new SkillPresentation(GraphicsDevice, Content, _library, _renderer.TransientLights, new SceneHost(this), _sounds, ConsoleClientLog.Instance);
         _library.Vfx.CompileAll();
         ItemVfx.Register(_skills.Library);
-        _orbs = new ForceOrbPresentation(_skills, _library, _assetRoot, _effects, _renderer.TransientLights);
-        _pets = new PremiumPetPresentation(actorScene, loader, _assetRoot, _library, _effects, _renderer.TransientLights, _sounds, ConsoleClientLog.Instance);
-        _return = new LegacyReturnEffect(GraphicsDevice, _library, _renderer.TransientLights);
-        _batch = new SpriteBatch(GraphicsDevice);
-        _font = Content.Load<SpriteFont>("Fonts/UI");
-        _pixel = new Texture2D(GraphicsDevice, 1, 1);
-        _pixel.SetData([Color.White]);
+        _items = new ItemUseEffects(_skills, _renderer.TransientLights, _sounds);
+        var scripts = new SystemScriptEffects(_skills.System, _skills.Library);
+        _orbs = new ForceOrbPresentation(_skills, scripts, _renderer.TransientLights);
+        _pets = new PremiumPetPresentation(actorScene, loader, _assetRoot, scripts, _renderer.TransientLights, _sounds, ConsoleClientLog.Instance);
     }
 
-    // Two crystal pets: the viewer's own with its life bar, and the friend's with the owner's name, each called in the
-    // return sparkle.
+    // Two crystal pets, the viewer's own and a friend's, each called in the return sparkle (their name boxes are HUD
+    // drawing, outside this probe).
     private void CrystalPets()
     {
         var own = Floor(_collision, _focus + new Vector3(-55f, 0f, 60f));
         var theirs = Floor(_collision, _focus + new Vector3(80f, 0f, 10f));
         _remote.Apply(new PresenceUpdate(5,
         [
-            new(PetId, RemoteEntityKind.Monster, false, Numeric(own), 0.4f, RemoteMoveState.Idle, 120, 153, null, 1, Name: "Hopy", Level: 4)
+            new(PetId, EntityKind.Monster, false, Numeric(own), 0.4f, MotionState.Stand, 120, 153, null, 1, Name: "Hopy", Level: 4)
             {
                 OwnerId = SelfId
             },
-            new(FriendPetId, RemoteEntityKind.Monster, false, Numeric(theirs), 2.4f, RemoteMoveState.Idle, 153, 153, null, 1, Name: "Hopy", Level: 4)
+            new(FriendPetId, EntityKind.Monster, false, Numeric(theirs), 2.4f, MotionState.Stand, 153, 153, null, 1, Name: "Hopy", Level: 4)
             {
                 OwnerId = FriendId
             }
         ], [], [], []));
-        _return.Start(own);
+        _skills.SpawnAt(ItemVfx.Return, own, Matrix.Identity);
         _items.Play(ItemEffectKind.Return, SelfId, 0, own, _eye, _seconds * 1000d);
     }
 
@@ -181,9 +176,9 @@ internal sealed class ItemEffectsCaptureProbe : Game
         {
             ItemEffects =
             [
-                new ItemEffectInfo(SelfId, (uint)PremiumEffectKind.HelpPetTerry, ItemEffectKind.PetAttack, default, (int)HopyId),
-                new ItemEffectInfo(SelfId, (uint)PremiumEffectKind.PhoenixPet, ItemEffectKind.PetAttack, default, (int)HopyId),
-                new ItemEffectInfo(FriendId, (uint)PremiumEffectKind.HelpPetIo, ItemEffectKind.PetAttack, default, (int)HopyId)
+                new ItemEffectInfo(SelfId, (uint)PremiumEffectKind.HelpPetTerry, ItemEffectKind.PetAttack, default, 0, HopyId),
+                new ItemEffectInfo(SelfId, (uint)PremiumEffectKind.PhoenixPet, ItemEffectKind.PetAttack, default, 0, HopyId),
+                new ItemEffectInfo(FriendId, (uint)PremiumEffectKind.HelpPetIo, ItemEffectKind.PetAttack, default, 0, HopyId)
             ]
         };
         _pets.Observe(update, Anchor);
@@ -206,7 +201,7 @@ internal sealed class ItemEffectsCaptureProbe : Game
 
     private void ForceOrbHit()
     {
-        var hit = new CombatEventInfo(SelfId, HopyId, RemoteCombatEventKind.Hit, 500f, 250f, 120, false, false);
+        var hit = new CombatEventInfo(SelfId, HopyId, CombatEventKind.Hit, 500f, 250f, 120, false, false);
         _orbs.Observe(new PresenceUpdate(4, [], [], [], [hit]), Anchor, _seconds * 1000d);
     }
 
@@ -247,9 +242,7 @@ internal sealed class ItemEffectsCaptureProbe : Game
         _items.Update(_seconds * 1000d, Anchor, _eye);
         _orbs.Update(_seconds * 1000d, Anchor);
         _skills.Update(step, _seconds * 1000d);
-        _effects.Update(new GameTime(TimeSpan.FromSeconds(_seconds), TimeSpan.FromSeconds(step)));
         _renderer.Update(new GameTime(TimeSpan.FromSeconds(_seconds), TimeSpan.FromSeconds(step)));
-        _return.Update(step);
     }
 
     protected override void Draw(GameTime gameTime)
@@ -273,16 +266,8 @@ internal sealed class ItemEffectsCaptureProbe : Game
         }
 
         _renderer.Draw(_camera);
-        _effects.Draw(_camera.View, _camera.Projection, _camera.Position);
         _skills.Draw(_camera.View, _camera.Projection, _camera.Position, _renderer.SceneLinearDepth);
-        _return.Draw(_camera.View, _camera.Projection, _camera.Position);
         _renderer.ComposeScene();
-        if (shot.Name.StartsWith("crystal", StringComparison.Ordinal))
-        {
-            _batch.Begin();
-            SummonPlates.Draw(_batch, _font, _pixel, GraphicsDevice.Viewport, _camera.View, _camera.Projection, _remote, _renderer, SelfId, _focus);
-            _batch.End();
-        }
         GraphicsDevice.SetRenderTarget(null);
         var pixels = new Color[960 * 540];
         target.GetData(pixels);
@@ -299,7 +284,7 @@ internal sealed class ItemEffectsCaptureProbe : Game
         }
 
         var vfx = $"{_skills.System.Instances.Count}/{_skills.System.ParticleCount}/{_skills.Renderer.LastQuadCount}";
-        Console.WriteLine($"Item effects {shot.Name}: captured; pets={_pets.OwnerCount}; effects={_effects.Instances.Count}; vfx={vfx}; bursts={_items.PendingBursts}");
+        Console.WriteLine($"Item effects {shot.Name}: captured; pets={_pets.OwnerCount}; vfx={vfx}; bursts={_items.PendingBursts}");
         foreach (var (owner, kind, position) in _pets.Pets)
         {
             Console.WriteLine($"  pet {kind} of {owner} at {position - (Anchor(owner) ?? Vector3.Zero)} from its owner");
@@ -310,12 +295,8 @@ internal sealed class ItemEffectsCaptureProbe : Game
 
     protected override void UnloadContent()
     {
-        _return.Dispose();
-        _batch.Dispose();
-        _pixel.Dispose();
         _pets.Dispose();
         _remote.Dispose();
-        _effects.Dispose();
         _library.Dispose();
         _sounds.Dispose();
     }
@@ -329,6 +310,8 @@ internal sealed class ItemEffectsCaptureProbe : Game
         public void PlaySkillMotion(ulong entityId, SkillMotionPlan plan, float durationMs, float rate, int loop)
         {
         }
+
+        public float AttackRateOf(ulong entityId) => 1f;
 
         public bool TryGetPosition(ulong entityId, out Vector3 position) => probe._remote.TryGetDrawnPosition(entityId, out position);
 
@@ -350,5 +333,5 @@ internal sealed class ItemEffectsCaptureProbe : Game
 
     private static System.Numerics.Vector3 Numeric(Vector3 value) => new(value.X, value.Y, value.Z);
 
-    private string Resolve(string relative) => PristonFileResolver.Resolve(Path.Combine(_assetRoot, relative.Replace('\\', '/')));
+    private string Resolve(string relative) => AssetFiles.Resolve(Path.Combine(_assetRoot, relative.Replace('\\', '/')));
 }

@@ -8,6 +8,7 @@ using PristonTale.Server.Hosting;
 using PristonTale.Server.Net;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.World;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -19,7 +20,12 @@ internal static class NetworkHardeningTests
         yield return ("player info bucket, per-address connections and sampled logs bound abusive clients", BucketsAsync);
         yield return ("login throttle blocks repeated failures per account and per address", LoginThrottleAsync);
         yield return ("network limits read configuration and reject negative values", NetworkConfigurationAsync);
+        yield return ("the server closes sockets past its handshake and connection caps before TLS", ConnectionCapsAsync);
+        yield return ("a full outbox's events and a full crowd encoded above the presence backlog fit the send limit", SendLimitAsync);
+        yield return ("requests that copy the character are refused as busy past their bucket", StoredOperationsAsync);
         yield return ("world command quota and a full queue refuse synchronously and per player", CommandQuotaAsync);
+        yield return ("a burst of movement reports fills only their own quota, never the commands behind them", MovementQuotaAsync);
+        yield return ("a session's packets wait in order off its receive loop; a move behind a move replaces it", SessionQueueAsync);
         yield return ("world options validate the experience multiplier", WorldOptionsAsync);
         yield return ("server startup fails without field terrain unless explicitly allowed", TerrainStartupAsync);
     }
@@ -87,6 +93,8 @@ internal static class NetworkHardeningTests
     {
         var defaults = NetworkLimits.From(Configuration());
         Assert.True(defaults.PacketLimit == 251 && defaults.PacketWindowMs == 5000, "packet limit default left the original values");
+        Assert.True(defaults is { MaxConnections: 6000, MaxHandshakes: 128, MaxHandshakesPerIp: 4, StoredOperationBurst: 40, StoredOperationsPerSecond: 20 },
+            "a connection or request limit lost its default");
         var custom = NetworkLimits.From(Configuration(("Network:PacketLimit", "0"), ("Network:LoginTimeoutSeconds", "12"), ("Network:MaxConnectionsPerIp", "0")));
         Assert.True(custom.PacketLimit == 0 && custom.LoginTimeoutMs == 12_000 && custom.MaxConnectionsPerIp == 0, "network configuration ignored");
         var threw = false;
@@ -101,6 +109,84 @@ internal static class NetworkHardeningTests
 
         Assert.True(threw, "a negative network limit was accepted");
         return Task.CompletedTask;
+    }
+
+    private static async Task ConnectionCapsAsync()
+    {
+        await SilentSocketAsync(("Network:MaxHandshakes", "1"), ("Network:MaxHandshakesPerIp", "0"));
+        await SilentSocketAsync(("Network:MaxHandshakesPerIp", "1"));
+
+        await using (var server = await MultiplayerServer.StartAsync(MultiplayerServer.WorldWith(), ("Network:MaxConnections", "1")))
+        {
+            var port = new Uri(server.Address).Port;
+            await using var first = await PristonTale.Protocol.Transport.TlsTransport.ConnectAsync("127.0.0.1", port,
+                new PristonTale.Protocol.Transport.ServerCertificatePolicy("127.0.0.1"), CancellationToken.None);
+            Assert.True(!await HandshakesAsync(port), "a connection past the cap was taken");
+        }
+    }
+
+    // A silent socket holds the only handshake the settings allow: the next is refused, and taken once the socket closes.
+    private static async Task SilentSocketAsync(params (string Key, string Value)[] settings)
+    {
+        await using var server = await MultiplayerServer.StartAsync(MultiplayerServer.WorldWith(), settings);
+        var port = new Uri(server.Address).Port;
+        var silent = new System.Net.Sockets.Socket(System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
+        await silent.ConnectAsync(IPAddress.Loopback, port);
+        Assert.True(!await HandshakesAsync(port), $"a handshake past the cap was taken while a silent socket held the only one ({settings[0].Key})");
+        silent.Dispose();
+        var taken = false;
+        for (var attempt = 0; attempt < 50 && !taken; attempt++)
+        {
+            taken = await HandshakesAsync(port);
+        }
+
+        Assert.True(taken, "the handshake slot stayed held after the silent socket closed");
+    }
+
+    private static Task SendLimitAsync()
+    {
+        var events = WorldOutbox.DefaultEventCapacity * Math.Max(Protocol.Packets.CombatEventEntry.MaxSize, Protocol.Packets.SkillEventEntry.MaxSize);
+        // Every entity of a crowd entering view at once is described ahead of its spawn.
+        var crowd = PresenceEncoder.MaxVisible * (Protocol.Packets.PresenceWire.MaxEntrySize + Protocol.Packets.EntityDescriptionPacket.MaximumSize);
+        Assert.True(ClientSession.PresenceBacklogBytes + events + crowd < new Protocol.Transport.FrameConnectionOptions().MaxPendingSendBytes,
+            "a slow reader's full outbox could take its connection past the send limit");
+        return Task.CompletedTask;
+    }
+
+    // Whether a TLS connection to the port completes its handshake.
+    private static async Task<bool> HandshakesAsync(int port)
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await using var connection = await PristonTale.Protocol.Transport.TlsTransport.ConnectAsync("127.0.0.1", port,
+                new PristonTale.Protocol.Transport.ServerCertificatePolicy("127.0.0.1"), timeout.Token);
+            return true;
+        }
+        catch (Exception ex) when (ex is System.Security.Authentication.AuthenticationException or IOException or System.Net.Sockets.SocketException)
+        {
+            return false;
+        }
+    }
+
+    private static async Task StoredOperationsAsync()
+    {
+        await using var server = await MultiplayerServer.StartAsync(MultiplayerServer.WorldWith(), ("Network:StoredOperationBurst", "3"),
+            ("Network:StoredOperationsPerSecond", "1"));
+        var account = await server.CreatePlayerAsync(new PlayerSetup("Hasty", PlayerClass.Fighter, 10, MultiplayerServer.HuntingField, MultiplayerServer.Camp));
+        await using var player = await MultiplayerClient.EnterAsync(server, account, "Hasty");
+        var revision = (await player.WaitAsync(world => world.Owner, "the owner state")).InventoryRevision;
+        var outcomes = new List<Simulation.Items.InventoryOutcome>();
+        for (var page = 1; page <= 5; page++)
+        {
+            var outcome = await player.InventoryAsync(new Simulation.Items.InventoryCommand(Guid.NewGuid(), revision,
+                Simulation.Items.InventoryAction.SwitchBagPage, Guid.Empty, page % 2, 0, default));
+            revision = outcome.Revision;
+            outcomes.Add(outcome);
+        }
+
+        Assert.True(outcomes.Take(3).All(static outcome => outcome.Ok) && outcomes.Skip(3).Any(static outcome => outcome is { Ok: false, Message: "too many requests" }),
+            $"the bucket did not refuse a burst past it: {string.Join(", ", outcomes.Select(static outcome => outcome.Message))}");
     }
 
     private static async Task CommandQuotaAsync()
@@ -132,9 +218,9 @@ internal static class NetworkHardeningTests
 
         var full = new WorldServer(new WorldDataHolder(), catalog);
         var refused = false;
-        for (ulong owner = 1; owner <= 2000 && !refused; owner++)
+        for (ulong owner = 1; owner <= WorldServer.CommandQueueCapacity && !refused; owner++)
         {
-            for (var command = 0; command < 40 && !refused; command++)
+            for (var command = 0; command < WorldServerOptions.DefaultMaxPendingCommandsPerPlayer && !refused; command++)
             {
                 refused = Throws(() => full.ReportMovementAsync(3, owner, Vector3.Zero, 0f, false, false, 0));
             }
@@ -149,6 +235,66 @@ internal static class NetworkHardeningTests
         }
 
         Assert.True(leave.IsCompletedSuccessfully, "leaving the world waited forever behind a full queue");
+    }
+
+    private static async Task MovementQuotaAsync()
+    {
+        var catalog = new WorldCatalog([new FieldDef("fixture", "Fixture", FieldState.Forest, new FieldBackdrop("", "", ""), "", []) { FieldCode = 3 }]);
+        var world = new WorldServer(new WorldDataHolder(), catalog, options: new WorldServerOptions { MaxPendingCommandsPerPlayer = 2 });
+        var player = new WorldPlayer(7, new Vector3(100, 0, 100), new CharacterClassRegistry().CreatePlayer(PlayerClass.Fighter, "Moves"), false, default);
+        var join = world.JoinAsync(3, player, Channel.CreateUnbounded<WorldSnapshot>().Writer);
+        world.Tick(0.05f, 1);
+        Assert.True(await join, "fixture join failed");
+        var reported = 0;
+        while (reported <= WorldServer.MostPendingMovements && world.TryReportMovement(3, player.EntityId, new Vector3(101 + reported, 0, 100), 0f, true, false, 0, null))
+        {
+            reported++;
+        }
+
+        Assert.True(reported == WorldServer.MostPendingMovements, $"{reported} movement reports waited, not {WorldServer.MostPendingMovements}");
+        var commands = new[]
+        {
+            world.ReportMovementAsync(3, player.EntityId, new Vector3(120, 0, 100), 0f, true, false, 0),
+            world.ReportMovementAsync(3, player.EntityId, new Vector3(121, 0, 100), 0f, true, false, 0)
+        };
+        Assert.True(world.PendingCommandsOf(player.EntityId) == 2, "the movement reports took the commands' quota");
+        world.Tick(0.05f, 2);
+        await Task.WhenAll(commands);
+        Assert.True(world.TryReportMovement(3, player.EntityId, new Vector3(130, 0, 100), 0f, true, false, 0, null),
+            "the tick did not release the movement quota");
+    }
+
+    private static async Task SessionQueueAsync()
+    {
+        using var queue = new SessionPacketQueue();
+        Assert.True(queue.TryEnqueue([1], movement: true) && queue.TryEnqueue([2], movement: true) && queue.TryEnqueue([3], movement: false)
+            && queue.TryEnqueue([4], movement: true) && queue.TryEnqueue([5], movement: false), "a packet was refused below the capacity");
+        var order = new List<byte>();
+        while (order.Count < 3 && await queue.DequeueAsync() is { } packet)
+        {
+            order.Add(packet.Memory.Span[0]);
+            SessionPacketQueue.Return(packet);
+        }
+
+        Assert.True(order.SequenceEqual(new byte[] { 2, 3, 4 }), $"queued packets came out as {string.Join(",", order)}");
+        Assert.True(queue.TryEnqueue([6], movement: true), "a move behind a handled one was refused");
+        var accepted = 2;
+        while (queue.TryEnqueue([7], movement: false))
+        {
+            accepted++;
+        }
+
+        Assert.True(accepted == SessionPacketQueue.Capacity, $"the queue held {accepted} packets, not {SessionPacketQueue.Capacity}");
+        queue.Complete();
+        Assert.True(!queue.TryEnqueue([8], movement: false), "a completed queue took a packet");
+        var drained = 0;
+        while (await queue.DequeueAsync() is { } packet)
+        {
+            drained++;
+            SessionPacketQueue.Return(packet);
+        }
+
+        Assert.True(drained == SessionPacketQueue.Capacity, $"a completed queue handed out {drained} of its packets");
     }
 
     private static Task WorldOptionsAsync()

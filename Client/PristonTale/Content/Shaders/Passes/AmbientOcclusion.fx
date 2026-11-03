@@ -14,7 +14,7 @@ cbuffer AmbientOcclusionConstants : register(b0)
     float4 AoSize;            // xy size of the half-resolution target (px), zw 1 / size
     float4 AoProjection;      // x tan(half fov x), y tan(half fov y), z pixels per world unit at depth 1 (half res)
     float4 AoRadius;          // x world radius, y falloff share of the radius, z max radius (px), w 1 = ambient occlusion on
-    float4 ContactParams;     // x march length (world), y thickness (world), z 1 = contact shadows on, w frame noise offset
+    float4 ContactParams;     // x march length (world), y thickness (world), z 1 = contact shadows on
     float3 CameraRight;       // world basis of the camera
     float AoPadding0;
     float3 CameraUp;
@@ -42,7 +42,6 @@ SamplerState AoInputSampler : register(s2) = sampler_state
     Texture = (AoInput); MinFilter = Point; MagFilter = Point; MipFilter = Point; AddressU = Clamp; AddressV = Clamp;
 };
 
-static const float SkyDepth = 50000.0;
 static const uint SliceCount = 2;
 static const uint StepCount = 3;
 static const uint ContactSteps = 10;
@@ -142,8 +141,9 @@ float ContactShadow(float2 pixel, float3 p, float3 n)
         return 1.0;
     }
 
-    float2 q = pixel + ContactParams.w * 5.588238;
-    float jitter = frac(52.9829189 * frac(dot(q, float2(0.06711056, 0.00583715))));
+    // A fixed jitter per pixel: one moving every frame shimmered wherever the temporal history was rejected (a turning
+    // camera, moving actors).
+    float jitter = InterleavedGradientNoise(pixel);
     float3 start = p + n * (0.002 * length(p));
     float3 stepWorld = toSun * (ContactParams.x / ContactSteps);
     float occlusion = 0.0;
@@ -181,7 +181,7 @@ float4 PS_Occlusion(FullscreenOut i) : SV_Target0
     float2 pixel = floor(i.Uv * AoSize.xy);
     float2 uv = (pixel + 0.5) * AoSize.zw;
     float depth = DepthAt(uv);
-    if (depth > SkyDepth)
+    if (depth > SkyDepthThreshold)
     {
         return float4(1.0, 1.0, depth, 1.0);
     }
@@ -200,7 +200,7 @@ float4 PS_Blur(FullscreenOut i) : SV_Target0
 {
     float2 pixel = floor(i.Uv * AoSize.xy);
     float4 centre = AoInput.SampleLevel(AoInputSampler, (pixel + 0.5) * AoSize.zw, 0);
-    if (centre.z > SkyDepth)
+    if (centre.z > SkyDepthThreshold)
     {
         return centre;
     }

@@ -11,7 +11,7 @@ namespace PristonTale.Gameplay.UI.Inventory;
 // mobile shop asks for confirmation. One use is in flight at a time and carries the inventory revision it was built on.
 public sealed class HudItemUseController(Func<ItemUseCommand, Task<ItemUseOutcome>> use, IClientLog log)
 {
-    private Task<ItemUseOutcome> _pending;
+    private readonly HudRequest<ItemUseOutcome> _request = new(log, "Item use failed");
     private OwnedItemView _confirmItem;
     private TeleportCoreDestination _confirmDestination;
     private Guid _confirmTeleportItem;
@@ -20,7 +20,7 @@ public sealed class HudItemUseController(Func<ItemUseCommand, Task<ItemUseOutcom
     private const double RestorationDelayMs = 10_000d;
 
     public HudTeleportCore Teleport { get; } = new();
-    public bool Pending => _pending is not null;
+    public bool Pending => _request.Pending;
     public bool Confirming => _confirmItem is not null || _confirmDestination is not null;
     public string Message { get; private set; } = "";
     public int Completions { get; private set; }
@@ -97,7 +97,7 @@ public sealed class HudItemUseController(Func<ItemUseCommand, Task<ItemUseOutcom
     // death and the server checks the time.
     public void Restore(OwnerState state, bool inCastle, double nowMs)
     {
-        if (state is null || state.Hp > 0)
+        if (state is null || state.Life > 0)
         {
             _deadSinceMs = -1d;
             _restoreSent = false;
@@ -131,17 +131,15 @@ public sealed class HudItemUseController(Func<ItemUseCommand, Task<ItemUseOutcom
 
     public void Update()
     {
-        if (_pending is null || !_pending.IsCompleted)
+        if (!_request.TryTake(out var outcome))
         {
             return;
         }
 
-        var outcome = _pending.Result;
-        _pending = null;
         LastOutcome = outcome;
         Message = outcome.Message;
         Completions++;
-        if (outcome.Ok && UsableItemCatalog.TryGet(Simulation.Items.ItemCodes.TryFormat(outcome.ItemCode, out var key) ? key : "", out var rule)
+        if (outcome.Ok && UsableItemCatalog.TryGet(Simulation.Items.ItemCodes.KeyOf(outcome.ItemCode), out var rule)
             && rule.Action == UsableItemAction.MobileShop)
         {
             ShopsOpened++;
@@ -154,14 +152,12 @@ public sealed class HudItemUseController(Func<ItemUseCommand, Task<ItemUseOutcom
         if (_confirmItem is not null)
         {
             painter.Flush();
-            HudMessageBox.Draw(painter, _confirmItem.Name, "Do you want to", pointer);
-            painter.TextCentered("use this item?", HudMessageBox.Bounds.Left, HudMessageBox.Bounds.Right, HudMessageBox.Bounds.Y + 60);
+            HudMessageBox.Draw(painter, _confirmItem.Name, "Do you want to", pointer, "use this item?");
         }
         else if (_confirmDestination is not null)
         {
             painter.Flush();
-            HudMessageBox.Draw(painter, HudTeleportCore.ConfirmText(_confirmDestination), "Do you want to", pointer);
-            painter.TextCentered("Teleport?", HudMessageBox.Bounds.Left, HudMessageBox.Bounds.Right, HudMessageBox.Bounds.Y + 60);
+            HudMessageBox.Draw(painter, HudTeleportCore.ConfirmText(_confirmDestination), "Do you want to", pointer, "Teleport?");
         }
     }
 
@@ -179,22 +175,10 @@ public sealed class HudItemUseController(Func<ItemUseCommand, Task<ItemUseOutcom
             return;
         }
 
-        _pending = UseAsync(command);
+        _request.Start(() => use(command), _ => ItemUseOutcome.Refused(command.ExpectedRevision, ItemUseStatus.StorageFailed) with
+        {
+            Message = "Connection error. Check your inventory before retrying."
+        });
     }
 
-    private async Task<ItemUseOutcome> UseAsync(ItemUseCommand command)
-    {
-        try
-        {
-            return await use(command);
-        }
-        catch (Exception exception)
-        {
-            log.Error("Item use failed", exception);
-            return ItemUseOutcome.Refused(command.ExpectedRevision, ItemUseStatus.StorageFailed) with
-            {
-                Message = "Connection error. Check your inventory before retrying."
-            };
-        }
-    }
 }

@@ -3,10 +3,14 @@ using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Skills;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.Items.Usable;
+using PristonTale.Simulation.PersonalShops;
 using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.Combat;
+using PristonTale.Simulation.Social;
 using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Motion;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
 
 namespace PristonTale.Application.World;
 
@@ -28,6 +32,8 @@ public enum PlayerActionState
     Eat = 3,
 
     Cast = 4,
+
+    Yahoo = 5,
 }
 
 public sealed class WorldPlayer
@@ -51,12 +57,17 @@ public sealed class WorldPlayer
     private const float MaxBudgetSeconds = 2f;
     private const float BusyCorrectionDistance = 192f;
     private const long StaleMotionMs = 1500;
-    // Reports may climb this much at once (a long report over stairs); falls of any height are accepted. The client
-    // still steps at most GroundTraversal.StepUp (10 units) per frame; only server-moved monsters climb 20.
+    // How far above the server's height a floor still counts as the one the player stands on where a report starts; falls
+    // of any height are accepted.
     private const float ReportClimb = 64f;
-    // Every report is checked against walls. One up to this long follows the client's wall slide and may end this far
-    // from the reported point (a corner cut between reports); the server then keeps the slid point on its side of the
-    // wall. Longer reports may not cross a wall at all.
+    // The most each 8-unit step of a report may climb: the client steps up at most GroundTraversal.StepUp (10 units)
+    // every 4 units, so 20, with room for the two sides sampling the ground at different points. Allowing ReportClimb at
+    // every step let one report scale 64 units per step, up any cliff without a wall face.
+    private const float StepClimb = 24f;
+    // Every report is walked in pieces no longer than this, each following the client's wall slide from the floor the
+    // last piece stood on, so the rising ground of a ramp is not taken for a wall. A piece may end this far from its
+    // point on the reported path (a corner cut between reports); the server then keeps the slid point on its side of
+    // the wall.
     private const float WallCheckDistance = 48f;
     private const float CornerCutTolerance = 8f;
     private long _lastReportMs = -1;
@@ -67,29 +78,91 @@ public sealed class WorldPlayer
     private bool _attackSustained;
 
     // A swing hits only when elapsed time crosses its authored event offset.
-    private float _swingElapsedMs;
-    private float _swingDurationMs;
-    private float _swingHitAtMs;
-    private bool _swingHitFired;
+    // The running action's clip; Action says which action it belongs to.
+    private ActionTimeline _timeline;
     private ulong _swingTargetId;
 
     private PotionDefinition? _pendingPotion;
-    private float _potionElapsedMs;
-    private float _potionDurationMs;
-    private float _potionEventMs;
-    private bool _potionApplied;
+    private bool _potionCheers;
 
     public bool HasPendingPotion => _pendingPotion is not null || Action == PlayerActionState.Eat;
+
+    // A queued cheer starts once the motion in progress ends (FieldInstance gives it the clip's length).
+    private bool _yahooPending;
+    private long _yahooKeyUntilMs = long.MinValue;
+
+    public bool HasPendingYahoo => _yahooPending;
 
     // Quest work waiting for the next upkeep, notices and dialogs for the owner, and duel bookkeeping.
     public PlayerQuestState QuestState { get; } = new();
 
-    public void QueuePotion(PotionDefinition potion)
+    internal long AgingCountedAtMs { get; set; } = -1;
+    internal float AgingWornMs { get; set; }
+    internal long AgingCheckAtMs { get; set; }
+
+    // A potion that cheers (the tiger capsule) ends its eating motion at the event frame and cheers instead.
+    public void QueuePotion(PotionDefinition potion, bool cheers = false)
     {
         if (!IsDead && !HasPendingPotion)
         {
             _pendingPotion = potion;
+            _potionCheers = cheers;
         }
+    }
+
+    public void QueueYahoo()
+    {
+        if (!IsDead)
+        {
+            _yahooPending = true;
+        }
+    }
+
+    // A yahoo word in the chat (key false) opens the Space window and cheers; Space (key true) cheers inside the window
+    // for its stamina. Either one cheers only from standing, walking or running.
+    public bool AskYahoo(bool key, long nowMs)
+    {
+        if (!key)
+        {
+            _yahooKeyUntilMs = nowMs + YahooRules.KeyWindowMs;
+        }
+        else if (nowMs >= _yahooKeyUntilMs)
+        {
+            return false;
+        }
+
+        if (IsDead || IsBusy || _yahooPending || MoveState is not (MotionState.Stand or MotionState.Walk or MotionState.Run))
+        {
+            return false;
+        }
+
+        if (key)
+        {
+            var cost = YahooRules.KeyStaminaCost(_character.MaxStamina);
+            if (_character.Stamina <= cost)
+            {
+                return false;
+            }
+
+            _character.Stamina -= cost;
+        }
+
+        _yahooPending = true;
+        return true;
+    }
+
+    public bool BeginPendingYahoo(float durationMs)
+    {
+        if (IsDead || IsBusy || !_yahooPending)
+        {
+            return false;
+        }
+
+        _yahooPending = false;
+        Action = PlayerActionState.Yahoo;
+        MoveState = MotionState.Yahoo;
+        _timeline = ActionTimeline.Start(durationMs);
+        return true;
     }
 
     public bool BeginPendingPotion(float durationMs, float eventMs)
@@ -100,11 +173,8 @@ public sealed class WorldPlayer
         }
 
         Action = PlayerActionState.Eat;
-        MoveState = MoveStateView.Eat;
-        _potionElapsedMs = 0f;
-        _potionDurationMs = MathF.Max(1f, durationMs);
-        _potionEventMs = Math.Clamp(eventMs, 0f, _potionDurationMs);
-        _potionApplied = false;
+        MoveState = MotionState.Eat;
+        _timeline = ActionTimeline.Start(durationMs, Math.Clamp(eventMs, 0f, MathF.Max(1f, durationMs)));
         return true;
     }
 
@@ -115,33 +185,35 @@ public sealed class WorldPlayer
             return PotionResource.None;
         }
 
-        _potionElapsedMs += dtMs;
+        _timeline.Advance(dtMs);
         var restored = PotionResource.None;
-        if (!_potionApplied && _potionElapsedMs >= _potionEventMs)
+        if (!_timeline.EventFired && _timeline.ElapsedMs >= _timeline.EventMs)
         {
-            _potionApplied = true;
+            _timeline.FireEvent();
             restored = _pendingPotion.Restore(_character, random);
+            if (_potionCheers)
+            {
+                _timeline.End();
+                _yahooPending = true;
+            }
         }
 
-        if (_potionElapsedMs >= _potionDurationMs)
+        if (_timeline.Finished)
         {
             _pendingPotion = null;
-            Action = PlayerActionState.Idle;
-            MoveState = MoveStateView.Idle;
+            StandIdle();
         }
 
         return restored;
     }
 
-    private float _flinchMsLeft;
-
-    // A skill motion owns the avatar like a swing; FieldSkills fires its hits from the elapsed time.
-    private float _castElapsedMs;
-    private float _castDurationMs;
+    // The length of the damage motion: the class fallback until the field sets the body's authored clip (FieldInstance.Add).
+    public float FlinchMs { get; set; }
 
     public PlayerSkillCooldowns Cooldowns { get; } = new();
     public RegenerationState Regeneration { get; } = new();
-    public float CastElapsedMs => _castElapsedMs;
+    // A skill motion owns the avatar like a swing; FieldSkills fires its hits from the elapsed time while it casts.
+    public float CastElapsedMs => _timeline.ElapsedMs;
     public bool CastCompleted { get; private set; }
     public bool IsCasting => Action == PlayerActionState.Cast;
 
@@ -156,7 +228,7 @@ public sealed class WorldPlayer
     {
         if (IsCasting)
         {
-            _castDurationMs = MathF.Max(_castElapsedMs, MathF.Max(1f, durationMs));
+            _timeline.Shorten(durationMs);
         }
     }
 
@@ -168,18 +240,17 @@ public sealed class WorldPlayer
         }
 
         Action = PlayerActionState.Cast;
-        MoveState = MoveStateView.Skill;
+        MoveState = MotionState.Skill;
         CastCompleted = false;
-        _castElapsedMs = 0f;
-        _castDurationMs = MathF.Max(1f, durationMs);
+        _timeline = ActionTimeline.Start(durationMs);
         ClearAttackTarget();
     }
 
     public RegenerationPosture Posture => IsDead ? RegenerationPosture.Acting : MoveState switch
     {
-        MoveStateView.Idle => RegenerationPosture.Standing,
-        MoveStateView.Walking => RegenerationPosture.Walking,
-        MoveStateView.Running => RegenerationPosture.Running,
+        MotionState.Stand => RegenerationPosture.Standing,
+        MotionState.Walk => RegenerationPosture.Walking,
+        MotionState.Run => RegenerationPosture.Running,
         _ => RegenerationPosture.Acting
     };
 
@@ -193,6 +264,7 @@ public sealed class WorldPlayer
         EntityId = entityId;
         Position = position;
         _character = character;
+        FlinchMs = MotionTiming.DurationMs(PlayerMotionFallback.GetClip(character.Class.Class, MotionCode.Damage).Frames, MotionCodes.DamageAndEatRate);
         _inVillage = inVillage;
         _appearance = appearance;
         _cueLevel = character.Level;
@@ -233,7 +305,7 @@ public sealed class WorldPlayer
     public ulong EntityId { get; }
     public Vector3 Position { get; private set; }
     public float Facing { get; private set; }
-    public MoveStateView MoveState { get; private set; } = MoveStateView.Idle;
+    public MotionState MoveState { get; private set; } = MotionState.Stand;
 
     public ulong AttackTargetId => _attackTargetId;
     public ulong AttackSequence { get; private set; }
@@ -258,7 +330,40 @@ public sealed class WorldPlayer
 
     public bool IsBusy => Action != PlayerActionState.Idle;
 
+    public bool InVillage => _inVillage;
+
+    // The party the player belongs to and the request to join one it has not answered (WorldServer.Parties).
+    public Party? Party { get; internal set; }
+    public PartyRequest? PartyRequest { get; internal set; }
+
+    public bool SharesPartyWith(WorldPlayer other) => Party is { } party && ReferenceEquals(party, other.Party);
+
+    // The trade the player is in and the request to trade it has not answered (WorldServer.Trades).
+    public Trade? Trade { get; internal set; }
+    public TradeRequest? TradeRequest { get; internal set; }
+
+    // An offered bag item changes only through the exchange.
+    public bool Offers(Guid itemId) => Trade is { } trade && trade.OfferOf(trade.SideOf(EntityId)).Holds(itemId);
+
+    // The personal shop the player sells from; while it is open the seller stays where it stands and acts on nothing else.
+    public PersonalShop? Shop { get; private set; }
+
+    public void OpenShop(PersonalShop shop) => Shop = shop;
+
+    public void CloseShop() => Shop = null;
+
+    // Drops what the seller no longer holds; a shop with nothing left closes.
+    public void PruneShop()
+    {
+        Shop?.Prune(_character.Inventory);
+        if (Shop is { IsEmpty: true })
+        {
+            Shop = null;
+        }
+    }
+
     private PlayerAppearanceView _appearance;
+    // Built on every read from the equipment and premium state: read InVillage for the flag alone.
     public PlayerAppearanceView Appearance => _appearance with
     {
         WeaponKey = _character.GetEquipped(EquipmentSlot.Weapon)?.Definition.CatalogKey ?? "",
@@ -268,24 +373,25 @@ public sealed class WorldPlayer
         OffHandGlow = HeldItemGlow.For(_character.GetEquipped(EquipmentSlot.OffHand)),
         InVillage = _inVillage,
         Tier = _character.Tier,
-        HelperPet = PremiumPets.HelperPet(_character.Premium) is { } pet ? pet - PremiumEffectKind.HelpPetTerry + 1 : 0,
+        HelperPet = HelpPets.Active(_character) is { } pet ? HelpPets.KindOf(pet) : 0,
         Phoenix = _character.Premium.IsActive(PremiumEffectKind.PhoenixPet),
-        BigHead = _character.Premium.BigHeadMode
+        BigHead = _character.Premium.BigHeadMode,
+        ShopSign = Shop?.Sign ?? ""
     };
 
     // A hair tint changes the head every viewer draws.
     public void ChangeHair(int hairIndex)
     {
         var current = _appearance;
-        _appearance = new PlayerAppearanceView(current.Name, current.JobCode, current.Tier, current.FaceIndex, hairIndex, current.ModelName, current.ModelName2);
+        _appearance = new PlayerAppearanceView(current.Name, current.Class, current.Tier, current.FaceIndex, hairIndex, current.ModelName, current.ModelName2);
     }
 
     // Damage is ignored while the guard runs (revives, invulnerability items).
     public void Guard(float durationMs) => GuardMsLeft = MathF.Max(GuardMsLeft, durationMs);
 
     public int Level => _character.Level;
-    public int Hp => _character.Life;
-    public int MaxHp => _character.MaxLife;
+    public int Life => _character.Life;
+    public int MaxLife => _character.MaxLife;
 
     public PlayerCharacter Character => _character;
 
@@ -301,9 +407,10 @@ public sealed class WorldPlayer
         float dx = position.X - Position.X;
         float dz = position.Z - Position.Z;
         float distance = MathF.Sqrt(dx * dx + dz * dz);
-        if (IsBusy || _character.Effects.Has(Simulation.Modifiers.ControlFlags.Stun))
+        if (IsBusy || Shop is not null || _character.Effects.Has(Simulation.Modifiers.ControlFlags.Stun))
         {
-            // Swings, flinches, potions and stuns own the avatar; small drift is tolerated, large drift is corrected.
+            // Swings, flinches, potions, cheers, stuns and an open shop own the avatar; small drift is tolerated, large drift
+            // is corrected.
             return distance > BusyCorrectionDistance ? MovementVerdict.Rejected : MovementVerdict.Ignored;
         }
 
@@ -313,30 +420,24 @@ public sealed class WorldPlayer
         }
 
         // The classic server only flagged players found off the floor; Etervale rejects the report instead.
+        // A player off a ledge falls as the client shows it (Falling) from the last accepted report, so the walls below are
+        // checked at the height the player is falling past rather than at the floor it will land on.
         terrain ??= FieldTerrain.None;
-        var planar = new Vector3(position.X, Position.Y, position.Z);
-        var reached = planar;
-        if (distance > WallCheckDistance)
+        var pieces = Math.Max(1, (int)MathF.Ceiling(distance / WallCheckDistance));
+        var fallSeconds = _lastReportMs < 0 ? float.PositiveInfinity : Math.Max(0L, nowMs - _lastReportMs) / 1000f / pieces;
+        var reached = Position;
+        for (var piece = 1; piece <= pieces; piece++)
         {
-            if (terrain.CrossesWall(Position, planar))
+            var along = piece / (float)pieces;
+            var target = new Vector3(Position.X + (dx * along), reached.Y, Position.Z + (dz * along));
+            var slid = terrain.Slide(reached, target);
+            float missX = slid.X - target.X;
+            float missZ = slid.Z - target.Z;
+            if ((missX * missX) + (missZ * missZ) > CornerCutTolerance * CornerCutTolerance
+                || !TryFollowFloor(terrain, reached, slid, fallSeconds, piece == pieces, out reached))
             {
                 return MovementVerdict.Rejected;
             }
-        }
-        else if (distance > 0f)
-        {
-            reached = terrain.Slide(Position, planar);
-            float missX = reached.X - planar.X;
-            float missZ = reached.Z - planar.Z;
-            if ((missX * missX) + (missZ * missZ) > CornerCutTolerance * CornerCutTolerance)
-            {
-                return MovementVerdict.Rejected;
-            }
-        }
-
-        if (!terrain.TryFloorNear(reached, ReportClimb, out var floor))
-        {
-            return MovementVerdict.Rejected;
         }
 
         _moveBudget -= distance;
@@ -348,13 +449,47 @@ public sealed class WorldPlayer
         }
 
         _lastReportMs = nowMs;
-        Position = new Vector3(reached.X, floor, reached.Z);
+        Position = reached;
         Facing = facing;
 
         // A character over the weight limit only walks, whatever the client reports.
         var runs = running && !CarriedWeight.IsOverweight(_character);
-        MoveState = !moving ? MoveStateView.Idle : runs ? MoveStateView.Running : MoveStateView.Walking;
+        MoveState = !moving ? MotionState.Stand : runs ? MotionState.Run : MotionState.Walk;
         return MovementVerdict.Accepted;
+    }
+
+    // Walks one piece in steps of the snap distance, as the client follows the ground each frame: a floor within the
+    // snap distance below is stood on, a deeper one is fallen toward for the piece's share of the time. A falling body
+    // may pass over ground with no floor (water, a gap between ledges), but the report must end over a floor.
+    private static bool TryFollowFloor(FieldTerrain terrain, Vector3 from, Vector3 to, float seconds, bool last, out Vector3 reached)
+    {
+        reached = from;
+        var length = new Vector2(to.X - from.X, to.Z - from.Z).Length();
+        var steps = Math.Max(1, (int)MathF.Ceiling(length / Falling.SnapDistance));
+        var stepSeconds = seconds / steps;
+        var height = from.Y;
+        var airborne = !terrain.TryFloorNear(from, ReportClimb, out var start) || Falling.IsAirborne(from.Y, start);
+        for (var step = 1; step <= steps; step++)
+        {
+            var point = Vector3.Lerp(from, to, step / (float)steps) with { Y = height };
+            if (!terrain.TryFloorNear(point, StepClimb, out var floor))
+            {
+                if (!airborne || (last && step == steps) || !float.IsFinite(stepSeconds))
+                {
+                    return false;
+                }
+
+                height -= Falling.UnitsPerSecond * stepSeconds;
+                reached = point with { Y = height };
+                continue;
+            }
+
+            airborne = Falling.IsAirborne(height, floor);
+            height = airborne ? Falling.Step(height, floor, stepSeconds) : floor;
+            reached = point with { Y = height };
+        }
+
+        return true;
     }
 
     private float RefillMoveBudget(long nowMs)
@@ -380,10 +515,10 @@ public sealed class WorldPlayer
     // A client that stops reporting while moving is shown standing, like the original's 1.5 s motion cut-off.
     public void ExpireStaleMotion(long nowMs)
     {
-        if (!IsBusy && !IsDead && MoveState is MoveStateView.Walking or MoveStateView.Running
+        if (!IsBusy && !IsDead && MoveState is MotionState.Walk or MotionState.Run
             && _lastReportMs >= 0 && nowMs - _lastReportMs > StaleMotionMs)
         {
-            MoveState = MoveStateView.Idle;
+            MoveState = MotionState.Stand;
         }
     }
 
@@ -410,9 +545,14 @@ public sealed class WorldPlayer
         ClearAttackTarget();
         _lastReportMs = -1;
         _budgetMs = -1;
-        _pendingPotion = null;
-        Action = PlayerActionState.Idle;
-        MoveState = MoveStateView.Idle;
+        // A paid potion that has not restored yet is drunk again where the player arrives; one that already restored is done.
+        if (Action == PlayerActionState.Eat && _timeline.EventFired)
+        {
+            _pendingPotion = null;
+        }
+
+        _yahooPending = false;
+        StandIdle();
     }
 
     public void EnterField(Vector3 position, bool inVillage)
@@ -446,11 +586,8 @@ public sealed class WorldPlayer
     {
         Facing = MathF.Atan2(targetPos.X - Position.X, targetPos.Z - Position.Z);
         Action = PlayerActionState.Swing;
-        MoveState = MoveStateView.Attack;
-        _swingElapsedMs = 0f;
-        _swingDurationMs = MathF.Max(durationMs, 1f);
-        _swingHitAtMs = hitAtMs;
-        _swingHitFired = false;
+        MoveState = MotionState.Attack;
+        _timeline = ActionTimeline.Start(durationMs, hitAtMs);
         _swingTargetId = targetId;
         _swingAttackSequence = AttackSequence;
         CombatTargetId = targetId;
@@ -462,51 +599,43 @@ public sealed class WorldPlayer
 
         switch (Action)
         {
-            case PlayerActionState.Flinch:
-                _flinchMsLeft -= dtMs;
-                if (_flinchMsLeft <= 0f)
+            case PlayerActionState.Flinch or PlayerActionState.Yahoo:
+                _timeline.Advance(dtMs);
+                if (_timeline.Finished)
                 {
-                    Action = PlayerActionState.Idle;
-                    MoveState = MoveStateView.Idle;
+                    StandIdle();
                 }
 
                 return false;
 
             case PlayerActionState.Cast:
-                _castElapsedMs += dtMs;
-                if (_castElapsedMs >= _castDurationMs)
+                _timeline.Advance(dtMs);
+                if (_timeline.Finished)
                 {
                     CastCompleted = true;
-                    Action = PlayerActionState.Idle;
-                    MoveState = MoveStateView.Idle;
+                    StandIdle();
                 }
 
                 return false;
 
             case PlayerActionState.Swing:
-                float before = _swingElapsedMs;
-                _swingElapsedMs += dtMs;
-
-                bool hit = false;
-                if (!_swingHitFired && _swingHitAtMs > before && _swingHitAtMs <= _swingElapsedMs)
+                var before = _timeline.Advance(dtMs);
+                var hit = !_timeline.EventFired && _timeline.EventMs > before && _timeline.EventMs <= _timeline.ElapsedMs;
+                // Malformed offsets past the clip still land once at completion.
+                if (_timeline.Finished && !_timeline.EventFired)
                 {
-                    _swingHitFired = true;
-                    hitTargetId = _swingTargetId;
                     hit = true;
                 }
 
-                if (_swingElapsedMs >= _swingDurationMs)
+                if (hit)
                 {
-                    if (!_swingHitFired)
-                    {
-                        // Malformed offsets past the clip still land once at completion.
-                        _swingHitFired = true;
-                        hitTargetId = _swingTargetId;
-                        hit = true;
-                    }
+                    _timeline.FireEvent();
+                    hitTargetId = _swingTargetId;
+                }
 
-                    Action = PlayerActionState.Idle;
-                    MoveState = MoveStateView.Idle;
+                if (_timeline.Finished)
+                {
+                    StandIdle();
                     if (!_attackSustained && _swingAttackSequence == AttackSequence)
                     {
                         ClearAttackTarget();
@@ -520,6 +649,12 @@ public sealed class WorldPlayer
         }
     }
 
+    private void StandIdle()
+    {
+        Action = PlayerActionState.Idle;
+        MoveState = MotionState.Stand;
+    }
+
     public void ApplyDamage(int amount)
     {
         if (amount <= 0 || IsDead || GuardMsLeft > 0f)
@@ -527,27 +662,28 @@ public sealed class WorldPlayer
             return;
         }
 
-        int hp = _character.Life - amount;
-        if (hp <= 0)
+        int life = _character.Life - amount;
+        if (life <= 0)
         {
             _character.Life = 0;
             IsDead = true;
+            Shop = null;
             _pendingPotion = null;
+            _yahooPending = false;
             Action = PlayerActionState.Idle;
             _attackTargetId = 0;
             _attackSustained = false;
             DeadMs = 0f;
-            MoveState = MoveStateView.Dead;
+            MoveState = MotionState.Dead;
         }
         else
         {
-            _character.Life = hp;
+            _character.Life = life;
             if (Action == PlayerActionState.Idle && amount > 1)
             {
                 Action = PlayerActionState.Flinch;
-                var clip = PlayerMotionFallback.GetClip(_character.Class.Class, MotionStateCode.Damage);
-                _flinchMsLeft = MotionTiming.DurationMs(clip.Frames, MotionTiming.DamageRateFactor);
-                MoveState = MoveStateView.Damage;
+                _timeline = ActionTimeline.Start(FlinchMs);
+                MoveState = MotionState.Damage;
             }
         }
     }
@@ -558,7 +694,7 @@ public sealed class WorldPlayer
         {
             return;
         }
-        _character.Life = Math.Min(MaxHp, _character.Life + amount);
+        _character.Life = Math.Min(MaxLife, _character.Life + amount);
     }
 
     // Real-clock milliseconds before which billing crystals and soul stones refuse (every crystal use restarts it).
@@ -598,10 +734,10 @@ public sealed class WorldPlayer
             return;
         }
 
-        _character.Life = Math.Clamp(life, 1, MaxHp);
+        _character.Life = Math.Clamp(life, 1, MaxLife);
         IsDead = false;
         _attackTargetId = 0;
-        MoveState = MoveStateView.Idle;
+        MoveState = MotionState.Stand;
         Action = PlayerActionState.Idle;
         GuardMsLeft = MathF.Max(0f, guardMs);
     }
@@ -614,8 +750,8 @@ public sealed class WorldPlayer
     }
 
     public EntityView ToView() => new(
-        EntityId, EntityKindView.Player, isSelf: false, Position, Facing, MoveState,
-        Level, Hp, MaxHp, Appearance,
+        EntityId, EntityKind.Player, isSelf: false, Position, Facing, MoveState,
+        Level, Life, MaxLife, Appearance,
         moveSpeed: _character.Derived.MoveSpeed,
         attackRate: _character.AttackRate,
         attackTargetId: AttackTargetId, attackSequence: AttackSequence)

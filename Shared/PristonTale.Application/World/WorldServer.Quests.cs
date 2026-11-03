@@ -13,19 +13,13 @@ public sealed partial class WorldServer
     private readonly CombatRng _questRng = new(0x5155);
 
     // Sessions with quest work for the upkeep worker; written from the field phase, read off the tick.
-    private readonly Channel<PlayerSession> _questUpkeep = Channel.CreateUnbounded<PlayerSession>(new UnboundedChannelOptions
-    {
-        SingleReader = true,
-        AllowSynchronousContinuations = false
-    });
+    private readonly Channel<PlayerSession> _questUpkeep = SessionRequests();
 
     public ChannelReader<PlayerSession> QuestUpkeepRequests => _questUpkeep.Reader;
 
-    private long QuestNowUnixMs() => _clock.GetUtcNow().ToUnixTimeMilliseconds();
-
     private void ConfigureQuests(FieldInstance field)
     {
-        field.QuestClock = QuestNowUnixMs;
+        field.QuestClock = () => UnixNowMs;
         field.QuestUpkeepRequested = player =>
         {
             // Read-only lookup during the field phase: the connection map changes only in the command phase.
@@ -50,7 +44,7 @@ public sealed partial class WorldServer
             }
 
             return QuestTransactions.Prepare(session, connection.Player, field, command, _worldData.Current.Items, _catalog, _questRng,
-                QuestNowUnixMs());
+                UnixNowMs);
         });
     }
 
@@ -61,12 +55,12 @@ public sealed partial class WorldServer
             // SaveGate remains held through commit, including when the connection leaves during storage I/O.
             if (!ReferenceEquals(session.Character, operation.Original) || operation.Candidate is null)
             {
-                throw new InvalidOperationException("Character ownership changed during quest commit.");
+                throw new CommitInvariantException("Character ownership changed during quest commit.");
             }
 
             operation.Original.CommitQuestOperation(operation.Candidate, operation.Tier, operation.StatPoints, operation.SkillPoints,
                 operation.EliteSkillPoints, operation.MoneyDelta, operation.ResetSkills);
-            if (!_connections.TryGetValue(session.EntityId, out var connection) || !ReferenceEquals(connection.Session, session))
+            if (!TryGetOwnConnection(session, out var connection))
             {
                 return true;
             }
@@ -104,7 +98,7 @@ public sealed partial class WorldServer
                 return null;
             }
 
-            var prepared = QuestTransactions.PrepareUpkeep(session, connection.Player, field, _worldData.Current.Items, _questRng, QuestNowUnixMs());
+            var prepared = QuestTransactions.PrepareUpkeep(session, connection.Player, field, _worldData.Current.Items, _questRng, UnixNowMs);
             if (prepared.Candidate is null)
             {
                 connection.Player.QuestState.UpkeepDue = false;
@@ -115,27 +109,12 @@ public sealed partial class WorldServer
         }, waitForCapacity: true);
     }
 
-    // The upkeep could not be stored: its drops wait for the next attempt.
-    public Task<bool> AbortQuestUpkeepAsync(PlayerSession session, PreparedQuestOperation operation)
-    {
-        return EnqueueAsync(NoOwner, () =>
-        {
-            if (_connections.TryGetValue(session.EntityId, out var connection) && ReferenceEquals(connection.Session, session))
-            {
-                connection.Player.QuestState.ReturnDrops(operation.Drops);
-                connection.Player.QuestState.UpkeepSignaled = false;
-            }
-
-            return true;
-        }, waitForCapacity: true);
-    }
-
     // The upkeep could not run now (the save gate stayed busy): the field signals it again on its next check.
     public Task<bool> DeferQuestUpkeepAsync(PlayerSession session)
     {
         return EnqueueAsync(NoOwner, () =>
         {
-            if (_connections.TryGetValue(session.EntityId, out var connection) && ReferenceEquals(connection.Session, session))
+            if (TryGetOwnConnection(session, out var connection))
             {
                 connection.Player.QuestState.UpkeepSignaled = false;
             }
@@ -177,22 +156,10 @@ public sealed partial class WorldServer
             return;
         }
 
-        var player = connection.Player;
-        var target = GetField(travel.FieldCode);
-        var position = target.Terrain.PlaceOnFloor(QuestTransactions.TravelPoint(destination, travel));
+        var position = GetField(travel.FieldCode).Terrain.PlaceOnFloor(QuestTransactions.TravelPoint(destination, travel));
         var inVillage = destination.State == FieldState.Village;
-        if (connection.FieldId != travel.FieldCode)
-        {
-            TransferPlayer(player, _fields[connection.FieldId], target);
-            _membershipChanged = true;
-            _connections[player.EntityId] = connection with
-            {
-                FieldId = travel.FieldCode
-            };
-        }
-
-        player.EnterField(position, inVillage);
-        UpdatePlacement(connection.Session, travel.FieldCode, position, inVillage);
+        Relocate(connection, travel.FieldCode, position, inVillage);
+        connection.Player.EnterField(position, inVillage);
     }
 
     // The quest arena is left on entry: a character saved there starts in its home town.

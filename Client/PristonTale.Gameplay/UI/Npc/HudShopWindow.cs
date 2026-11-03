@@ -26,12 +26,13 @@ public enum HudShopAction
 // The NPC shop in the original window: weapon and armour tabs (or the goods title), pages of stock packed into the grid,
 // and the buy, sell, repair and repair-all buttons. Buying is a click on the stock; selling and repairing are clicks on
 // owned items while that mode is active.
-public sealed class HudShopWindow
+public sealed class HudShopWindow : IHudServiceWindow
 {
     private const int GoodsTab = 2;
-    private static readonly Color Selection = Color.FromNonPremultiplied(255, 200, 0, 128);
     private readonly HudSlide _slide = new();
     private readonly List<List<Placed>>[] _pages = [[], [], []];
+    private readonly HudNumberText _price = new();
+    private readonly HudNumberText _money = new();
     private ShopOffer _hovered;
     private HudShopButton? _hoveredButton;
 
@@ -78,6 +79,12 @@ public sealed class HudShopWindow
     }
 
     public void Advance(double seconds) => _slide.Advance(seconds);
+
+    public bool BlocksWorld => false;
+
+    void IHudServiceWindow.Draw(in HudServiceFrame frame) => Draw(frame.Painter, frame.Icons, frame.State, frame.Pointer, FullyOpen && !frame.SettingsOpen);
+
+    void IHudServiceWindow.DrawOverlay(in HudServiceFrame frame) => DrawOverlay(frame.Painter, frame.Layout, frame.Pointer);
 
     public bool Contains(Point pointer) => _slide.Visible && HudStoreLayout.Window(Origin).Contains(pointer);
 
@@ -158,22 +165,18 @@ public sealed class HudShopWindow
                 var bounds = HudStoreLayout.Cell(origin, placed.Anchor, placed.Offer.Width, placed.Offer.Height);
                 if (ReferenceEquals(placed.Offer, _hovered))
                 {
-                    painter.Fill(bounds, Selection);
+                    painter.Fill(bounds, HudPlacementColors.Selection);
                 }
 
-                DrawIcon(painter, icons, placed.Offer.CatalogKey, bounds);
+                icons.Draw(painter, placed.Offer.CatalogKey, bounds);
             }
         }
 
         painter.Sprite(HudNpcArt.Gold, HudStoreLayout.GoldPlate(origin).X, HudStoreLayout.GoldPlate(origin).Y);
         var upper = HudStoreLayout.UpperBar(origin);
-        if (_hovered is not null)
-        {
-            painter.TextCentered(_hovered.Price.ToString("N0"), upper.Left, upper.Right, upper.Y + 3);
-        }
-
+        painter.TextCentered(_price.Of(_hovered?.Price ?? 0, _hovered is not null), upper.Left, upper.Right, upper.Y + 3);
         var lower = HudStoreLayout.LowerBar(origin);
-        painter.TextCentered((state?.Money ?? 0).ToString("N0"), lower.Left, lower.Right, lower.Y + 3);
+        painter.TextCentered(_money.Of(state?.Money ?? 0), lower.Left, lower.Right, lower.Y + 3);
     }
 
     public void DrawOverlay(HudPainter painter, HudLayout layout, Point pointer)
@@ -194,21 +197,6 @@ public sealed class HudShopWindow
         var price = $"Price: {offer.Price:N0} gold";
         const string action = "Click: buy";
         HudItemTooltip.Draw(painter, layout, pointer, offer.Name, price, action);
-    }
-
-    public static void DrawIcon(HudPainter painter, HudItemIcons icons, string catalogKey, Rectangle bounds, Color? tint = null)
-    {
-        var texture = icons.Find(catalogKey);
-        if (texture is null)
-        {
-            painter.Fill(new Rectangle(bounds.X + 2, bounds.Y + 2, bounds.Width - 4, bounds.Height - 4), Color.FromNonPremultiplied(60, 60, 60, 160));
-            return;
-        }
-
-        // Item bitmaps are authored at their cell size; they are drawn unscaled and centred as in the inventory.
-        var x = bounds.X + (bounds.Width - texture.Width) / 2;
-        var y = bounds.Y + (bounds.Height - texture.Height) / 2;
-        painter.Image(texture, new Rectangle(x, y, texture.Width, texture.Height), tint ?? Color.White);
     }
 
     private void DrawTabs(HudPainter painter, Point origin)
@@ -325,61 +313,19 @@ public sealed class HudShopWindow
             }
 
             var page = pages.Count - 1;
-            var anchor = page >= 0 ? FindSpace(occupied[page], offer) : -1;
+            var anchor = page >= 0 ? HudStoreLayout.FindSpace(occupied[page], offer.Width, offer.Height) : -1;
             if (anchor < 0)
             {
                 pages.Add([]);
                 occupied.Add(new bool[HudStoreLayout.Columns * HudStoreLayout.Rows]);
                 page = pages.Count - 1;
-                anchor = FindSpace(occupied[page], offer);
+                anchor = HudStoreLayout.FindSpace(occupied[page], offer.Width, offer.Height);
             }
 
-            Occupy(occupied[page], offer, anchor);
+            HudStoreLayout.Occupy(occupied[page], anchor, offer.Width, offer.Height);
             pages[page].Add(new Placed(offer, anchor));
         }
 
         return pages;
-    }
-
-    private static int FindSpace(bool[] occupied, ShopOffer offer)
-    {
-        for (var place = 0; place < occupied.Length; place++)
-        {
-            var x = place / HudStoreLayout.Rows;
-            var y = place % HudStoreLayout.Rows;
-            if (x + offer.Width > HudStoreLayout.Columns || y + offer.Height > HudStoreLayout.Rows)
-            {
-                continue;
-            }
-
-            var free = true;
-            for (var row = y; row < y + offer.Height && free; row++)
-            {
-                for (var column = x; column < x + offer.Width && free; column++)
-                {
-                    free = !occupied[row * HudStoreLayout.Columns + column];
-                }
-            }
-
-            if (free)
-            {
-                return y * HudStoreLayout.Columns + x;
-            }
-        }
-
-        return -1;
-    }
-
-    private static void Occupy(bool[] occupied, ShopOffer offer, int anchor)
-    {
-        var x = anchor % HudStoreLayout.Columns;
-        var y = anchor / HudStoreLayout.Columns;
-        for (var row = y; row < y + offer.Height; row++)
-        {
-            for (var column = x; column < x + offer.Width; column++)
-            {
-                occupied[row * HudStoreLayout.Columns + column] = true;
-            }
-        }
     }
 }

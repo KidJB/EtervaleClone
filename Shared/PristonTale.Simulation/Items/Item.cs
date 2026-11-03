@@ -127,16 +127,33 @@ public sealed class ItemInstance
     public Guid InstanceId { get; init; } = Guid.NewGuid();
     public ItemDefinition Definition { get; }
 
-    public ItemInstance Copy(int count, bool preserveId = false)
+    public ItemInstance Copy(int count, bool preserveId = false) => Copy(count, preserveId ? InstanceId : Guid.NewGuid());
+
+    // Takes `amount` off this stack (less than all of it) into a new stack.
+    public ItemInstance Split(int amount)
+    {
+        if (amount < 1 || amount >= Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amount));
+        }
+
+        Count -= amount;
+        return Copy(amount);
+    }
+
+    public ItemInstance Copy(int count, Guid instanceId)
     {
         return new ItemInstance(Definition, count)
         {
-            InstanceId = preserveId ? InstanceId : Guid.NewGuid(),
+            InstanceId = instanceId,
             UpgradeLevel = UpgradeLevel,
             DurabilityCurrent = DurabilityCurrent,
             DurabilityMax = DurabilityMax,
             Roll = Roll,
-            Sealed = Sealed
+            Sealed = Sealed,
+            Maturity = Maturity,
+            MixSheltom = MixSheltom,
+            MixStats = MixStats
         };
     }
 
@@ -146,6 +163,15 @@ public sealed class ItemInstance
 
     // A dropped puzzle piece stays sealed as a lucky bag until its owner pays to reveal it.
     public bool Sealed { get; set; }
+
+    public Aging.AgingMaturity Maturity { get; set; }
+
+    // 1 Lucidy .. 9 Celesto; 0 never mixed.
+    public int MixSheltom { get; set; }
+
+    public Mixing.MixStat MixStats { get; set; }
+
+    public bool Mixed => MixSheltom > 0;
 
     public int DurabilityCurrent { get; set; }
     public int DurabilityMax { get; set; }
@@ -162,7 +188,11 @@ public sealed class ItemInstance
     public string DisplayName => UpgradeLevel > 0 ? $"+{UpgradeLevel} {Definition.Name}" : Definition.Name;
 
     public ItemStatBlock TotalStats =>
-        new(_roll.DamageMin, _roll.DamageMax, _roll.Defence, _roll.AttackRating, Definition.BaseStats.AttackSpeed, 0, 0, 0, 0, 0);
+        new(_roll.DamageMin, _roll.DamageMax, _roll.Defence, _roll.AttackRating, Definition.BaseStats.AttackSpeed + _roll.AttackSpeedBonus, 0, 0, 0, 0, 0);
+
+    public int Critical => Definition.Critical + _roll.CriticalBonus;
+
+    public float MagicMastery => Definition.MagicMastery + _roll.MagicMasteryBonus;
 
     public int Price => _roll.Price;
 }

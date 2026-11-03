@@ -1,3 +1,4 @@
+using PristonTale.Persistence.Abstractions.GameLogs;
 using System.Numerics;
 using PristonTale.Application.Chat;
 using PristonTale.Application.GameMasters;
@@ -8,6 +9,11 @@ using PristonTale.Simulation.Items.Usable;
 using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.Progression;
 using PristonTale.Simulation.World;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Social;
+using PristonTale.Contracts.Characters;
+using PristonTale.Simulation.World.Monsters;
 
 namespace PristonTale.Tests;
 
@@ -17,8 +23,9 @@ internal static class GameMasterCommandTests
     private static readonly (string Text, int Level)[] ExpectedLevels =
     [
         ("/localtime", 1), ("/get_bosstime", 1), ("/get_forceorb", 1), ("/get_primitem", 1), ("/get_currency", 1), ("/init_premiumitem", 4),
-        ("/specific", 1), ("/Performance", 1), ("/@get_perf", 4), ("/@get", 4), ("/@put", 4), ("/get_potion", 1), ("/>", 2), ("/netlog", 1),
-        ("//netlog", 1), ("/user_limit", 2), ("/kick", 2), ("/kill", 2), ("/open_warehouse", 2), ("/shutdown", 2), ("/insert", 2),
+        ("/specific", 1), ("/Performance", 1), ("/@get_perf", 4), ("/@get", 4), ("/@put", 4), ("/AgingSetting", 3), ("/get_potion", 1), ("/>", 2), ("/netlog", 1),
+        ("//netlog", 1), ("/user_limit", 2), ("/kick", 2), ("/kill", 2), ("/open_warehouse", 2), ("/shutdown", 2), ("/weather", 2),
+        ("/reload_settings", 4), ("/setting", 4), ("/insert", 2),
         ("/usercode", 1), ("/userid", 1), ("/username", 1), ("/near", 2), ("/call", 2), ("/where", 2), ("/field", 2),
         ("/player_location", 2), ("/expup", 4), ("/GiveMeExp!", 4), ("/GiveMeMoney!", 4),
         ("/user", 1), ("/sockets", 1), ("/talk", 1), ("/set_absorb", 4), ("/area_users", 1), ("/monster", 1), ("/mymonster", 1),
@@ -33,6 +40,7 @@ internal static class GameMasterCommandTests
         yield return ("kick, kill, near, call and where act on the named player on the server", PlayerCommandsAsync);
         yield return ("a hidden game master leaves other players' views and monsters' sight, and shows again", HideAsync);
         yield return ("monster calls spawn on the server without drops below the highest level, and pets take the caller's side", MonstersAsync);
+        yield return ("a hidden game master's called monsters and pet stay and show to the caller", HiddenMonstersAsync);
         yield return ("event monsters, field reports, absorption and monster speech", MonsterDetailsAsync);
         yield return ("item commands drop rolled, perfect and specialized copies and gold, and gifts are stored before delivery", ItemsAsync);
         yield return ("experience, premium resets, force orb and premium reports", CharacterAsync);
@@ -78,9 +86,12 @@ internal static class GameMasterCommandTests
         var fixture = new ChatFixture(new GameMasterOptions(ServerCode: 3));
         var gm = await fixture.JoinAsync("Keeper", 0, 0, GameMasterLevel.Operator);
         var ann = await fixture.JoinAsync("Ann", 100, 0);
+        // The date is read on both sides of the command: a run across midnight sees either day.
+        var before = fixture.World.LocalNow;
         await fixture.SayAsync(gm, "/localtime");
-        var now = fixture.World.LocalNow;
-        Assert.True(gm.Link.Last.StartsWith($"TIME [3]> {now.Year}/{now.Month}/{now.Day} ( ", StringComparison.Ordinal), $"local time {gm.Link.Last}");
+        var after = fixture.World.LocalNow;
+        Assert.True(new[] { before, after }.Any(now => gm.Link.Last.StartsWith($"TIME [3]> {now.Year}/{now.Month}/{now.Day} ( ", StringComparison.Ordinal)),
+            $"local time {gm.Link.Last}");
         await fixture.SayAsync(gm, "/get_bosstime");
         Assert.True(gm.Link.Last == $"3> Boss Time ( {fixture.World.BossMinute} min.)", gm.Link.Last);
         await fixture.SayAsync(ann, "/bosstime");
@@ -151,7 +162,7 @@ internal static class GameMasterCommandTests
         Assert.True(gm.Link.Last == "> Killed ( Ann )", gm.Link.Last);
         fixture.Tick(1);
         var view = ChatFixture.Latest(ann)!.Value.Entities.Single(entity => entity.EntityId == ann.Id);
-        Assert.True(view.Hp == 0 && view.MoveState == MoveStateView.Dead, "the killed player is not dead on the server");
+        Assert.True(view.Life == 0 && view.MoveState == MotionState.Dead, "the killed player is not dead on the server");
         await fixture.SayAsync(gm, "/kick Ann");
         Assert.True(ann.Link.Disconnected is not null && gm.Link.Last == "Congratulations. You have been kicked Ann", "the player was not disconnected");
     }
@@ -183,12 +194,12 @@ internal static class GameMasterCommandTests
         var admin = await fixture.JoinAsync("Admin", 4000, 0, GameMasterLevel.Administrator);
         await fixture.SayAsync(guide, "/monster Hopy 3");
         fixture.Tick(1);
-        var monsters = ChatFixture.Latest(guide)!.Value.Entities.Where(entity => entity.Kind == EntityKindView.Monster).ToArray();
+        var monsters = ChatFixture.Latest(guide)!.Value.Entities.Where(entity => entity.Kind == EntityKind.Monster).ToArray();
         Assert.True(monsters.Length == 4 && monsters.All(monster => MathF.Abs(monster.Position.X) <= WorldServer.GameMasterSpawnScatter
             && MathF.Abs(monster.Position.Z) <= WorldServer.GameMasterSpawnScatter), $"expected 4 monsters around the caller, got {monsters.Length}");
         await fixture.SayAsync(guide, "/monster Hopy 21");
         fixture.Tick(1);
-        Assert.True(ChatFixture.Latest(guide)!.Value.Entities.Count(entity => entity.Kind == EntityKindView.Monster) == 5,
+        Assert.True(ChatFixture.Latest(guide)!.Value.Entities.Count(entity => entity.Kind == EntityKind.Monster) == 5,
             "more than 20 extra monsters must call only the first");
         await fixture.SayAsync(guide, "/monster Nobody");
         Assert.True(fixture.Audit.Entries[^1].Result == "", "an unknown monster still spawned");
@@ -197,13 +208,31 @@ internal static class GameMasterCommandTests
         Assert.True(field.TryGetMonster(guideMonster, out var called) && called.DropsDisabled, "a guide's monster may drop items");
         await fixture.SayAsync(admin, "/monster Hopy");
         fixture.Tick(1);
-        var adminMonster = ChatFixture.Latest(admin)!.Value.Entities.Single(entity => entity.Kind == EntityKindView.Monster && entity.Position.X > 3000);
+        var adminMonster = ChatFixture.Latest(admin)!.Value.Entities.Single(entity => entity.Kind == EntityKind.Monster && entity.Position.X > 3000);
         Assert.True(field.TryGetMonster(adminMonster.EntityId, out var dropping) && !dropping.DropsDisabled, "an administrator's monster must drop");
         await fixture.SayAsync(guide, "/mymonster Hopy");
         fixture.Tick(1);
-        var pet = ChatFixture.Latest(guide)!.Value.Entities.Single(entity => entity.Kind == EntityKindView.Monster && entity.OwnerId == guide.Id);
+        var pet = ChatFixture.Latest(guide)!.Value.Entities.Single(entity => entity.Kind == EntityKind.Monster && entity.OwnerId == guide.Id);
         Assert.True(field.TryGetMonster(pet.EntityId, out var owned) && owned.Def.Brood == Simulation.World.Monsters.MonsterBrood.User && owned.Aggressive,
             "a pet does not take the caller's side");
+        await fixture.SayAsync(guide, "/mymonster Hopy");
+        await fixture.SayAsync(guide, "/mymonster Hopy 2");
+        fixture.Tick(1);
+        var pets = ChatFixture.Latest(guide)!.Value.Entities.Count(entity => entity.Kind == EntityKind.Monster && entity.OwnerId == guide.Id);
+        Assert.True(pets == 5, $"a later pet replaced an earlier one or the extra count was ignored: {pets} pets of 5");
+    }
+
+    private static async Task HiddenMonstersAsync()
+    {
+        var fixture = new ChatFixture();
+        var gm = await fixture.JoinAsync("Shade", 0, 0, GameMasterLevel.Guide);
+        await fixture.SayAsync(gm, "/hide");
+        await fixture.SayAsync(gm, "/monster Hopy 2");
+        await fixture.SayAsync(gm, "/mymonster Hopy");
+        fixture.Tick(40);
+        var seen = ChatFixture.Latest(gm)!.Value.Entities.Where(entity => entity.Kind == EntityKind.Monster).ToArray();
+        Assert.True(seen.Count(entity => entity.OwnerId == 0) == 3 && seen.Count(entity => entity.OwnerId == gm.Id) == 1,
+            $"a hidden game master saw {seen.Length} monsters of 3 called and a pet");
     }
 
     private static async Task MonsterDetailsAsync()
@@ -221,7 +250,7 @@ internal static class GameMasterCommandTests
         fixture.Tick(1);
         await fixture.SayAsync(gm, "/area_monster");
         Assert.True(gm.Link.Last == "> ResponePoint( 0 ) ResponeMonster( 0 ) Monster( 1 ) MonsterCount( 1 ) LimitTime( 1 )", gm.Link.Last);
-        var monster = ChatFixture.Latest(gm)!.Value.Entities.Single(entity => entity.Kind == EntityKindView.Monster);
+        var monster = ChatFixture.Latest(gm)!.Value.Entities.Single(entity => entity.Kind == EntityKind.Monster);
         await fixture.SayAsync(gm, $"/set_absorb {monster.EntityId} 40");
         Assert.True(gm.Link.Last == "> set_absorb (Hopy) 10->40 ", gm.Link.Last);
         Assert.True(FieldOf(fixture).TryGetMonster(monster.EntityId, out var instance)
@@ -286,6 +315,8 @@ internal static class GameMasterCommandTests
         var carried = Enumerable.Range(0, ann.Session.Character!.Inventory.Capacity).Select(anchor => ann.Session.Character.Inventory[anchor])
             .Where(item => item is not null).ToArray();
         Assert.True(carried.Any(item => item.Definition.CatalogKey == "PL101"), "the gift did not reach the player's bag");
+        Assert.True(fixture.Log.Rows.Single(row => row.Kind == ItemTransferKind.GameMasterGift) is { ItemCode: "PL101", FromCharacterId: null } gift
+            && gift.ToCharacterId == fixture.Characters.Records["Ann"].Id, "the gift was not logged");
     }
 
     private static async Task CharacterAsync()

@@ -3,8 +3,11 @@ using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.IO;
 using PristonTale.Engine3D.Physics;
 using PristonTale.Engine3D.Rendering;
+using PristonTale.Gameplay.Combat;
 using PristonTale.Gameplay.World;
 using PristonTale.Simulation.World.Fields;
+using PristonTale.Contracts.Motion;
+using PristonTale.Assets;
 
 namespace PristonTale.Tests;
 
@@ -16,12 +19,65 @@ internal static class GroundTraversalTests
         yield return ("ground traversal climbs connected ramps and blocks unsupported steps", ContinuityAsync);
         yield return ("collision DDA ray and segment queries do not allocate per call", CollisionQueriesDoNotAllocateAsync);
         yield return ("player visual position restores the original two-unit floor offset", PlayerVisualPositionAsync);
+        yield return ("a player above its floor falls eight units a frame and lands with the original motions", FallAsync);
+    }
+
+    private static Task FallAsync()
+    {
+        Assert.True(!GroundFall.IsAirborne(108, 100), "eight units above the floor counted as a fall");
+        Assert.True(GroundFall.IsAirborne(108.5f, 100), "more than eight units above the floor did not fall");
+        Assert.Near(92, GroundFall.Step(100, 0, 1f / 70f));
+        Assert.Near(0, GroundFall.Step(5, 0, 1f / 70f));
+
+        var feet = 613f + 400f;
+        var frames = 0;
+        while (GroundFall.IsAirborne(feet, 613f))
+        {
+            feet = GroundFall.Step(feet, 613f, 1f / 70f);
+            frames++;
+        }
+
+        Assert.True(frames is 49 or 50, $"a 400-unit fall took {frames} frames at 70 Hz");
+        Assert.True(feet >= 613f && feet - 613f <= GroundFall.SnapDistance, "fall stopped away from the floor");
+        Assert.True(GroundFall.Landing(200) == MotionCode.FallStand, "a 200-unit fall landed hard");
+        Assert.True(GroundFall.Landing(201) == MotionCode.FallDamage, "a fall over 200 units landed soft");
+
+        var motion = new ActorMotionController();
+        motion.ApplyAuthoritative(MotionCode.FallDown);
+        Assert.True(motion.ApplyLocomotion(MotionCode.Walk).Kind == MotionCommandKind.None, "walking replaced the fall motion");
+        Assert.True(!motion.LocomotionFrozen, "a fall stopped the player from walking");
+        foreach (var landing in new[] { MotionCode.FallStand, MotionCode.FallDamage })
+        {
+            // A landing holds the player until its clip ends and the actor is back to Stand.
+            motion.ApplyAuthoritative(landing);
+            Assert.True(motion.LocomotionFrozen, $"{landing} let the player walk");
+            Assert.True(motion.ApplyLocomotion(MotionCode.Walk).Kind == MotionCommandKind.None, $"walking replaced {landing}");
+            motion.ApplyAuthoritative(MotionCode.Stand);
+            Assert.True(motion.ApplyLocomotion(MotionCode.Walk).Motion == MotionCode.Walk, "walking did not follow the landing");
+        }
+
+        // A steep slope crossed in one long frame is followed; a ledge between two samples is a fall.
+        GroundFloorQuery slope = (Vector3 position, float reference, out float height) =>
+        {
+            height = 100f - position.X * 1.5f;
+            return true;
+        };
+        Assert.True(GroundTraversal.TryFollow(new Vector3(0f, 100f, 0f), new Vector2(40f, 0f), slope, out var down, out var slopeDrop)
+            && slopeDrop <= GroundFall.SnapDistance && MathF.Abs(down.Y - 40f) < 0.01f, $"a slope dropped {slopeDrop} between samples");
+        GroundFloorQuery ledge = (Vector3 position, float reference, out float height) =>
+        {
+            height = position.X < 20f ? 100f : 80f;
+            return true;
+        };
+        Assert.True(GroundTraversal.TryFollow(new Vector3(0f, 100f, 0f), new Vector2(40f, 0f), ledge, out _, out var ledgeDrop)
+            && ledgeDrop > GroundFall.SnapDistance, $"a 20-unit ledge dropped only {ledgeDrop}");
+        return Task.CompletedTask;
     }
 
     public static void InspectRicarten(string assetRoot)
     {
         var relativePath = RicartenField.Definition.StageSmd.Replace('\\', Path.DirectorySeparatorChar);
-        var path = PristonFileResolver.Resolve(Path.Combine(assetRoot, relativePath));
+        var path = AssetFiles.Resolve(Path.Combine(assetRoot, relativePath));
         var world = new PristonCollisionWorld(new PristonSmdReader().ReadStage(path));
         bool Floor(Vector3 point, float reference, out float height)
         {

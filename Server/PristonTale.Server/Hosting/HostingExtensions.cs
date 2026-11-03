@@ -1,10 +1,15 @@
+using PristonTale.Application.Contacts;
 using PristonTale.Application.Chat;
 using PristonTale.Application.GameMasters;
 using PristonTale.Application.Services;
+using PristonTale.Application.Settings;
 using PristonTale.Persistence.Abstractions.Accounts;
 using PristonTale.Persistence.Abstractions.Characters;
 using PristonTale.Persistence.Abstractions.GameMasters;
+using PristonTale.Persistence.Abstractions.Settings;
 using PristonTale.Persistence.Abstractions.Warehouses;
+using PristonTale.Application.GameLogs;
+using PristonTale.Application.Saves;
 using PristonTale.Application.Sessions;
 using PristonTale.Application.World;
 using PristonTale.Server.Net;
@@ -35,6 +40,11 @@ public static class HostingExtensions
         builder.Services.AddSingleton<RestartAppService>();
         builder.Services.AddSingleton<WingGateAppService>();
         builder.Services.AddSingleton<QuestAppService>();
+        builder.Services.AddSingleton<PersonalShopAppService>();
+        builder.Services.AddSingleton<PartyAppService>();
+        builder.Services.AddSingleton<TradeAppService>();
+        builder.Services.AddSingleton<ContactAppService>();
+        builder.Services.AddSingleton<StarterGiftAppService>();
 
         var provider = builder.Configuration["Database:Provider"] ?? "Sqlite";
         if (string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
@@ -46,13 +56,16 @@ public static class HostingExtensions
         {
             var connectionString = builder.Configuration.GetConnectionString("Postgres")
                 ?? throw new InvalidOperationException("ConnectionStrings:Postgres is required for the Postgres provider.");
-            builder.Services.AddPristonPostgres(connectionString);
+            builder.Services.AddPristonPostgres(connectionString,
+                builder.Configuration.GetValue("Database:MaxPoolSize", PostgresPersistenceServiceCollectionExtensions.DefaultMaxPoolSize));
         }
         else
         {
             throw new InvalidOperationException($"Unsupported database provider '{provider}'. Use Sqlite or Postgres.");
         }
         builder.Services.AddHostedService<DatabaseMigrationService>();
+        AddCharacterSaves(builder);
+        AddGameLogs(builder);
 
         builder.Services.AddSingleton<WorldDataAppService>();
         builder.Services.AddSingleton<WorldDataHolder>();
@@ -62,58 +75,97 @@ public static class HostingExtensions
 
         var worldOptions = new WorldServerOptions
         {
-            CrystalEvent = builder.Configuration.GetValue("World:CrystalEvent", 0),
-            ItemEvents = new ItemEventRates
-            {
-                Mandoo = builder.Configuration.GetValue("World:ItemEvents:Mandoo", false),
-                ValentineDay = builder.Configuration.GetValue("World:ItemEvents:ValentineDay", 0),
-                Watermelon = builder.Configuration.GetValue("World:ItemEvents:Watermelon", 0),
-                Valentine = builder.Configuration.GetValue("World:ItemEvents:Valentine", 0),
-                CandyDays = builder.Configuration.GetValue("World:ItemEvents:CandyDays", 0),
-                WhiteDay = builder.Configuration.GetValue("World:ItemEvents:WhiteDay", 0),
-                Puzzle = builder.Configuration.GetValue("World:ItemEvents:Puzzle", 0),
-                GiftBox = builder.Configuration.GetValue("World:ItemEvents:GiftBox", 0)
-            },
-            ExperienceMultiplier = builder.Configuration.GetValue("World:ExperienceMultiplier", WorldServerOptions.DefaultExperienceMultiplier),
-            ClockOffsetMinutes = builder.Configuration.GetValue("World:ClockOffsetMinutes", 0),
             MaxPendingCommandsPerPlayer = builder.Configuration.GetValue("World:MaxPendingCommandsPerPlayer",
-                WorldServerOptions.DefaultMaxPendingCommandsPerPlayer)
+                WorldServerOptions.DefaultMaxPendingCommandsPerPlayer),
+            CheckpointSeconds = builder.Configuration.GetValue("World:CheckpointSeconds", WorldServerOptions.DefaultCheckpointSeconds)
         }.Validated();
+        builder.Services.AddSingleton(worldOptions);
         builder.Services.AddSingleton(services => new WorldServer(
             services.GetRequiredService<WorldDataHolder>(),
             services.GetRequiredService<PristonTale.Simulation.World.WorldCatalog>(),
             terrain: services.GetRequiredService<FieldTerrainCatalog>(),
-            options: worldOptions));
+            options: worldOptions,
+            saves: services.GetRequiredService<ICharacterSaves>(),
+            log: services.GetRequiredService<IGameLog>()));
         builder.Services.AddHostedService<WorldTickService>();
         AddChat(builder);
+        builder.Services.AddSingleton(services =>
+        {
+            var gameMasters = services.GetRequiredService<GameMasterCommands>();
+            var settings = new ServerSettingsAppService(services.GetRequiredService<IServerSettingsRepository>(),
+                services.GetRequiredService<WorldServer>(), gameMasters, services.GetRequiredService<GameServerControl>(), worldOptions);
+            gameMasters.Settings = settings;
+            return settings;
+        });
+        // After the world tick (settings apply on it) and before the game server opens.
+        builder.Services.AddHostedService<ServerSettingsService>();
         builder.Services.AddHostedService<GameTcpServer>();
         builder.Services.AddHostedService<PristonTale.Server.World.QuestUpkeepService>();
+        builder.Services.AddHostedService<PristonTale.Server.World.StarterGiftService>();
 
         builder.Services.AddSingleton<IServerStatusReadModel, WorldStatusReadModel>();
 
         return builder;
     }
 
-    // Chat and game masters: GameMasters:TestServer and GameMasters:DebugServer open the experience, gold and item-code
-    // commands to every game master; GameMasters:PotionMonitor enables the potion report.
+    // The save journal lives beside the server executable (Database:SaveJournalPath, relative to it).
+    private static void AddCharacterSaves(HostApplicationBuilder builder)
+    {
+        var journal = Path.Combine(AppContext.BaseDirectory, builder.Configuration["Database:SaveJournalPath"] ?? "save-journal");
+        var batchSize = builder.Configuration.GetValue("Database:SaveBatchSize", CharacterSaveQueue.DefaultBatchSize);
+        if (batchSize < 1)
+        {
+            throw new InvalidOperationException("Database:SaveBatchSize must be at least 1.");
+        }
+
+        builder.Services.AddSingleton(services =>
+        {
+            var logger = services.GetRequiredService<ILogger<CharacterSaveQueue>>();
+            return new CharacterSaveQueue(services.GetRequiredService<ICharacterRepository>(), new SaveJournal(journal), batchSize)
+            {
+                Failed = exception => logger.LogError(exception, "A character save batch failed; it is retried")
+            };
+        });
+        builder.Services.AddSingleton<ICharacterSaves>(services => services.GetRequiredService<CharacterSaveQueue>());
+        builder.Services.AddHostedService<CharacterSaveService>();
+        // Room for the leave saves of every player: once stopping, the store journals what storage refuses after one
+        // failed attempt, which a connection timeout (15 s) bounds.
+        builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = ShutdownTimeout);
+    }
+
+    private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(60);
+
+    private static void AddGameLogs(HostApplicationBuilder builder)
+    {
+        builder.Services.AddSingleton(services =>
+        {
+            var logger = services.GetRequiredService<ILogger<GameLogQueue>>();
+            return new GameLogQueue(services.GetRequiredService<PristonTale.Persistence.Abstractions.GameLogs.IGameLogRepository>(),
+                failed: exception => logger.LogError(exception, "An item transfer log batch failed; it is retried"));
+        });
+        builder.Services.AddSingleton(services =>
+        {
+            var logger = services.GetRequiredService<ILogger<GmAuditQueue>>();
+            return new GmAuditQueue(services.GetRequiredService<IGameMasterRepository>(),
+                failed: exception => logger.LogError(exception, "A game-master audit row failed; it is retried"));
+        });
+        builder.Services.AddSingleton<IGameLog>(services => services.GetRequiredService<GameLogQueue>());
+        builder.Services.AddSingleton(GameLogOptions.From(builder.Configuration));
+        builder.Services.AddHostedService<GameLogService>();
+    }
+
     private static void AddChat(HostApplicationBuilder builder)
     {
-        var options = new GameMasterOptions(
-            builder.Configuration.GetValue("GameMasters:TestServer", false),
-            builder.Configuration.GetValue("GameMasters:DebugServer", false),
-            builder.Configuration.GetValue("GameMasters:PotionMonitor", true),
-            builder.Configuration.GetValue("GameMasters:ServerCode", 0));
         builder.Services.AddSingleton<ChatDirectory>();
         builder.Services.AddSingleton<GameServerControl>();
         builder.Services.AddSingleton(services =>
         {
-            var logger = services.GetRequiredService<ILogger<GameMasterCommands>>();
             return new GameMasterCommands(services.GetRequiredService<ChatDirectory>(), services.GetRequiredService<WorldServer>(),
-                services.GetRequiredService<WorldDataHolder>(), options, services.GetRequiredService<GameServerControl>(),
-                services.GetRequiredService<IGameMasterRepository>(), ex => logger.LogError(ex, "Could not write the game-master audit."))
+                services.GetRequiredService<WorldDataHolder>(), GameMasterOptions.Default, services.GetRequiredService<GameServerControl>(),
+                services.GetRequiredService<IGameMasterRepository>(), services.GetRequiredService<GmAuditQueue>())
             {
                 Accounts = services.GetRequiredService<IAccountRepository>(),
-                Characters = services.GetRequiredService<ICharacterRepository>(),
+                Saves = services.GetRequiredService<ICharacterSaves>(),
                 Warehouses = services.GetRequiredService<IWarehouseRepository>()
             };
         });

@@ -48,13 +48,14 @@ public class Game1 : Game
         InactiveSleepTime = TimeSpan.Zero;
         TargetElapsedTime = TimeSpan.FromSeconds(1d / FrameTiming.TargetHz);
         Window.AllowUserResizing = true;
+        Window.Title = "Etervale";
         Content.RootDirectory = "Content";
         IsMouseVisible = true;
     }
 
     protected override void LoadContent()
     {
-        _presentationController = new PresentationController(_presentation, _settingsStore, _graphics);
+        _presentationController = new PresentationController(_presentation, _settingsStore, _graphics, Window);
         _client = new GameClient(GraphicsDevice, Content, ResolveAssetRoot(), ServerAddress, _presentation);
         _client.LoadContent();
         Window.TextInput += (_, args) => _client.TypeCharacter(args.Character);
@@ -91,7 +92,7 @@ public class Game1 : Game
                 Exit();
             }
 
-            UpdateWindowTitle();
+            UpdateDiagnostics();
             base.Update(gameTime);
             _timing.RecordUpdate(Stopwatch.GetTimestamp() - started, GC.GetAllocatedBytesForCurrentThread() - allocated);
             return;
@@ -110,27 +111,33 @@ public class Game1 : Game
             Exit();
         }
 
+        if (keyboard.IsKeyDown(Keys.F9) && !_lastKeyboardState.IsKeyDown(Keys.F9))
+        {
+            _client.DiagnosticsShown = !_client.DiagnosticsShown;
+        }
+
         _client.Update(gameTime, IsActive);
-        UpdateWindowTitle();
+        UpdateDiagnostics();
         _lastKeyboardState = Keyboard.GetState();
         base.Update(gameTime);
         _timing.RecordUpdate(Stopwatch.GetTimestamp() - started, GC.GetAllocatedBytesForCurrentThread() - allocated);
     }
 
-    private void UpdateWindowTitle()
+    // The frame timing and the screen's status for the diagnostics F9 shows (the original's debug display); the window
+    // title stays the game's name. Sampled only while shown.
+    private void UpdateDiagnostics()
     {
-        if (!_timing.TrySample(Stopwatch.GetTimestamp(), out var sample))
+        if (!_client.DiagnosticsShown || !_timing.TrySample(Stopwatch.GetTimestamp(), out var sample))
         {
             return;
         }
 
-        var res = $"{GraphicsDevice.Viewport.Width}x{GraphicsDevice.Viewport.Height}";
         var limit = _presentation.Requested.FrameLimit(IsActive);
         var ceiling = limit == 0 ? "unlimited" : limit.ToString();
-        Window.Title = $"FPS {sample.FramesPerSecond:F0} | cap {ceiling} | p95/p99 {sample.FrameP95Ms:F1}/{sample.FrameP99Ms:F1}ms"
-            + $" | work {sample.WorkP95Ms:F1}ms | present {sample.PresentP95Ms:F1}ms | {sample.AllocatedBytesPerFrame / 1024:F1}KB/frame"
-            + $" | pacing {sample.PacingP95Ms:F1}ms"
-            + $" | VSync {(_presentation.VerticalSync ? "on" : "off")} | {res} | {_client.StatusText}";
+        _client.Diagnostics = $"FPS {sample.FramesPerSecond:F0} (cap {ceiling}, VSync {(_presentation.VerticalSync ? "on" : "off")})"
+            + $"\nframe p95/p99 {sample.FrameP95Ms:F1}/{sample.FrameP99Ms:F1} ms, work {sample.WorkP95Ms:F1} ms, present {sample.PresentP95Ms:F1} ms,"
+            + $" pacing {sample.PacingP95Ms:F1} ms, {sample.AllocatedBytesPerFrame / 1024:F1} KB/frame"
+            + $"\n{GraphicsDevice.Viewport.Width}x{GraphicsDevice.Viewport.Height} | {_client.StatusText.Replace(" | ", "\n")}";
     }
 
     protected override void Draw(GameTime gameTime)
@@ -146,6 +153,11 @@ public class Game1 : Game
     {
         if (_client is not null)
         {
+            if (_shutdown is null)
+            {
+                _presentationController.CaptureWindowPlacement();
+            }
+
             _shutdown ??= Task.WhenAll(_client.BeginShutdown(), _presentationController.CompleteAsync());
             args.Cancel = !_shutdown.IsCompleted;
         }

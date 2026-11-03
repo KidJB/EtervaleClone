@@ -9,6 +9,11 @@ public static class ItemCodes
 {
     private const int FamilySymbols = 36;
 
+    // The key, code and name gold shows as: its ground model, icon and coin sound.
+    public const string GoldKey = "GG101";
+    public const string GoldName = "Gold";
+    public static readonly uint GoldCode = Parse(GoldKey);
+
     public static bool TryParse(string key, out uint code)
     {
         code = 0;
@@ -24,6 +29,9 @@ public static class ItemCodes
 
     public static uint Parse(string key) =>
         TryParse(key, out var code) ? code : throw new FormatException($"'{key}' is not an item key.");
+
+    // The key of a code; empty for 0, an empty slot, or a code no key spells.
+    public static string KeyOf(uint code) => TryFormat(code, out var key) ? key : "";
 
     public static bool TryFormat(uint code, out string key)
     {
@@ -50,6 +58,28 @@ public static class ItemCodes
         prefix.Length == 3 && TryFamily(prefix, out var family) ? family : throw new FormatException($"'{prefix}' is not an item family.");
 
     public static int Ordinal(uint code) => (int)(code & 0xFF);
+
+    // The family of a catalog key, its first three characters upper-cased ("WA1"); empty for a shorter key.
+    public static string FamilyOf(string key) => key is { Length: >= 3 } ? key[..3].ToUpperInvariant() : "";
+
+    // Whether a key belongs to one of these families, without allocating.
+    public static bool InFamily(string key, ReadOnlySpan<string> families)
+    {
+        if (key is not { Length: >= 3 })
+        {
+            return false;
+        }
+
+        foreach (var family in families)
+        {
+            if (key.AsSpan(0, 3).Equals(family, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static bool TryFamily(ReadOnlySpan<char> prefix, out uint family)
     {

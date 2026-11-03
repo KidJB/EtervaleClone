@@ -38,7 +38,7 @@ public sealed class PristonCamera
         _distance = _settings.DefaultDistance;
         _pitch = _settings.DefaultPitch;
         var normalized = NormalizedForward(forward);
-        _yaw = MathF.Atan2(normalized.X, normalized.Z);
+        _yaw = WorldSpace.RenderYaw(normalized);
         _hasPosition = false;
         _hasMouse = false;
         UpdateFollow(target, 0f);
@@ -136,7 +136,7 @@ public sealed class PristonCamera
         _projectionHeight = height;
         var aspect = width / (float)height;
         var verticalFieldOfView = VerticalFieldOfView(_fieldOfViewRadians, _settings.MaxHorizontalFieldOfViewDegrees, aspect);
-        Projection = Matrix.CreatePerspectiveFieldOfView(verticalFieldOfView, aspect, _settings.NearPlane, _settings.FarPlane);
+        Projection = PristonDepth.Perspective(verticalFieldOfView, aspect, _settings.NearPlane, _settings.FarPlane);
     }
 
     internal static float VerticalFieldOfView(float verticalRadians, float maxHorizontalDegrees, float aspect)

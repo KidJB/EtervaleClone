@@ -6,6 +6,10 @@ using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Simulation.World.Monsters.Skills;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Units;
+using PristonTale.Simulation.World.Npcs;
 
 namespace PristonTale.Application.World;
 
@@ -35,7 +39,7 @@ internal sealed class FieldMonsterSkills
     private readonly MonsterHitRider[] _riders = new MonsterHitRider[MonsterSkillRules.MaxRiders];
     private readonly List<MonsterInstance> _pointScratch = new();
     private readonly List<(MonsterInstance Monster, MonsterDefinition Into)> _changes = new();
-    private readonly Dictionary<ulong, (MonsterMotionState Motion, float Ms, bool Regenerated)> _babelMotion = new();
+    private readonly Dictionary<ulong, (MotionState Motion, float Ms, bool Regenerated)> _babelMotion = new();
 
     public FieldMonsterSkills(IFieldMonsterSkillHost host, CombatRng rng)
     {
@@ -46,7 +50,7 @@ internal sealed class FieldMonsterSkills
     internal FieldCombat? Combat { get; set; }
 
     // Mystics left alive explode on their own after 1920 updates of four frames.
-    public const float MysticLifetimeMs = 1920 * 4 * MonsterStatuses.FrameMs;
+    public const float MysticLifetimeMs = 1920 * 4 * GameUnits.TickMs;
 
     // Reinforcement caps, counted over the monsters standing on the caller's spawn point.
     public const int VirtualLifeReinforcementCap = 8;
@@ -69,12 +73,12 @@ internal sealed class FieldMonsterSkills
             monster.AliveMs += dtMs;
         }
 
-        if (monster.Def.SoundCode == MonsterSounds.VampiricMachine)
+        if (monster.Def.SoundCode == CharacterSoundCodes.VampiricMachine)
         {
             monster.Position = before;
         }
 
-        if (monster.Def.SoundCode == MonsterSounds.Mystic)
+        if (monster.Def.SoundCode == CharacterSoundCodes.Mystic)
         {
             StepMystic(monster);
         }
@@ -96,23 +100,23 @@ internal sealed class FieldMonsterSkills
         }
 
         monster.SwingJustBegan = false;
-        if (monster.Def.SoundCode == MonsterSounds.VampiricMachine && PointCount(monster) > BeeCap - 1)
+        if (monster.Def.SoundCode == CharacterSoundCodes.VampiricMachine && PointCount(monster) > BeeCap - 1)
         {
             // The machine waits while four of its brood stand on its point.
             monster.AiState = MonsterAiState.Chase;
-            monster.Motion = MonsterMotionState.Stand;
+            monster.Motion = MotionState.Stand;
             monster.AttackHitFired = true;
             return;
         }
 
-        if (monster.AttackIsSkill && monster.Def.SoundCode == MonsterSounds.MagicMaster && _rng.NextExclusive(0, 100) < MagicMasterDrinkPercent)
+        if (monster.AttackIsSkill && monster.Def.SoundCode == CharacterSoundCodes.MagicMaster && _rng.NextExclusive(0, 100) < MagicMasterDrinkPercent)
         {
             // The magic master sometimes drinks a mana potion instead of casting; it restores no life.
             monster.AttackIsSkill = false;
             monster.SkillImpactPending = false;
             monster.AttackHitFired = true;
             monster.AiState = MonsterAiState.Chase;
-            monster.Motion = MonsterMotionState.Eat;
+            monster.Motion = MotionState.Eat;
             monster.SpecialMsLeft = tuning.EatDurationMs;
             monster.DrinkHeals = false;
             return;
@@ -124,7 +128,7 @@ internal sealed class FieldMonsterSkills
         }
 
         _host.EmitCombatEvent(new CombatEventView(monster.EntityId, monster.AllyTargetId != 0 ? monster.AllyTargetId : monster.TargetId,
-            CombatEventKindView.SwingBegin, monster.ActionDurationMs, monster.ActionHitAtMs)
+            CombatEventKind.SwingBegin, monster.ActionDurationMs, monster.ActionHitAtMs)
         {
             Clip = monster.ActionSlot,
             Skill = monster.AttackIsSkill
@@ -163,7 +167,7 @@ internal sealed class FieldMonsterSkills
                 {
                     // Nobody to strengthen: the swing stays the normal attack it was drawn as.
                     monster.AttackIsSkill = false;
-                    monster.Motion = MonsterMotionState.Attack;
+                    monster.Motion = MotionState.Attack;
                     var attack = monster.AttackVariant;
                     monster.ActionSlot = attack.Slot;
                     monster.ActionKey = attack.Key;
@@ -174,7 +178,7 @@ internal sealed class FieldMonsterSkills
                 break;
         }
 
-        if (definition.SoundCode == MonsterSounds.Ratoo)
+        if (definition.SoundCode == CharacterSoundCodes.Ratoo)
         {
             foreach (var other in _host.Monsters)
             {
@@ -221,25 +225,25 @@ internal sealed class FieldMonsterSkills
     private void CompleteSpecial(MonsterInstance monster)
     {
         var completed = monster.CompletedSpecial;
-        if (completed == MonsterMotionState.Stand)
+        if (completed == MotionState.Stand)
         {
             return;
         }
 
-        monster.CompletedSpecial = MonsterMotionState.Stand;
-        if (completed == MonsterMotionState.Warp && monster.VanishOnWarp)
+        monster.CompletedSpecial = MotionState.Stand;
+        if (completed == MotionState.Warp && monster.VanishOnWarp)
         {
             _vanished.Add(monster);
             return;
         }
 
-        if (completed == MonsterMotionState.Eat && monster.DrinkHeals)
+        if (completed == MotionState.Eat && monster.DrinkHeals)
         {
             var max = monster.Def.Combat.MaxLife;
             monster.Life = Math.Min(max, monster.Life + MonsterLifeRules.PotionHeal(monster.Def));
-            _host.EmitCombatEvent(new CombatEventView(monster.EntityId, monster.EntityId, CombatEventKindView.PotionApplied, resources: 1));
+            _host.EmitCombatEvent(new CombatEventView(monster.EntityId, monster.EntityId, CombatEventKind.PotionApplied, resources: 1));
         }
-        else if (completed == MonsterMotionState.Warp && ChangeInto(monster) is { } into)
+        else if (completed == MotionState.Warp && ChangeInto(monster) is { } into)
         {
             _changes.Add((monster, into));
         }
@@ -281,7 +285,7 @@ internal sealed class FieldMonsterSkills
             var changed = _host.SpawnMonster(into, monster.Position, monster.Facing, monster.SpawnPointIndex);
             changed.TargetId = monster.TargetId;
             changed.AiState = monster.TargetId != 0 ? MonsterAiState.Chase : MonsterAiState.Idle;
-            changed.Motion = MonsterMotionState.Stand;
+            changed.Motion = MotionState.Stand;
         }
 
         _changes.Clear();
@@ -296,8 +300,8 @@ internal sealed class FieldMonsterSkills
             var remaining = monster.VirtualLives + monster.LivesSpent;
             var called = monster.Def.SoundCode switch
             {
-                MonsterSounds.Kelvezu => MonsterSounds.ChaosCara,
-                MonsterSounds.Mokova => MonsterSounds.DarkGuard,
+                CharacterSoundCodes.Kelvezu => CharacterSoundCodes.ChaosCara,
+                CharacterSoundCodes.Mokova => CharacterSoundCodes.DarkGuard,
                 _ => 0
             };
             if (called == 0 || (remaining & 1) != 0)
@@ -404,7 +408,7 @@ internal sealed class FieldMonsterSkills
     private void DropFarSummonTarget(MonsterInstance monster)
     {
         const float limit = 120f;
-        if (monster.Def.SoundCode == MonsterSounds.DeathKnight && monster.AiState != MonsterAiState.Attack
+        if (monster.Def.SoundCode == CharacterSoundCodes.DeathKnight && monster.AiState != MonsterAiState.Attack
             && _host.TryGetMonster(monster.TargetId, out var summon) && summon.IsSummon
             && Vector2.DistanceSquared(new Vector2(monster.Position.X, monster.Position.Z), new Vector2(summon.Position.X, summon.Position.Z)) > limit * limit)
         {
@@ -435,7 +439,7 @@ internal sealed class FieldMonsterSkills
 
         monster.AliveMs = -1f;
         var skill = monster.Def.Skill;
-        _host.EmitCombatEvent(new CombatEventView(monster.EntityId, monster.TargetId, CombatEventKindView.MonsterSkillImpact,
+        _host.EmitCombatEvent(new CombatEventView(monster.EntityId, monster.TargetId, CombatEventKind.MonsterSkillImpact,
             sourceSoundCode: monster.Def.SoundCode, position: monster.Position, facing: monster.Facing));
         var candidates = _host.NearbyPlayers(monster.Position, MonsterOffensiveSkill.QueryRadius(skill));
         for (var index = 0; index < candidates.Count; index++)
@@ -451,7 +455,7 @@ internal sealed class FieldMonsterSkills
         {
             var damage = _rng.Range(skill.SkillDamage.Min, Math.Max(skill.SkillDamage.Min, skill.SkillDamage.Max)) * 2;
             fought.ApplyDamage(damage);
-            _host.EmitCombatEvent(new CombatEventView(monster.EntityId, fought.EntityId, CombatEventKindView.Hit, damage: damage, killed: !fought.IsAlive)
+            _host.EmitCombatEvent(new CombatEventView(monster.EntityId, fought.EntityId, CombatEventKind.Hit, damage: damage, killed: !fought.IsAlive)
             {
                 Skill = true
             });
@@ -468,7 +472,7 @@ internal sealed class FieldMonsterSkills
 
         attacker.SkillImpactPending = false;
         _host.EmitCombatEvent(new CombatEventView(attacker.EntityId, attacker.AllyTargetId != 0 ? attacker.AllyTargetId : targetId,
-            CombatEventKindView.MonsterSkillImpact, sourceSoundCode: attacker.Def.SoundCode, position: attacker.SkillOrigin, facing: attacker.SkillFacing));
+            CombatEventKind.MonsterSkillImpact, sourceSoundCode: attacker.Def.SoundCode, position: attacker.SkillOrigin, facing: attacker.SkillFacing));
         if (attacker.AllyTargetId != 0 || !MonsterSkillRules.DealsSkillDamage(attacker.Def))
         {
             return;
@@ -506,7 +510,7 @@ internal sealed class FieldMonsterSkills
     // A skill blow never misses and is never blocked: the power less the player's absorption, at least 1.
     private void SkillOnPlayer(MonsterInstance attacker, WorldPlayer target, bool applyRiders)
     {
-        if (target.IsDead || target.Hp <= 0)
+        if (target.IsDead || target.Life <= 0)
         {
             return;
         }
@@ -528,7 +532,7 @@ internal sealed class FieldMonsterSkills
         damage = Combat?.SkillCombat?.Defend(attacker, target, damage, true) ?? damage;
         damage = CastleItems.Defend(attacker.Def.SoundCode, target.Character.Effects, damage);
         target.ApplyDamage(damage);
-        _host.EmitCombatEvent(new CombatEventView(attacker.EntityId, target.EntityId, CombatEventKindView.Hit, damage: damage, killed: target.IsDead)
+        _host.EmitCombatEvent(new CombatEventView(attacker.EntityId, target.EntityId, CombatEventKind.Hit, damage: damage, killed: target.IsDead)
         {
             Skill = true
         });
@@ -538,7 +542,7 @@ internal sealed class FieldMonsterSkills
     // A skill on a summon strikes it alone; the Guardian Saint's strikes every monster around it.
     private void SkillOnMonster(MonsterInstance attacker, MonsterInstance target)
     {
-        if (attacker.Def.SoundCode != MonsterSounds.GuardianSaint)
+        if (attacker.Def.SoundCode != CharacterSoundCodes.GuardianSaint)
         {
             Combat?.MonsterOnMonster(attacker, target, skill: true);
             return;
@@ -560,7 +564,7 @@ internal sealed class FieldMonsterSkills
             }
 
             other.ApplyDamage(damage);
-            _host.EmitCombatEvent(new CombatEventView(attacker.EntityId, other.EntityId, CombatEventKindView.Hit, damage: damage, killed: !other.IsAlive)
+            _host.EmitCombatEvent(new CombatEventView(attacker.EntityId, other.EntityId, CombatEventKind.Hit, damage: damage, killed: !other.IsAlive)
             {
                 Skill = true
             });
@@ -574,7 +578,7 @@ internal sealed class FieldMonsterSkills
     // Babel's roll for a normal blow: whether it splashes and the percent of the roll its target takes.
     public (int Percent, bool Splash) BeginBlow(MonsterInstance attacker, WorldPlayer target)
     {
-        if (attacker.Def.SoundCode != MonsterSounds.Babel || _rng.NextExclusive(0, 100) >= MonsterSkillRules.BabelSplashChance)
+        if (attacker.Def.SoundCode != CharacterSoundCodes.Babel || _rng.NextExclusive(0, 100) >= MonsterSkillRules.BabelSplashChance)
         {
             return (100, false);
         }
@@ -614,24 +618,40 @@ internal sealed class FieldMonsterSkills
     // The vampiric machine's blow sends a bee out of it instead of striking.
     public bool ReplacesBlow(MonsterInstance attacker)
     {
-        if (attacker.Def.SoundCode != MonsterSounds.VampiricMachine)
+        if (attacker.Def.SoundCode != CharacterSoundCodes.VampiricMachine)
         {
             return false;
         }
 
-        CallReinforcement(attacker, MonsterSounds.VampiricBee, attacker.Position, BeeCap);
+        CallReinforcement(attacker, CharacterSoundCodes.VampiricBee, attacker.Position, BeeCap);
         return true;
     }
 
-    // Damage of a monster's roll against another monster: the bosses deal eight times as much, Kelvezu kills outright.
-    public static int AgainstMonster(MonsterInstance attacker, MonsterInstance target, int roll)
+    // A monster's blow on another monster, a wild one's on a summon or a summon's on a wild one alike: its accuracy against
+    // the target's defence at their levels, a roll of its damage (its skill damage for a skill that has any), eight times
+    // as much from the bosses, less the target's absorption; Kelvezu kills outright. Null on a miss.
+    public static int? BlowOnMonster(CombatRng rng, MonsterInstance attacker, MonsterInstance target, bool skill)
     {
+        var combat = attacker.Def.Combat;
+        var attack = new AttackProfile(combat.AttackRatingAccuracy, combat.AttackDamage.Min, combat.AttackDamage.Max, combat.Level, Element.Bionic, 0, 0, 0);
+        if (!CombatResolver.RollHit(rng, CombatResolver.HitChance(attack, DefenderProfile.FromMonster(target))))
+        {
+            return null;
+        }
+
         if (MonsterSkillRules.KillsMonsters(attacker.Def))
         {
             return Math.Max(1, target.Life);
         }
 
-        return MonsterSkillRules.MultipliesAgainstMonsters(attacker.Def) ? roll * MonsterSkillRules.MonsterDamageMultiplier : roll;
+        var range = skill && attacker.Def.Skill.SkillDamage.Max > 0 ? attacker.Def.Skill.SkillDamage : combat.AttackDamage;
+        var roll = rng.Range(range.Min, Math.Max(range.Min, range.Max));
+        if (MonsterSkillRules.MultipliesAgainstMonsters(attacker.Def))
+        {
+            roll *= MonsterSkillRules.MonsterDamageMultiplier;
+        }
+
+        return CombatResolver.ApplyAbsorbMonster(roll, target.Def.Combat.Absorption);
     }
 
     private void ApplyRiders(MonsterInstance attacker, WorldPlayer target, int count, int power)

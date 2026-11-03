@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using PristonTale.Effects.Vfx;
 using PristonTale.Simulation.Items;
+using PristonTale.Contracts.Units;
 
 namespace PristonTale.Gameplay.Effects;
 
@@ -13,8 +14,6 @@ public sealed class ClassUpLights
 {
     public const string Light = "particle.ClassUpWeapon1";
     public const string Trail = "particle.ClassUpWeapon2";
-    private const float Frame = 1f / 70f;
-    private const float Fixed = 256f;
 
     private readonly Dictionary<ulong, Holder> _held = new();
     private readonly HashSet<ulong> _seen = new();
@@ -35,8 +34,8 @@ public sealed class ClassUpLights
         holder.Advance(seconds);
         var center = Center(weaponKey, reach, leftHand, twoHanded);
         var across = Across(weaponKey, leftHand);
-        var radius = holder.Radius / Fixed;
-        var turn = holder.Angle * MathHelper.TwoPi / 4096f;
+        var radius = holder.Radius / GameUnits.FixedScale;
+        var turn = holder.Angle * GameUnits.RadiansPerAngle;
         var offset = across
             ? new Vector3(0f, MathF.Sin(turn) * radius, MathF.Cos(turn) * radius)
             : new Vector3(-MathF.Sin(turn) * radius, 0f, MathF.Cos(turn) * radius);
@@ -67,7 +66,7 @@ public sealed class ClassUpLights
     // The lights' centre in the weapon's model space, its length along Y.
     public static Vector3 Center(string weaponKey, float reach, bool leftHand, bool twoHanded)
     {
-        var family = weaponKey.Length >= 3 ? weaponKey[..3].ToUpperInvariant() : "";
+        var family = ItemCodes.FamilyOf(weaponKey);
         Vector3 point;
         if (leftHand && family == "WS1")
         {
@@ -79,7 +78,7 @@ public sealed class ClassUpLights
             point = family switch
             {
                 "WT1" => new Vector3(0f, -0.4f * reach, 0f),
-                "WS2" => new Vector3(0f, reach * (reach * Fixed > 5000f ? 0.75f : 0.8f), 0f),
+                "WS2" => new Vector3(0f, reach * (reach * GameUnits.FixedScale > 5000f ? 0.75f : 0.8f), 0f),
                 "WC1" => new Vector3(2f * reach, 0f, 0f),
                 "WM1" => new Vector3(0f, 0.7f * reach, 0f),
                 "WS1" => new Vector3(0.7f * reach * MathF.Sin(MathHelper.PiOver4), 0.7f * reach * MathF.Cos(MathHelper.PiOver4), 0f),
@@ -99,14 +98,13 @@ public sealed class ClassUpLights
 
     private static bool Across(string weaponKey, bool leftHand)
     {
-        var family = weaponKey.Length >= 3 ? weaponKey[..3].ToUpperInvariant() : "";
+        var family = ItemCodes.FamilyOf(weaponKey);
         return leftHand || family is "WC1" or "WS1";
     }
 
     private sealed class Holder
     {
-        private readonly VfxInstance[] _effects = new VfxInstance[4];
-        private readonly int[] _generations = new int[4];
+        private readonly VfxHandle[] _effects = new VfxHandle[4];
         private float _frames;
         private bool _growing;
 
@@ -115,11 +113,11 @@ public sealed class ClassUpLights
 
         public void Advance(float seconds)
         {
-            _frames += seconds / Frame;
+            _frames += seconds * GameUnits.TicksPerSecond;
             while (_frames >= 1f)
             {
                 _frames -= 1f;
-                Angle = (Angle + 70f) % 4096f;
+                Angle = (Angle + 70f) % GameUnits.AngleTurn;
                 if (!_growing)
                 {
                     Radius -= 10f;
@@ -139,15 +137,12 @@ public sealed class ClassUpLights
             for (var part = 0; part < 2; part++)
             {
                 var slot = light * 2 + part;
-                var effect = _effects[slot];
-                if (effect is null || effect.Generation != _generations[slot] || !effect.Alive)
+                if (!_effects[slot].Alive)
                 {
-                    effect = skills.SpawnAt(part == 0 ? Light : Trail, point, Matrix.Identity);
-                    _effects[slot] = effect;
-                    _generations[slot] = effect?.Generation ?? 0;
+                    _effects[slot] = skills.SpawnAt(part == 0 ? Light : Trail, point, Matrix.Identity);
                 }
 
-                effect?.MoveTo(point);
+                _effects[slot].MoveTo(point);
             }
         }
 
@@ -155,12 +150,8 @@ public sealed class ClassUpLights
         {
             for (var slot = 0; slot < _effects.Length; slot++)
             {
-                if (_effects[slot] is { } effect && effect.Generation == _generations[slot])
-                {
-                    effect.Stop();
-                }
-
-                _effects[slot] = null;
+                _effects[slot].Stop();
+                _effects[slot] = default;
             }
         }
     }

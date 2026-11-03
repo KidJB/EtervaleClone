@@ -1,9 +1,10 @@
+using PristonTale.Assets;
 #nullable enable
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
-using PristonTale.Effects.Legacy;
+using PristonTale.Effects.Scripts;
 using PristonTale.Effects.Vfx;
 using PristonTale.Engine3D.Diagnostics;
 using PristonTale.Engine3D.Formats;
@@ -24,6 +25,7 @@ public sealed class VfxContent : IVfxResources, IDisposable
     private readonly IClientLog _log;
     private readonly Task<Prepared> _preparation;
     private readonly Dictionary<string, PristonMeshEffect?> _models = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, BillboardSequence?> _readOnUse = new(StringComparer.OrdinalIgnoreCase);
     private Prepared? _prepared;
     private int _next;
 
@@ -99,7 +101,7 @@ public sealed class VfxContent : IVfxResources, IDisposable
 
     Texture2D? IVfxResources.Texture(string path)
     {
-        return PristonFileResolver.Exists(Path.Combine(_assetRoot, path)) ? _textures.LoadTexture(_assetRoot, path) : null;
+        return AssetFiles.Exists(Path.Combine(_assetRoot, path)) ? _textures.LoadTexture(_assetRoot, path) : null;
     }
 
     // A static model outside the effect definitions (a thrown weapon), read on first use; null when it cannot be read.
@@ -197,14 +199,29 @@ public sealed class VfxContent : IVfxResources, IDisposable
         return new Prepared(catalog, models, animations);
     }
 
-    BillboardSequence? IVfxResources.Animation(string name) =>
-        _prepared is not null && _prepared.Animations.TryGetValue(name, out var animation) ? animation : null;
+    // Effects defined in code (ItemVfx) may name animations no catalog file uses, and may register before the catalog is
+    // prepared: those are read on first use.
+    BillboardSequence? IVfxResources.Animation(string name)
+    {
+        if (_prepared is not null && _prepared.Animations.TryGetValue(name, out var prepared))
+        {
+            return prepared;
+        }
+
+        if (!_readOnUse.TryGetValue(name, out var animation))
+        {
+            animation = ReadAnimation(name);
+            _readOnUse[name] = animation;
+        }
+
+        return animation;
+    }
 
     private BillboardSequence? ReadAnimation(string name)
     {
         try
         {
-            return BillboardSequence.Read(name, path => PristonFileResolver.OpenRead(Path.Combine(_assetRoot, path)));
+            return BillboardSequence.Read(name, path => AssetFiles.OpenRead(Path.Combine(_assetRoot, path)));
         }
         catch (Exception exception) when (exception is IOException or InvalidDataException or FormatException or UnauthorizedAccessException
             or OverflowException)
@@ -239,7 +256,7 @@ public sealed class VfxContent : IVfxResources, IDisposable
     private void QueueTexture(string texture, HashSet<string> textures, List<Task> decoding)
     {
         if (texture.Length > 0 && !texture.StartsWith(VfxBuiltinTextures.Prefix, StringComparison.OrdinalIgnoreCase) && textures.Add(texture)
-            && PristonFileResolver.Exists(Path.Combine(_assetRoot, texture)))
+            && AssetFiles.Exists(Path.Combine(_assetRoot, texture)))
         {
             decoding.Add(_textures.PrepareTextureAsync(_assetRoot, texture));
         }
@@ -258,7 +275,7 @@ public sealed class VfxContent : IVfxResources, IDisposable
             else
             {
                 var sibling = Path.ChangeExtension(path, ".smb");
-                if (PristonFileResolver.Exists(Path.Combine(_assetRoot, sibling)))
+                if (AssetFiles.Exists(Path.Combine(_assetRoot, sibling)))
                 {
                     bones = reader.ReadModel(Path.Combine(_assetRoot, sibling));
                 }
@@ -304,7 +321,7 @@ public sealed class VfxContent : IVfxResources, IDisposable
         var directory = Path.GetDirectoryName(mesh.Path) ?? ".";
         string Resolve(string name)
         {
-            if (string.IsNullOrWhiteSpace(name) || PristonFileResolver.Exists(Path.Combine(directory, name))
+            if (string.IsNullOrWhiteSpace(name) || AssetFiles.Exists(Path.Combine(directory, name))
                 || !effectTextures.TryGetValue(Path.GetFileName(name), out var found))
             {
                 return name;

@@ -2,6 +2,7 @@ using PristonTale.Simulation.Progression;
 using PristonTale.Simulation.World.Npcs;
 using System.Numerics;
 using System.Text.Json;
+using PristonTale.Application.Saves;
 using PristonTale.Application.Sessions;
 using PristonTale.Application.World;
 using PristonTale.Persistence.Abstractions.Characters;
@@ -9,6 +10,8 @@ using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.Quests;
 using PristonTale.Simulation.World;
+using PristonTale.Contracts.Sessions;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Application.Services;
 
@@ -17,8 +20,10 @@ public sealed class SessionAppService
     private readonly ISessionRegistry _sessions;
     private readonly CharacterClassRegistry _classes;
     private readonly ICharacterRepository _characters;
+    private readonly ICharacterSaves _saves;
     private readonly WorldCatalog _world;
     private readonly WorldServer? _host;
+    private readonly DurableOperations _durable;
     private readonly WorldDataHolder _worldData;
     private readonly TimeProvider _clock;
 
@@ -26,6 +31,7 @@ public sealed class SessionAppService
         ISessionRegistry sessions,
         CharacterClassRegistry classes,
         ICharacterRepository characters,
+        ICharacterSaves saves,
         WorldCatalog world,
         WorldServer? host = null,
         WorldDataHolder? worldData = null,
@@ -34,6 +40,8 @@ public sealed class SessionAppService
         _sessions = sessions;
         _classes = classes;
         _characters = characters;
+        _saves = saves;
+        _durable = new DurableOperations(saves);
         _world = world;
         _host = host;
         _worldData = worldData ?? new WorldDataHolder();
@@ -56,8 +64,22 @@ public sealed class SessionAppService
         var ready = false;
         try
         {
-            var record = await _characters.FindByNameForAccountAsync(session.AccountId, characterName ?? string.Empty, ct);
-            if (record is null)
+            var found = await _characters.FindByNameForAccountAsync(session.AccountId, characterName ?? string.Empty, ct);
+            if (found is null)
+            {
+                return EnterWorldOutcome.Denied(EnterWorldFailure.NotFound);
+            }
+
+            if (!_sessions.TryClaimCharacter(found.Id, sessionToken))
+            {
+                return EnterWorldOutcome.Denied(EnterWorldFailure.AlreadyActive);
+            }
+
+            claimedCharacter = found.Id;
+            // The previous session's leave save may have been stored, and its claim released, after the first read: the
+            // record is read again under the claim, when nothing else writes it.
+            var record = await _characters.FindByNameForAccountAsync(session.AccountId, found.Name, ct);
+            if (record is null || record.Id != found.Id)
             {
                 return EnterWorldOutcome.Denied(EnterWorldFailure.NotFound);
             }
@@ -66,13 +88,6 @@ public sealed class SessionAppService
             {
                 return EnterWorldOutcome.Denied(EnterWorldFailure.InvalidSavedClassOrField);
             }
-
-            if (!_sessions.TryClaimCharacter(record.Id, sessionToken))
-            {
-                return EnterWorldOutcome.Denied(EnterWorldFailure.AlreadyActive);
-            }
-
-            claimedCharacter = record.Id;
             var attributes = new CharacterAttributes(record.Strength, record.Spirit, record.Talent, record.Agility, record.Health);
             var character = new PlayerCharacter(_classes.Get((PlayerClass)record.JobCode), record.Name, record.Level, attributes);
             try
@@ -106,6 +121,7 @@ public sealed class SessionAppService
             session.CharacterName = record.Name;
             session.Character = character;
             session.Loaded = record;
+            session.ResumeSaves(record.SaveSeq);
             session.FieldId = field.FieldCode;
             session.SpawnPosition = spawn;
             session.InVillage = field.State == FieldState.Village;
@@ -148,7 +164,14 @@ public sealed class SessionAppService
         return new Vector3(field.Center.X, 0f, field.Center.Z);
     }
 
-    public async Task<bool> SaveCharacterAsync(string sessionToken, CancellationToken ct = default)
+    public Task<bool> SaveCharacterAsync(string sessionToken, CancellationToken ct = default) => SaveAsync(sessionToken, null, ct);
+
+    // Stores the capture the world took as the player left (WorldServer.LeaveAsync). A leave save completes once storage
+    // has it (or, as the server stops, the save journal), so the character is not released before.
+    public Task<bool> SaveLeftCharacterAsync(string sessionToken, CharacterSaveSnapshot left, CancellationToken ct = default) =>
+        SaveAsync(sessionToken, left, ct);
+
+    private async Task<bool> SaveAsync(string sessionToken, CharacterSaveSnapshot? left, CancellationToken ct)
     {
         if (!_sessions.TryGet(sessionToken, out var session))
         {
@@ -163,18 +186,15 @@ public sealed class SessionAppService
                 return false;
             }
 
-            var snapshot = _host is null
-                || !session.IsPlaying ? CharacterRecordFactory.Capture(
-                    session.Loaded,
-                    session.Character,
-                    session.FieldId,
-                    session.SpawnPosition) : await _host.CaptureForSaveAsync(session);
+            var snapshot = left ?? (_host is null || !session.IsPlaying && !session.LeftDead
+                ? CharacterRecordFactory.Capture(session.Loaded, session.Character, session.FieldId, session.SpawnPosition)
+                : session.IsPlaying ? await _host.CaptureForSaveAsync(session) : await _host.CaptureLeftAsync(session));
             if (snapshot is null)
             {
                 return false;
             }
 
-            return await _characters.UpdateAsync(snapshot.Encode(), ct);
+            return await _saves.SaveAsync(session, snapshot);
         }
         finally
         {
@@ -202,55 +222,25 @@ public sealed class SessionAppService
         Func<PlayerSession, PreparedCharacterOperation<TOutcome>, Task<bool>> commit,
         Func<string, TOutcome> rejected, CancellationToken ct)
     {
-        if (_host is null || !_sessions.TryGet(token, out var session))
+        if (_host is null)
         {
             return rejected("invalid session");
         }
 
-        // One admitted mutation per character; saves and all economic operations share this gate.
-        if (!await session.SaveGate.WaitAsync(0, ct))
-        {
-            return rejected("save or character operation pending; retry");
-        }
-
-        PreparedCharacterOperation<TOutcome>? prepared = null;
-        bool stored = false;
-        try
-        {
-            prepared = await prepare(session);
-            if (prepared is null)
+        using var lease = await _durable.AdmitAsync(_sessions, token, ct);
+        return await lease.RunAsync(prepare, commit, prepared => prepared.Outcome,
+            failure => rejected(failure switch
             {
-                return rejected("character is not playing");
-            }
-
-            if (prepared.Snapshot is null)
-            {
-                return prepared.Outcome;
-            }
-
-            // Finish an admitted transaction despite cancellation. Retrying its UUID recovers the outcome.
-            if (!await _characters.UpdateAsync(prepared.Snapshot.Encode(), CancellationToken.None))
-            {
-                return rejected("storage rejected operation; character unchanged");
-            }
-
-            stored = true;
-            await commit(session, prepared);
-            return prepared.Outcome;
-        }
-        finally
-        {
-            try
-            {
-                if (!stored && prepared is PreparedPickupOperation)
-                {
-                    await _host.AbortCharacterOperationAsync(prepared);
-                }
-            }
-            finally
-            {
-                session.SaveGate.Release();
-            }
-        }
+                DurableFailure.NoSession => "invalid session",
+                DurableFailure.Busy => "save or character operation pending; retry",
+                DurableFailure.StorageFailed => "storage rejected operation; character unchanged",
+                _ => "character is not playing"
+            }),
+            // An item or gold thrown to the ground is stored before it lands there, so no crash keeps it in the bag and on
+            // the ground; any other change is stored in the background.
+            async (session, prepared) => await _characters.UpdateAsync(session.Stamp(prepared.Snapshot!), CancellationToken.None)
+                ? null
+                : DurableFailure.StorageFailed,
+            storeFirst: static prepared => prepared is PreparedThrowOperation);
     }
 }

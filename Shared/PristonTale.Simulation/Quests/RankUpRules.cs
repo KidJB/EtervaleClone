@@ -110,7 +110,7 @@ public static class RankUpRules
     }
 
     public static QuestPrompt RankUpPrompt(QuestContext context, QuestCode code, int state, string document) =>
-        QuestSteps.Confirm(code, state, document, QuestTexts.RankUp, JobTitles.At(QuestClasses.ClassOf(context.Character), context.Character.Tier + 1));
+        QuestSteps.Confirm(code, state, document, QuestTexts.RankUp, ClassProfiles.Of(QuestClasses.ClassOf(context.Character)).TitleAt(context.Character.Tier + 1));
 
     // Moves the class one tier up; the master then offers one free redistribution of the learned skills.
     public static void RankUp(QuestContext context)
@@ -119,6 +119,18 @@ public static class RankUpRules
         character.ApplyQuestProgress((short)(character.Tier + 1), 0, 0, 0);
         context.Journal.SkillResetOffered = true;
         context.Notice(QuestNoticeKind.Fanfare, "");
+    }
+
+    // The original asks once, right after the rank-up: No ends the offer.
+    public static bool DeclineSkillReset(QuestContext context)
+    {
+        if (!context.Journal.SkillResetOffered)
+        {
+            return context.Fail(QuestStatus.Rejected, "no skill redistribution is offered");
+        }
+
+        context.Journal.SkillResetOffered = false;
+        return true;
     }
 
     public static bool ResetSkills(QuestContext context)

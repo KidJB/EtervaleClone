@@ -14,6 +14,11 @@ using PristonTale.Simulation.World.Motion;
 using PristonTale.Simulation.World.Spawning;
 using PristonTale.Simulation.World.Npcs;
 using PristonTale.Simulation.Skills;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Skills;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Application.World;
 
@@ -36,13 +41,51 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
     private readonly List<SpatialEntry> _collisionQuery = new();
     private readonly Dictionary<int, MonsterAiTuning> _tuningByCode = new();
     // Null timing entries use the fallback clips and are cached as misses.
-    private readonly Dictionary<int, MotionTimingSet?> _playerTimingByJob = new();
+    private readonly Dictionary<PlayerClass, MotionTimingSet?> _playerTimingByClass = new();
     // Snapshots copy this tick-owned list before asynchronous publication.
     private readonly List<CombatEventView> _events = new();
 
     private static readonly CharacterClassRegistry ClassRegistry = new();
 
     private readonly FieldSpawner _spawner;
+
+    private BossSpotView[] _bossSpots = [];
+
+    // The field's bosses at their spot, rebuilt only when a master comes alive or goes (the encoder sends the list when
+    // the array changes); empty for a field without bosses or a boss spot.
+    public BossSpotView[] BossSpots()
+    {
+        var bosses = _spawner.Bosses;
+        if (bosses.Count == 0 || !_spawner.TryBossSpot(out var spot))
+        {
+            return _bossSpots;
+        }
+
+        var changed = _bossSpots.Length != bosses.Count;
+        for (var index = 0; index < bosses.Count && !changed; index++)
+        {
+            changed = _bossSpots[index].Alive != BossAlive(index);
+        }
+
+        if (changed)
+        {
+            var spots = new BossSpotView[bosses.Count];
+            for (var index = 0; index < spots.Length; index++)
+            {
+                spots[index] = new BossSpotView(_spawner.BossName(index), spot.X, spot.Z, BossAlive(index));
+            }
+
+            _bossSpots = spots;
+        }
+
+        return _bossSpots;
+    }
+
+    private bool BossAlive(int bossIndex) =>
+        _spawner.BossMaster(bossIndex) is var master and not 0 && _monsters.TryGetValue(master, out var monster) && monster.IsAlive;
+
+    // The field's next boss pass at this local time and today's pass minute (BossSpawnSchedule.Minute).
+    public Simulation.World.Spawning.BossCountdown? NextBoss(DateTimeOffset localNow, int minute) => _spawner.NextBoss(localNow, minute);
     private readonly IReadOnlyList<SpawnPoint> _spawnPoints;
     private readonly MonsterAiBrain _brain;
     private readonly FieldCombat _combat;
@@ -66,7 +109,7 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
     {
         FieldId = fieldId;
         Terrain = terrain ?? FieldTerrain.None;
-        GroundLoot = new FieldGroundLoot(items ?? new ItemCatalog([]));
+        GroundLoot = new FieldGroundLoot(items ?? new ItemCatalog([]), Terrain);
         _ids = ids;
         _rng = rng;
         _catalog = catalog;
@@ -111,14 +154,19 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
 
     public IReadOnlyCollection<WorldNpc> Npcs => _npcs.Values;
     public bool TryGetNpc(ulong entityId, [MaybeNullWhen(false)] out WorldNpc npc) => _npcs.TryGetValue(entityId, out npc);
-    public IEnumerable<ulong> PlayerIds => _players.Keys;
+    internal Dictionary<ulong, WorldPlayer>.KeyCollection PlayerIds => _players.Keys;
 
-    public void Add(WorldPlayer player) => _players[player.EntityId] = player;
+    public void Add(WorldPlayer player)
+    {
+        _players[player.EntityId] = player;
+        player.FlinchMs = PlayerActionTiming(player, MotionCode.Damage, MotionCodes.DamageAndEatRate).DurationMs;
+    }
     public void Remove(ulong entityId)
     {
         if (_players.TryGetValue(entityId, out var leaving))
         {
             LeaveCastleItems(leaving);
+            _skills.LeaveCrystalPets(leaving);
         }
 
         _players.Remove(entityId, out _);
@@ -135,13 +183,14 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
             return SkillCastOutcome.Refused(request, SkillCastVerdict.Stale);
         }
 
-        return _skills.Cast(player, request);
+        // An open personal shop holds its seller (WorldPlayer.Shop).
+        return player.Shop is null ? _skills.Cast(player, request) : SkillCastOutcome.Refused(request, SkillCastVerdict.Busy);
     }
     public bool TryGet(ulong entityId, [MaybeNullWhen(false)] out WorldPlayer player) => _players.TryGetValue(entityId, out player);
 
     public bool SetAttackTarget(ulong attackerEntityId, ulong targetEntityId, bool sustained, ulong sequence = 0)
     {
-        if (!_players.TryGetValue(attackerEntityId, out var attacker) || attacker.IsDead)
+        if (!_players.TryGetValue(attackerEntityId, out var attacker) || attacker.IsDead || attacker.Shop is not null)
         {
             return false;
         }
@@ -204,7 +253,7 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         // The shared world clock emits one pass for all fields, independent of player entry.
         if (scheduledBossHour is int hour)
         {
-            _spawner.SpawnScheduledBosses(hour, this, this);
+            _spawner.SpawnScheduledBosses(hour, this);
         }
 
         _preyCurrent = false;
@@ -246,15 +295,20 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
             var restored = player.TickPotion(dtMs, _rng);
             if (restored != PotionResource.None)
             {
-                EmitCombatEvent(new CombatEventView(player.EntityId, player.EntityId, CombatEventKindView.PotionApplied, resources: (int)restored));
+                EmitCombatEvent(new CombatEventView(player.EntityId, player.EntityId, CombatEventKind.PotionApplied, resources: (int)restored));
             }
 
             if (player.HasPendingPotion && !player.IsBusy)
             {
                 var timing = PlayerPotionTiming(player);
                 player.BeginPendingPotion(timing.DurationMs, timing.HitAtMs);
-                EmitCombatEvent(new CombatEventView(player.EntityId, player.EntityId, CombatEventKindView.PotionBegin,
+                EmitCombatEvent(new CombatEventView(player.EntityId, player.EntityId, CombatEventKind.PotionBegin,
                     timing.DurationMs, timing.HitAtMs));
+            }
+
+            if (player.HasPendingYahoo && !player.IsBusy)
+            {
+                player.BeginPendingYahoo(PlayerActionTiming(player, MotionCode.Yahoo, 1f).DurationMs);
             }
 
             _combat.StepPlayerAttack(player);
@@ -262,12 +316,12 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
             player.TakeProgressCues(out var leveledUp, out var learned);
             if (leveledUp)
             {
-                EmitCombatEvent(new CombatEventView(player.EntityId, player.EntityId, CombatEventKindView.LevelUp));
+                EmitCombatEvent(new CombatEventView(player.EntityId, player.EntityId, CombatEventKind.LevelUp));
             }
 
             if (learned)
             {
-                EmitCombatEvent(new CombatEventView(player.EntityId, player.EntityId, CombatEventKindView.SkillLearned));
+                EmitCombatEvent(new CombatEventView(player.EntityId, player.EntityId, CombatEventKind.SkillLearned));
             }
         }
 
@@ -280,6 +334,7 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         Premium.Step(_players.Values);
 
         _combat.TickCorpses(dtMs);
+        StepAging(dtMs, nowMs);
         StepQuests(dtMs, nowMs);
         GroundLoot.Step(nowMs);
         Statuses.Apply(_skills.StatusEvents, nowMs);
@@ -322,6 +377,8 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
     {
         var summon = new MonsterInstance(_ids.NextMonsterId(), definition, Terrain.PlaceOnFloor(position), facing, spawnPointIndex: -1);
         _monsters[summon.EntityId] = summon;
+        // Into the collision index at once, so a summon called before the next step is seen standing there.
+        _collisionIndex.Put(summon.EntityId, summon.Position);
         return summon;
     }
 
@@ -352,8 +409,13 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
             {
                 summon.SwingJustBegan = false;
                 var tuning = TuningFor(summon.Def);
-                _events.Add(new CombatEventView(summon.EntityId, summon.TargetId, CombatEventKindView.SwingBegin,
+                _events.Add(new CombatEventView(summon.EntityId, summon.TargetId, CombatEventKind.SwingBegin,
                     summon.AttackIsSkill ? tuning.SkillDurationMs : tuning.CooldownMs, summon.AttackIsSkill ? tuning.SkillWindupMs : tuning.WindupMs));
+            }
+
+            if (summon.Position == before && summon.AiState == MonsterAiState.Idle && !summon.Effects.Has(ControlFlags.Stun))
+            {
+                StepOutOfCrowd(summon, before, dtMs);
             }
 
             MoveMonster(summon, before);
@@ -388,6 +450,54 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         {
             _combat.ResolveMonsterHit(monster, landed);
         }
+    }
+
+    bool IFieldSkillHost.MonsterStandsAt(Vector3 point)
+    {
+        BuildMonsterNeighbours(0, point, 0f);
+        return _occupancy.IsOccupied(point);
+    }
+
+    // An idle summon standing inside other monsters walks out of them, away from the bodies it overlaps (a summon on
+    // the very spot of another goes the way its id picks). MoveMonster lets an overlapping monster leave, so pets called
+    // or recalled together part instead of standing in each other.
+    private void StepOutOfCrowd(MonsterInstance summon, Vector3 at, float dtMs)
+    {
+        // Squared lengths below this give no direction (bodies on the very same spot).
+        const float NoDirection = 1e-6f;
+        BuildMonsterNeighbours(summon.EntityId, at, 0f);
+        var awayX = 0f;
+        var awayZ = 0f;
+        var overlapping = false;
+        foreach (var neighbour in _neighbourScratch)
+        {
+            if (!neighbour.Overlaps(at))
+            {
+                continue;
+            }
+
+            overlapping = true;
+            var dx = at.X - neighbour.Position.X;
+            var dz = at.Z - neighbour.Position.Z;
+            var squared = (dx * dx) + (dz * dz);
+            if (squared > NoDirection)
+            {
+                var distance = MathF.Sqrt(squared);
+                awayX += dx / distance;
+                awayZ += dz / distance;
+            }
+        }
+
+        if (!overlapping)
+        {
+            return;
+        }
+
+        var heading = (awayX * awayX) + (awayZ * awayZ) > NoDirection ? MathF.Atan2(awayX, awayZ) : FieldSkills.CompassAngle(summon.EntityId);
+        var step = MonsterLocomotion.UnitsPerSecond(summon.Def, running: false) * dtMs / 1000f;
+        summon.Facing = heading;
+        summon.Motion = MotionState.Walk;
+        summon.Position = new Vector3(at.X + (MathF.Sin(heading) * step), at.Y, at.Z + (MathF.Cos(heading) * step));
     }
 
     // Re-resolve AI movement against the stage and the other monsters only, sliding along blockers as the client's
@@ -449,25 +559,26 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
     public (float DurationMs, float HitAtMs) PlayerSwingTiming(WorldPlayer player)
     {
         var rate = player.Character.AttackRate;
-        return PlayerActionTiming(player, MotionStateCode.Attack, rate);
+        return PlayerActionTiming(player, MotionCode.Attack, rate);
     }
 
     private (float DurationMs, float HitAtMs) PlayerPotionTiming(WorldPlayer player)
     {
-        return PlayerActionTiming(player, MotionStateCode.Eat, MotionTiming.DamageRateFactor);
+        return PlayerActionTiming(player, MotionCode.Eat, MotionCodes.DamageAndEatRate);
     }
 
-    private (float DurationMs, float HitAtMs) PlayerActionTiming(WorldPlayer player, int state, float rate)
+    private (float DurationMs, float HitAtMs) PlayerActionTiming(WorldPlayer player, MotionCode state, float rate)
     {
-        var timing = PlayerTimingFor(player.Appearance.JobCode);
-        var clip = PlayerMotionFallback.GetClip(player.Character.Class.Class, state);
+        var playerClass = player.Character.Class.Class;
+        var timing = PlayerTimingFor(playerClass);
+        var clip = PlayerMotionFallback.GetClip(playerClass, state);
         if (timing is not null && timing.TryGetClip(state, out var authored))
         {
             clip = authored;
         }
 
         string weaponKey = player.Character.GetEquipped(EquipmentSlot.Weapon)?.Definition.CatalogKey ?? "";
-        if (state == MotionStateCode.Attack && PlayerEquipmentTiming.TryGet(player.Appearance.JobCode, weaponKey, out var equipped))
+        if (state == MotionCode.Attack && PlayerEquipmentTiming.TryGet(playerClass, weaponKey, out var equipped))
         {
             clip = equipped;
         }
@@ -483,19 +594,14 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
 
     internal CombatEventView[]? SnapshotEvents() => _events.Count == 0 ? null : _events.ToArray();
 
-    private MotionTimingSet? PlayerTimingFor(int jobCode)
+    private MotionTimingSet? PlayerTimingFor(PlayerClass playerClass)
     {
-        if (_playerTimingByJob.TryGetValue(jobCode, out var cached))
-            return cached;
-
-        MotionTimingSet? set = null;
-        if (Enum.IsDefined(typeof(PlayerClass), jobCode))
+        if (!_playerTimingByClass.TryGetValue(playerClass, out var set))
         {
-            var bodyPath = ClassRegistry.Get((PlayerClass)jobCode).Definition.DefaultVisuals.Body.InxPath;
-            _motions.TryGet(bodyPath, out set);
+            _motions.TryGet(ClassRegistry.Get(playerClass).Definition.DefaultVisuals.Body.InxPath, out set);
+            _playerTimingByClass[playerClass] = set;
         }
 
-        _playerTimingByJob[jobCode] = set;
         return set;
     }
 
@@ -533,7 +639,7 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
 
             if (_players.TryGetValue(entry.Id, out var player))
             {
-                if (player.Hp > 0)
+                if (player.Life > 0)
                 {
                     _neighbourScratch.Add(new EntityNeighbour(player.Position, EntityCollisionRadii.Player));
                 }
@@ -569,10 +675,7 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         {
             foreach (var neighbour in neighbours)
             {
-                float dx = neighbour.Position.X - position.X;
-                float dz = neighbour.Position.Z - position.Z;
-                float overlap = neighbour.Radius;
-                if (MathF.Abs(neighbour.Position.Y - position.Y) < overlap && (dx * dx) + (dz * dz) < overlap * overlap)
+                if (neighbour.Overlaps(position))
                 {
                     return true;
                 }
@@ -686,14 +789,14 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
 
     private static EntityView ToMonsterView(MonsterInstance m) => new(
         m.EntityId,
-        EntityKindView.Monster,
+        EntityKind.Monster,
         isSelf: false,
         m.Position,
         m.Facing,
-        ToMoveState(m.PresentedMotion),
+        m.PresentedMotion,
         level: m.Def.Combat.Level,
-        hp: FieldMonsterSkills.ViewLife(m).Life,
-        maxHp: FieldMonsterSkills.ViewLife(m).Max,
+        life: FieldMonsterSkills.ViewLife(m).Life,
+        maxLife: FieldMonsterSkills.ViewLife(m).Max,
         appearance: default,
         templateId: (uint)m.Def.Code,
         moveSpeed: m.Def.Ai.MoveSpeed,
@@ -704,17 +807,4 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         DuelPlayerId = m.DuelPlayerId
     };
 
-    private static MoveStateView ToMoveState(MonsterMotionState motion) => motion switch
-    {
-        MonsterMotionState.Stand => MoveStateView.Idle,
-        MonsterMotionState.Walk => MoveStateView.Walking,
-        MonsterMotionState.Run => MoveStateView.Running,
-        MonsterMotionState.Attack => MoveStateView.Attack,
-        MonsterMotionState.Skill => MoveStateView.Skill,
-        MonsterMotionState.Damage => MoveStateView.Damage,
-        MonsterMotionState.Dead => MoveStateView.Dead,
-        MonsterMotionState.Eat => MoveStateView.Eat,
-        MonsterMotionState.Warp => MoveStateView.Warp,
-        _ => MoveStateView.Idle,
-    };
 }

@@ -11,7 +11,7 @@ Monster skills are a separate system (see [world.md](world.md)); they share only
 - Adding a skill mechanic the rule format cannot express yet, or a new `SkillKind`.
 - Debugging a refused cast (`SkillCastVerdict`), a wrong hit time, a missing impact or an effect that never ends.
 - Changing skill learning: prices, level requirements, skill points, the skill master.
-- Changing the skill window, mouse sockets, `F1`-`F8` keys, charge input, the buff bar or summon orders.
+- Changing the skill window, mouse sockets, the action bar keys, charge input, the buff bar or summon orders.
 - Wiring a skill to a cast, projectile, impact, aura or familiar VFX or sound.
 
 ## Code map
@@ -24,7 +24,8 @@ Monster skills are a separate system (see [world.md](world.md)); they share only
 | `Shared/PristonTale.Simulation/Skills/SkillRuleMechanics.cs` | Second half of the rule records: range/damage modes, motion variants, allies, enchant, absorb, reflect, guard, pulse, charm, resurrect; `ForRank`, `HitFrames` |
 | `Shared/PristonTale.Simulation/Skills/Skill.cs` | `Skill` definition, `JobTier`, `SkillCategory`, `SkillMouseUse`; rank-indexed mana and stamina |
 | `Shared/PristonTale.Simulation/Skills/SkillFormulas.cs`, `SkillFormulas.Mechanics.cs` | Shared formulas: cost, cooldown, proficiency, caster checks, range, motion timing, charge timing, damage, heal, duration, chances |
-| `Shared/PristonTale.Simulation/Skills/SkillCastVerdict.cs` | `SkillCastVerdict` (wire status numbering), `SkillCastCommand`, `SkillCastRequest`, `SkillCastOutcome` |
+| `Shared/PristonTale.Simulation/Skills/SkillCastRequest.cs` | `SkillCastRequest`, `SkillCastOutcome` |
+| `Shared/PristonTale.Contracts/Skills/SkillCodes.cs` | `SkillCastVerdict`, `SkillCastCommand`, `SkillEventPhase`, `SkillEventFlags` (with `Mode`/`WithMode`), `StatusEffectOp`: one declaration for the server, the wire and the client |
 | `Shared/PristonTale.Simulation/Skills/LearnedSkills.cs` | Per-character ranks (1..10) and use counter (0..10000) |
 | `Shared/PristonTale.Simulation/Skills/PassiveSkills.cs`, `PassiveSkillEffects.cs` | Passives: `values` tables read by derived stats and combat; `modifiers` passives synced as permanent effects |
 | `Shared/PristonTale.Simulation/Skills/SkillProjectile.cs` | Projectile flight speed (900 units/s), shared by server damage time and client projectile VFX |
@@ -34,7 +35,7 @@ Monster skills are a separate system (see [world.md](world.md)); they share only
 | `Shared/PristonTale.Application/World/FieldSkills.<Mechanic>.cs` | One partial per mechanic: `Damage`, `Areas`, `Buffs`, `Allies`, `Defense`, `Companions`, `Charge`, `Charm`, `Resurrection`, `Summons` |
 | `Shared/PristonTale.Application/World/PlayerSkillCooldowns.cs` | Per-player server cooldowns on the field clock; `Rebase` on field change; snapshot on change |
 | `Shared/PristonTale.Application/World/ProgressionTransactions.cs` | `LearnSkill` command: skill-master reach check, then `PlayerCharacter.ApplyProgression` |
-| `Shared/PristonTale.Protocol/Packets/SkillPackets.cs` | Wire records: `SkillCastPacket`, `SkillCastFlags`, `SkillCastStatus`, `SkillEventEntry`/`Flags`, `StatusEffectEntry`, `SkillCooldownsPacket` |
+| `Shared/PristonTale.Protocol/Packets/SkillPackets.cs` | Wire records: `SkillCastPacket`, `SkillEventEntry`, `StatusEffectEntry`, `SkillCooldownsPacket` |
 | `Server/PristonTale.Server/Net/ClientSession.cs` (`CastSkillAsync`), `WireMapping.cs` | Wire edge: packet to `SkillCastRequest`, outcome to `SkillCastResultPacket`, views to entries |
 | `Client/PristonTale.Client.Net/Presence/SkillPresence.cs`, `Online/PresenceDecoder.cs` | Client-side decoded skill events, statuses, cooldowns, cast results |
 | [GameScene.Skills.cs](../Client/PristonTale.Gameplay/World/GameScene.Skills.cs) | Mouse-socket casts, walk into range, local pre-checks, charge release, summon mode toggle, refusal notices |
@@ -43,7 +44,7 @@ Monster skills are a separate system (see [world.md](world.md)); they share only
 | `Client/PristonTale.Gameplay/Effects/SkillSoundBank.cs` | Skill sounds by asset path, decoded on a worker, created on the game thread |
 | `tools/PristonTale.VfxImport/Authored/Common/`, `Authored/Classes/<Class>/` | Named skill effects, installed into `<assetRoot>/Effect/Vfx` by `ptvfx import`; format in [effects.md](effects.md) |
 | `Client/PristonTale.Gameplay/UI/Widgets/HudSkillsPanel.cs`, `HudSkillTreeLayout.cs` | Skill window (`S`): 16 nodes, rank gauges, short-key marks, training clicks at a skill master |
-| `Client/PristonTale.Gameplay/UI/Widgets/HudSkillBindings.cs` | Left/right mouse sockets and the eight `F1`-`F8` short keys (in memory, not saved) |
+| `Client/PristonTale.Gameplay/UI/Widgets/HudSkillBindings.cs` | Left/right mouse sockets and the action bar's short keys (`HudActionBarSlots`, saved per character; [client.md](client.md#hud-and-windows)) |
 | `Client/PristonTale.Gameplay/UI/Widgets/HudSkillHud.cs` | Bottom-bar sockets with cooldown sweep; continuous-skill bar (keep icons, duration gauge, summon mode tooltip) |
 | `Client/PristonTale.Gameplay/UI/Widgets/HudSkillDetails.cs` | Tooltip numbers per rank, read from the same `SkillRule` |
 | `tests/PristonTale.Tests/Skill*Tests.cs`, `ClassSkillDataTests.cs`, `PassiveSkillTests.cs` | Regression cases; `SkillScenario`/`SkillFixtures` build a one-player field for server tests |
@@ -171,7 +172,7 @@ means absent); `SkillRule.At` clamps the rank into the table. Distances are worl
 | `element` (`Bionic`), `flatElement`, `resistAddedOnly` | Element; `flatElement` makes `min..max` an add resisted by its own element |
 | `resistanceDivisor` (1) | Target resistance divided by this before it applies |
 | `noCritical`, `neverMiss` | No critical; weapon hits skip the accuracy roll |
-| `bonusBroods`, `bonusPercent`, `bonusPercentByRank[10]` | Extra percent vs broods (`Normal`, `Undead`, `Mutant`, `Demon`, `Mechanic`) |
+| `bonusBroods`, `bonusPercent`, `bonusPercentByRank[10]` | Extra percent vs broods (`Normal`, `Undead`, `Mutant`, `Demon`, `Mechanic`); every brood list loads as `MonsterBrood[]` and is matched with `SkillFormulas.MatchesBrood` |
 | `mode` | `Rolled` (default), `MaxLifeShare`, `CurrentLifeShare` (percent of each target's life) |
 | `share[10]`, `chance[10]`, `chanceLevelDivisor`, `shareResistedByBionic` | Share modes: percent, chance (+ level / divisor), bionic resistance |
 | `minLifePercent`, `onlyBroods`, `excludeBroods`, `lifeToCasterCapPercent` | Share filters; drained life returns to the caster up to a cap |
@@ -207,20 +208,22 @@ owner's target while the owner fights) or `radius` (300, nearest enemy around th
 ### Other blocks
 
 - `allies`: `radius[10]`, `includeCaster` (true), `othersPercent` (100; 0..100 strength on other players), `height`
-  (80), `excludeWith` (codes whose holders are skipped). No party system: allies are the other living players of the
-  field within the radius.
+  (80), `excludeWith` (codes whose holders are skipped), `party` (only the caster's party members, an ally target
+  too), `requiresParty` (a cast without a party is refused). Allies are the other living players of the field within
+  the radius. As in the original, Holy Valor, Grand Healing (which needs a party) and Enchant Weapon are party skills;
+  Force of Nature, Triumph and Hall of Valhalla, Virtual Life and Regeneration Field reach any player.
 - `passive`: `effect` with `values[10]`: `Resistance` (with `element`), `WeaponDamagePercent`, `MaxStaminaPercent`,
   `CriticalChance`, `BlockChance` (`withoutShield`), `MaxLife`, `WeaponAttackRatingPercent`, `Evasion`; weapon effects
   need a weapon the skill lists, or one made for the class with `classWeapon`. Or `modifiers` (permanent effect via
   `PassiveSkillEffects`, optionally only while the main hand holds one of `weapons`).
-- `summon`: `monster` (world catalog display name: model, motions, sight, reach), `lifetimeMs` (> 0),
+- `summon`: `monster` (the world catalog monster's key, else its display name: model, motions, sight, reach), `lifetimeMs` (> 0),
   `damageMin[10]`/`damageMax[10]`, `attackRating[10]`, `defence[10]`, `life[10]` (empty keeps the catalog value),
   `lifePerStrength`, `defencePerAgility` (owner attributes added at the call), `scaleBase`, `scalePerRank` (model
   scale in 1/256; 0 keeps the catalog size), `aggressive`, `moveSpeedPercent` (100).
 - `charm`: `chance[10]` (lowered by bionic resistance), `lifePercent[10]` (life kept), `broods`; `buff` gives the
   duration.
 - `resurrect`: `chance[10]`, `radius` (300), `lifePercent` (50), `guardTenths` (50; time the revived player cannot be
-  hurt).
+  hurt). It revives the nearest dead member of the caster's party.
 - `charge`: `startFrame` > 0, `fullFrame` > `startFrame`, `releaseSpeed` > 0 (frame step after release), `maxHits`,
   `full` (rule fragment that resolves a full charge). Requires `motionSpeedByRank[10]` and a hit event >= `fullFrame`.
 
@@ -253,14 +256,16 @@ Example (real entry, Mechanician window index 1):
 ## Shared formulas
 
 - Cooldown (`SkillFormulas.CooldownMs`): proficiency `P = min(min(talent / 3 + itemMastery, 50) x 100 + uses, 10000)`
-  (final-tier skills always 10000); mastery `M = clamp(masteryBase + masteryPerRank x rank - P / 100, 1, 70)`;
+  (final-tier skills always 10000; `itemMastery` is the worn magic mastery, truncated); mastery `M = clamp(masteryBase + masteryPerRank x rank - P / 100, 1, 70)`;
   cooldown = `35 x max(1, 35 / max(1, 70 / M)) x 14 ms`, from 0.49 s to 17.15 s.
 - Proficiency (`UsesAfterCast`): every `CastsPerStep[windowIndex] + (rank - 1) / 3` casts add 100 uses (max 10000).
   The cast counter (`WorldPlayer.SkillCasts`) is per session; uses persist.
 - Mana: `mana[rank]` scaled by `SkillManaCost` percent plus flat, not below 0. Stamina has no modifiers.
 - Timing (`Timing`, `Plan`, `MotionRate`): skill clips play at the fixed frame step / 80, or at the caster's attack
   rate + 0.125 per speed step, times the two percents; frames last 33 ms at rate 1 (`MotionTiming`). Weapon-clip
-  skills repeat the caster's swing `loops` times. `ChargeTiming` gives the window start, full time and full-charge hits.
+  skills repeat the caster's swing `loops` times, sped up by `WeaponClipSpeedup` (that rate over the attack rate; the
+  client applies the same speed-up to each caster's attack rate). `ChargeTiming` gives the window start, full time and
+  full-charge hits.
 - The client uses the same functions for tooltips, cast range and motion playback, so client and server must ship the
   same data.
 
@@ -308,10 +313,8 @@ Etervale extension opcodes `SkillCast` (C→S), `SkillCastResult`, `SkillEvents`
 (S→C), plus `Skills` (learned ranks), `OwnerStatus` (final-tier points, class tier) and
 `ProgressionCommand`/`ProgressionResult`. Layouts, flags, phases and status ops are in [protocol.md](protocol.md).
 
-- The client sends only skill code, target serial, its position and a command flag; the server re-derives everything.
-- `SkillCastStatus` mirrors `SkillCastVerdict` numerically (0 accepted .. 14 `AlreadyActive`); keep them in sync.
-- `SkillEventFlagsView` (Application) and `SkillEventFlags` (Protocol) share bit values; `WireMapping` casts
-  numerically.
+- The client sends only skill code, target id, its position and a command flag; the server re-derives everything.
+- The verdict, command, phase, event flags and status operation are the Contracts enums on every side; append values.
 - Statuses carry `SourceKind`: `PlayerSkill`, `Item`, or `MonsterSkill` for the slows, poison, stuns, curses and lent
   power of monster skills ([world.md](world.md#monster-skills)); the value is the main modifier, or the drawn element
   (as an integer) for enchants and familiars.
@@ -321,16 +324,19 @@ Etervale extension opcodes `SkillCast` (C→S), `SkillCastResult`, `SkillEvents`
 Input and cast flow (`GameScene.Skills.cs`, `HudSkillBindings`, `GameplayHud`):
 
 - `S` toggles the skill window. Releasing the left or right button over a learned castable skill selects it into that
-  socket if its `mouse` allows it (otherwise a notice). Holding the button over a skill and pressing `F1`-`F8` binds
-  that key to the skill and side (one key per skill); pressing `F1`-`F8` elsewhere selects the bound skill. `Ctrl`
-  suppresses the keys. Sockets fall back to the basic attack (`0x11111111`) when a skill is lost.
+  socket if its `mouse` allows it (otherwise a notice). Holding the button over a skill and pressing an action bar key
+  (`F1`-`F8`, `F10`, `4`-`0`, `-`, `=`), or releasing it over a key of the shown bar, binds that key of the shown page
+  to the skill and side (one key per skill on a page); pressing the key elsewhere selects the bound skill. `Ctrl` and
+  `Alt` suppress the keys. Sockets fall back to the basic attack (`0x11111111`) when a skill is lost.
 - A click with a skill in the clicked socket picks the entity under the cursor: `Enemy` needs a monster, `Ally` takes a
   picked player or none, `Self`/`None` cast at once. Local pre-checks (rank, cooldown, unmodified mana/stamina) show a
   notice instead of sending. The avatar walks until within the client's `CastRange - 8`, faces the target and sends.
-  An unanswered cast locks the avatar for at most 1500 ms. Refusals map to notices in `OnCastResolved`.
-- Charge: an accepted charge skill records its button; releasing it while casting sends `SkillCastFlags.Release`.
+  An unanswered cast locks the avatar for at most 1500 ms. Refusals map to notices in `OnCastResolved`. When the lock
+  ends, the local motion controller returns from `Skill` to `Stand` (`EndSkillMotion`), so the floor is followed again.
+- Charge: an accepted charge skill records its button; releasing it while casting sends `SkillCastCommand.Release`.
 - Summons: double-clicking (0.4 s) a summon's buff icon sends `SummonAggressive`/`SummonPassive`; a new call resets
-  to the rule's `aggressive`.
+  to the rule's `aggressive`. A right click on a crystal pet's icon asks to dismiss it
+  ([special-items.md](special-items.md#client-presentation)).
 
 Presentation (`SkillPresentation`):
 
@@ -357,6 +363,7 @@ Presentation (`SkillPresentation`):
   Sounds are asset paths loaded by `SkillSoundBank`.
 - HUD: `HudSkillHud` draws the socket icons with the cooldown sweep from `SkillCooldownBook` and, from (10, 10), the
   continuous-skill bar: one 32 px icon per status that has a `keepIcon` (or a skill button), longest running first,
+  ten to a row in up to two rows (ten crystal pets leave room for the other effects),
   each the `keep/GA_.tga` ring, a 72-step fan filling clockwise as the time runs out (cyan, red for harmful) and the
   keep icon. Icons fade in over 255 and out over the last 180 frames, blink every 31 frames in the last 4 s and slide
   2 px per frame (70 Hz frames). Hovering shows name, time left and, for summons, `Attack type: Auto/Manual`
@@ -396,8 +403,8 @@ Add a new mechanic or rule field:
    mechanic); a new `SkillKind` needs a case in `FieldSkills.Resolve` and in `Complete`. Combat-side hooks go through
    `IPlayerSkillCombat` (`FieldSkills.Defense.cs`).
 4. Tooltip lines in `HudSkillDetails`; presentation in `SkillPresentation` if it needs a new visual cue.
-5. A new event flag or verdict: `SkillEventFlagsView`/`SkillCastVerdict`, `SkillEventFlags`/`SkillCastStatus` in
-   `SkillPackets.cs`, `WireMapping`, client notice in `OnCastResolved`, and [protocol.md](protocol.md).
+5. A new event flag or verdict: append it in `Contracts/Skills/SkillCodes.cs`, add the client notice in
+   `OnCastResolved`, and document it in [protocol.md](protocol.md).
 6. A new test file registered in `tests/PristonTale.Tests/Program.cs`; update this doc.
 
 Change learning rules: `SkillLearning` (prices, gates), `PlayerCharacter.LevelUp` (point grants),

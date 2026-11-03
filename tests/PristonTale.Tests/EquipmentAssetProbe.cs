@@ -2,6 +2,8 @@ using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Gameplay.World.Remote;
 using PristonTale.Simulation.Characters;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -11,17 +13,7 @@ internal static class EquipmentAssetProbe
     {
         var registry = new CharacterClassRegistry();
         var loader = new PristonActorLoader();
-        var text = new System.Text.StringBuilder();
-        text.AppendLine("// Generated from the shipped INX tables by --export-equipment-timings; do not edit individual timings.");
-        text.AppendLine("namespace PristonTale.Simulation.World.Motion;");
-        text.AppendLine("public static class PlayerEquipmentTiming");
-        text.AppendLine("{");
-        text.AppendLine("    private static readonly Dictionary<(int Job, string Key), MotionClip> Clips = Build();");
-        text.AppendLine("    public static int Count => Clips.Count;");
-        text.AppendLine("    public static bool TryGet(int job, string key, out MotionClip clip) => Clips.TryGetValue((job, key), out clip);");
-        text.AppendLine("    private static Dictionary<(int, string), MotionClip> Build()");
-        text.AppendLine("    {");
-        text.AppendLine("        var result = new Dictionary<(int, string), MotionClip>();");
+        var lines = new List<string>();
         for (int job = 1; job <= 8; job++)
         {
             var definition = registry.Get((PlayerClass)job).Definition;
@@ -34,7 +26,7 @@ internal static class EquipmentAssetProbe
                     continue;
                 }
 
-                var clip = PristonMotionSelection.Select(actor.Info, PristonActorMotion.Attack,
+                var clip = PristonMotionSelection.Select(actor.Info, MotionCode.Attack,
                     new(EquipmentVisuals.MotionIndex(key), definition.MotionJobMask, 2));
                 var timing = (clip.StartFrame, clip.EndFrame, clip.EventFrames[0]);
                 if (!groups.TryGetValue(timing, out var keys))
@@ -48,24 +40,12 @@ internal static class EquipmentAssetProbe
 
             foreach (var (timing, keys) in groups)
             {
-                text.AppendLine("        foreach (string key in new[]");
-                text.AppendLine("        {");
-                foreach (string key in keys)
-                {
-                    text.AppendLine($"            \"{key}\",");
-                }
-
-                text.AppendLine("        })");
-                text.AppendLine("        {");
-                text.AppendLine($"            result.Add(({job}, key), new MotionClip({timing.Start}, {timing.End}, {timing.Hit}u, 0, 0, 0, false));");
-                text.AppendLine("        }");
+                lines.Add($"  {{\"class\": \"{(PlayerClass)job}\", \"start\": {timing.Start}, \"end\": {timing.End}, \"hit\": {timing.Hit}, "
+                    + $"\"keys\": [{string.Join(", ", keys.Select(static key => $"\"{key}\""))}]}}");
             }
         }
 
-        text.AppendLine("        return result;");
-        text.AppendLine("    }");
-        text.AppendLine("}");
-        File.WriteAllText(output, text.ToString());
+        File.WriteAllText(output, "[\n" + string.Join(",\n", lines) + "\n]\n");
     }
 
     public static void Run(string root)
@@ -79,11 +59,11 @@ internal static class EquipmentAssetProbe
             var path = Path.Combine(root, definition.DefaultVisuals.Body.InxExtensionPath.Replace('\\', '/'));
             var actor = loader.Load(root, path);
             int item = EquipmentVisuals.MotionIndex(weapons[index]);
-            var armed = PristonMotionSelection.Select(actor.Info, PristonActorMotion.Attack, new(item, definition.MotionJobMask, 2));
-            var bare = PristonMotionSelection.Select(actor.Info, PristonActorMotion.Attack, new(-1, definition.MotionJobMask, 2));
+            var armed = PristonMotionSelection.Select(actor.Info, MotionCode.Attack, new(item, definition.MotionJobMask, 2));
+            var bare = PristonMotionSelection.Select(actor.Info, MotionCode.Attack, new(-1, definition.MotionJobMask, 2));
             if (armed is null || bare is null)
             {
-                string candidates = string.Join(", ", actor.Info.Motions.Where(motion => motion.State == (uint)PristonActorMotion.Attack)
+                string candidates = string.Join(", ", actor.Info.Motions.Where(motion => motion.State == (uint)MotionCode.Attack)
                     .Select(motion => $"{motion.StartFrame}-{motion.EndFrame}: job={motion.JobCodeBit:X}, map={motion.MapPosition}"));
                 throw new InvalidDataException($"No attack for {definition.Name}, job={definition.MotionJobMask:X}: {candidates}");
             }
@@ -91,9 +71,9 @@ internal static class EquipmentAssetProbe
             Console.WriteLine($"{definition.Name} {weapons[index]} index={item}: armed={armed.StartFrame}-{armed.EndFrame} hit={armed.EventFrames[0]}; bare={bare.StartFrame}-{bare.EndFrame} hit={bare.EventFrames[0]}");
             foreach (string key in EquipmentVisuals.CatalogKeys.Where(key => key.StartsWith('W')))
             {
-                var clip = PristonMotionSelection.Select(actor.Info, PristonActorMotion.Attack,
+                var clip = PristonMotionSelection.Select(actor.Info, MotionCode.Attack,
                     new(EquipmentVisuals.MotionIndex(key), definition.MotionJobMask, 2));
-                Assert.True(PristonTale.Simulation.World.Motion.PlayerEquipmentTiming.TryGet(index + 1, key, out var shared), "missing authoritative equipped timing");
+                Assert.True(PristonTale.Simulation.World.Motion.PlayerEquipmentTiming.TryGet((PlayerClass)(index + 1), key, out var shared), "missing authoritative equipped timing");
                 Assert.True(shared.Frames == clip.EndFrame - clip.StartFrame && shared.Event0 == clip.EventFrames[0], "authoritative timing differs from rendered INX");
             }
         }

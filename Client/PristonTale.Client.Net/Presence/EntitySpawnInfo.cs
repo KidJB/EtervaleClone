@@ -1,16 +1,18 @@
 using System.Numerics;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
 
 namespace PristonTale.Client.Net.Presence;
 
 public sealed record EntitySpawnInfo(
     ulong EntityId,
-    RemoteEntityKind Kind,
+    EntityKind Kind,
     bool IsSelf,
     Vector3 Position,
     float Facing,
-    RemoteMoveState MoveState,
-    int Hp,
-    int MaxHp,
+    MotionState MoveState,
+    int Life,
+    int MaxLife,
     PlayerAppearanceInfo? Player,
     uint TemplateId,
     int MoveSpeed = 0,
@@ -21,7 +23,7 @@ public sealed record EntitySpawnInfo(
     string Name = "",
     int Level = 0)
 {
-    // A summon: its owner's serial and its own model scale (0 keeps the catalog's).
+    // A summon: its owner's entityId and its own model scale (0 keeps the catalog's).
     public ulong OwnerId { get; init; }
     public float ModelScale { get; init; }
 }

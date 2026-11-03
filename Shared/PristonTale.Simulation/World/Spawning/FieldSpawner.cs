@@ -11,6 +11,7 @@ public sealed class FieldSpawner
 
     private readonly FieldSpawnData _data;
     private readonly MonsterCatalog _catalog;
+    private readonly ulong[] _bossMasters;
     private readonly ISimRng _rng;
 
     private float _passTimerMs;
@@ -23,6 +24,7 @@ public sealed class FieldSpawner
     {
         _data = data ?? throw new ArgumentNullException(nameof(data));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+        _bossMasters = new ulong[_data.BossSpawns.Count];
         _rng = rng ?? throw new ArgumentNullException(nameof(rng));
 
         _pointCooldownUntilMs = new long[data.SpawnPoints.Count];
@@ -152,30 +154,45 @@ public sealed class FieldSpawner
         return (IReadOnlyList<MonsterInstance>)expired ?? Array.Empty<MonsterInstance>();
     }
 
-    public void SpawnScheduledBosses(int hour, IPlayerProximity proximity, ISpawnSink sink)
+    // The field's next boss pass, named after the boss's monster; null for a field without bosses.
+    public BossCountdown? NextBoss(DateTimeOffset localNow, int minute)
     {
-        ArgumentNullException.ThrowIfNull(proximity);
+        if (!BossSpawnSchedule.TryNext(_data.BossSpawns, localNow, minute, out var boss, out var slot, out var exact))
+        {
+            return null;
+        }
+
+        var name = _catalog.TryGet(boss.BossMonsterCode, out MonsterDefinition definition) ? definition.Name : "Boss";
+        var seconds = (int)Math.Clamp(Math.Ceiling((slot - localNow.DateTime).TotalSeconds), 0, int.MaxValue);
+        return new BossCountdown(name, slot, seconds, exact);
+    }
+
+    // Each boss of the hour at the field's boss spot (BossSpot), with its escorts around it, whether or not a player is near.
+    public void SpawnScheduledBosses(int hour, ISpawnSink sink)
+    {
         ArgumentNullException.ThrowIfNull(sink);
         ArgumentOutOfRangeException.ThrowIfNegative(hour);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(hour, 23);
 
-        foreach (BossSpawn boss in _data.BossSpawns)
+        int pointIndex = BossPointIndex();
+        if (pointIndex < 0)
         {
+            return;
+        }
+
+        Vector3 anchor = PointToWorld(_data.SpawnPoints[pointIndex]);
+        for (int bossIndex = 0; bossIndex < _data.BossSpawns.Count; bossIndex++)
+        {
+            BossSpawn boss = _data.BossSpawns[bossIndex];
             if (!boss.SpawnHours.Contains(hour)
                 || !_catalog.TryGet(boss.BossMonsterCode, out MonsterDefinition masterDef))
             {
                 continue;
             }
 
-            int pointIndex = FirstActivePoint(proximity);
-            if (pointIndex < 0)
-            {
-                continue;
-            }
-
-            Vector3 anchor = PointToWorld(_data.SpawnPoints[pointIndex]);
             MonsterInstance master = sink.Spawn(masterDef, anchor, pointIndex, RandomFacing());
             SeedIdleDespawn(master, masterDef);
+            _bossMasters[bossIndex] = master.EntityId;
 
             if (boss.EscortCount > 0 && _catalog.TryGet(boss.EscortMonsterCode, out MonsterDefinition escortDef))
             {
@@ -187,6 +204,23 @@ public sealed class FieldSpawner
             }
         }
     }
+
+    // Where the field's bosses always spawn: its first active spawn point; false for a field without one.
+    public bool TryBossSpot(out Vector3 spot)
+    {
+        int pointIndex = BossPointIndex();
+        spot = pointIndex < 0 ? default : PointToWorld(_data.SpawnPoints[pointIndex]);
+        return pointIndex >= 0;
+    }
+
+    public IReadOnlyList<BossSpawn> Bosses => _data.BossSpawns;
+
+    // The entity of the last master spawned for a boss of the field's list (0 before its first pass).
+    public ulong BossMaster(int bossIndex) => _bossMasters[bossIndex];
+
+    // The boss's name: its monster's, or "Boss" for a code the catalog lacks.
+    public string BossName(int bossIndex) =>
+        _catalog.TryGet(_data.BossSpawns[bossIndex].BossMonsterCode, out MonsterDefinition definition) ? definition.Name : "Boss";
 
     private bool IsSpawnPassDue(float dtMs)
     {
@@ -207,6 +241,9 @@ public sealed class FieldSpawner
 
     private float IdleBudgetFor(MonsterDefinition def)
         => def.IsBoss ? _data.IdleDespawnMs * (float)_data.BossIdleDespawnFactor : _data.IdleDespawnMs;
+
+    // A monster placed outside the spawn points (a game master's call) leaves after the same idle time as a spawned one.
+    public void SeedIdleDespawn(MonsterInstance m) => SeedIdleDespawn(m, m.Def);
 
     private void SeedIdleDespawn(MonsterInstance m, MonsterDefinition def) => m.IdleDespawnMsLeft = IdleBudgetFor(def);
 
@@ -271,29 +308,17 @@ public sealed class FieldSpawner
         return -1;
     }
 
-    private int FirstActivePoint(IPlayerProximity proximity)
+    private int BossPointIndex()
     {
-        int firstActive = -1;
         for (int i = 0; i < _data.SpawnPoints.Count; i++)
         {
-            SpawnPoint p = _data.SpawnPoints[i];
-            if (!p.Active)
-            {
-                continue;
-            }
-
-            if (firstActive < 0)
-            {
-                firstActive = i;
-            }
-
-            if (proximity.AnyPlayerNear(PointToWorld(p)))
+            if (_data.SpawnPoints[i].Active)
             {
                 return i;
             }
         }
 
-        return firstActive;
+        return -1;
     }
 
     private Vector3 ScatterAround(Vector3 center)

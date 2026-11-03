@@ -1,14 +1,16 @@
 using Microsoft.Xna.Framework;
+using PristonTale.Gameplay.UI.Inventory;
+using PristonTale.Simulation.Items;
 
 namespace PristonTale.Gameplay.UI.Npc;
 
 // The original shop and warehouse window in 800x600 design coordinates: a 344x264 frame at (0, 40) that slides in from
-// the left, a 9x9 grid of 22-pixel cells, the parchment with tabs and arrows, two gold bars and four round buttons.
+// the left, the warehouse's 9x9 grid of 22-pixel cells (the shop lays its stock on it too), the parchment with tabs and
+// arrows, two gold bars and four round buttons.
 public static class HudStoreLayout
 {
-    public const int CellSize = 22;
-    public const int Columns = 9;
-    public const int Rows = 9;
+    public const int Columns = StoreGrid.Columns;
+    public const int Rows = StoreGrid.Rows;
     public const int SlideDistance = 384;
 
     // HudSlide offsets run 0..256 while the window travels its full width.
@@ -16,21 +18,58 @@ public static class HudStoreLayout
 
     public static Rectangle Window(Point origin) => new(origin.X, origin.Y + 40, 344, 264);
 
-    public static Rectangle Grid(Point origin) => new(origin.X + 21, origin.Y + 86, Columns * CellSize, Rows * CellSize);
+    public static Rectangle Grid(Point origin) => new(origin.X + 21, origin.Y + 86, Columns * HudGridPlacement.CellSize, Rows * HudGridPlacement.CellSize);
 
-    public static Rectangle Cell(Point origin, int anchor, int width = 1, int height = 1)
+    public static Rectangle Cell(Point origin, int anchor, int width = 1, int height = 1) =>
+        HudGridPlacement.Cell(Grid(origin), Columns, anchor, width, height);
+
+    // The first free place for an item, down each column from the left as the original's shops lay items, on a grid of
+    // occupied cells (row-major, Columns wide and rows high: the store's, or the trade's shorter one); -1 when none.
+    public static int FindSpace(bool[] occupied, int width, int height, int rows = Rows)
     {
-        var grid = Grid(origin);
-        return new Rectangle(grid.X + anchor % Columns * CellSize, grid.Y + anchor / Columns * CellSize, width * CellSize, height * CellSize);
+        for (var place = 0; place < Columns * rows; place++)
+        {
+            var x = place / rows;
+            var y = place % rows;
+            if (x + width > Columns || y + height > rows)
+            {
+                continue;
+            }
+
+            var free = true;
+            for (var row = y; row < y + height && free; row++)
+            {
+                for (var column = x; column < x + width && free; column++)
+                {
+                    free = !occupied[row * Columns + column];
+                }
+            }
+
+            if (free)
+            {
+                return y * Columns + x;
+            }
+        }
+
+        return -1;
     }
 
-    public static int CellAt(Point origin, Point pointer)
+    public static void Occupy(bool[] occupied, int anchor, int width, int height)
     {
-        var grid = Grid(origin);
-        return grid.Contains(pointer) ? (pointer.Y - grid.Y) / CellSize * Columns + (pointer.X - grid.X) / CellSize : -1;
+        var x = anchor % Columns;
+        var y = anchor / Columns;
+        for (var row = y; row < y + height; row++)
+        {
+            for (var column = x; column < x + width; column++)
+            {
+                occupied[row * Columns + column] = true;
+            }
+        }
     }
 
     public static Point Title(Point origin) => new(origin.X + 225, origin.Y + 47);
+    // A personal shop's picture, where the NPC shop shows its tabs.
+    public static Point Picture(Point origin) => new(origin.X + 238, origin.Y + 90);
     public static Point WarehouseTitle(Point origin) => new(origin.X + 243, origin.Y + 100);
     public static Rectangle TabWeapons(Point origin) => new(origin.X + 239, origin.Y + 87, 41, 45);
     public static Rectangle TabArmor(Point origin) => new(origin.X + 280, origin.Y + 87, 41, 45);
@@ -47,5 +86,8 @@ public static class HudStoreLayout
     public static Rectangle UpperBar(Point origin) => new(origin.X + 231, origin.Y + 166, 99, 20);
     public static Rectangle LowerBar(Point origin) => new(origin.X + 231, origin.Y + 196, 99, 20);
     public static Point GoldPlate(Point origin) => new(origin.X + 231, origin.Y + 193);
+
+    // The coin at the left of the warehouse's upper bar: a click asks how much stored gold to take out.
+    public static Rectangle WarehouseGold(Point origin) => new(origin.X + 231, origin.Y + 163, 20, 20);
     public static Point WeightIcon(Point origin) => new(origin.X + 231, origin.Y + 191);
 }

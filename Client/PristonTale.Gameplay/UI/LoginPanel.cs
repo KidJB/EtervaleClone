@@ -40,12 +40,14 @@ public sealed class LoginPanel
     public string Status { get; set; } = string.Empty;
     public bool InputEnabled { get; set; } = true;
 
-    public LoginIntent Update(in KeyboardState keyboard, in KeyboardState previousKeyboard, double dtSeconds, Viewport viewport)
+    // typed: the characters the window typed since the last frame (TypedText), for the focused field.
+    public LoginIntent Update(in KeyboardState keyboard, in KeyboardState previousKeyboard, ReadOnlySpan<char> typed, double dtSeconds, Viewport viewport)
     {
-        return Update(keyboard, previousKeyboard, Mouse.GetState(), dtSeconds, viewport);
+        return Update(keyboard, previousKeyboard, Mouse.GetState(), typed, dtSeconds, viewport);
     }
 
-    internal LoginIntent Update(in KeyboardState keyboard, in KeyboardState previousKeyboard, MouseState mouse, double dtSeconds, Viewport viewport)
+    internal LoginIntent Update(in KeyboardState keyboard, in KeyboardState previousKeyboard, MouseState mouse, ReadOnlySpan<char> typed, double dtSeconds,
+        Viewport viewport)
     {
         var intent = LoginIntent.None;
         if (InputEnabled)
@@ -76,8 +78,8 @@ public sealed class LoginPanel
                 }
             }
 
-            Account.Update(keyboard, previousKeyboard, dtSeconds);
-            Password.Update(keyboard, previousKeyboard, dtSeconds);
+            Account.Update(typed, dtSeconds);
+            Password.Update(typed, dtSeconds);
             if (Pressed(keyboard, previousKeyboard, Keys.Enter)
                 || _focus >= FocusTarget.Login && Pressed(keyboard, previousKeyboard, Keys.Space))
             {
@@ -102,20 +104,20 @@ public sealed class LoginPanel
         var tint = InputEnabled ? Color.White : new Color(155, 155, 155);
         _canvas.Begin(layout.Scale);
         _canvas.Image("LoginPanel", layout.Panel);
-        _canvas.Text("PRISTON TALE", layout.Title, scale: 1.25f, centered: true);
-        _canvas.Text("Your adventure begins here", layout.Subtitle, HudCanvas.Muted, 0.7f, centered: true);
+        _canvas.Text("ETERVALE", layout.Title, pixels: 30f, centered: true);
+        _canvas.Text("Your adventure begins here", layout.Subtitle, HudCanvas.Muted, 17f, centered: true);
         DrawField("Account", Account, layout.Account, tint);
         DrawField("Password", Password, layout.Password, tint);
         DrawButton("Log in", layout.Login, _focus == FocusTarget.Login, layout, tint);
-        _canvas.Text(Status, layout.Status, HudCanvas.Gold, 0.68f, centered: true);
-        _canvas.Text("Connect to the game server", layout.Hint, HudCanvas.Muted, 0.56f, centered: true);
+        _canvas.Text(Status, layout.Status, HudCanvas.Gold, 16f, centered: true);
+        _canvas.Text("Connect to the game server", layout.Hint, HudCanvas.Muted, 13f, centered: true);
         _canvas.End();
     }
 
     private void DrawField(string label, TextInputField field, Rectangle box, Color tint)
     {
         var focused = InputEnabled && field.Focused;
-        _canvas.Text(label, new Rectangle(box.X, box.Y - 28, box.Width, 24), HudCanvas.Muted, 0.7f);
+        _canvas.Text(label, new Rectangle(box.X, box.Y - 28, box.Width, 24), HudCanvas.Muted, 17f);
         _canvas.Frame(box, "Inset", 8, focused ? HudCanvas.Gold : tint);
         var text = field.DisplayText;
         if (focused && field.CaretVisible)
@@ -123,7 +125,7 @@ public sealed class LoginPanel
             text += "_";
         }
 
-        _canvas.Text(text, new Rectangle(box.X + 14, box.Y + 6, box.Width - 28, box.Height - 12), tint, 0.85f);
+        _canvas.Text(text, new Rectangle(box.X + 14, box.Y + 6, box.Width - 28, box.Height - 12), tint, 20f);
     }
 
     private void DrawButton(string label, Rectangle box, bool focused, LoginLayout layout, Color tint)
@@ -138,7 +140,7 @@ public sealed class LoginPanel
         }
 
         _canvas.Frame(box, "Button", 12, color);
-        _canvas.Text(label, box, highlighted ? Color.White : HudCanvas.Gold, 0.84f, centered: true);
+        _canvas.Text(label, box, highlighted ? Color.White : HudCanvas.Gold, 20f, centered: true);
     }
 
     private static bool Pressed(in KeyboardState current, in KeyboardState previous, Keys key)

@@ -1,5 +1,5 @@
-using System.Numerics;
 using PristonTale.Application.Sessions;
+using PristonTale.Application.World.ItemUses;
 using PristonTale.Simulation.Items.Usable;
 
 namespace PristonTale.Application.World;
@@ -8,6 +8,14 @@ public sealed partial class WorldServer
 {
     // Touched only by the tick thread: the random rolls of an item use (firecracker colours, big-head look, prize tables).
     private readonly Random _itemRandom = new();
+
+    // The owner confirmed a right click on a crystal pet's icon: the pet of that status dies and the icon goes; false when
+    // the owner keeps no such pet or status.
+    public Task<bool> DismissCrystalPetsAsync(ulong entityId, uint statusCode)
+    {
+        return EnqueueAsync(entityId, () => _connections.TryGetValue(entityId, out var connection) && _fields.TryGetValue(connection.FieldId, out var field)
+            && field.DismissCrystalPets(connection.Player, statusCode));
+    }
 
     public Task<PreparedItemUseOperation?> PrepareItemUseAsync(PlayerSession session, ItemUseCommand command)
     {
@@ -36,36 +44,33 @@ public sealed partial class WorldServer
         {
             if (!ReferenceEquals(session.Character, operation.Original) || operation.Candidate is null || operation.Rule is null)
             {
-                throw new InvalidOperationException("Character ownership changed during item use commit.");
+                throw new CommitInvariantException("Character ownership changed during item use commit.");
             }
 
             var rule = operation.Rule;
+            var action = ItemUseActions.For(rule.Action);
             var original = operation.Original;
             original.CommitInventoryOperation(operation.Candidate);
             original.ItemUses.CopyFrom(operation.Candidate.ItemUses);
             if (operation.Money != 0 && !original.TryChangeMoney(operation.Money))
             {
-                throw new InvalidOperationException("Money changed beyond capacity during item use commit.");
+                throw new CommitInvariantException("Money changed beyond capacity during item use commit.");
             }
 
-            if (rule.Action != UsableItemAction.AgingMastery)
+            if (action.ReappliesAtCommit)
             {
                 UsableItemEffects.Apply(original, rule, operation.NowSeconds, ItemUseTransactions.BigHeadMode(operation.Roll));
             }
 
-            if (rule.Action == UsableItemAction.HairTint)
-            {
-                session.Loaded = session.Loaded! with { HairIndex = rule.Argument };
-            }
-
-            if (rule.Action == UsableItemAction.MobileShop)
-            {
-                session.MobileShopOpen = true;
-            }
-
+            action.Commit(session, rule);
             if (TryGetPlaying(session, out var connection) && _fields.TryGetValue(connection.FieldId, out var field))
             {
-                ApplyToWorld(connection.Player, field, operation, _clock.GetUtcNow().ToUnixTimeMilliseconds());
+                var player = connection.Player;
+                var effect = action.Apply(new ItemUseInWorld(player, field, operation, UnixNowMs));
+                if (effect.Kind != ItemEffectKind.None)
+                {
+                    field.ItemEvents.Add(new ItemEffectView(player.EntityId, operation.ItemCode, effect.Kind, effect.At ?? player.Position, operation.Roll));
+                }
             }
 
             if (operation.Arrival is { } arrival)
@@ -75,97 +80,5 @@ public sealed partial class WorldServer
 
             return true;
         }, waitForCapacity: true);
-    }
-
-    private static void ApplyToWorld(WorldPlayer player, FieldInstance field, PreparedItemUseOperation operation, long nowMs)
-    {
-        var rule = operation.Rule!;
-        var effect = ItemEffectKind.None;
-        var position = player.Position;
-        switch (rule.Action)
-        {
-            case UsableItemAction.ScrollEffect:
-            {
-                var scroll = ItemScrolls.For((ScrollEffectKind)rule.Argument);
-                var durationMs = scroll.DurationSeconds * 1000f;
-                field.QueueItemEffect(player.EntityId, scroll.Spec(), durationMs);
-                if (scroll.Kind == ScrollEffectKind.Invulnerability)
-                {
-                    player.Guard(durationMs);
-                }
-
-                break;
-            }
-            case UsableItemAction.ForceOrb:
-            {
-                if (ForceOrbs.TryGet(operation.CatalogKey, out var orb))
-                {
-                    field.QueueItemEffect(player.EntityId, orb.Spec(ItemUseTransactions.AverageAttack(player.Character)), orb.DurationSeconds * 1000f);
-                    effect = ItemEffectKind.ForceOrb;
-                }
-
-                break;
-            }
-            case UsableItemAction.HairTint:
-                player.ChangeHair(rule.Argument);
-                effect = ItemEffectKind.Learn;
-                break;
-            case UsableItemAction.Firecracker:
-                effect = ItemEffectKind.Firecracker;
-                break;
-            case UsableItemAction.SkillMastery:
-                effect = ItemEffectKind.Mastery;
-                break;
-            case UsableItemAction.ReturnToTown:
-                player.Guard(ItemUseTransactions.EtherCoreGuardMs);
-                effect = ItemEffectKind.Return;
-                break;
-            case UsableItemAction.PremiumTimers when rule.Grants.Any(static grant => PremiumTimers.PausesOffline(grant.Kind)):
-                effect = ItemEffectKind.Drink;
-                break;
-            case UsableItemAction.MonsterCrystal:
-                player.CrystalDelayUntilMs = nowMs + (long)MonsterCrystals.SharedDelayMs;
-                if (field.CallCrystalMonster(player, operation.CatalogKey, operation.Summon) is { } spawned)
-                {
-                    position = spawned;
-                    effect = ItemEffectKind.Return;
-                }
-
-                break;
-            case UsableItemAction.CastleItem when CastleItems.TryGetByIndex(rule.Argument, out var castle):
-                field.StartCastleItem(player, castle);
-                break;
-            case UsableItemAction.Restoration:
-                player.Revive(player.MaxHp / 2, ItemUseTransactions.RestorationGuardMs);
-                field.EmitCombatEvent(new CombatEventView(player.EntityId, player.EntityId, CombatEventKindView.Revive, damage: player.Hp));
-                effect = ItemEffectKind.Return;
-                break;
-            case UsableItemAction.Food when operation.Food is { } food:
-                player.QueuePotion(food);
-                break;
-            case UsableItemAction.GiftBox:
-                if (operation.Food is { } meal)
-                {
-                    player.QueuePotion(meal);
-                }
-
-                effect = ItemEffectKind.GiftBox;
-                break;
-            case UsableItemAction.SoccerHead:
-                player.Guard(EventFoods.HeadChangeGuardMs);
-                effect = ItemEffectKind.HeadChange;
-                break;
-            case UsableItemAction.Chocolate:
-                field.QueueItemEffect(player.EntityId, Chocolates.Spec(rule.Argument), Chocolates.DurationMs(rule.Argument), rule.Argument);
-                break;
-            case UsableItemAction.PuzzleBag:
-                effect = ItemEffectKind.Drink;
-                break;
-        }
-
-        if (effect != ItemEffectKind.None)
-        {
-            field.ItemEvents.Add(new ItemEffectView(player.EntityId, operation.ItemCode, effect, position, operation.Roll));
-        }
     }
 }

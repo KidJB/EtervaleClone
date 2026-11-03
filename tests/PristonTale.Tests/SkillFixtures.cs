@@ -8,6 +8,8 @@ using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World.Fields;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Simulation.World.Spawning;
+using PristonTale.Contracts.Skills;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -42,6 +44,23 @@ internal static class SkillFixtures
         var player = new WorldPlayer(id, position, character, false, default);
         field.Add(player);
         return player;
+    }
+
+    // Puts the players in one party, the first leading, as an accepted request would.
+    public static Party Group(params WorldPlayer[] players)
+    {
+        var party = new Party(players[0].EntityId, players[1].EntityId);
+        foreach (var player in players.Skip(2))
+        {
+            party.Add(player.EntityId);
+        }
+
+        foreach (var player in players)
+        {
+            player.Party = party;
+        }
+
+        return party;
     }
 
     public static MonsterInstance Spawn(FieldInstance field, MonsterDefinition definition, Vector3 position) =>

@@ -16,6 +16,9 @@ using PristonTale.Simulation.World.Loot;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Simulation.World.Npcs;
 using static PristonTale.Tests.QuestFixture;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -28,8 +31,10 @@ internal static class QuestServiceTests
         yield return ("the quest journal persists with the character and quest weapons keep their quest variant", PersistenceAsync);
         yield return ("quest messages round-trip their layouts inside the quest extension range", ProtocolAsync);
         yield return ("quest presence reaches the client and the arena shows only the player's own duel", PresenceAsync);
-        yield return ("quest requests store once, replay idempotently, refuse on storage failure and credit field kills", RequestsAsync);
-        yield return ("the quest upkeep stores quest drops in the pack and keeps them when storage fails", UpkeepAsync);
+        yield return ("quest requests store once, replay idempotently and credit field kills", RequestsAsync);
+        yield return ("the quest upkeep puts quest drops in the pack and stores them, and waits while the save gate is busy", UpkeepAsync);
+        yield return ("a quest item a monster drops reaches the special item box through the upkeep and the master takes it for the rank-up",
+            KillToMasterAsync);
         yield return ("the master duel travels to the arena, yields at a sixteenth and promotes from the victory dialog", ArenaAsync);
     }
 
@@ -115,14 +120,14 @@ internal static class QuestServiceTests
     private static Task PresenceAsync()
     {
         var origin = new Vector3(QuestArena.EntryX, 0, QuestArena.EntryZ);
-        var self = new EntityView(1, EntityKindView.Player, true, origin, 0f, MoveStateView.Idle, 60, 100, 100, new PlayerAppearanceView("Self", 2, 2, 0, 0, "", ""));
-        var other = new EntityView(2, EntityKindView.Player, false, origin + new Vector3(30, 0, 0), 0f, MoveStateView.Idle, 60, 100, 100,
-            new PlayerAppearanceView("Other", 2, 2, 0, 0, "", ""));
-        var mine = new EntityView(3, EntityKindView.Monster, false, origin + new Vector3(0, 0, 40), 0f, MoveStateView.Idle, 60, 900, 1000, default, 50)
+        var self = new EntityView(1, EntityKind.Player, true, origin, 0f, MotionState.Stand, 60, 100, 100, new PlayerAppearanceView("Self", PlayerClass.Mechanician, 2, 0, 0, "", ""));
+        var other = new EntityView(2, EntityKind.Player, false, origin + new Vector3(30, 0, 0), 0f, MotionState.Stand, 60, 100, 100,
+            new PlayerAppearanceView("Other", PlayerClass.Mechanician, 2, 0, 0, "", ""));
+        var mine = new EntityView(3, EntityKind.Monster, false, origin + new Vector3(0, 0, 40), 0f, MotionState.Stand, 60, 900, 1000, default, 50)
         {
             DuelPlayerId = 1
         };
-        var theirs = new EntityView(4, EntityKindView.Monster, false, origin + new Vector3(0, 0, -40), 0f, MoveStateView.Idle, 60, 900, 1000, default, 50)
+        var theirs = new EntityView(4, EntityKind.Monster, false, origin + new Vector3(0, 0, -40), 0f, MotionState.Stand, 60, 900, 1000, default, 50)
         {
             DuelPlayerId = 2
         };
@@ -166,10 +171,6 @@ internal static class QuestServiceTests
             "a talk without an NPC was accepted");
 
         var accept = new QuestCommand(Guid.NewGuid(), npc, QuestAction.Accept, QuestCode.Level30, 0, 0);
-        world.Characters.BeforeUpdate = _ => Task.FromResult(false);
-        var refused = await world.Advance(quests.RequestAsync(token, accept));
-        Assert.True(refused.Status == QuestStatus.StorageFailed && character.Quests.Active.IsIdle, "a failed write started the quest");
-        world.Characters.BeforeUpdate = null;
         var accepted = await world.Advance(quests.RequestAsync(token, accept));
         Assert.True(accepted.Ok && character.Quests.Active is { Code: QuestCode.Level30, State: 1 }
             && QuestStateCodec.Read(world.Characters.Record.Quests).Active.Code == QuestCode.Level30, "the accepted quest was not stored");
@@ -185,8 +186,8 @@ internal static class QuestServiceTests
         world.Player.Teleport(Vector3.Zero);
 
         character.Quests.Active = character.Quests.Active with { Kills = 19 };
-        var target = world.WaitFor(snapshot => snapshot.Entities.Any(entity => entity.Kind == EntityKindView.Monster))
-            .Entities.First(entity => entity.Kind == EntityKindView.Monster);
+        var target = world.WaitFor(snapshot => snapshot.Entities.Any(entity => entity.Kind == EntityKind.Monster))
+            .Entities.First(entity => entity.Kind == EntityKind.Monster);
         await world.Advance(server.SetAttackTargetAsync(3, world.Session.EntityId, target.EntityId, true));
         var credited = world.WaitFor(snapshot => snapshot.Quest?.View is { State: 2 });
         Assert.True(credited.Quest!.View!.Kills == 20 && credited.Quest.Notices.Any(n => n.Text == QuestTexts.TwentyBargons)
@@ -200,16 +201,51 @@ internal static class QuestServiceTests
             && character.StatPoints == points + 5, "a new request paid the reward twice");
     }
 
+    private static async Task KillToMasterAsync()
+    {
+        var wolverine = Monster(1, "Wolverine", 0, life: 6) with
+        {
+            Drops = new DropTable([new DropEntry(DropKind.Item, 100, QuestItems.SilverWolverineTrophy, 0, 0, IsBonus: false)], 1, false)
+        };
+        var spawn = new FieldSpawnData([new SpawnPoint(24, 0, true)], [new SpawnTableEntry(1, 100)], [], [])
+        {
+            MaxConcurrentMonsters = 1,
+            MaxPerSpawnPoint = 1
+        };
+        var world = await QuestWorld.CreateAsync(PlayerClass.Fighter, 20, 0, [new NpcService(NpcServiceKind.SkillMaster, 4)], [wolverine], spawn);
+        var character = world.Session.Character!;
+        character.Quests.Active = new ActiveQuest { Code = QuestCode.RankUpTrophies, State = 1 };
+        foreach (var gathered in new[] { QuestItems.BronzeWolverineTrophy, QuestItems.GoldenWolverineTrophy })
+        {
+            Assert.True(Items.TryGet(gathered, out var trophy) && character.TryReceive(new ItemInstance(trophy)), "fixture trophy missing");
+        }
+
+        var target = world.WaitFor(snapshot => snapshot.Entities.Any(entity => entity.Kind == EntityKind.Monster))
+            .Entities.First(entity => entity.Kind == EntityKind.Monster);
+        await world.Advance(world.Server.SetAttackTargetAsync(3, world.Session.EntityId, target.EntityId, true));
+        world.WaitFor(_ => world.Player.QuestState.Drops.Count > 0);
+        Assert.True(await world.Advance(world.Quests.RunUpkeepAsync(world.Session)) && QuestInventory.Has(character, QuestItems.SilverWolverineTrophy)
+            && character.QuestBox.Occupied().Count() == 3 && character.Inventory.Items().All(item => !RankUpByTrophies.IsTrophy(item.Definition.Code)),
+            "the killed wolverine's trophy did not reach the special item box");
+
+        var promoted = await world.Advance(world.Quests.RequestAsync(world.Session.SessionToken,
+            new QuestCommand(Guid.NewGuid(), world.NpcId, QuestAction.Accept, QuestCode.RankUpTrophies, 1, 0)));
+        var record = Classes.CreatePlayer(PlayerClass.Fighter, character.Name, 20);
+        CharacterStateCodec.Restore(record, world.Characters.Record, Items);
+        Assert.True(promoted.Ok && character.Tier == 1 && character.QuestBox.Occupied().Count() == 0
+            && world.Characters.Record.Tier == 1 && !QuestInventory.Has(record, QuestItems.SilverWolverineTrophy), "the master did not take the trophies for the rank-up");
+    }
+
     private static async Task UpkeepAsync()
     {
         var world = await QuestWorld.CreateAsync(PlayerClass.Fighter, 20, 0, [new NpcService(NpcServiceKind.SkillMaster, 4)], [], null);
         var character = world.Session.Character!;
         character.Quests.Active = new ActiveQuest { Code = QuestCode.RankUpTrophies, State = 1 };
         world.Player.QuestState.AddDrop(new PendingQuestDrop(QuestItems.SilverWolverineTrophy, 1, 0, QuestDropSource.MainTable));
-        world.Characters.BeforeUpdate = _ => Task.FromResult(false);
+        await world.Session.SaveGate.WaitAsync();
         Assert.True(!await world.Advance(world.Quests.RunUpkeepAsync(world.Session)) && !QuestInventory.Has(character, QuestItems.SilverWolverineTrophy)
-            && world.Player.QuestState.Drops.Count == 1, "a failed upkeep lost or stored its drop");
-        world.Characters.BeforeUpdate = null;
+            && world.Player.QuestState.Drops.Count == 1, "an upkeep ran while the save gate was busy, or lost its drop");
+        world.Session.SaveGate.Release();
         Assert.True(await world.Advance(world.Quests.RunUpkeepAsync(world.Session)) && QuestInventory.Has(character, QuestItems.SilverWolverineTrophy)
             && world.Player.QuestState.Drops.Count == 0, "the upkeep did not store the drop");
         var record = Classes.CreatePlayer(PlayerClass.Fighter, character.Name, 20);
@@ -220,7 +256,7 @@ internal static class QuestServiceTests
 
     private static async Task ArenaAsync()
     {
-        var master = Monster(50, "Skill Master", 0, life: 1000, level: 60) with { SoundCode = LegacyNpcSoundCode.SkillMaster };
+        var master = Monster(50, "Skill Master", 0, life: 1000, level: 60) with { SoundCode = CharacterSoundCodes.SkillMaster };
         var world = await QuestWorld.CreateAsync(PlayerClass.Fighter, 60, 2, [new NpcService(NpcServiceKind.SkillMaster, 4)], [master], null,
             strongWeapon: true);
         var (quests, token, npc) = (world.Quests, world.Session.SessionToken, world.NpcId);
@@ -231,9 +267,9 @@ internal static class QuestServiceTests
         var travel = await world.Advance(quests.RequestAsync(token, new QuestCommand(Guid.NewGuid(), npc, QuestAction.Proceed, QuestCode.RankUpMasterTrial, 6, 0)));
         Assert.True(travel.Ok && character.Quests.Active.State == 7 && !QuestInventory.Has(character, QuestItems.RoyalAmulet), "the duel step failed");
         var arena = world.WaitFor(snapshot => snapshot.FieldId == QuestArena.FieldCode
-            && snapshot.Entities.Any(entity => entity.Kind == EntityKindView.Monster && entity.DuelPlayerId == world.Session.EntityId));
-        var opponent = arena.Entities.Single(entity => entity.Kind == EntityKindView.Monster);
-        Assert.True(opponent.MaxHp == 1000, "the opponent did not scale with the player");
+            && snapshot.Entities.Any(entity => entity.Kind == EntityKind.Monster && entity.DuelPlayerId == world.Session.EntityId));
+        var opponent = arena.Entities.Single(entity => entity.Kind == EntityKind.Monster);
+        Assert.True(opponent.MaxLife == 1000, "the opponent did not scale with the player");
         Assert.True(world.Characters.Record.FieldId == 3 || world.Characters.Record.FieldId == QuestArena.FieldCode, "the record field differs");
 
         // The client walks the player into reach; the test places it there.
@@ -241,7 +277,7 @@ internal static class QuestServiceTests
         await world.Advance(world.Server.SetAttackTargetAsync(QuestArena.FieldCode, world.Session.EntityId, opponent.EntityId, true));
         var won = world.WaitFor(snapshot => snapshot.Quest?.Prompt is { State: 8 }, 6000);
         var yielded = won.Entities.Single(entity => entity.EntityId == opponent.EntityId);
-        Assert.True(yielded.Hp == QuestArena.YieldLife(1000) && character.Quests.Active is { State: 8, ArenaWon: true }, "the master did not yield");
+        Assert.True(yielded.Life == QuestArena.YieldLife(1000) && character.Quests.Active is { State: 8, ArenaWon: true }, "the master did not yield");
 
         var promote = await world.Advance(quests.RequestAsync(token, new QuestCommand(Guid.NewGuid(), 0, QuestAction.Accept, QuestCode.RankUpMasterTrial, 8, 0)));
         Assert.True(promote.Ok && character.Tier == 3 && world.Characters.Record.Tier == 3 && character.Quests.HasFinished(QuestCode.RankUpMasterTrial),
@@ -283,7 +319,7 @@ internal static class QuestServiceTests
             }
 
             var characters = new MemoryCharacters(CharacterRecordFactory.FromLiveSession(starter, character, 3, Vector3.Zero));
-            var npcDefinition = new NpcDefinition(1, "퀘스트", "quest.inx", services) { DisplayName = "Quest NPC", Dialog = ["Hello."] };
+            var npcDefinition = new NpcDefinition(1, "Quest NPC", "quest.inx", services) { DisplayName = "Quest NPC", Dialog = ["Hello."] };
             var empty = WorldData.Empty;
             var holder = new WorldDataHolder
             {
@@ -302,14 +338,14 @@ internal static class QuestServiceTests
             var server = new WorldServer(holder, catalog);
             var sessions = new SessionRegistry();
             var session = sessions.Create(1, "owner");
-            var sessionService = new SessionAppService(sessions, Classes, characters, catalog, server, holder);
+            var sessionService = new SessionAppService(sessions, Classes, characters, new ImmediateSaves(characters), catalog, server, holder);
             Assert.True((await sessionService.EnterWorldAsync(session.SessionToken, name)).Ok && session.TryBeginPlay(), "quest fixture entry failed");
             var player = WorldPlayerFactory.Create(session);
             var outbox = new WorldOutbox();
             var world = new QuestWorld
             {
                 Server = server,
-                Quests = new QuestAppService(sessions, characters, server),
+                Quests = new QuestAppService(sessions, new ImmediateSaves(characters), server),
                 Session = session,
                 Player = player,
                 Characters = characters,
@@ -317,7 +353,7 @@ internal static class QuestServiceTests
                 NpcId = 0
             };
             await world.Advance(server.JoinAsync(3, player, outbox.Writer, session));
-            var roster = world.WaitFor(snapshot => snapshot.Entities.Any(entity => entity.Kind == EntityKindView.Npc));
+            var roster = world.WaitFor(snapshot => snapshot.Entities.Any(entity => entity.Kind == EntityKind.Npc));
             return new QuestWorld
             {
                 Server = server,
@@ -326,21 +362,12 @@ internal static class QuestServiceTests
                 Player = player,
                 Characters = characters,
                 Outbox = outbox,
-                NpcId = roster.Entities.First(entity => entity.Kind == EntityKindView.Npc).EntityId,
+                NpcId = roster.Entities.First(entity => entity.Kind == EntityKind.Npc).EntityId,
                 _tick = world._tick
             };
         }
 
-        public async Task<T> Advance<T>(Task<T> task)
-        {
-            for (var step = 0; !task.IsCompleted && step < 1000; step++)
-            {
-                Server.Tick(0.05f, ++_tick);
-                await Task.Delay(1);
-            }
-
-            return await task.WaitAsync(TimeSpan.FromSeconds(1));
-        }
+        public Task<T> Advance<T>(Task<T> task) => WorldPump.RunAsync(Server, task, () => ++_tick);
 
         public WorldSnapshot WaitFor(Func<WorldSnapshot, bool> condition, int ticks = 1500)
         {

@@ -20,7 +20,13 @@ public enum NpcServiceAction : byte
     WithdrawGold = 24,
     Teleport = 30,
     // The puzzle collector takes a finished puzzle for a reward.
-    Exchange = 40
+    Exchange = 40,
+
+    Age = 50,
+
+    // The mixing NPC: Mix works ItemId with sheltoms (or reconstructs it with seals); Refine turns sheltoms into force orbs.
+    Mix = 51,
+    Refine = 52
 }
 
 public enum NpcServiceStatus : ushort
@@ -38,11 +44,13 @@ public enum NpcServiceStatus : ushort
     Conflict = 10,
     NotOpen = 11,
     OverWeight = 12,
-    WrongPuzzle = 13
+    WrongPuzzle = 13,
+    WrongMaterials = 14
 }
 
 // ItemCode names a stock entry to buy; ItemId an owned item. Anchor is a destination cell (-1 = first free) or, for a
-// teleport, the destination index. Amount is gold for the gold actions.
+// teleport, the destination index. Amount is gold for the gold actions. Materials are the owned items a work on ItemId
+// uses up (one unit per entry). Covered is the one item a warehouse item set down lies over, exchanged with it.
 public sealed record NpcServiceCommand(
     Guid OperationId,
     ulong NpcEntityId,
@@ -54,7 +62,21 @@ public sealed record NpcServiceCommand(
     Guid ItemId = default,
     int Anchor = -1,
     int Count = 1,
-    long Amount = 0);
+    long Amount = 0,
+    Guid[] Materials = null,
+    Guid Covered = default)
+{
+    public const int MaxMaterials = 16;
+
+    // Value equality over the materials too, so a replayed operation id with other materials is a conflict.
+    public bool Equals(NpcServiceCommand other) =>
+        other is not null && OperationId == other.OperationId && NpcEntityId == other.NpcEntityId && Service == other.Service
+        && Action == other.Action && ExpectedRevision == other.ExpectedRevision && ExpectedStorageRevision == other.ExpectedStorageRevision
+        && ItemCode == other.ItemCode && ItemId == other.ItemId && Anchor == other.Anchor && Count == other.Count && Amount == other.Amount
+        && Covered == other.Covered && (Materials ?? []).AsSpan().SequenceEqual(other.Materials ?? []);
+
+    public override int GetHashCode() => HashCode.Combine(OperationId, NpcEntityId, Service, Action, ItemId, Anchor, Amount, Materials?.Length ?? 0);
+}
 
 public static class NpcServiceActions
 {
@@ -62,7 +84,10 @@ public static class NpcServiceActions
     public static bool IsDurable(NpcServiceAction action) => action is not (NpcServiceAction.Open or NpcServiceAction.Close or NpcServiceAction.Refresh);
 }
 
-public sealed record AppliedServiceOperation(NpcServiceCommand Command, long Revision);
+public sealed record AppliedServiceOperation(NpcServiceCommand Command, long Revision) : IAppliedOperation
+{
+    Guid IAppliedOperation.OperationId => Command?.OperationId ?? Guid.Empty;
+}
 
 public sealed record NpcServiceOutcome(bool Ok, NpcServiceStatus Status, long Revision, long StorageRevision, string Message)
 {
@@ -89,6 +114,10 @@ public sealed record NpcServiceReply(NpcServiceOutcome Outcome)
     public WarehouseView Warehouse { get; init; }
     public IReadOnlyList<TeleportOffer> Destinations { get; init; }
     public TeleportArrival Arrival { get; init; }
+    public ItemWorkResult Work { get; init; }
 }
+
+// Result is AgingResult for the aging NPC; ItemId is empty when the item was lost.
+public sealed record ItemWorkResult(byte Result, Guid ItemId, uint Code);
 
 public sealed record TeleportArrival(int FieldCode, System.Numerics.Vector3 Position);

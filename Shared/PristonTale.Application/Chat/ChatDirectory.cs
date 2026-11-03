@@ -1,3 +1,4 @@
+using PristonTale.Simulation.Social;
 using System.Collections.Concurrent;
 using PristonTale.Application.Sessions;
 
@@ -38,11 +39,17 @@ public sealed class ChatMember
         set => Volatile.Write(ref _gmLevel, value);
     }
 
+    // Fed only by this member's connection, one line at a time.
+    public ChatFloodGuard Flood { get; } = new();
+
     public bool WhisperRefused
     {
         get => Volatile.Read(ref _whisperRefused) != 0;
         set => Volatile.Write(ref _whisperRefused, value ? 1 : 0);
     }
+
+    // The player's friends and the players it ignores (ContactAppService); a whisper from an ignored player is refused.
+    public ContactBook Contacts { get; init; } = new([]);
 
     // The last server notice this player received; a newer notice is sent with the next heartbeat.
     public int NoticeSeen
@@ -142,6 +149,18 @@ public sealed class ChatDirectory
         foreach (var member in _byEntity.Values)
         {
             member.Link.Deliver(line);
+        }
+    }
+
+    // The lines a world change answered (a party or a trade), to those of their players still in the chat.
+    public void Deliver(IReadOnlyList<World.WorldNotice>? notices)
+    {
+        foreach (var notice in notices ?? [])
+        {
+            if (TryGet(notice.To, out var member))
+            {
+                member.Link.Deliver(new ChatLine(notice.Kind, 0, notice.Text));
+            }
         }
     }
 }

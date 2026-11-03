@@ -7,6 +7,7 @@ using PristonTale.Simulation.Skills;
 using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Contracts.Skills;
 
 namespace PristonTale.Application.World;
 
@@ -24,6 +25,7 @@ internal interface IFieldSkillHost
     MonsterAiTuning TuningFor(MonsterDefinition definition);
     bool TryFindMonsterDefinition(string name, [MaybeNullWhen(false)] out MonsterDefinition definition);
     MonsterInstance AddSummon(MonsterDefinition definition, Vector3 position, float facing);
+    bool MonsterStandsAt(Vector3 point);
 }
 
 // Server authority for player skills on one field: cast validation, the skill timeline (hits at the motion's event
@@ -92,7 +94,7 @@ internal sealed partial class FieldSkills
             return SkillCastOutcome.Refused(request, SkillCastVerdict.Busy);
         }
 
-        if (player.Appearance.InVillage)
+        if (player.InVillage)
         {
             return SkillCastOutcome.Refused(request, SkillCastVerdict.InVillage);
         }
@@ -139,7 +141,7 @@ internal sealed partial class FieldSkills
         var casts = player.SkillCasts.GetValueOrDefault(skill.Code) + 1;
         player.SkillCasts[skill.Code] = casts;
         character.Skills.RecordUses(skill.Code, SkillFormulas.UsesAfterCast(previousUses, casts, WindowIndex(character, skill.Code), rank));
-        var cooldown = Simulation.Items.Usable.PremiumRules.SkillCooldownMs(SkillFormulas.CooldownMs(rule, rank, character.Attributes.Talent, previousUses), character.Premium);
+        var cooldown = Simulation.Items.Usable.PremiumRules.SkillCooldownMs(SkillFormulas.CooldownMs(rule, rank, character.Attributes.Talent, (int)character.Derived.MagicMastery, previousUses), character.Premium);
         player.Cooldowns.Start(skill.Code, cooldown, nowMs);
         player.BeginCast(aim, timing.DurationMs);
         if (targetId != player.EntityId && _host.TryGetMonster(targetId, out _))
@@ -151,23 +153,23 @@ internal sealed partial class FieldSkills
         var cast = new ActiveCast(rule, rank, targetId, aim, timing.HitsAtMs, request.Sequence, mode, charge);
         _casts[player.EntityId] = cast;
 
-        var flags = ModeFlags(mode);
+        var flags = SkillEventFlags.None.WithMode(mode);
         if (rule.Projectile)
         {
-            flags |= SkillEventFlagsView.Projectile;
+            flags |= SkillEventFlags.Projectile;
         }
 
         if (rule.Kind == SkillKind.Area)
         {
-            flags |= SkillEventFlagsView.Area;
+            flags |= SkillEventFlags.Area;
         }
 
         if (targetId == player.EntityId)
         {
-            flags |= SkillEventFlagsView.SelfCast;
+            flags |= SkillEventFlags.SelfCast;
         }
 
-        _pendingStarts.Add(new SkillEventView(player.EntityId, targetId, rule.Code, SkillEventPhaseView.Start, rank, flags, timing.DurationMs,
+        _pendingStarts.Add(new SkillEventView(player.EntityId, targetId, rule.Code, SkillEventPhase.Start, rank, flags, timing.DurationMs,
             timing.HitsAtMs.Length > 0 ? timing.HitsAtMs[0] : timing.DurationMs, aim, player.Facing, 0, AreaRadius(cast.Rule, rank, player, aim)));
         return new SkillCastOutcome(request.Sequence, rule.Code, SkillCastVerdict.Accepted, rank, cooldown, cooldown, character.Mana, character.Stamina);
     }
@@ -256,7 +258,7 @@ internal sealed partial class FieldSkills
 
     private void CancelCast(ulong casterId, ActiveCast cast)
     {
-        _skillEvents.Add(new SkillEventView(casterId, cast.TargetId, cast.Rule.Code, SkillEventPhaseView.Cancel, cast.Rank, SkillEventFlagsView.None,
+        _skillEvents.Add(new SkillEventView(casterId, cast.TargetId, cast.Rule.Code, SkillEventPhase.Cancel, cast.Rank, SkillEventFlags.None,
             0f, 0f, cast.Aim, 0f, 0, 0f));
     }
 
@@ -350,14 +352,14 @@ internal sealed partial class FieldSkills
             ApplyEffect(caster.Character.Effects, caster.EntityId, caster.EntityId, cast.Rule.Code, rule.CasterBuff, rank, 0, caster.Character);
         }
 
-        var flags = rule.Kind == SkillKind.Area ? SkillEventFlagsView.Area : SkillEventFlagsView.None;
-        flags |= ModeFlags(cast.Mode);
+        var flags = rule.Kind == SkillKind.Area ? SkillEventFlags.Area : SkillEventFlags.None;
+        flags |= SkillEventFlags.None.WithMode(cast.Mode);
         if (cast.Full)
         {
-            flags |= SkillEventFlagsView.Charged;
+            flags |= SkillEventFlags.Charged;
         }
 
-        _skillEvents.Add(new SkillEventView(caster.EntityId, cast.TargetId, cast.Rule.Code, SkillEventPhaseView.Impact, rank, flags, 0f, 0f, aim,
+        _skillEvents.Add(new SkillEventView(caster.EntityId, cast.TargetId, cast.Rule.Code, SkillEventPhase.Impact, rank, flags, 0f, 0f, aim,
             caster.Facing, targetCount, AreaRadius(rule, rank, caster, aim)));
     }
 
@@ -396,14 +398,6 @@ internal sealed partial class FieldSkills
         }
     }
 
-    private static SkillEventFlagsView ModeFlags(int mode) => mode switch
-    {
-        1 => SkillEventFlagsView.Mode1,
-        2 => SkillEventFlagsView.Mode2,
-        3 => SkillEventFlagsView.Mode1 | SkillEventFlagsView.Mode2,
-        _ => SkillEventFlagsView.None
-    };
-
     private SkillCastVerdict ResolveTarget(WorldPlayer player, SkillRule rule, int rank, in SkillCastRequest request, out ulong targetId, out Vector3 aim)
     {
         targetId = 0;
@@ -416,6 +410,11 @@ internal sealed partial class FieldSkills
         if (rule.RequiresClassArmor && !WearsClassArmor(player.Character))
         {
             return SkillCastVerdict.WeaponNotAllowed;
+        }
+
+        if (rule.Allies is { RequiresParty: true } && player.Party is null)
+        {
+            return SkillCastVerdict.InvalidTarget;
         }
 
         switch (rule.Target)
@@ -460,7 +459,7 @@ internal sealed partial class FieldSkills
                     return SupportBlocked(player, rule) ? SkillCastVerdict.AlreadyActive : SkillCastVerdict.Accepted;
                 }
 
-                if (!_host.TryGetPlayer(request.TargetId, out var ally) || ally.IsDead)
+                if (!_host.TryGetPlayer(request.TargetId, out var ally) || ally.IsDead || rule.Allies is { Party: true } && !player.SharesPartyWith(ally))
                 {
                     return SkillCastVerdict.InvalidTarget;
                 }

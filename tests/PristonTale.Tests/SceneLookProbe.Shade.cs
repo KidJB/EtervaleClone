@@ -2,6 +2,8 @@ using Microsoft.Xna.Framework;
 using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.IO;
 using PristonTale.Engine3D.Rendering;
+using PristonTale.Contracts.Motion;
+using PristonTale.Assets;
 
 namespace PristonTale.Tests;
 
@@ -21,7 +23,7 @@ internal sealed partial class SceneLookProbe
     private void LoadShade(PristonAssetCache cache)
     {
         var reader = new PristonSmdReader(cache);
-        var ricarten = reader.ReadStage(PristonFileResolver.Resolve(Path.Combine(_root, "Field/Ricarten/village-2.smd")));
+        var ricarten = reader.ReadStage(AssetFiles.Resolve(Path.Combine(_root, "Field/Ricarten/village-2.smd")));
         var material = ricarten.Materials.First(m => m.InUse && string.Equals(m.TextureName, SceneryTexture, StringComparison.OrdinalIgnoreCase));
         var vertices = new List<PristonStageVertex>();
         var faces = new List<PristonStageFace>();
@@ -66,7 +68,7 @@ internal sealed partial class SceneLookProbe
         foreach (var spot in new[] { ShadeSpot, OpenSpot })
         {
             var world = Matrix.CreateTranslation(spot);
-            _actors.Add((_renderer.AddActor(new PristonActorInstance(_shadeActor!, world, PristonActorMotion.Stand)), world));
+            _actors.Add((_renderer.AddActor(new PristonActorInstance(_shadeActor!, world, MotionCode.Stand)), world));
         }
     }
 

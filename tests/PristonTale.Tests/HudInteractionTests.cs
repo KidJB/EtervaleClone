@@ -1,15 +1,21 @@
+using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.Skills;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.World;
 using PristonTale.Gameplay.UI.Inventory;
+using PristonTale.Gameplay.UI.Npc;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Gameplay.UI;
+using PristonTale.Gameplay.World;
+using PristonTale.Gameplay.World.Remote;
 using PristonTale.Gameplay.UI.Widgets;
 using PristonTale.Gameplay.UI.Rendering;
+using PristonTale.Contracts.Characters;
+using PristonTale.Contracts.World;
 
 namespace PristonTale.Tests;
 
@@ -23,11 +29,29 @@ internal static class HudInteractionTests
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
         yield return ("original skill shortcuts bind the held mouse side without selecting on release", ShortcutsAsync);
+        yield return ("the action bar takes skills from the skill window and bag items, moves, swaps and drops shortcuts, pages and saves them", ActionBarAsync);
+        yield return ("the minimap moves past a small drag, stays on screen, and names the marker under the pointer", MinimapMoveAsync);
+        yield return ("name plate life bars follow the cursor when classic, the click or an attack otherwise; the outline fades", NamePlatesAsync);
         yield return ("UI color keys preserve crimson, metal and opaque world pixels", ColorKeysAsync);
         yield return ("original HUD uses the largest integer scale and the 800x600 bottom/right anchors", LayoutAsync);
         yield return ("owner combat statistics survive the owner-status packet", OwnerStatsAsync);
         yield return ("original HUD hit rectangles stay inside their windows without overlapping", HitRectsAsync);
-        yield return ("inventory drag uses original equipment slots and owner revision without changing local items", EquipmentDragAsync);
+        yield return ("a carried item is set down by a second click on an original equipment slot with the owner revision", EquipmentDragAsync);
+        yield return ("with an item carried, the item under it is described but not hovered, and the carried one's own cells describe nothing", CarriedOverAsync);
+        yield return ("a number typed above the count box's maximum shows the maximum at once", CountBoxAsync);
+        yield return ("the weapon pair key holds the other pair with the window closed once the motion in progress ends, the next swing's start included", WeaponPairKeyAsync);
+        yield return ("a worn two-handed weapon is also shown, taken and exchanged in the empty off-hand slot", TwoHandedShadowAsync);
+        yield return ("the page button with an item on the cursor switches the page taking the item along, which stays on the cursor", CarriedPageButtonAsync);
+        yield return ("an item set down stays where it was set down, not back in its old cell, until the owner state shows it moved", SettleAsync);
+        yield return ("an item thrown to the ground shows nowhere until the owner state shows it gone, and back in its place when refused", ThrownAsync);
+        yield return ("an item that arrives by itself sounds, a moved item sounds on its reply, and a page switch sounds nothing", ArrivalSoundAsync);
+        yield return ("the weapon pair switches with an item on the cursor and sounds the pair now held; a quest item set into the closed box rings and glows",
+            CarriedSidesAsync);
+        yield return ("a ground item picked up with the window open comes to the cursor, and goes where any item goes with it closed", PickupToCursorAsync);
+        yield return ("the pointer attacks over wild monsters, talks over NPCs and stays the arrow elsewhere", CursorKindAsync);
+        yield return ("drop names on one spot rise into a column above the nearest, which keeps its place", DropNameColumnAsync);
+        yield return ("the settings offer only the monitor's sizes: all in fullscreen, those that fit in a window, none borderless", ResolutionsAsync);
+        yield return ("a carried item lands where the original sets it: free cells, one item to exchange, a potion to join, a slot of its kind", PlacementAsync);
         yield return ("original gauges crop bitmaps from the top and follow the source formulas", GaugeAsync);
         yield return ("atlas gauge separation preserves the frame and masks every rectangular corner", AtlasGaugeAsync);
         yield return ("HUD overlays tolerate uninitialized and tiny resized viewports", OverlayAsync);
@@ -99,8 +123,7 @@ internal static class HudInteractionTests
         AssertDisjointInside(Enumerable.Range(0, 10).Select(slot => HudInventoryLayout.Equipment(origin, slot)).Append(bag).ToArray(), window,
             "equipment slots and bag");
         Assert.True(HudInventoryLayout.Equipment(origin, (int)EquipmentSlot.Weapon) == new Rectangle(575, 434, 65, 110), "weapon slot moved");
-        Assert.True(HudInventoryLayout.CellAt(origin, new Point(23 + 22 * 11 + 3, 436 + 22 * 5 + 3)) == 71, "last bag cell not addressed");
-        Assert.True(HudInventoryLayout.CellAt(origin, new Point(22, 436)) == -1, "pointer outside bag picked a cell");
+        Assert.True(HudInventoryLayout.Cell(origin, 71) == new Rectangle(23 + 22 * 11, 436 + 22 * 5, 22, 22), "last bag cell not addressed");
         Assert.True(window.Contains(HudInventoryLayout.Close(origin)) && !HudInventoryLayout.Close(origin).Intersects(bag), "inventory close misplaced");
 
         // Skill node rectangles overlap at their transparent hexagon corners; every centre must hit only its own node.
@@ -125,6 +148,8 @@ internal static class HudInteractionTests
         var entries = Enum.GetValues<HudSystemEntry>().Select(HudSystemMenu.Entry).ToArray();
         AssertDisjointInside(entries, HudSystemMenu.Bounds, "system menu entries");
         Assert.True(!buttons.Any(HudSystemMenu.Bounds.Intersects), "system menu covers the menu buttons");
+        Assert.True(HudSystemMenu.Entry(HudSystemEntry.Help) == new Rectangle(698, 504, 96, 20) && HudSystemMenu.Entry(HudSystemEntry.Exit) == new Rectangle(698, 535, 96, 20)
+            && HudSystemMenu.Entry(HudSystemEntry.Settings).Bottom < 504, "the exit menu's rows left the original sheet, or settings is not above it");
 
         var design = new Rectangle(0, 0, HudLayout.DesignWidth, HudLayout.DesignHeight);
         Assert.True(design.Contains(HudNpcPanel.Box) && HudNpcPanel.Box.Contains(HudNpcPanel.OkButton) && HudNpcPanel.Box.Contains(HudNpcPanel.Title),
@@ -133,9 +158,15 @@ internal static class HudInteractionTests
         Assert.True(design.Contains(HudSettingsPanel.Box) && HudSettingsPanel.Box.Contains(HudSettingsPanel.OkButton)
             && HudSettingsPanel.Box.Contains(HudSettingsPanel.Row(15)), "settings rows escaped the help box");
         AssertDisjointInside([HudMessageBox.Accept, HudMessageBox.Reject], HudMessageBox.Bounds, "message box buttons");
+        HudMessageBox.Place(HudLayout.Create(1920, 1080));
+        Assert.True(HudMessageBox.Bounds == new Rectangle(876, 478, HudMessageBox.VisibleWidth, HudMessageBox.Height) && HudMessageBox.Bounds.Contains(HudMessageBox.Accept)
+            && HudMessageBox.Bounds.Contains(HudMessageBox.Reject), "the message box is not centred on a wide screen, or its buttons stayed behind");
         var layout = HudLayout.Create(800, 600);
-        Assert.True(HudNpcPanel.SkillMasterBox(layout).Contains(HudNpcPanel.TrainingButton(layout))
-            && HudNpcPanel.SkillMasterBox(layout).Contains(HudNpcPanel.ExitButton(layout)), "skill master buttons escaped ReStartMain");
+        HudMessageBox.Place(layout);
+        var skills = HudInventoryLayout.Origin(layout);
+        Assert.True(HudSkillTreeLayout.ClassChange == new Rectangle(240, 380, 44, 44) && HudSkillTreeLayout.MasterBox.Contains(HudSkillTreeLayout.ClassChange)
+            && HudSkillTreeLayout.Window(skills).Contains(HudSkillTreeLayout.PageForward(skills)) && HudSkillTreeLayout.Window(skills).Contains(HudSkillTreeLayout.PageBack(skills)),
+            "the class change button left the training box, or the page arrows the skill window");
         return Task.CompletedTask;
     }
 
@@ -151,6 +182,75 @@ internal static class HudInteractionTests
         }
     }
 
+    private static Task CountBoxAsync()
+    {
+        var box = new HudCountBox();
+        var accepted = -1;
+        box.Open("How many items", "do you wanna buy?", 25, count => accepted = count);
+        box.Type("100", static _ => false);
+        Assert.True(box.Count == 25, $"a number above the maximum did not show the maximum while typing: {box.Count}");
+        box.Type([], static key => key == Keys.Enter);
+        Assert.True(accepted == 25 && !box.IsOpen, $"the maximum shown was not accepted: {accepted}");
+
+        box.Open("How many items", "do you wanna sell?", 25, count => accepted = count);
+        box.Type("7", static _ => false);
+        box.Click(HudCountBox.Up.Center);
+        box.Click(HudCountBox.Ok.Center);
+        Assert.True(accepted == 8, "the arrow and OK did not give the number shown");
+        return Task.CompletedTask;
+    }
+
+    private static Task WeaponPairKeyAsync()
+    {
+        var layout = HudLayout.Create(800, 600);
+        var state = OwnerState.Capture(new CharacterClassRegistry().CreatePlayer(PlayerClass.Fighter, "Pair")) with { InventoryRevision = 3 };
+        InventoryCommand? sent = null;
+        var controller = new HudInventoryController(null!, command =>
+        {
+            sent = command;
+            return Task.FromResult(new InventoryOutcome(true, 4, ""));
+        });
+        controller.Update(state, layout, false, default, default);
+        controller.PickupLocked = true;
+        controller.ToggleWeaponPair();
+        controller.Update(state, layout, false, default, default);
+        Assert.True(sent is null, "the pair changed during a swing");
+        controller.ActionStarts++;
+        controller.Update(state, layout, false, default, default);
+        Assert.True(sent is { Action: InventoryAction.SwitchWeaponSet, Destination: 1, ExpectedRevision: 3 },
+            $"the next swing of a fight did not end the wait for the other pair: {sent}");
+
+        sent = null;
+        var swapped = state with { WeaponSet = 1, InventoryRevision = 4 };
+        controller.Update(swapped, layout, false, default, default);
+        controller.ToggleWeaponPair();
+        controller.Update(swapped, layout, false, default, default);
+        Assert.True(sent is null, "the pair changed during the swing it was asked in");
+        controller.PickupLocked = false;
+        controller.Update(swapped, layout, false, default, default);
+        Assert.True(sent is { Action: InventoryAction.SwitchWeaponSet, Destination: 0 }, $"the pair did not change once the player stopped: {sent}");
+        return Task.CompletedTask;
+    }
+
+    private static Task CarriedOverAsync()
+    {
+        var layout = HudLayout.Create(800, 600);
+        var carried = new OwnedItemView(Guid.NewGuid(), 1, "Carried", ItemKind.Axe, 1, 0, -1, 1, 1);
+        var other = new OwnedItemView(Guid.NewGuid(), 2, "Other", ItemKind.Axe, 1, 4, -1, 1, 1);
+        var state = OwnerState.Capture(new CharacterClassRegistry().CreatePlayer(PlayerClass.Fighter, "Carry")) with { Items = [carried, other], InventoryRevision = 1 };
+        var controller = new HudInventoryController(null!, _ => Task.FromResult(new InventoryOutcome(true, 2, "")));
+        var origin = HudInventoryLayout.Origin(layout);
+        var start = HudInventoryLayout.Bounds(origin, carried).Center;
+        var over = HudInventoryLayout.Bounds(origin, other).Center;
+        controller.Update(state, layout, true, default, MouseAt(start, layout.Scale, ButtonState.Pressed));
+        Assert.True(controller.Dragging == carried.InstanceId, "bag item was not picked up");
+        controller.Update(state, layout, true, default, MouseAt(over, layout.Scale, ButtonState.Released));
+        Assert.True(controller.Hovered is null, "an item under a carried one took the hover, which picks up on a click");
+        Assert.True(HudInventoryPanel.CarriedOver(origin, state, controller, carried, over) == other, "the item under a carried one was not described");
+        Assert.True(HudInventoryPanel.CarriedOver(origin, state, controller, carried, start) is null, "the carried item's own cells described it");
+        return Task.CompletedTask;
+    }
+
     private static Task EquipmentDragAsync()
     {
         foreach (var size in new[] { new Point(800, 600), new Point(1600, 1200), new Point(1920, 1080) })
@@ -160,6 +260,9 @@ internal static class HudInteractionTests
             var state = OwnerState.Capture(character);
             Assert.True(state.AttackRating > 0 && state.MoveSpeed > 0, "owner projection omitted derived combat statistics");
             Assert.True(ReferenceEquals(state, OwnerState.Capture(character, state)), "unchanged derived values invalidated owner cache");
+            character.Effects.Apply(new EffectSpec(0x0A00_0003, EffectSourceKind.Item, false, [StatModifier.Flat(StatKind.DamageMax, 10)]), 0, 60_000f);
+            var buffed = OwnerState.Capture(character, state);
+            Assert.True(!ReferenceEquals(state, buffed) && buffed.DamageMax == state.DamageMax + 10, "a buff that changes only the damage left the owner state stale");
             var item = new OwnedItemView(Guid.NewGuid(), 1, "Weapon", ItemKind.Axe, 1, 0, -1, 2, 3);
             state = state with { Items = new[] { item }, InventoryRevision = 7 };
             InventoryCommand? sent = null;
@@ -174,11 +277,427 @@ internal static class HudInteractionTests
             Assert.True(controller.Dragging == item.InstanceId, "bag item was not picked up");
             var weapon = HudInventoryLayout.Equipment(origin, (int)EquipmentSlot.Weapon).Center;
             controller.Update(state, layout, true, default, MouseAt(weapon, layout.Scale, ButtonState.Released));
+            Assert.True(sent is null && controller.Dragging == item.InstanceId, "releasing the button set the carried item down");
+            controller.Update(state, layout, true, default, MouseAt(weapon, layout.Scale, ButtonState.Pressed));
             Assert.True(sent is { Action: InventoryAction.Equip, Slot: EquipmentSlot.Weapon, ExpectedRevision: 7 }
-                && sent.ItemId == item.InstanceId && sent.OperationId != Guid.Empty, "drop did not preserve the authoritative equipment command");
+                && sent.ItemId == item.InstanceId && sent.OperationId != Guid.Empty, "a click on the weapon slot did not send the authoritative equipment command");
             Assert.True(state.Items[0].Slot == -1 && controller.Dragging == Guid.Empty, "gesture changed immutable owner state or retained drag");
+
+            // An item a reply hands to the cursor waits for the owner state of that reply's revision, which travels apart.
+            var handed = item with { InstanceId = Guid.NewGuid(), Anchor = 30 };
+            controller.CarryAfter(handed.InstanceId, 9);
+            controller.Update(state with { InventoryRevision = 8 }, layout, true, default, MouseAt(weapon, layout.Scale, ButtonState.Released));
+            Assert.True(controller.Dragging == Guid.Empty, "an item was carried before the state that holds it arrived");
+            controller.Update(state with { InventoryRevision = 9, Items = [item, handed] }, layout, true, default, MouseAt(weapon, layout.Scale, ButtonState.Released));
+            Assert.True(controller.Dragging == handed.InstanceId, "the item the reply handed over was not carried once its state arrived");
+
+            var asked = 0;
+            controller.GoldRequested = () => asked++;
+            var coin = HudInventoryLayout.GoldButton(origin).Center;
+            controller.Update(state, layout, true, default, MouseAt(coin, layout.Scale, ButtonState.Pressed));
+            controller.CancelDrag();
+            controller.Update(state, layout, true, default, MouseAt(coin, layout.Scale, ButtonState.Released));
+            controller.Update(state, layout, true, default, MouseAt(coin, layout.Scale, ButtonState.Pressed));
+            Assert.True(asked == 1, "the gold coin asked for gold while an item was carried, or not once nothing was");
+
+            // The special item box: its button asks the HUD, a page button closes it, and a box item set down goes back.
+            var kept = new OwnedItemView(Guid.NewGuid(), 2, "Letter", ItemKind.Quest, 1, -1, QuestItemBox.FirstOwnerSlot, 2, 2, "QT101");
+            var boxed = state with { Items = [item, kept], InventoryRevision = state.InventoryRevision + 1 };
+            var requested = 0;
+            controller.QuestBoxRequested = () =>
+            {
+                requested++;
+                controller.ToggleQuestBox();
+            };
+            var questButton = HudInventoryLayout.QuestBoxButton(origin).Center;
+            controller.Update(boxed, layout, true, default, MouseAt(questButton, layout.Scale, ButtonState.Released));
+            controller.Update(boxed, layout, true, default, MouseAt(questButton, layout.Scale, ButtonState.Pressed));
+            var keptAt = HudInventoryLayout.QuestBoxCell(origin, 0).Center;
+            Assert.True(requested == 1 && controller.QuestBoxShown && HudInventoryLayout.ItemAt(origin, boxed.Items, keptAt, true) == kept
+                && HudInventoryLayout.ItemAt(origin, boxed.Items, HudInventoryLayout.Cell(origin, 0).Center, true) != item,
+                "the box did not open over the bag, or the bag's item still showed");
+            sent = null;
+            controller.Update(boxed, layout, true, default, MouseAt(keptAt, layout.Scale, ButtonState.Released));
+            controller.Update(boxed, layout, true, default, MouseAt(keptAt, layout.Scale, ButtonState.Pressed));
+            controller.Update(boxed, layout, true, default, MouseAt(keptAt, layout.Scale, ButtonState.Released));
+            Assert.True(controller.Dragging == kept.InstanceId, "a box item was not picked up");
+            controller.Update(boxed, layout, true, default, MouseAt(weapon, layout.Scale, ButtonState.Pressed));
+            Assert.True(controller.Dragging == Guid.Empty && sent is null, "a box item set down did not go back to its box, or sent a command");
+            controller.ShowBagPage(1);
+            Assert.True(!controller.QuestBoxShown && sent is null, "a page button switched the page instead of closing the box");
         }
 
+        return Task.CompletedTask;
+    }
+
+    private static Task TwoHandedShadowAsync()
+    {
+        var origin = HudInventoryLayout.Origin(HudLayout.Create(800, 600));
+        var offHand = HudInventoryLayout.Equipment(origin, (int)EquipmentSlot.OffHand).Center;
+        OwnedItemView Worn(string key, EquipmentSlot slot) => new(Guid.NewGuid(), 1, key, ItemKind.Axe, 1, -1, (int)slot, 2, 3, key);
+        var twoHanded = Worn("WA105", EquipmentSlot.Weapon);
+        Assert.True(HudInventoryLayout.TwoHandedShadow([twoHanded]) == twoHanded && HudInventoryLayout.ItemAt(origin, [twoHanded], offHand, false) == twoHanded,
+            "a worn two-handed weapon does not fill the empty off-hand slot");
+        Assert.True(HudInventoryLayout.TwoHandedShadow([twoHanded, Worn("DS101", EquipmentSlot.OffHand)]) is null,
+            "a two-handed weapon was shown over an off-hand item");
+        var shield = new OwnedItemView(Guid.NewGuid(), 2, "DS101", ItemKind.Shield, 1, 0, -1, 2, 3, "DS101");
+        Assert.True(HudInventoryPlacement.Of(origin, [twoHanded, shield], shield, offHand, true) is { Kind: HudPlacementKind.Exchange, Slot: EquipmentSlot.OffHand } swap
+            && swap.Covered == twoHanded, "a shield over the two-handed weapon's off-hand slot does not pick the weapon up");
+        var oneHanded = Worn("WA101", EquipmentSlot.Weapon);
+        Assert.True(HudInventoryLayout.TwoHandedShadow([oneHanded]) is null && HudInventoryLayout.ItemAt(origin, [oneHanded], offHand, false) is null,
+            "a one-handed weapon filled the off-hand slot");
+        return Task.CompletedTask;
+    }
+
+    private static Task PlacementAsync()
+    {
+        static OwnedItemView Item(ItemKind kind, int anchor, int width = 1, int height = 1, string key = "", int slot = -1) =>
+            new(Guid.NewGuid(), 1, kind.ToString(), kind, 1, anchor, slot, width, height, key);
+        var origin = HudInventoryLayout.Origin(HudLayout.Create(800, 600));
+        var bag = HudInventoryLayout.Bag(origin);
+        Point CellCentre(int anchor) => new(bag.X + anchor % 12 * 22 + 11, bag.Y + anchor / 12 * 22 + 11);
+
+        var stone = Item(ItemKind.Material, 0);
+        var other = Item(ItemKind.Material, 5);
+        var potion = Item(ItemKind.Potion, 30, key: "PL101");
+        var potions = Item(ItemKind.Potion, 31, key: "PL101");
+        var upper = Item(ItemKind.Material, 7);
+        var lower = Item(ItemKind.Material, 19);
+        var worn = Item(ItemKind.Sword, -1, 1, 3, slot: (int)EquipmentSlot.Weapon);
+        OwnedItemView[] items = [stone, other, potion, potions, upper, lower, worn];
+
+        var free = HudInventoryPlacement.Of(origin, items, stone, CellCentre(3), true);
+        Assert.True(free.Kind == HudPlacementKind.Fits && free.Anchor == 3, $"a free cell gave {free}");
+        var exchange = HudInventoryPlacement.Of(origin, items, stone, CellCentre(5), true);
+        Assert.True(exchange.Kind == HudPlacementKind.Exchange && exchange.Covered == other && exchange.Anchor == 5, $"one covered item gave {exchange}");
+        var join = HudInventoryPlacement.Of(origin, items, potion, CellCentre(31), true);
+        Assert.True(join.Kind == HudPlacementKind.Merge && join.Covered == potions, $"a potion over its kind gave {join}");
+        var tall = Item(ItemKind.Material, 40, 1, 2);
+        var two = HudInventoryPlacement.Of(origin, [.. items, tall], tall, new Point(bag.X + 7 * 22 + 11, bag.Y + 22), true);
+        Assert.True(two.Kind == HudPlacementKind.Blocked, $"two covered items gave {two}");
+
+        var weaponSlot = HudInventoryLayout.Equipment(origin, (int)EquipmentSlot.Weapon).Center;
+        var sword = Item(ItemKind.Sword, 50, 1, 3);
+        var wield = HudInventoryPlacement.Of(origin, items, sword, weaponSlot, true);
+        Assert.True(wield.Kind == HudPlacementKind.Exchange && wield.Slot == EquipmentSlot.Weapon && wield.Covered == worn, $"a sword over the weapon slot gave {wield}");
+        Assert.True(HudInventoryPlacement.Of(origin, items, sword, weaponSlot, false).Kind == HudPlacementKind.Blocked, "an unusable sword was accepted");
+        Assert.True(HudInventoryPlacement.Of(origin, items, Item(ItemKind.Armor, 60, 2, 3), weaponSlot, true).Kind == HudPlacementKind.Blocked,
+            "an armour was accepted in the weapon slot");
+        var box = HudInventoryLayout.Belt(origin, 1).Center;
+        var belt = HudInventoryPlacement.Of(origin, items, potion, box, true);
+        Assert.True(belt.Kind == HudPlacementKind.Fits && belt.Belt == 1, $"a potion over an empty belt box gave {belt}");
+        Assert.True(HudInventoryPlacement.Of(origin, items, stone, box, true).Kind == HudPlacementKind.Blocked, "a stone was accepted in a belt box");
+        Assert.True(HudInventoryPlacement.Of(origin, items, stone, new Point(400, origin.Y + 100), true).Kind == HudPlacementKind.Outside,
+            "an item above the window does not leave the bag");
+        Assert.True(HudInventoryPlacement.Of(origin, items, stone, new Point(200, origin.Y + 585), true).Kind == HudPlacementKind.None,
+            "an item over the window's frame has a place");
+
+        // The warehouse grid: what it keeps out is red where it would land, a potion is placed (and refused on the click),
+        // and a stored item over the bag goes only to bag cells.
+        var store = HudStoreLayout.Origin(0);
+        var grid = HudStoreLayout.Grid(store);
+        var kept = Item(ItemKind.Axe, 2, 2, 3, "WA101");
+        Point StoreCentre(int anchor) => new(grid.X + anchor % 9 * 22 + 11, grid.Y + anchor / 9 * 22 + 11);
+        var bottle = HudWarehouseWindow.Placement(store, [kept], Item(ItemKind.Material, 0, key: "MA101"), StoreCentre(40));
+        Assert.True(bottle.Kind == HudPlacementKind.Blocked && bottle.Highlight == HudStoreLayout.Cell(store, 40), $"a crafting material gave {bottle}");
+        Assert.True(HudWarehouseWindow.Placement(store, [kept], potion, StoreCentre(40)).Kind == HudPlacementKind.Fits, "a potion was refused before the click");
+        var swapped = HudWarehouseWindow.Placement(store, [kept], Item(ItemKind.Sword, 0, 1, 3, "WS101"), StoreCentre(12));
+        Assert.True(swapped.Kind == HudPlacementKind.Exchange && swapped.Covered == kept, $"a sword over a stored axe gave {swapped}");
+        Assert.True(HudInventoryPlacement.OfStored(origin, items, kept, weaponSlot).Kind == HudPlacementKind.Blocked, "a stored item was worn straight away");
+        Assert.True(HudInventoryPlacement.OfStored(origin, items, potion with { InstanceId = Guid.NewGuid() }, CellCentre(31)).Kind == HudPlacementKind.Blocked,
+            "a stored potion joined a bag stack");
+        Assert.True(HudInventoryPlacement.OfStored(origin, items, kept, new Point(bag.X + 9 * 22 + 22, bag.Y + 3 * 22 + 33)).Kind == HudPlacementKind.Fits,
+            "a stored item found no free bag cells");
+        return Task.CompletedTask;
+    }
+
+    private static Task ResolutionsAsync()
+    {
+        DisplayModeOption[] modes = [new(0, 1920, 1080, 0), new(0, 800, 600, 0), new(0, 1600, 900, 0), new(0, 1280, 720, 0)];
+        var desktop = new DisplayModeOption(0, 1920, 1080, 0);
+        var full = HudSettingsPanel.Resolutions(WindowMode.Fullscreen, modes, desktop);
+        Assert.True(full.SequenceEqual([new Point(800, 600), new Point(1280, 720), new Point(1600, 900), new Point(1920, 1080)]),
+            $"fullscreen offers {string.Join(' ', full)}");
+        var windowed = HudSettingsPanel.Resolutions(WindowMode.Windowed, modes, desktop);
+        Assert.True(windowed.SequenceEqual([new Point(800, 600), new Point(1280, 720), new Point(1600, 900)]),
+            $"a window offers {string.Join(' ', windowed)}, more than fits below its title bar");
+        Assert.True(HudSettingsPanel.Resolutions(WindowMode.Borderless, modes, desktop).Count == 0, "borderless offers a size");
+        return Task.CompletedTask;
+    }
+
+    private static Task CursorKindAsync()
+    {
+        Assert.True(HudCursor.ForHovered(EntityKind.Monster, 0) == HudCursorKind.Attack, "a wild monster does not show the attack pointer");
+        Assert.True(HudCursor.ForHovered(EntityKind.Npc, 0) == HudCursorKind.Talk, "an NPC does not show the talk pointer");
+        Assert.True(HudCursor.ForHovered(EntityKind.Player, 0) == HudCursorKind.Default, "a player changes the pointer");
+        Assert.True(HudCursor.ForHovered(EntityKind.Monster, 42) == HudCursorKind.Default, "a summon changes the pointer");
+        Assert.True(HudCursor.ForHovered(EntityKind.None, 0) == HudCursorKind.Default, "nothing under the pointer changes it");
+        Assert.True(HudCursor.ArtPath(HudCursorKind.Attack).EndsWith("Attack_Cursor.tga", StringComparison.Ordinal)
+            && HudCursor.ArtPath(HudCursorKind.Talk).EndsWith("Talk_Cursor.tga", StringComparison.Ordinal)
+            && HudCursor.ArtPath(HudCursorKind.Default).EndsWith("DefaultCursor.tga", StringComparison.Ordinal), "pointer art differs");
+        Assert.True(HudCursor.ForHovered(true, false, EntityKind.Monster, 0) == HudCursorKind.GetItem, "a drop before a monster does not show the open hand");
+        Assert.True(HudCursor.ForHovered(true, true, EntityKind.None, 0) == HudCursorKind.GetItemHeld, "a held button over a drop does not close the hand");
+        Assert.True(HudCursor.ForHovered(false, true, EntityKind.Npc, 0) == HudCursorKind.Talk, "a held button without a drop changes the pointer");
+        Assert.True(HudCursor.ArtPath(HudCursorKind.GetItem).EndsWith("GetItem_Cursor1.tga", StringComparison.Ordinal)
+            && HudCursor.ArtPath(HudCursorKind.GetItemHeld).EndsWith("GetItem_Cursor2.tga", StringComparison.Ordinal), "the hand art differs");
+        Assert.True(HudCursor.ArtPath(HudCursorKind.Buy).EndsWith("BuyCursor.tga", StringComparison.Ordinal)
+            && HudCursor.ArtPath(HudCursorKind.Sell).EndsWith("SellCursor.tga", StringComparison.Ordinal)
+            && HudCursor.ArtPath(HudCursorKind.Repair).EndsWith("RepairCursor.tga", StringComparison.Ordinal), "the shop pointer art differs");
+        return Task.CompletedTask;
+    }
+
+    private static Task DropNameColumnAsync()
+    {
+        var nearest = new Rectangle(100, 200, 80, 28);
+        var second = HudGroundLabels.Stack(nearest, [nearest]);
+        var third = HudGroundLabels.Stack(new Rectangle(110, 210, 60, 28), [nearest, second]);
+        Assert.True(second == new Rectangle(100, 170, 80, 28) && third == new Rectangle(110, 140, 60, 28), "drop names on one spot did not rise into a column");
+        var aside = new Rectangle(181, 200, 50, 28);
+        var clear = new Rectangle(100, 170, 80, 28);
+        Assert.True(HudGroundLabels.Stack(aside, [nearest]) == aside && HudGroundLabels.Stack(clear, [nearest]) == clear, "a drop name that covers none moved");
+
+        // The stacking order: nearest first, but drops in one row, at nearly one depth, keep the order they had.
+        const float slack = GroundLootPresentation.OrderHysteresis;
+        var row = new List<float> { 100, 100 + slack, 100 + slack / 2 };
+        GroundLootPresentation.SettleOrder(row, static depth => depth);
+        Assert.True(row.SequenceEqual([100, 100 + slack, 100 + slack / 2]), $"drop names in one row swapped places: {string.Join(", ", row)}");
+        var turned = new List<float> { 100 + slack * 3, 100 + slack, 100 };
+        GroundLootPresentation.SettleOrder(turned, static depth => depth);
+        GroundLootPresentation.InsertByDepth(turned, 100 + slack * 2, static depth => depth);
+        Assert.True(turned.SequenceEqual([100 + slack, 100, 100 + slack * 2, 100 + slack * 3]),
+            $"drop names did not come nearest first once the camera turned, or a new one was not placed by depth: {string.Join(", ", turned)}");
+        return Task.CompletedTask;
+    }
+
+    private static Task CarriedPageButtonAsync()
+    {
+        var layout = HudLayout.Create(800, 600);
+        var origin = HudInventoryLayout.Origin(layout);
+        var character = new CharacterClassRegistry().CreatePlayer(PlayerClass.Mechanician, "Pages");
+        var id = Guid.NewGuid();
+        var stone = new OwnedItemView(id, 1, "Stone", ItemKind.Material, 1, 0, -1, 1, 1);
+        var state = OwnerState.Capture(character) with { Items = new[] { stone }, InventoryRevision = 3 };
+        var sent = new List<InventoryCommand>();
+        var controller = new HudInventoryController(null!, command =>
+        {
+            sent.Add(command);
+            return Task.FromResult(new InventoryOutcome(true, state.InventoryRevision + 1, ""));
+        });
+        controller.Update(state, layout, true, default, MouseAt(HudInventoryLayout.Cell(origin, 0).Center, layout.Scale, ButtonState.Pressed));
+        controller.Update(state, layout, true, default, default);
+        Assert.True(controller.Dragging == id, "the stone was not picked up");
+
+        // The page button takes the click, not the bag below it: the stone goes along to page B and stays on the cursor.
+        controller.Update(state, layout, true, default, MouseAt(HudInventoryLayout.PageButton(origin, 1).Center, layout.Scale, ButtonState.Pressed));
+        Assert.True(sent is [{ Action: InventoryAction.SwitchBagPage, Destination: 1 } switched] && switched.ItemId == id && controller.Dragging == id,
+            "the page button with a carried stone did not switch the page taking the stone, or dropped it");
+        return Task.CompletedTask;
+    }
+
+    private static async Task SettleAsync()
+    {
+        var layout = HudLayout.Create(800, 600);
+        var origin = HudInventoryLayout.Origin(layout);
+        var character = new CharacterClassRegistry().CreatePlayer(PlayerClass.Mechanician, "Settle");
+        var id = Guid.NewGuid();
+        var stone = new OwnedItemView(id, 1, "Stone", ItemKind.Material, 1, 0, -1, 1, 1);
+        var state = OwnerState.Capture(character) with { Items = new[] { stone }, InventoryRevision = 3 };
+        var reply = new TaskCompletionSource<InventoryOutcome>();
+        var controller = new HudInventoryController(null!, _ => reply.Task);
+        controller.Update(state, layout, true, default, MouseAt(HudInventoryLayout.Cell(origin, 0).Center, layout.Scale, ButtonState.Pressed));
+        controller.Update(state, layout, true, default, default);
+        var target = HudInventoryLayout.Cell(origin, 5).Center;
+        controller.Update(state, layout, true, default, MouseAt(target, layout.Scale, ButtonState.Pressed));
+
+        // Set down, the stone stays where it was set down, not in its old cell, until the owner state shows it moved.
+        var away = new Point(target.X + 100, target.Y);
+        Assert.True(controller.Dragging == Guid.Empty && controller.Held == id && controller.HeldAt(away) == target, "the set-down stone left the click point");
+        reply.SetResult(new InventoryOutcome(true, 4, ""));
+        await Task.Yield();
+        controller.Update(state, layout, true, default, default);
+        Assert.True(controller.Held == id, "the stone went back to its old cell before the owner state showed the move");
+
+        // A later command refused before that owner state does not put the stone back in its old cell either.
+        reply = new TaskCompletionSource<InventoryOutcome>();
+        controller.Update(state, layout, true, default, MouseAt(HudInventoryLayout.PageButton(origin, 1).Center, layout.Scale, ButtonState.Pressed));
+        reply.SetResult(new InventoryOutcome(false, 3, "refused"));
+        await Task.Yield();
+        controller.Update(state, layout, true, default, default);
+        Assert.True(controller.Completions == 2 && controller.Held == id, "a later refused command put the set-down stone back in its old cell");
+        controller.Update(state with { Items = new[] { stone with { Anchor = 5 } }, InventoryRevision = 4 }, layout, true, default, default);
+        Assert.True(controller.Held == Guid.Empty, "the stone stayed held once the owner state showed it moved");
+    }
+
+    private static async Task CarriedSidesAsync()
+    {
+        var layout = HudLayout.Create(800, 600);
+        var origin = HudInventoryLayout.Origin(layout);
+        var character = new CharacterClassRegistry().CreatePlayer(PlayerClass.Fighter, "Carrier");
+        var stone = new OwnedItemView(Guid.NewGuid(), 1, "Stone", ItemKind.Material, 1, 0, -1, 1, 1, "MA101");
+        var claw = new OwnedItemView(Guid.NewGuid(), 2, "Claw", ItemKind.Claw, 1, -1, (int)EquipmentSlot.Weapon, 1, 3, "WC101");
+        var shield = new OwnedItemView(Guid.NewGuid(), 3, "Shield", ItemKind.Shield, 1, -1, (int)EquipmentSlot.OffHand, 2, 2, "DS101");
+        var state = OwnerState.Capture(character) with { Items = new[] { stone }, InventoryRevision = 3 };
+        InventoryCommand? sent = null;
+        var sounds = new List<string>();
+        Rectangle? glowAt = null;
+        var controller = new HudInventoryController(null!, command =>
+        {
+            sent = command;
+            return Task.FromResult(new InventoryOutcome(true, command.ExpectedRevision + 1, ""));
+        })
+        { ItemSound = sounds.Add, QuestBoxStored = frame => glowAt = frame };
+        controller.Update(state, layout, true, default, default);
+        controller.Update(state, layout, true, default, MouseAt(HudInventoryLayout.Cell(origin, 0).Center, layout.Scale, ButtonState.Pressed));
+        controller.Update(state, layout, true, default, default);
+        Assert.True(controller.Dragging == stone.InstanceId, "the stone was not picked up");
+
+        controller.SidesLocked = true;
+        controller.ToggleWeaponPair();
+        controller.Update(state, layout, true, default, default);
+        Assert.True(sent is null, "the pair switched with the warehouse open and an item on the cursor");
+        controller.SidesLocked = false;
+        controller.ToggleWeaponPair();
+        controller.Update(state, layout, true, default, default);
+        Assert.True(sent is { Action: InventoryAction.SwitchWeaponSet, Destination: 1 } && controller.Dragging == stone.InstanceId,
+            $"the pair did not switch with the stone carried: {sent}");
+
+        sounds.Clear();
+        controller.Update(state with { Items = new[] { stone, claw, shield }, InventoryRevision = 4, WeaponSet = 1 }, layout, true, default, default);
+        Assert.True(sounds.Contains("WC101") && sounds.Contains("DS101") && controller.Dragging == stone.InstanceId,
+            $"the pair now held sounded {string.Join(", ", sounds)}");
+
+        var hammer = new OwnedItemView(Guid.NewGuid(), 4, "Lost Hammer", ItemKind.Quest, 1, 5, -1, 1, 1, "QT116");
+        state = state with { Items = new[] { stone, claw, shield, hammer }, InventoryRevision = 5, WeaponSet = 1 };
+        controller.Update(state, layout, true, default, default);
+        controller.Update(state, layout, true, default, MouseAt(HudInventoryLayout.Cell(origin, 0).Center, layout.Scale, ButtonState.Pressed));
+        controller.Update(state, layout, true, default, default);
+        var dropAt = HudInventoryLayout.Cell(origin, 10).Center;
+        controller.Update(state, layout, true, default, MouseAt(HudInventoryLayout.Cell(origin, 5).Center, layout.Scale, ButtonState.Pressed));
+        controller.Update(state, layout, true, default, default);
+        Assert.True(controller.Dragging == hammer.InstanceId, "the quest item was not picked up");
+        controller.Update(state, layout, true, default, MouseAt(dropAt, layout.Scale, ButtonState.Pressed));
+        await Task.Yield();
+        controller.Update(state, layout, true, default, default);
+        Assert.True(sent is { Action: InventoryAction.StoreQuestItem } && glowAt == HudGridPlacement.Frame(hammer, dropAt),
+            $"the quest item set into the closed box did not glow where it was carried: {sent}, {glowAt}");
+        var glow = new HudQuestBoxGlow();
+        glow.Start(new Rectangle(100, 200, 22, 22), 0);
+        Assert.True(glow.Tick(0) < 0 && glow.Bounds(glow.Tick(100)) == new Rectangle(105, 193, 34, 34) && glow.Tick(700) < 0,
+            "the box glow does not grow 2 px a tick from 20 px at 12 px right of the item, for 40 ticks");
+    }
+
+    private static async Task ArrivalSoundAsync()
+    {
+        var layout = HudLayout.Create(800, 600);
+        var origin = HudInventoryLayout.Origin(layout);
+        var character = new CharacterClassRegistry().CreatePlayer(PlayerClass.Mechanician, "Listener");
+        var stone = new OwnedItemView(Guid.NewGuid(), 1, "Stone", ItemKind.Material, 1, 0, -1, 1, 1, "MA101");
+        var gift = new OwnedItemView(Guid.NewGuid(), 2, "Suit", ItemKind.Armor, 1, 2, -1, 2, 3, "DA102");
+        var state = OwnerState.Capture(character) with { Items = new[] { stone }, InventoryRevision = 3 };
+        var reply = new TaskCompletionSource<InventoryOutcome>();
+        var sounds = new List<string>();
+        var controller = new HudInventoryController(null!, _ => reply.Task) { ItemSound = sounds.Add };
+        controller.Update(state, layout, true, default, default);
+        Assert.True(sounds.Count == 0, "the first owner state sounded its items");
+
+        state = state with { Items = new[] { stone, gift }, InventoryRevision = 4 };
+        controller.Update(state, layout, true, default, default);
+        Assert.True(sounds is ["DA102"], $"the suit the server laid in the bag sounded {string.Join(", ", sounds)}");
+
+        var otherPage = state with { Items = new[] { stone with { InstanceId = Guid.NewGuid() } }, InventoryRevision = 5, BagPage = 1 };
+        controller.Update(otherPage, layout, true, default, default);
+        controller.Update(state with { InventoryRevision = 6 }, layout, true, default, default);
+        Assert.True(sounds.Count == 1, "switching the bag page sounded the other page's items");
+
+        sounds.Clear();
+        controller.Update(state with { InventoryRevision = 6 }, layout, true, default, MouseAt(HudInventoryLayout.Cell(origin, 0).Center, layout.Scale, ButtonState.Pressed));
+        controller.Update(state with { InventoryRevision = 6 }, layout, true, default, default);
+        controller.Update(state with { InventoryRevision = 6 }, layout, true, default, MouseAt(HudInventoryLayout.Cell(origin, 5).Center, layout.Scale, ButtonState.Pressed));
+        reply.SetResult(new InventoryOutcome(true, 7, ""));
+        await Task.Yield();
+        controller.Update(state with { InventoryRevision = 6 }, layout, true, default, default);
+        Assert.True(sounds is ["MA101", "MA101"], $"lifting and moving the stone sounded {string.Join(", ", sounds)}");
+    }
+
+    private static async Task ThrownAsync()
+    {
+        var layout = HudLayout.Create(800, 600);
+        var origin = HudInventoryLayout.Origin(layout);
+        var character = new CharacterClassRegistry().CreatePlayer(PlayerClass.Mechanician, "Thrower");
+        var id = Guid.NewGuid();
+        var stone = new OwnedItemView(id, 1, "Stone", ItemKind.Material, 1, 0, -1, 1, 1);
+        var state = OwnerState.Capture(character) with { Items = new[] { stone }, InventoryRevision = 3 };
+        var reply = new TaskCompletionSource<InventoryOutcome>();
+        HudInventoryController controller = null!;
+        controller = new HudInventoryController(null!, _ => reply.Task)
+        {
+            ThrowRequested = item =>
+            {
+                controller.Drop(item, item.Count);
+                return true;
+            }
+        };
+        var above = new Point(400, origin.Y + 100);
+        void Throw()
+        {
+            controller.Update(state, layout, true, default, MouseAt(HudInventoryLayout.Cell(origin, 0).Center, layout.Scale, ButtonState.Pressed));
+            controller.Update(state, layout, true, default, default);
+            controller.Update(state, layout, true, default, MouseAt(above, layout.Scale, ButtonState.Pressed));
+            controller.Update(state, layout, true, default, default);
+        }
+
+        // Thrown above the window, the stone shows nowhere, not back in a bag cell, until the owner state shows it gone.
+        Throw();
+        Assert.True(controller.Dragging == Guid.Empty && controller.Held == Guid.Empty && controller.Thrown == id, "the thrown stone showed back in the bag");
+        reply.SetResult(new InventoryOutcome(true, 4, ""));
+        await Task.Yield();
+        controller.Update(state, layout, true, default, default);
+        Assert.True(controller.Thrown == id, "the thrown stone showed in the bag before the owner state showed it gone");
+        controller.Update(state with { Items = [], InventoryRevision = 4 }, layout, true, default, default);
+        Assert.True(controller.Thrown == Guid.Empty, "the throw stayed pending once the owner state showed the stone gone");
+
+        // A refused throw shows the stone in its place again.
+        reply = new TaskCompletionSource<InventoryOutcome>();
+        Throw();
+        reply.SetResult(new InventoryOutcome(false, 3, "refused"));
+        await Task.Yield();
+        controller.Update(state, layout, true, default, default);
+        Assert.True(controller.Thrown == Guid.Empty, "a refused throw kept the stone hidden");
+    }
+
+    private static Task PickupToCursorAsync()
+    {
+        var layout = HudLayout.Create(800, 600);
+        var character = new CharacterClassRegistry().CreatePlayer(PlayerClass.Mechanician, "Picker");
+        var stone = new OwnedItemView(Guid.NewGuid(), 1, "Stone", ItemKind.Material, 1, 0, -1, 1, 1);
+        var state = OwnerState.Capture(character) with { Items = new[] { stone }, InventoryRevision = 3 };
+        var sent = new List<InventoryCommand>();
+        var controller = new HudInventoryController(null!, command =>
+        {
+            sent.Add(command);
+            return Task.FromResult(new InventoryOutcome(true, 4, ""));
+        });
+        controller.Update(state, layout, false, default, default);
+        Assert.True(!controller.ExpectPickup(2), "a pickup came to the cursor with the window closed");
+
+        controller.Update(state, layout, true, default, default);
+        Assert.True(controller.ExpectPickup(2), "a pickup with the window open did not come to the cursor");
+        // The owner state may come before the reply: the new gem shows nowhere meanwhile, the stone stays.
+        var gem = new OwnedItemView(Guid.NewGuid(), 2, "Gem", ItemKind.Material, 1, 1, -1, 1, 1);
+        var arrived = state with { Items = new[] { stone, gem }, InventoryRevision = 4 };
+        controller.Update(arrived, layout, true, default, default);
+        Assert.True(controller.Hides(gem) && !controller.Hides(stone) && controller.Dragging == Guid.Empty, "the picked up gem showed in the bag before the reply");
+        controller.PickupAnswered(true, 4);
+        controller.Update(arrived, layout, true, default, default);
+        Assert.True(controller.Dragging == gem.InstanceId, "the picked up gem did not come to the cursor");
+        Assert.True(!controller.ExpectPickup(2), "a pickup came to the cursor over a carried item");
+
+        // The window closed (V), the gem stays on the cursor, as the original keeps the mouse item, and nothing is sent; Esc
+        // (CancelDrag) lets go of it where it lies.
+        controller.Update(arrived, layout, false, default, default);
+        Assert.True(controller.Dragging == gem.InstanceId && sent.Count == 0, "closing the window took the gem off the cursor, or moved it");
+        controller.CancelDrag();
+        Assert.True(controller.Dragging == Guid.Empty && sent.Count == 0, "Esc did not let go of the gem, or moved it");
         return Task.CompletedTask;
     }
 
@@ -201,6 +720,16 @@ internal static class HudInteractionTests
         var owner = OwnerState.Capture(new CharacterClassRegistry().CreatePlayer(PlayerClass.Mechanician, "Exp"));
         Assert.True(HudBar.ExperienceFraction(owner with { Experience = owner.LevelStart }) == 0, "level start shows experience");
         Assert.True(HudBar.ExperienceFraction(owner with { Experience = owner.NextLevel + 10 }) == 1, "experience escaped its bar");
+        var halfway = owner with { Experience = owner.LevelStart + (owner.NextLevel - owner.LevelStart) / 2 };
+        var experience = (int)(HudBar.ExperienceLength * HudBar.ExperienceFraction(halfway));
+        Assert.True(experience == HudBar.ExperienceLength / 2 && HudBar.GaugeSource(6, HudBar.ExperienceLength, experience) == new Rectangle(0, 43, 6, 43),
+            "half a level does not fill the lower half of the 6x86 experience gauge");
+        Assert.True(HudBar.ExperienceHover.Contains(new Point(487, 550)) && !HudBar.ExperienceHover.Intersects(HudBar.ManaHover),
+            "the experience hover is not the slot right of the mana");
+        Assert.True(HudBar.ExperienceText(halfway) == "EXP: 50.000%" && HudBar.ExperienceText(owner with { Experience = owner.NextLevel }) == "EXP: 99.999%",
+            $"the experience text is not in thousandths with a dot: {HudBar.ExperienceText(halfway)}");
+        Assert.True(HudStatusPanel.ExperienceText(1_234_567_890, 79) == "1234567890" && HudStatusPanel.ExperienceText(1_234_567_890, 80) == "1234M",
+            "the status window's experience does not read in millions past level 79");
         Assert.True(HudCombat.StateColor(0, 10) == new Color(255, 0, 0) && HudCombat.StateColor(10, 10) == new Color(1, 255, 0),
             "target bar color differs from DrawStateBar");
         return Task.CompletedTask;
@@ -287,7 +816,7 @@ internal static class HudInteractionTests
 
         Assert.True(bindings.Assign(0, basic, SkillMouseUse.Left), "valid reassignment rejected");
         Assert.True(bindings.Shortcut(4).SkillId == 0, "old shortcut remained after rebinding the same skill");
-        Assert.True(!bindings.Assign(8, basic, SkillMouseUse.Left), "F9 outside original shortcut range accepted");
+        Assert.True(!bindings.Assign(HudActionBarSlots.SlotCount, basic, SkillMouseUse.Left), "key past the action bar accepted");
         Assert.True(!bindings.Select(42, SkillMouseUse.Right), "unknown skill selected");
         Assert.True(!bindings.Select(basic, SkillMouseUse.Both), "ambiguous mouse side accepted");
 
@@ -304,6 +833,122 @@ internal static class HudInteractionTests
         debug.Update(default, rightDown, basic);
         debug.Update(new KeyboardState(Keys.LeftControl, Keys.F5), rightDown, basic);
         Assert.True(debug.Shortcut(4).SkillId == 0, "debug chord overwrote a skill shortcut");
+        return Task.CompletedTask;
+    }
+
+    private static Task ActionBarAsync()
+    {
+        var bindings = new HudSkillBindings();
+        var basic = HudSkillBindings.BasicAttackId;
+        var bar = new HudActionBar(bindings) { Open = true };
+        var layout = HudLayout.Create(800, 600);
+        var frame = bar.Bounds(layout);
+        Point Over(int index) => bar.SlotBounds(frame, index).Center;
+
+        // A skill pressed in the skill window and released over a key lands there for the pressing side.
+        var leftDown = Mouse(left: ButtonState.Pressed);
+        bindings.Update(default, leftDown, basic);
+        bar.Update(layout, Over(9), default, leftDown, false, false);
+        bindings.Update(default, default, 0);
+        Assert.True(bindings.Slots[9] == HudActionSlot.ForSkill(basic, SkillMouseUse.Left), "skill released over the 4 key not bound");
+        Assert.True(bindings.LeftSkillId == basic, "release over the bar changed the socket");
+
+        // Its key selects it; Alt with the key does not, and Alt with 2 shows the second page.
+        bindings.Select(basic, SkillMouseUse.Right);
+        bindings.Update(new KeyboardState(Keys.D4), default, 0);
+        Assert.True(bindings.LeftSkillId == basic, "4 key did not select its skill");
+        bindings.Slots.Page = 1;
+        Assert.True(bindings.Slots[9].IsEmpty && bindings.Slots.At(0, 9).Kind == HudActionKind.Skill, "pages share their keys");
+        bindings.Slots.Page = 0;
+
+        // A bag potion set on a key becomes an item shortcut; its key asks for the item; equipment is refused.
+        var potion = new OwnedItemView(Guid.NewGuid(), 1, "Life potion", ItemKind.Potion, 5, 0, -1, 1, 1, "PL101");
+        var sword = new OwnedItemView(Guid.NewGuid(), 2, "Sword", ItemKind.Sword, 1, 4, -1, 1, 3, "WS101");
+        Assert.True(bar.TakeItem(layout, Over(0), potion) && bindings.Slots[0] == HudActionSlot.ForItem("PL101"), "potion not taken");
+        Assert.True(bar.TakeItem(layout, Over(1), sword) && bindings.Slots[1].IsEmpty && bar.Refusals == 1, "equipment taken as a shortcut");
+        Assert.True(!bar.TakeItem(layout, new Point(frame.Right + 20, frame.Y), potion), "drop beside the bar taken");
+        var asked = "";
+        bindings.ItemRequested += key => asked = key;
+        bindings.Update(new KeyboardState(Keys.F1), default, 0);
+        Assert.True(asked == "PL101", "F1 did not ask for its item");
+
+        // Lifted and set on an occupied key, the two shortcuts trade keys; dropped off the bar, a shortcut is gone.
+        bar.Update(layout, Over(0), leftDown, default, false, false);
+        Assert.True(bar.Carried.Kind == HudActionKind.Item && bindings.Slots[0].IsEmpty, "click did not lift the shortcut");
+        bar.Update(layout, Over(9), default, leftDown, false, false);
+        Assert.True(bindings.Slots[9].Kind == HudActionKind.Item && bindings.Slots[0].Kind == HudActionKind.Skill, "shortcuts did not trade keys");
+        bar.Update(layout, Over(0), leftDown, default, false, false);
+        bar.Update(layout, new Point(frame.X, frame.Bottom + 30), default, leftDown, false, false);
+        Assert.True(bindings.Slots[0].IsEmpty && bar.Carried.IsEmpty, "shortcut dropped off the bar remained");
+
+        // Locked, nothing is lifted.
+        bar.Locked = true;
+        bar.Update(layout, Over(9), leftDown, default, false, false);
+        Assert.True(bar.Carried.IsEmpty && bindings.Slots[9].Kind == HudActionKind.Item, "locked bar lifted a shortcut");
+
+        // Saved and restored, every page comes back.
+        bindings.Slots.Page = 2;
+        bindings.Slots.AssignSkill(17, 0x08010002, SkillMouseUse.Right);
+        var restored = new HudActionBarSlots();
+        restored.Restore(bindings.Slots.Save(), bindings.Slots.Page);
+        Assert.True(restored.Page == 2 && restored[17] == HudActionSlot.ForSkill(0x08010002, SkillMouseUse.Right)
+            && restored.At(0, 9) == HudActionSlot.ForItem("PL101"), "saved shortcuts not restored");
+        return Task.CompletedTask;
+    }
+
+    private static Task MinimapMoveAsync()
+    {
+        var minimap = new HudMinimap();
+        var layout = HudLayout.Create(800, 600);
+        var home = HudMinimap.Box(layout);
+        var down = Mouse(left: ButtonState.Pressed);
+
+        // A press that moves less than the threshold stays a click.
+        minimap.Drag(layout, home.Center, down, default, true);
+        minimap.Drag(layout, home.Center + new Point(2, 2), down, down, true);
+        minimap.Drag(layout, home.Center + new Point(2, 2), default, down, true);
+        Assert.True(minimap.Offset == Point.Zero && minimap.Revision == 0, "a click moved the minimap");
+
+        // A drag carries it and counts a move once released.
+        minimap.Drag(layout, home.Center, down, default, true);
+        minimap.Drag(layout, home.Center - new Point(300, 200), down, down, true);
+        Assert.True(minimap.Dragging, "the drag did not start");
+        minimap.Drag(layout, home.Center - new Point(300, 200), default, down, true);
+        Assert.True(minimap.Bounds(layout).Location == home.Location - new Point(300, 200) && minimap.Revision == 1, "the drag did not move the map");
+
+        // Dragged off screen, it stops at the edge with its title strip in view; a refused press does nothing.
+        minimap.Drag(layout, minimap.Bounds(layout).Center, down, default, true);
+        minimap.Drag(layout, new Point(-500, -500), down, down, true);
+        minimap.Drag(layout, new Point(-500, -500), default, down, true);
+        Assert.True(minimap.Bounds(layout).X == 0 && minimap.Area(layout).Y == 0, "the map left the screen");
+        var placed = minimap.Offset;
+        minimap.Drag(layout, minimap.Bounds(layout).Center, down, default, false);
+        minimap.Drag(layout, new Point(400, 300), down, down, false);
+        Assert.True(minimap.Offset == placed, "a refused press moved the map");
+
+        // The marker under the pointer is found where it is drawn, wherever the map lies.
+        var world = new HudWorldView("village", false, default, Vector3.Zero, Vector3.UnitZ, 0f, false);
+        var markers = new List<HudMapMarker>
+        {
+            new(7, new Vector3(0f, 0f, 0f), HudMapMarkerKind.Npc),
+            new(8, new Vector3(minimap.CurrentViewSize / 2, 0f, 0f), HudMapMarkerKind.Player)
+        };
+        var center = minimap.Bounds(layout).Center;
+        Assert.True(minimap.MarkerAt(layout, world, markers, center) == 0, "the NPC at the centre was not found");
+        Assert.True(minimap.MarkerAt(layout, world, markers, center + new Point(32, 0)) == 1, "the player east of the centre was not found");
+        Assert.True(minimap.MarkerAt(layout, world, markers, center + new Point(16, 16)) == -1, "an empty spot named a marker");
+        return Task.CompletedTask;
+    }
+
+    private static Task NamePlatesAsync()
+    {
+        Assert.True(HudCombat.ShowsPlateBar(true, hovered: true, traced: false, attacked: false), "classic bar missing under the cursor");
+        Assert.True(!HudCombat.ShowsPlateBar(true, hovered: false, traced: true, attacked: true), "classic bar shown without the cursor");
+        Assert.True(!HudCombat.ShowsPlateBar(false, hovered: true, traced: false, attacked: false), "compact bar shown for the cursor alone");
+        Assert.True(HudCombat.ShowsPlateBar(false, hovered: false, traced: true, attacked: false), "compact bar missing on the clicked monster");
+        Assert.True(HudCombat.ShowsPlateBar(false, hovered: true, traced: false, attacked: true), "compact bar missing on an attacked monster");
+        Assert.True(GameScene.OutlineStrength(300f) == 1f && GameScene.OutlineStrength(800f) == 0.5f && GameScene.OutlineStrength(1300f) == 0f,
+            "the outline does not fade from 300 to 1300 units");
         return Task.CompletedTask;
     }
 
@@ -367,8 +1012,8 @@ internal static class HudInteractionTests
         return Task.CompletedTask;
     }
 
-    private static MouseState Mouse(ButtonState right)
+    private static MouseState Mouse(ButtonState right = ButtonState.Released, ButtonState left = ButtonState.Released)
     {
-        return new MouseState(0, 0, 0, ButtonState.Released, ButtonState.Released, right, ButtonState.Released, ButtonState.Released);
+        return new MouseState(0, 0, 0, left, ButtonState.Released, right, ButtonState.Released, ButtonState.Released);
     }
 }

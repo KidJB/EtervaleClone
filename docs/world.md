@@ -2,7 +2,7 @@
 
 Shared world rules the authoritative server runs: fields and their catalog, stage collision and ground queries,
 movement checks, monsters and their AI, spawning, loot, motion timing and NPC services. Covers
-`Shared/PristonTale.Simulation/World/`, `Shared/PristonTale.Simulation/Physics/` and `Shared/PristonTale.Geometry/`.
+`Shared/PristonTale.Simulation/World/`, `Shared/PristonTale.Simulation/Physics/`, `Shared/PristonTale.Geometry/` and `Shared/PristonTale.Assets/`.
 How the tick calls these rules belongs to [application.md](application.md).
 
 ## Read this when
@@ -21,12 +21,13 @@ How the tick calls these rules belongs to [application.md](application.md).
 |---|---|
 | [`WorldDefinitions.cs`](../Shared/PristonTale.Simulation/World/WorldDefinitions.cs) | `FieldDef`, its records (gates, warp gates, ambients, lighting, camera, day/night), `FieldState`, `WorldCatalog` |
 | `World/Fields/*.cs` | One static `Definition` per field, grouped by region (`DungeonFields`, `IceFields`...); `FieldSpawnData` records |
+| `World/FieldCodes.cs` | The field codes rules name (home towns, office room, inner ice field, Bellatra, quest arena, castle, boss field); the definitions and every rule use these, never a bare code |
 | `World/FieldBackdrops.cs` | Sky backdrop texture keys (day, glow, night) shared by fields |
 | [`World/FieldTerrain.cs`](../Shared/PristonTale.Simulation/World/FieldTerrain.cs) | Ground queries for one field: place on floor, step, wall crossing, wall slide, body sweep |
 | `World/MonsterStepping.cs` | Server monster step: full step, then two side probes; `IStepOccupancy` |
 | `World/WorldPosition.cs` | `IsValid`: finite and within ±1,000,000 units on every axis |
-| `World/Monsters/` | `MonsterDefinition` (stats, AI block, skill block, potions, drops), `MonsterCatalog`, `MonsterInstance` (live state), `MonsterMotionState` |
-| `World/Monsters/Skills/` | Monster skill rules: `MonsterSkillRules` (curses, blow and skill riders, timings), `MonsterStatuses` (codes and effect specs), `MonsterLifeRules` (potions, virtual lives, Babel's regeneration), `MonsterTransformRules`, `MonsterSounds` |
+| `World/Monsters/` | `MonsterDefinition` (stats, AI block, skill block, potions, drops), `MonsterCatalog`, `MonsterInstance` (live state, motion as `MotionState`), `MotionStateExtensions` |
+| `World/Monsters/Skills/` | Monster skill rules: `MonsterSkillRules` (curses, blow and skill riders, timings), `MonsterStatuses` (codes and effect specs), `MonsterLifeRules` (potions, virtual lives, Babel's regeneration), `MonsterTransformRules` |
 | [`World/Ai/MonsterAiBrain.cs`](../Shared/PristonTale.Simulation/World/Ai/MonsterAiBrain.cs) | Wild monster state machine: target scan, chase, attack, leash and stuck manoeuvres, flinch, boss retarget |
 | `World/Ai/MonsterAiTuning.cs` | Per-definition derived constants and clip timings; global AI constants |
 | `World/Ai/SummonBrain.cs` | Owned summon behaviour (follow owner, attack ordered target) |
@@ -36,18 +37,18 @@ How the tick calls these rules belongs to [application.md](application.md).
 | `World/Spawning/SpawnCadence.cs` | Optional bitmask spawn cadence on a 70 Hz frame clock |
 | `World/Spawning/BossSpawnSchedule.cs` | Server-wide hourly boss pass at a random minute per day |
 | `World/Loot/` | `DropTable`, `DropRoller`, `KillReward` (experience and kill credit), `GroundDropView` |
-| `World/Motion/` | `MotionClip`, `MotionStateCode`, `MotionTiming`, `MotionTimingSet`/`MotionTimingCatalog`, player fallbacks |
-| `World/Motion/PlayerEquipmentTiming.cs` | Generated table of player attack clips by job and weapon key; do not hand-edit |
+| `World/Motion/` | `MotionClip`, `MotionTiming`, `MotionTimingSet`/`MotionTimingCatalog`, player fallbacks |
+| `World/Motion/PlayerEquipmentTiming.cs`, `World/Motion/Data/PlayerEquipmentTiming.json` | Player attack clips by class and weapon key, loaded from the generated embedded JSON (one entry per class and clip with its keys); do not hand-edit |
 | `World/Npcs/` | `NpcDefinition`, `NpcCatalog`, typed services (`NpcServiceKind`), service commands and replies, shop and warehouse rules, teleport routes, sound code map |
 | `Physics/EntityCollision.cs` | Circle-vs-circle blocking between bodies (players, monsters, NPCs) along a swept segment |
-| `Physics/EntityCollisionRadii.cs`, `EntityNeighbour.cs`, `EntityCollisionKind.cs` | Body radii and neighbour records |
+| `Physics/EntityCollisionRadii.cs`, `EntityNeighbour.cs` | Body radii (by `EntityKind`) and neighbour records |
 | `Physics/SpatialIndex.cs` | XZ hash grid of entity positions with deterministic query order |
-| [`Geometry/StageCollisionReader.cs`](../Shared/PristonTale.Geometry/StageCollisionReader.cs) | Reads collision triangles from a stage `.smd` |
+| [`Assets/StageCollisionReader.cs`](../Shared/PristonTale.Assets/StageCollisionReader.cs) | Reads collision triangles from a stage `.smd` |
 | `Geometry/CollisionMesh.cs` | Immutable triangle grid: floor height, floor raycast, segment trace |
-| `Geometry/AssetPath.cs` | Case-insensitive asset path resolution and assets root discovery |
+| `Assets/AssetFiles.cs` | Case-insensitive asset path resolution and assets root discovery |
 
-`PristonTale.Geometry` has no dependencies and is referenced by `PristonTale.Simulation` and the client's
-`PristonTale.Engine3D` (`Physics/PristonCollisionWorld.cs` wraps the same `CollisionMesh` in MonoGame space).
+`PristonTale.Geometry` has no dependencies and is referenced by `PristonTale.Simulation`, `PristonTale.Assets` and
+the client's `PristonTale.Engine3D` (`Physics/PristonCollisionWorld.cs` wraps the same `CollisionMesh` in MonoGame space).
 
 ## Coordinates and units
 
@@ -161,7 +162,7 @@ startup unless `Assets:AllowMissingTerrain=true`, which leaves those fields on `
 
 | Mover | Rule | Code |
 |---|---|---|
-| Player (server check of a report) | Distance budget, wall check or slide, a floor at most 64 units above; height comes from the server floor | `WorldPlayer.ReportMovement` (Application) |
+| Player (server check of a report) | Distance budget, wall slide in 48-unit pieces, a floor at most 24 units above each 8-unit step; height follows the floor and falls (`Falling`) | `WorldPlayer.ReportMovement` (Application) |
 | Wild monster and summon | `MonsterStepping.Step` against stage and other monsters only | `FieldInstance.MoveMonster` |
 | NPC | `EntityCollision.Resolve` against all bodies, then `FieldTerrain.TryStep` | `FieldInstance.StepNpc` |
 | Local player (client prediction) | `EntityCollision.Resolve` with player radius, then client terrain | `Client/PristonTale.Gameplay/World/GameScene.cs` |
@@ -187,21 +188,26 @@ first `Order`; `Query` returns candidates sorted by `Order`, which keeps neighbo
 `MonsterDefinition` is built from the database by `WorldDataFactory.ToMonsterDefinitions`
 (`Persistence/PristonTale.Persistence.Abstractions/WorldData/`):
 
-- `Code` is the 1-based position of the record in the loaded list; 0 means unset. Spawn tables and boss spawns
-  reference monsters by name and are resolved to codes at load, so codes are stable only within one load.
-- `Faction` is `Enemy` for a hostile monster (`*속성 적`), `Npc` otherwise; `Name` is the display name (`"Monster"` when
+- `Code` is the monster's registry id ([world-import.md](world-import.md#identities)); 0 means unset. Spawn tables
+  and boss spawns hold the same id. `Key` is its unique English name, which crystals and skill summons use.
+- `Faction` is `Enemy` for a hostile monster (`*속성 적`), `Npc` otherwise; `Name` is the display name (the key when
   empty); `ModelInxPath` is normalized to `.inx`. `ShadowSizeLevel` is the authored shadow size.
 - `DeathGold` with `DeathGoldChance`: gold dropped on death on top of the drop table. `EventCode`/`EventInfo`: event
   creatures (code 100 walks at night in field `EventInfo`). `EventModelInxPath`: the model of the hammer event; a monster
   with one gets an event form after every authored monster in the catalog (`EventFormCode`: the same monster, normal
-  class, wearing that model). `MagicResistance`, `MoveType` and `SpecialAttackPercent` are kept as authored.
+  class, wearing that model). `MagicResistance` (-100..100) cuts a spell's damage like an element resistance (100 none
+  but the least hit, -100 double): a spell is a damage rule whose power grows with spirit or spell power
+  (`SkillDamageRule.Magic`), applied after its element's resistance (`SkillFormulas.PowerAgainst`; the main target's
+  own spell hit of an area skill, `MainSpellPowerAgainst`, skips it). `MoveType` and
+  `SpecialAttackPercent` are kept as authored (the original reads them and never uses them).
 - `Combat.MeleeRange` is the attack reach; `Combat.DamageStunPercent` the flinch chance; `Ai.SightRadius` the notice
   radius; `Ai.Iq` enables running; `Ai.GroupSize` the spawn group. `Ai.MoveSpeed` is only sent to clients for
   presentation; `Ai.MoveRange`, `Ai.Nature` and `Ai.ActiveHour` are imported but no rule reads them.
 - `SoundCode` is the original sound family code and doubles as a behaviour key (see Pitfalls).
 - `PotionCount`/`PotionPercent`: potions a spawn may carry (Valento, Kelvezu and Mokova use the count as lives, see
   Monster skills). `Skill` keeps curse-only skills (no damage, no area, a rating and a curse code).
-- `MonsterCatalog.TryFind(name)` matches the display name case-insensitively and returns the lowest code.
+- `MonsterCatalog.TryFindKey(key)` matches the key case-insensitively; `TryFind(name)` (game-master commands, skill
+  summons) matches the key, else the display name, and returns the lowest code (an event form shares its key).
 
 `MonsterInstance` holds live state: `Position`, `Facing`, `Life`, `AiState`, `Motion`, `HomeAnchor` (spawn position),
 `SpawnPointIndex` (-1 for summons), `TargetId`, timers, manoeuvre counters, `Effects` (modifier container stepped by the
@@ -265,7 +271,7 @@ else chases or idles. Every blow (landed or not) adds one to `AttackAnger`.
 Timing: with an imported attack clip, cooldown is the clip duration at rate 1 and windup its first event; without one,
 `rate = 256 + 32 * clamp(AttackSpeed - 6, 0, 6)`, cooldown `1000 * 256 / rate` ms, windup `cooldown * 40 / 72`.
 Babel's and Valento's skill blows land 120 frames (1714 ms) into the clip; Babel's normal attack strikes at its event
-and again 40 frames later. Flinch duration is the damage clip at `DamageRateFactor`; drinking and changing shape use
+and again 40 frames later. Flinch duration is the damage clip at `MotionCodes.DamageAndEatRate`; drinking and changing shape use
 their clips at rate 1 (one second without one); walk and run cycles come from their clips.
 
 Host-called rules:
@@ -334,8 +340,9 @@ Boss and special rules:
 - Mystic: explodes when it dies, or by itself after 1920 updates (109.7 s): its skill damage on every player within
   `SkillRange`, double on a summon it fought.
 - Ratoo's skill ends the stuns of the monsters within 200 units (height 80).
-- Against summons, Babel, Chaos Cara, Valento, Mokova and Kelvezu deal 8 times their roll and Kelvezu's blow kills; the
-  Guardian Saint's skill strikes every monster within its `SkillRange`. Valento drops a summon farther than 120 units.
+- Against other monsters (a wild boss on a summon, or a player's summoned boss on a wild monster), Babel, Chaos Cara,
+  Valento, Mokova and Kelvezu deal 8 times their roll and Kelvezu's blow kills; the Guardian Saint's skill strikes every
+  monster within its `SkillRange`. Valento drops a summon farther than 120 units.
 
 Clients play each swing's clip from the `SwingBegin` slot and draw its effects from the clip itself
 ([effects.md](effects.md#monster-effects)).
@@ -345,27 +352,49 @@ Clients play each swing's clip from the `SwingBegin` slot and draw its effects f
 `SummonBrain.Tick(summon, tuning, orders, dtMs)` takes `SummonOrders` (owner position, target) from the skills layer.
 It runs back to the owner (dropping the target) beyond 300 units with a target or 150 without, stops at 90; attacks
 when within `max(80, MeleeRange + 32)` planar and 64 vertical; uses the same clip timing. `NeedsRecall` (500 units)
-tells the host to place it beside the owner. Only stun stops it. Wild monsters see summons as target-only prey (they
-fight a summon that hits them, never pick it by sight). Summon skills are documented in [skills.md](skills.md).
+tells the host to place it beside the owner, at one of the eight spawn points around him that no monster stands on
+when one is free (`FieldSkills.TryRecallBeside`). Only stun stops it. Wild monsters see summons as target-only prey
+(they fight a summon that hits them, never pick it by sight). Summon skills are documented in [skills.md](skills.md);
+crystal pets follow the same orders ([special-items.md](special-items.md#monster-crystals-and-soul-stones)).
 
 ## Night and day
 
-`WorldClock` (Simulation): one game minute lasts 800 ms, a day 19.2 real minutes; night runs from 23:00 to 4:00. The
-server keeps the clock (`WorldServer.GameClockMs`, the Unix time plus `World:ClockOffsetMinutes` game minutes) and sends
-it in `WorldJoined`; each tick it sets `FieldInstance.Night` for every field.
+`WorldClock` (Simulation): one game minute lasts 800 ms, a day 19.2 real minutes; night runs from 23:00 to 4:00
+(`GameHours`, Contracts, which the client's sky follows too: its sun sets in the 22:00 glow and rises at 4:00). The
+server keeps the clock (`WorldServer.GameClockMs`, the Unix time plus `world.clock_offset_minutes` game minutes) and
+sends it in `WorldJoined`; each tick it sets `FieldInstance.Night` for every field.
 
 `FieldInstance.Night` (`FieldInstance.Night.cs`), applied at the first step and at each change:
 
 - Event creatures (`MonsterDefinition.EventCode` 100, field `EventInfo`: the bronze, silver and golden wolverines) walk
-  at night at a random active spawn point of their field and come back when killed (once the corpse is gone); they stay
-  until dawn even with no player near (`StaysUntilDawn`). At dawn they play their warp clip and leave (`VanishOnWarp`);
-  clients show the return sparkle with the skill-learn sound for a wolverine's warp.
+  at night from the field's first active spawn point a player stands near (its first active point when nobody is near,
+  so night on an empty field finds them at the same spot) and come back there when killed (once the corpse is gone);
+  they stay until dawn even with no player near (`StaysUntilDawn`). At dawn they play their warp clip and leave
+  (`VanishOnWarp`); clients show the return sparkle with the skill-learn sound for a wolverine's warp.
 - NPCs with the event creature service (`NpcServiceKind.EventMonster` 100: the town's wolverine pets) leave at night and
   return at dawn.
 - A nightmare field (`FieldDef.FieldEvent` = `Nightmare`: Navisko) spawns its monsters only at night; at nightfall each
   of its people turns into the night creature (the monster whose model is `Wolverin_A`) where it stands; at dawn its
   hostile monsters die without reward and its people return, those with an appearance draw (`NpcDefinition.AppearSlot`,
   `AppearCycle`) only when the dawn's new draw picks them.
+
+## Weather
+
+`WeatherSchedule` (Simulation) is the original's rain on the world clock: in every cycle of
+`world.weather_cycle_minutes` game minutes (8192 by default, about 1 h 49 min) the sky clouds over after minute 512,
+rains from 60 minutes later until 60 minutes before minute 932 (4 real minutes of rain), then clears. The original
+always rained the same; here each cycle's number draws its rain (`WeatherState`, Contracts): light (96), steady (160) or
+heavy (224) rain, or a storm (255) (rain with lightning and thunder), with a wind heading and strength, so every restart
+agrees on it. The rain does not fall evenly (`WeatherSchedule.Varied`): it starts at a third of the cycle's rain and
+swells to it over 30 game minutes, eases off over the last 30, and between them comes and goes in spells of 15 game
+minutes (60 % to all of it, eased from one spell's draw to the next), in steps of 8, so the server sends a new weather
+about once a spell. Dungeons, rooms, the ice fields and Bellatra never take rain (`WeatherSchedule.Rains`, set as
+`FieldInstance.Rains` when the field opens).
+
+Each tick `WorldServer` takes the weather (a game master's `/weather` while one is set, else the schedule while
+`world.weather` is on, else clear) and `FieldInstance.SetWeather` keeps it for a field that takes rain, clear otherwise.
+Every snapshot carries the field's weather and the encoder sends `Weather` when it differs from the last one sent (the
+first snapshot, a change, a field of another sky).
 
 ## Spawning
 
@@ -390,8 +419,12 @@ spawn files; see [world-import.md](world-import.md)): `SpawnPoints` (X/Z, `Activ
 
 Bosses: `BossSpawnSchedule` (one per server) picks a random minute 1-45 each local day and opens a pass at that minute
 of every hour, at most once per hour slot and never within 10 minutes of the last pass. `WorldServer` hands the hour to
-every live field; `SpawnScheduledBosses(hour)` spawns each `BossSpawn` whose hours contain it at the first active
-point with a player near (else the first active point), plus escorts scattered within 64 units.
+every live field; `SpawnScheduledBosses(hour)` spawns each `BossSpawn` whose hours contain it at the field's boss spot
+(`TryBossSpot`: its first active spawn point, whether or not a player is near), plus escorts scattered within 64 units,
+and remembers the master's entity (`BossMaster`). `FieldInstance.BossSpots` lists each boss at that spot and whether
+its master is alive, rebuilt only when that changes; the encoder sends it as `BossSpots` (protocol.md). `BossList`
+holds every boss of every field with its next pass, soonest first; `WorldServer` builds it again when a pass in it has
+come or the day's minute changed, and the encoder sends it as `BossList`.
 
 ## Loot and kill rewards
 
@@ -412,7 +445,8 @@ picks; the field hands them to the credited player's quest upkeep instead of the
 
 `KillReward.ExpForKill(baseExp, monsterLevel, playerLevel, multiplier)`: `baseExp * multiplier`, then 100 / 85 / 70 /
 55 percent for a level gap of at most 10 / 20 / 30 / more, computed in 128 bits and saturated at `ulong.MaxValue` (no
-award wraps or throws). The server passes `World:ExperienceMultiplier`.
+award wraps or throws). The server passes `experience.multiplier` and the experience event (`experience.event_percent`: +100% up to 199, then
++200%, +300%, +400% from 400).
 `FirstAttackerStealsCredit`: the first attacker gets the kill over another killer if it dealt at least 40% of max life
 and hit within the last 15 s (`FirstAttackerDisengageMs`).
 
@@ -431,26 +465,27 @@ INX motion tables are extracted by the importer (`MotionTableExtractor`) into th
   `TicksPerFrame = 160`; an event is valid only if `0 < ticks <= Frames * 160`.
 - `MotionTiming.DurationMs(frames, rate) = frames * 33 / rate`;
   `EventOffsetMs(ticks, rate) = ticks * 33 / (160 * rate)`.
-  `DamageRateFactor = 92 / 80` is used for flinch clips and the potion (`Eat`) clip.
-- `MotionStateCode`: Stand 0x40, Walk 0x50, Run 0x60, Attack 0x100, Damage 0x110, Dead 0x120, Eat 0x140, Skill 0x150,
-  Restart 0x200.
+  `MotionCodes.DamageAndEatRate = 92 / 80` (Contracts) is used for flinch clips and the potion (`Eat`) clip, by the server's timing and the renderer alike.
+- `MotionCode` (`Shared/PristonTale.Contracts`, shared with the renderer): Stand 0x40, Walk 0x50, Run 0x60, Attack 0x100,
+  Damage 0x110, Dead 0x120, Eat 0x140, Skill 0x150, Restart 0x200, Warp 0x210, Yahoo 0x220, and the talk codes from
+  0x400. `MotionCodes.Of(MotionState)` is the one mapping from a motion state to its clip code.
 - `MotionTimingSet.TryGetClip(state)` returns the first clip of the state (the one the client plays);
   `ClipsForState` returns all (NPC stand variants). Zero-length clips are dropped.
 
 Player action timing (`FieldInstance.PlayerActionTiming`): start from `PlayerMotionFallback.GetClip(class, state)`,
-replace with the job body's catalog clip, and for attacks replace with `PlayerEquipmentTiming.TryGet(job, weaponKey)`.
-Attack rate is `Character.AttackRate`. The hit lands at event 0, or at the clip end if there is none.
+replace with the job body's catalog clip, and for attacks replace with `PlayerEquipmentTiming.TryGet(class, weaponKey)`.
+Attack rate is `Character.AttackRate`. The hit lands at event 0, or at the clip end if there is none. The flinch lasts
+the damage clip found this way (`WorldPlayer.FlinchMs`, set when the player enters a field).
 
-`PlayerEquipmentTiming.cs` is generated from the shipped INX files by the test runner
+`Data/PlayerEquipmentTiming.json` is generated from the shipped INX files by the test runner
 (`--export-equipment-timings <assetsRoot> <outputFile>`; `--verify-equipment <assetsRoot>` checks it).
 
 ## NPCs and services
 
-`NpcDefinition` comes from `WorldDataFactory.ToNpcDefinitions`: `Code` is the 1-based record position, `Name` the
-authored identity that field placements reference, `DisplayName` the player label (`Label` falls back to `Name`),
-`Services` in authored order with a bit set `ServiceSet` (`1 << kind`), `Shop` stock in three tabs (weapons, armour,
-misc), `Dialog`, `MoveRange` (default 64). A shop service without runtime stock is removed. Databases without typed
-service rows fall back to the older per-service flag columns.
+`NpcDefinition` comes from `WorldDataFactory.ToNpcDefinitions`, one per NPC definition file: `Code` is the file's
+registry id, which field placements hold, `Name` its unique English key, `DisplayName` the English name (`Label`
+falls back to `Name`), `Dialog` its English lines, `Services` in authored order with a bit set `ServiceSet`
+(`1 << kind`), `Shop` stock in three tabs (weapons, armour, misc), `MoveRange` (default 64). A shop service without runtime stock is removed.
 
 NPC placement and wandering (`WorldNpc`, Application): placed from `FixedNpc` (fixed point, 4096-step angle); walks
 only with `MoveRange > 0` and a walk clip, with a 25% chance at the end of each stand clip, at 70 units/s.
@@ -458,12 +493,12 @@ only with `MoveRange > 0` and a walk clip, with a 25% chance at the end of each 
 | Type | Contract |
 |---|---|
 | `NpcServiceKind` | Stored in `npc_services.kind`, sent in the dialog and as bit `1 << kind`; append only. Argument meanings per member. |
-| `NpcServiceAvailability.IsAvailable` | Running services: `Shop`, `Warehouse`, `SkillMaster`, `Teleporter` with a known route. Others are offered but unavailable. |
+| `NpcServiceAvailability.IsAvailable` | Running services: `Shop`, `Warehouse`, `SkillMaster`, quest givers and scripts, `ItemAging`, `ItemMix`, the wing exchange, the puzzle collector, `Teleporter` with a known route. Others are offered but unavailable. |
 | `NpcInteraction` | Dialog reply; `Reach = 96` planar units for NPC service requests |
-| `NpcServiceCommand` | `OperationId` (idempotency), NPC, service, action, expected revisions, item, `Anchor`, `Count`, `Amount` |
+| `NpcServiceCommand` | `OperationId` (idempotency), NPC, service, action, expected revisions, item, `Anchor`, `Count`, `Amount`, `Materials` (compared by value) |
 | `NpcServiceAction` | Persisted in the operation history and sent on the wire; append only. `IsDurable` is false for Open, Close, Refresh. |
 | `NpcServiceStatus` | Outcome codes on the wire (`Ok` ... `NotOpen`, `OverWeight`); append only |
-| `NpcServiceReply` | Outcome plus the view after it: shop catalog, quotes, warehouse, teleport destinations, arrival |
+| `NpcServiceReply` | Outcome plus the view after it: shop catalog, quotes, warehouse, teleport destinations, arrival, the work on an item (`ItemWorkResult`) |
 
 Shop rules (`NpcShopRules`):
 
@@ -472,15 +507,20 @@ Shop rules (`NpcShopRules`):
   (`ItemRoller.Lower`, see [simulation.md](simulation.md#items)).
 - Worn value: `intact = price * dur / maxDur` (0 counts as 1), `worn = intact + (price - intact) / 4`, where price is
   the copy's own price (a specialized drop costs a fifth more than its kind).
-- Sell: `min(price / 5, worn / 5)`; stackables `(price / 5) * count`; quest items and the quest weapon and ring a
+- Sell: `min(price / 5, worn / 5)`; stackables `(price / 5) * count` for the count of units asked (1 to the stack's
+  count; an item sells whole); quest items and the quest weapon and ring a
   running rank-up holds cannot be sold; refused with `GoldLimit` when gold would exceed
   `MoneyLimits.CarryLimit(level, tier)`.
 - Repair: `(price - worn) / 8` for items below max durability; requires gold strictly greater than the cost.
 - Carry limit: 200,000 up to level 10; tier 0 `max(200,000, level * 200,000 - 1,800,000)`; tier 1 10M; tier 2 50M;
   higher 100M.
 
-Warehouse (`WarehouseStorage`, one per account): 9×9 grid, at most 100 items, weight 1000, gold 100,000,000; quest
-items, materials and the quest weapon and ring a running rank-up holds are refused. Every change increments `Revision`;
+Warehouse (`WarehouseStorage`, one per account): 9×9 grid, at most 100 items, weight 1000, gold 100,000,000.
+`CanStore` keeps out what the original does: what `BoundItems.CanHandOver` refuses (the bound items and the SP1 and CH1
+families, which a trade refuses too) and potions (`RefusedOnSetDown`: the client refuses them only when set down). Deposit, Withdraw and Move set an item down at a cell; over one other item
+the two are exchanged (`Inventory.Covered` finds it from the footprint; the request's `Covered` must name the same item,
+or the client's view was stale), the covered one going to the moved item's cell or wherever its side has room.
+`Inventory.CanExchange` checks both sides before either changes. Every change increments `Revision`;
 `Clone` supports prepare-then-commit. A withdrawal that would carry the character over its weight limit is refused
 (`OverWeight`), and an overweight character cannot open the warehouse (`NpcServiceTransactions.Check`).
 
@@ -489,6 +529,64 @@ Teleport routes (`TeleportRoutes`): route 0 means route 1. Route 1: index 1 fiel
 `LimitLevel` applies; arrival is its first start point (or `Center`) placed on the floor. The cave destinations are the
 fields that hold the cave entrances: field 0 (`fore-3`) has the warp gate to `Tcave`, field 18 (`forever-fall-03`) the
 one to `Mcave`.
+
+## Aging
+
+`AgingRules` and `AgingWork` (Simulation, `Items/Aging/`) hold the rules; each ageable family is one `AgingFamily` row
+(counter, goal table, wear, and what a level adds: damage, attack rating, odd-level critical or block, mana, absorb
+step, defence percent), which both a level gained and a fall read, and which `AgingRules.RaisedBy` turns into the
+stats the item tooltip marks (`AgedStats`; bows and javelins also mark mana, as the original tooltip does); `NpcServiceTransactions` runs an aging
+(`NpcServiceAction.Age`) on a candidate copy; `FieldInstance.Aging` counts maturity in the field.
+
+- Ageable: axes, claws, hammers, staves, poles, bows, swords, javelins, armours, robes, shields, orbs, gloves, boots,
+  armlets and the aging ring `OR201`; not unique items, quest items, costumes and timed items of those families, mixed
+  copies, copies still maturing or copies at +20.
+- The NPC takes the item from the bag, exactly the sheltoms its level asks (`SheltomsFor`: five to twelve of Lucidy..Ordo,
+  laid out in four rows of three) and at most one aging stone (`BI110` aging stone, `BI111` copper ore, `BI160` elder
+  copper ore, `BI161` super aging stone, `BI185` superior copper ore), for `(level + 1) * price / 2` gold. Materials and
+  gold are spent whatever the roll gives (`WrongMaterials`, `NotEnoughGold` otherwise). `aging.price_percent`,
+  `aging.failure_percent` and `aging.double_percent` scale the price and the chances (`AgingSettings`).
+- The roll (`Roll`, three draws of 0..100: destroy, down, plus): a failure by the level's chance (none to +4, 95% at +18
+  and +19; lower with the aging stone, the super stone and the superior ore) falls one or two levels or loses the item
+  by the level's split; otherwise below +10 the level may come at once (doubled chance with the aging stone, never with
+  the super stones). Copper ores and super stones turn a loss into a fall (81% one level).
+- Every outcome but the loss starts the next level's maturity (`AgingMaturity`: count, goal, stone): a success at 0, a
+  fall half way, a doubling after gaining a level. The goal follows the family's counter: attacks (axes, hammers,
+  staves, bows, javelins), critical hits (claws, poles, swords), blocks (shields), blows taken (armours, robes, orbs,
+  boots, gloves, armlets), or 1200 worn seconds (the ring).
+- Counting (`FieldInstance.Aging`): the holder's own landed hit on a wild monster within ten levels counts once a tick
+  (`Critical` on a critical hit, else `Attack`); a block counts for the shield and a blow taken for the armour, orb,
+  boots, gloves and armlets; a worn ring counts each second. Counts live on the worn copies (`AgingRevision`) and are
+  saved with the character; a copy that reaches its goal waits for the upkeep (`QuestTransactions.PrepareUpkeep` calls
+  `MatureAgedItems`), which stores the level. A copy checked every five seconds asks again when a commit replaced it.
+- A level (`LevelUp`): axes and hammers damage +1 (+2 from +10, +3 from +20), attack rating +10; claws, poles and swords
+  damage, attack rating +5 and critical +1 on odd levels; staves damage, attack rating +10, mana +10; bows and javelins
+  damage and critical on odd levels; shields block +1 on odd levels and absorb; orbs, boots and gloves defence +10%,
+  armours and robes +5%, with absorb; armlets defence +10% and attack rating +5; worn families lose durability. Even
+  levels raise the level requirement unless the item asks 100, 102 or 105 or the aging used the elder ore or a super
+  stone. A fall (`LevelDown`) takes the same values back.
+- The aging ring worn at +6 lowers the death's share to a fiftieth, at +8 to a hundredth (`DeathPenalty.Divisor`).
+- `/AgingSetting code level [class]` (game master level 3) drops a weapon or armour already at the level.
+
+## Mixing and alchemy
+
+`MixFormulas`, `MixingWork` (Simulation, `Items/Mixing/`) hold the rules; `NpcServiceTransactions` runs `Mix` and
+`Refine` for the `ItemMix` service (value 1 the mixer, 200 the alchemist).
+
+- Mix: an item from the bag that can be worn, never aged nor mixed, not a quest, timed or clan item, with up to twelve
+  sheltoms (Lucidy .. Ordo), for the item's price (`mixing.price_percent`). The sheltoms and the gold are spent whatever
+  the result. The first of the 103 formulas (`MixFormulas.Table`) whose families hold the item's family (axes to
+  javelins, armours and robes, shields, orbs) and whose counts of the nine sheltoms Lucidy .. Celesto are exactly those
+  placed adds its bonuses: elements add their value; other stats add a whole value or a percent of the copy's own value.
+  The copy records its highest sheltom (`MixSheltom`) and the stats the mix raised (`MixStats`); without a formula the
+  mix fails and the item stays as it was. A mixed copy can no longer be aged or mixed.
+- Reconstruction: two seals of one kind and nothing else, for an item whose level requirement is in the seal's band
+  (SE101 0..105, SE102 40..79, SE103 0..39, SE104 0..80), rebuilds the item as a newly rolled copy under the same identity.
+  With the respec stone (`BI190`) half the rebuilds take the owner's class specialization, the others never take it.
+- Alchemy: each sheltom from Lucidy to the eleventh becomes the force orb of its rank, for 200, 500, 1000, 2000, 4000,
+  5000, 10000, 20000, 30000, 40000 or 50000 gold (`alchemy.price_percent`); the later and the magic sheltoms are refused.
+- Results (`MixResult`): 0 failed, 1 mixed, 2 reconstructed, 3 refined. A mixed copy whose highest sheltom is Devine to
+  Mirage glows in the mixing colours (`HeldItemGlow`).
 
 ## Wing warp gates
 
@@ -510,7 +608,9 @@ Ruinen Village (6), Navisko (9), Forbidden Land (12), Eura (29), Land of Chaos (
 - Bless Castle's stone has no map entry: the castle destination belongs to the castle's owner clan, and there is no
   castle ownership yet.
 
-`LegacyNpcSoundCode.Resolve(key)` maps the authored sound keyword of a monster or NPC to its sound family code. The
+`CharacterSoundCodes` names every sound family code a rule or sound reads (NPCs, castle objects, and the monsters
+with rules of their own); `CharacterSoundCodes.Resolve(key)` maps the authored sound keyword of a monster or NPC to its
+sound family code. The
 importer stores it; the client audio library and the AI rules key on it. The 54 keywords of monsters newer than the
 original sound table (Greedy, Hestian, the invaders, the lizards, the mine and laboratory monsters...) have Etervale's
 own codes from 0x6000, one per sound folder; MapleFairy, MapleTree, Furia, Lucifer, KhanDoor, LizardDoor, Sakura and
@@ -528,8 +628,8 @@ Soldier_D have no sound folder and stay silent.
   `IStepOccupancy` (monster occupancy) and the prey view (`IPreyView`).
 - `FieldCombat`: `ApplyFlinchOnHit`, `ApplyBossRetargetOnHit`, `MonsterAttackReach.CanLandBasic`, `KillReward`,
   `DropRoller.Roll`.
-- `WorldPlayer.ReportMovement`: `FieldTerrain.CrossesWall`, `Slide`, `TryFloorNear`.
-- `NpcServiceTransactions`: `NpcShopRules`, `MoneyLimits`, `WarehouseStorage`, `TeleportRoutes`,
+- `WorldPlayer.ReportMovement`: `FieldTerrain.Slide`, `TryFloorNear`, `Falling.Step`.
+- `NpcServiceTransactions`: `NpcShopRules`, `MoneyLimits`, `WarehouseStorage`, `TeleportRoutes`, `AgingWork`, `MixingWork`,
   `NpcServiceAvailability`.
 
 Each `FieldInstance` owns a `CombatRng` seeded with its field code (shared by brain, spawner and drops) and is created
@@ -564,12 +664,12 @@ safe. Rules here run inside the tick and must not block: no I/O, no lock waits, 
 - **Add a teleport route**: add the route to `TeleportRoutes`; availability follows. Update `NpcServiceTests` and the
   README teleporter list.
 - **Regenerate player attack timings**: run the test runner with `--export-equipment-timings <assetsRoot>
-  Shared/PristonTale.Simulation/World/Motion/PlayerEquipmentTiming.cs`, then `--verify-equipment <assetsRoot>`.
+  Shared/PristonTale.Simulation/World/Motion/Data/PlayerEquipmentTiming.json`, then `--verify-equipment <assetsRoot>`.
 
 ## Pitfalls
 
 - `SoundCode` selects behaviour: ranged basic reach (`MonsterAttackReach.HasRangedBasicAttack`), the monster skill rules
-  (`MonsterSkillRules`, `MonsterSounds`), unyielding bosses, locomotion speed and the client's effect family. Changing a
+  (`MonsterSkillRules`; the named codes are `CharacterSoundCodes`), unyielding bosses, locomotion speed and the client's effect family. Changing a
   sound mapping changes combat and visuals.
 - Motion clip slots are the model's INX motion indices and keys their authored key characters (`motion_slots.slot`,
   `key_code`); re-import after changing models so server swings and client clips agree.
@@ -585,7 +685,7 @@ safe. Rules here run inside the tick and must not block: no I/O, no lock waits, 
 - `MonsterAiTuning` is cached per field by monster code; a definition altered with `with` for a summon shares the
   original code's tuning.
 - `Idle` monsters do not wander after the spawn walk; they only react to prey or damage.
-- Do not hand-edit `PlayerEquipmentTiming.cs`; regenerate it.
+- Do not hand-edit `Data/PlayerEquipmentTiming.json`; regenerate it.
 - Appending is the only safe change to `NpcServiceKind`, `NpcServiceAction` and `NpcServiceStatus`: values are stored
   and sent on the wire.
 

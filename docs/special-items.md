@@ -27,9 +27,10 @@ and draws the result.
 | `.../Usable/UsableItemEffects.cs` | The character part of a use (timers, resets, mastery, aging, Gravity Scroll, big head) |
 | `.../Usable/ItemScrolls.cs`, `ForceOrbs.cs`, `TeleportCoreDestinations.cs` | Scroll effects, force orb tables, the 33 Teleport Core fields |
 | `.../Usable/ItemUseCommand.cs`, `ItemUseMessages.cs`, `ItemEffectKind.cs` | Command, statuses, outcome and history; the effect kinds sent to clients |
-| `Shared/PristonTale.Application/Services/ItemUseAppService.cs` | Prepare, store, commit under the session's `SaveGate` |
-| `Shared/PristonTale.Application/World/ItemUseTransactions.cs` | Tick-side checks and the candidate of a use |
-| `Shared/PristonTale.Application/World/WorldServer.Items.cs` | `PrepareItemUseAsync`, `CommitItemUseAsync` and the world part of a use |
+| `Shared/PristonTale.Application/Services/ItemUseAppService.cs` | Prepare and commit under the session's `SaveGate`, then the save queue |
+| `Shared/PristonTale.Application/World/ItemUseTransactions.cs` | Tick-side shared checks and the candidate of a use |
+| `Shared/PristonTale.Application/World/ItemUses/ItemUseAction.cs` | `ItemUseAction`, one per `UsableItemAction` (`ItemUseActions.For`): `ForTheDead`, `Consumes`, `ReappliesAtCommit`, `Check`, `Arrival`, `Extend`, `Message`, `Store`, `Commit` (session), `Apply` (world, returns the effect viewers see) |
+| `Shared/PristonTale.Application/World/WorldServer.Items.cs` | `PrepareItemUseAsync`, `CommitItemUseAsync` (calls the kind's `Commit` and `Apply`) |
 | `Shared/PristonTale.Application/World/FieldPremium.cs`, `FieldInstance.Premium.cs` | Timer expiry, per-attack life and mana, pets |
 | `Shared/PristonTale.Application/World/FieldItemEvents.cs`, `FieldSkills.Items.cs` | Item effects published per tick; item status effects |
 | `Shared/PristonTale.Application/World/MobileShopTransactions.cs` | The NPC-less shop a mobile shop item opens |
@@ -37,8 +38,8 @@ and draws the result.
 | `Shared/PristonTale.Protocol/Packets/ItemUsePackets.cs` | `ItemUseCommand`, `ItemUseResult`, `PremiumTimers`, `ItemEffects` |
 | `Client/PristonTale.Gameplay/UI/Inventory/HudItemUseController.cs`, `HudTeleportCore.cs`, `HudUsableTooltip.cs` | Right-click use, Teleport Core window, confirmations, tooltips |
 | `Client/PristonTale.Gameplay/UI/Widgets/HudPremiumTimers.cs` | The premium timer column |
-| `Client/PristonTale.Gameplay/Effects/LegacyItemEffects.cs` | Firecrackers and item sounds on the legacy particle engine |
-| `Client/PristonTale.Gameplay/Effects/ItemVfx.cs`, `ForceOrbPresentation.cs` | Skill-learn light, force orb weapon glow and hit spark |
+| `Client/PristonTale.Gameplay/Effects/ItemUseEffects.cs` | Firecrackers (converted burst scripts and `ItemVfx` launch sparks and flash), item sounds, and a potion taking effect (`PotionApplied`, for every drinker in view): its drops and `drink1.wav` once |
+| `Client/PristonTale.Gameplay/Effects/ItemVfx.cs`, `ForceOrbPresentation.cs` | Effects built in code: skill-learn light, force orb weapon glow and hit spark, potion drops, firecracker launch sparks and flash, the return sparkle (`ItemVfx.Return`) |
 | `Client/PristonTale.Gameplay/World/Remote/PremiumPetPresentation.cs` | Pet actors, their animation and strikes |
 | `Client/PristonTale.Gameplay/World/GameScene.Items.cs` | Item use, timers and item effects in the scene |
 | `.../Usable/MonsterCrystals.cs` | Crystal and soul stone tables, pet lifetime and life, the shared delay, the crystal event |
@@ -46,11 +47,11 @@ and draws the result.
 | `.../Usable/EventFoods.cs`, `GiftBoxes.cs`, `Chocolates.cs` | Event foods and the soccer-ball head, prize tables, Virtual Life levels |
 | `.../Usable/Puzzles.cs`, `PuzzleExchange.cs` | Pieces, board cells, reveal cost, drop weights, reward table, the collector's exchange |
 | `Shared/PristonTale.Simulation/World/Loot/ItemEventDrops.cs` | Item events that replace drop rolls (`ItemEventRates`) |
-| `Shared/PristonTale.Application/World/ItemUseTransactions.*.cs` | Per family checks: `Crystals`, `Castle` (and Restoration), `Events` (foods, boxes, chocolates, puzzle bags) |
+| `Shared/PristonTale.Application/World/ItemUses/*Uses.cs` | The kinds by family: `CharacterUses` (timers, resets, masteries, gravity), `ScrollUses` (scrolls, force orbs), `TravelUses` (cores, return, mobile shop, union core), `LookUses` (hair, firecracker, soccer head), `CastleUses` (castle items, Restoration), `CrystalUses`, `EventUses` (foods, boxes, chocolates, puzzle bags) |
 | `Shared/PristonTale.Application/World/FieldSkills.Crystals.cs`, `FieldInstance.Items.cs` | Crystal pets, soul monsters, castle items on the field |
 | `Client/PristonTale.Gameplay/UI/Widgets/HudPremiumKeeps.cs` | Boosters and the skill-delay item in the effects bar |
 | `Client/PristonTale.Gameplay/UI/Inventory/HudPuzzleExchange.cs` | The collector's question; the board is drawn by `HudInventoryPanel` |
-| `Client/PristonTale.Gameplay/World/Remote/SummonPlates.cs` | Name plates of crystal pets and summons |
+| `Client/PristonTale.Gameplay/UI/Widgets/HudCombat.NamePlates.cs` | Name boxes of crystal pets and summons (with the owner's name) |
 
 ## Use flow
 
@@ -83,6 +84,7 @@ and draws the result.
 | `MaleCannotUse`, `FemaleCannotUse` | A chocolate meant for the other gender |
 | `NotEnoughGold` | A lucky bag without 1000 gold |
 | `CrystalRefused` | Castle mercenaries outside a siege of the castle-master clan (Etervale runs no siege) |
+| `SummonLimit` | A pet crystal while the user keeps ten pets ("You can only have 10 crystal summons at a time") |
 
 ## Items and effects
 
@@ -110,8 +112,8 @@ running kind is refused, so timers never stack.
 | Aging masters BI136-138, BI162-164 | The worn aged item (weapon, shield or orb, armor, armlet, gloves, boots) gains one level |
 | Gravity Scroll BI184 | Carrying capacity +50, at most five |
 | Big-head potion BI109 | Big head for 600 s |
-| Firecracker BI123 | Four rockets half a second apart; the roll picks each burst's shape |
-| Mobile shop BI142 | A shop that buys and repairs until closed (NPC serial 0) |
+| Firecracker BI123 | Four rockets half a second apart; the roll picks each burst's shape; the player cheers (Yahoo) after the motion in progress |
+| Mobile shop BI142 | A shop that buys and repairs until closed (NPC id 0) |
 
 Aging and mixing materials (BI110, 111, 160, 161, 185, 189, 190) and the passive resurrection scroll are not used
 from the inventory. Items without a rule keep the generic tooltip.
@@ -129,15 +131,26 @@ from the inventory. Items without a rule keep the generic tooltip.
 | GP114-116 | Ricarten militia, Ricarten guard, Bless royal guard as castle mercenaries; refused (`CrystalRefused`) |
 | GP201-209 | Soul stones: a hostile "soul of" monster for 4 min from seven per stone, uniformly |
 
-Monsters are named by their authored name (`MonsterDefinition.Key`, spaces included). A crystal is refused in towns,
+Monsters are named by their key (`MonsterDefinition.Key`, the unique English name; a crystal pet is the crystal
+variant of its monster, `HOPY 2` for Hopy) and a soul stone's by `Soul of <key>`. A crystal is refused in towns,
 the quest arena and below its item level; a soul stone also in the castle (33), field 29 and field 16. Every crystal
-use starts a three-second delay; billing crystals (GP117-120) and soul stones refuse during it. A pet stands beside its
-user (one of the eight points 48 units around him), lives 4 min plus 2 s per owner level (levels 1-99) with 3 more
-life per level, does not follow, hunts the nearest wild monster in its sight and never another pet, credits its owner
-with the kill's experience and drops, and dies when it expires or the owner leaves the field. A Web pet's blow slows
-its target to half speed for 36 frames (not Kelvezu). Players may keep any number of pets. `World:CrystalEvent` (0 off,
-1 from 12:00 to 23:59, 2 all day) switches crystals to their event monsters. A crystal whose drawn monster the world
-data lacks is refused and kept; the data's soul monsters are absent, so soul stones refuse.
+use starts a three-second delay; billing crystals (GP117-120) and soul stones refuse during it. A pet is called beside
+its user (one of the eight points 48 units around him, preferring one no monster stands on), lives 4 min plus 2 s per
+owner level (levels 1-99) with 3 more life per level, hunts the nearest wild monster in its sight and never another
+pet, and credits its owner with the kill's experience and drops. It follows its owner as a skill summon does
+(`SummonBrain`: the leash, and the recall to a free point beside an owner 500 units away); the original's pet stands
+where it was called. An idle pet standing inside another monster walks out of it (`FieldInstance.StepOutOfCrowd`), so
+pets do not stand in each other. The owner keeps one status per pet (`MonsterCrystals.PetStatus`): code
+`PetStatusBase` 0xF0000500 + the number of the crystal it shows + its slot (the owner's lowest free one, 0..9) in bits
+12-23, GP101 in slot 0 0xF0000565, in slot 1 0xF0001565. A pet shows the crystal that calls its monster alone
+(`ShownCrystal`: a Mystic's Hobgoblin shows GP102, a Marvel's Bargon GP104), else the crystal used. The status has
+the pet's lifetime and starts with the next step (`QueueItemEffect`); a pet dies when it expires, with its status (its
+end, the owner's death), when the owner dismisses it (`DismissCrystalPets`, the `DismissCrystalPets` request), enters a
+town or leaves the field (`LeaveCrystalPets`; the statuses end in the field entered, `ArriveWithoutCrystalPets`); a
+pet that falls ends its status. A Web pet's blow slows its target to half speed for 36 frames (not Kelvezu). A player
+keeps at most ten pets (`MonsterCrystals.PetSlots`); an eleventh crystal is refused as `SummonLimit` and kept.
+`events.crystal` (0 off, 1 from 12:00 to 23:59, 2 all day) switches crystals to their event monsters. A crystal whose
+drawn monster the world data lacks is refused and kept; the data's soul monsters are absent, so soul stones refuse.
 
 ### Bless Castle items
 
@@ -170,7 +183,7 @@ since. They show in the running-effects bar (`Booster_01..04.tga`), not the prem
   item's authored life, mana and stamina ranges (`PotionDefinition` on any item with restore ranges).
 - Gift boxes SP105 (grade 1) to SP110 (grade 6) and the tiger capsule SP134: need room for a 2 x 2 item and ten free
   weight (five for the capsule); the player eats the box and the prize, drawn out of 10000 (`GiftBoxes`), lands in the
-  inventory. Grades 1-3 give Mystic Mana Potions x10, 4-5 Great, 6 Medium; all give Teleport Cores, crystals, force
+  inventory. The capsule ends its eating motion at the event and cheers (Yahoo). Grades 1-3 give Mystic Mana Potions x10, 4-5 Great, 6 Medium; all give Teleport Cores, crystals, force
   orbs, a 3 h package, Mana Recharging and Vampiric Cuspid.
 - SP140 soccer-ball potion: the soccer-ball head (big-head look 3, one model per class) for 3 h of real time, refused
   while another head change runs; starting and ending guard for 5 s with the level-up burst.
@@ -189,7 +202,7 @@ Crystal 500, Celesto 10; an unknown reward gives 30 Mystic Mana Potions. The exc
 
 ### Item events
 
-`World:ItemEvents:*` (`ItemEventRates`, per 10000, all off by default) make event items replace a monster's main drop
+The `events.*` settings (`ItemEventRates`, per 10000, all off by default) make event items replace a monster's main drop
 rolls, tried in this order: `Mandoo` (on/off: SP101 4%, SP102 2%), `ValentineDay` (CH101 70% / CH102 30%),
 `Watermelon` (SP115), `Valentine` (SP135), `CandyDays` (SP136), `WhiteDay` (CH103 70% / CH104 30%), `Puzzle` (a sealed
 piece by the drop weights 743, 723, 704, 650, 650, 650, 380, 500 per set) and `GiftBox` (the box of the monster's
@@ -218,12 +231,17 @@ clan and refuses (`ClanOnly`).
 - Ether cores, crystal summons (at the called monster) and the Restoration play the return sparkle with the learn
   sound; the soccer-ball head starts and ends with the learn light; boosters and lucky bags play the drink sound; a gift
   box the eat sound under an orange light. Foods show the potion effects of their restored resources.
-- Crystal pets and summons carry a name plate: the name in pale green, the owner's life bar for his own pet and the
-  owner's name in parentheses for anyone else's.
+- Crystal pets and summons carry the HUD's name box (`HudCombat.DrawNamePlates`): the name in pale green, the owner's
+  name in parentheses on a second line, and under the box a life bar on the viewer's own.
+- Each crystal pet's status shows in the running-effects bar with the inventory sprite of the crystal it shows
+  (`image/Sinimage/Items/Event/it<KEY>.bmp`); the hover box reads `<name> Crystal`, "Summoned Pet that supports you in
+  Battle", `Time Left: m:ss` and "Right-click to dismiss". A right click on it asks "Monster Crystal / Do you want to /
+  dismiss this pet?" (`HudCrystalDismiss`); Yes (or Enter, while the chat input is closed) sends `DismissCrystalPets`
+  for that pet's status and the chat says "Pet has been dismissed".
 - While a puzzle piece or lucky bag is carried, the board backdrop (`NYEAR_00.bmp`) covers the last four columns'
   top four rows; a finished puzzle glows yellow under two orange lines sweeping one pixel every three 70 Hz frames. The
   collector asks "Do you wanna / exchange to the item?" under "Completed Puzzle", or explains the board.
-- Item effects (`ItemEffects` message): firecracker bursts with the original particle scripts and sounds, the
+- Item effects (`ItemEffects` message): firecracker bursts with the converted particle scripts and sounds, the
   skill-learn light of hair tints and force orbs (`ItemVfx.Learn`, rising streaks registered in code), the agony glow
   of skill masters, and pet strikes.
 - A running force orb keeps a flare glow in the orb's colour on the holder's weapon bone, renewed every 29 s until the
@@ -231,18 +249,26 @@ clan and refuses (`ClanOnly`).
 - The big head replaces the head model with the oversized one of the class (tier-0 head prefix, hair 1..3, look `b`
   or `t`); the descriptor carries it, so every client sees it.
 - Pets are client actors driven by the player's description (the Phoenix flag, the helper pet and the head look);
-  they follow their owner and play the strike the server announces.
+  they follow their owner and play the strike the server announces. A premium helper pet takes the place of the
+  beginner's pet ([application.md](application.md#beginners-helper-pet)), which uses the same dragons and strikes.
 
 ## Pitfalls
 
 - `PremiumTimers.Expire` runs every tick before the rules read the timers; reading them elsewhere sees the state of
   the last tick.
 - The commit re-applies the character part with the prepared clock and roll; it must not re-apply aging (the
-  inventory commit already carries the upgraded item).
+  inventory commit already carries the upgraded item): `AgingMasteryUse.ReappliesAtCommit` is false.
+- A new usable item kind is one `ItemUseAction` subclass in the family's `*Uses.cs` and one row in `ItemUseActions`;
+  a kind without a row behaves as the plain character rules.
 - Package timers share one expiry; a single item of a kind a package runs is refused while the package runs.
-- `HudNpcServiceController` accepts NPC serial 0 only for the shop: that is the mobile shop.
+- `HudNpcServiceController` accepts NPC id 0 only for the shop: that is the mobile shop.
 - Crystal pets are summons (`OwnerId`) but not in the skill summon table; `FieldSkills.StepSummon` steps them through
   `StepCrystalPet` first.
+- A crystal pet is called in the command phase, so its status starts with the next step (`QueueItemEffect`) and a
+  dismissal ends it the same way (`EndItemEffect`); a status event added in the command phase would be lost. Ends are
+  applied before adds, so `EndItemEffect` also drops an add of that status still queued (a pet dismissed before its
+  first step leaves no status behind). A summon is put in the collision index when called, so pets called before a step
+  see each other.
 - Castle item ends queued from the command phase reach clients with the next step (`EndItemEffect`); leaving the castle
   removes them directly.
 - A puzzle bag keeps its piece's grid size; only its code, key and name are swapped for the lucky bag on the wire.
@@ -255,4 +281,4 @@ clan and refuses (`ClanOnly`).
 - [client.md](client.md) - HUD and scene
 - [testing.md](testing.md) - `SpecialItemTests`, `MonsterCrystalTests`, `CastleItemTests`, `EventItemTests`,
   `PuzzleTests`, `--capture-item-hud`, `--capture-item-effects`
-- [server.md](server.md) - `World:CrystalEvent`, `World:ItemEvents:*`
+- [server.md](server.md) - the `events.*` settings

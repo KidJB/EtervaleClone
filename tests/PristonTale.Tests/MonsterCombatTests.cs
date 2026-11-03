@@ -8,6 +8,8 @@ using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Simulation.World.Fields;
 using PristonTale.Simulation.World.Spawning;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -73,18 +75,18 @@ internal static class MonsterCombatTests
         var monster = new MonsterInstance(2, Definition(), Vector3.Zero, 0, 0);
         var host = new CombatHost(player, monster);
         var combat = new FieldCombat(host, new CombatRng(7));
-        var initialHp = character.Life;
+        var initialLife = character.Life;
         for (var index = 0; index < 100; index++)
         {
             combat.ResolveMonsterHit(monster, new MonsterAttackEvent(2, 1, false));
         }
 
-        Assert.True(character.Life == initialHp && host.EventCount == 0, "authority trusted an out-of-range hit event");
+        Assert.True(character.Life == initialLife && host.EventCount == 0, "authority trusted an out-of-range hit event");
         player.Teleport(new Vector3(70, 0, 0));
         combat.ResolveMonsterHit(monster, new MonsterAttackEvent(999, 1, false));
         monster.ApplyDamage(100);
         combat.ResolveMonsterHit(monster, new MonsterAttackEvent(2, 1, false));
-        Assert.True(character.Life == initialHp, "invalid/dead attacker inflicted damage");
+        Assert.True(character.Life == initialLife, "invalid/dead attacker inflicted damage");
         return Task.CompletedTask;
     }
 
@@ -128,7 +130,7 @@ internal static class MonsterCombatTests
         for (var tick = 0; tick < 300; tick++)
         {
             field.Step(0.05f);
-            attackEntries += (field.SnapshotEvents() ?? []).Count(value => value.Kind == CombatEventKindView.SwingBegin && value.AttackerId == monster.EntityId);
+            attackEntries += (field.SnapshotEvents() ?? []).Count(value => value.Kind == CombatEventKind.SwingBegin && value.AttackerId == monster.EntityId);
         }
 
         Assert.True(attackEntries >= 3, $"short melee stopped outside its reach: distance={monster.Position.Length()}, swings={attackEntries}");

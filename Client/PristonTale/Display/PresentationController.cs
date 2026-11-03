@@ -16,26 +16,27 @@ internal sealed class PresentationController
     private readonly ClientSettingsStore _store;
     private readonly DisplayController _display;
     private readonly GraphicsDeviceManager _graphics;
+    private readonly GameWindow _window;
     private readonly FramePacer _pacer = new();
     private ClientSettings _applied;
     private ClientSettings _accepted;
     private long _confirmationDeadline;
+    // The last position of the window while windowed and not maximized: the one it is restored to.
+    private Point? _normalPosition;
 
-    public PresentationController(PresentationSettings shared, ClientSettingsStore store, GraphicsDeviceManager graphics)
+    public PresentationController(PresentationSettings shared, ClientSettingsStore store, GraphicsDeviceManager graphics, GameWindow window)
     {
         _shared = shared;
         _store = store;
         _graphics = graphics;
-        _display = new DisplayController(graphics, ConsoleClientLog.Instance);
+        _window = window;
+        _display = new DisplayController(graphics, window, ConsoleClientLog.Instance);
         DisplayController.DescribeOptions(shared);
+        // The saved display was confirmed when it was chosen, so it applies without asking again; a failing first apply
+        // falls back to the defaults (Apply).
         _accepted = shared.Requested;
         Apply(shared.Requested);
-        if (_applied.WindowMode != WindowMode.Windowed)
-        {
-            _accepted = new ClientSettings();
-            _shared.AwaitingConfirmation = true;
-            _shared.ConfirmationSeconds = 15;
-        }
+        _accepted = _applied;
     }
 
     public void UpdateBoundary()
@@ -87,10 +88,16 @@ internal sealed class PresentationController
         }
     }
 
+    // Every frame: a manual resize becomes the windowed size; a maximized window keeps the size it is restored to.
     public void CaptureWindowSize(int width, int height)
     {
-        if (_applied is null || _shared.AwaitingConfirmation || _applied.WindowMode != WindowMode.Windowed
-            || width < 800 || height < 600 || _shared.Requested != _applied)
+        if (_applied is null || _applied.WindowMode != WindowMode.Windowed || _window.IsMaximized)
+        {
+            return;
+        }
+
+        _normalPosition = _window.Position;
+        if (_shared.AwaitingConfirmation || width < 800 || height < 600 || _shared.Requested != _applied)
         {
             return;
         }
@@ -102,6 +109,28 @@ internal sealed class PresentationController
 
         _applied = _applied with { WindowWidth = width, WindowHeight = height };
         _shared.Requested = _applied;
+        Accept();
+    }
+
+    // On exit: where the windowed window was left and whether it was maximized, for the next start (DisplayController
+    // restores them).
+    public void CaptureWindowPlacement()
+    {
+        if (_applied is null || _shared.AwaitingConfirmation || _applied.WindowMode != WindowMode.Windowed || _shared.Requested != _applied)
+        {
+            return;
+        }
+
+        var maximized = _window.IsMaximized;
+        var position = maximized ? _normalPosition : _window.Position;
+        var x = position?.X ?? _applied.WindowX;
+        var y = position?.Y ?? _applied.WindowY;
+        if (x == _applied.WindowX && y == _applied.WindowY && maximized == _applied.WindowMaximized)
+        {
+            return;
+        }
+
+        _applied = _applied with { WindowX = x, WindowY = y, WindowMaximized = maximized };
         Accept();
     }
 

@@ -1,5 +1,6 @@
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Application.GameMasters;
 
@@ -21,6 +22,8 @@ public interface IServerOperations
     // Players a new connection may join beyond; 0 when unlimited.
     int UserLimit { get; set; }
 
+    string ServerName { get; set; }
+
     // Starts the shutdown countdown; false when one is already running.
     bool BeginShutdown();
 
@@ -38,6 +41,8 @@ public sealed class DetachedServer : IServerOperations
     public int OpenConnections => 0;
 
     public int UserLimit { get; set; }
+
+    public string ServerName { get; set; } = "";
 
     public bool ShutdownStarted { get; private set; }
 
@@ -96,7 +101,7 @@ public sealed class ItemCreationOverrides
                 return ItemRollOverrides.None;
             }
 
-            var job = Enum.IsDefined((PlayerClass)_specJob) ? ItemRoller.JobBitFor((PlayerClass)_specJob) : 0u;
+            var job = Enum.IsDefined((PlayerClass)_specJob) ? (uint)JobBits.Of((PlayerClass)_specJob) : 0u;
             return new ItemRollOverrides(job, _performance != 0);
         }
     }

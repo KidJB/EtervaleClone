@@ -182,9 +182,17 @@ internal sealed class PristonShaderLibrary : IDisposable
         _skinned.SetDrawLight(floorLight);
         var overlay = shade?.Overlay;
         _skinned.ApplyMaterial(material, texture, uvScrollOffset, overlay is null ? layerOffset : new Vector2(overlayOffset, 0f), 1f, rimColor, overlay);
-        _skinned.ApplyActor(shade is null ? new Vector4(0f, 0f, 0f, 1f) : new Vector4(shade.Tint, shade.Opacity),
+        _skinned.ApplyActor(shade is null ? new Vector4(0f, 0f, 0f, 1f) : new Vector4(shade.ShownTint, shade.ShownOpacity),
             new Vector4(shade is { Wobble: true } ? ActorShade.WobbleAmplitude : 0f, wobblePhase, overlay is null ? 0f : 1f, 0f), actor);
         return _skinned.Select(_skinned.SurfaceTechnique(material.AlphaTest, prepass));
+    }
+
+    // The hover outline of a skinned batch SelectSkinnedSurface just set up (same pose, wobble and texture): parameters as
+    // Surface.fx OutlineParams, color display-referred with its strength in w.
+    public Effect SelectSkinnedOutline(bool masked, Vector4 parameters, Vector4 color)
+    {
+        _skinned.ApplyOutline(parameters, color);
+        return _skinned.Select(masked ? _skinned.OutlineMasked : _skinned.Outline);
     }
 
     public Effect SelectStaticShadow(PristonMaterialRuntime material, Texture2D texture, Vector4 windParams, Vector2 uvScrollOffset)
@@ -335,6 +343,8 @@ internal sealed class PristonShaderLibrary : IDisposable
         private readonly EffectParameter _environmentMap;
         private readonly EffectParameter _environmentSh;
         private readonly EffectParameter _brdfLut;
+        private readonly EffectParameter _cloudShadowMap;
+        private readonly EffectParameter _cloudShadowParams;
         private readonly EffectParameter _shadowMap;
         private readonly EffectParameter _localLightCount;
         private readonly EffectParameter _transientLightCount;
@@ -358,6 +368,8 @@ internal sealed class PristonShaderLibrary : IDisposable
         private Vector4 _actorParamsValue;
         private readonly EffectParameter _actorReceiver;
         private bool _receiver;
+        private readonly EffectParameter _outlineParams;
+        private readonly EffectParameter _outlineColor;
         private Texture2D _overlay;
         private readonly EffectParameter _baseColorMap;
         private readonly EffectParameter _layerMap;
@@ -391,6 +403,10 @@ internal sealed class PristonShaderLibrary : IDisposable
             Caster = Technique("ShadowCaster");
             CasterMasked = Technique("ShadowCasterMasked");
             Sky = factory == ShaderVertexFactory.Static ? Technique("Sky") : null;
+            Outline = factory == ShaderVertexFactory.Skinned ? Technique("Outline") : null;
+            OutlineMasked = factory == ShaderVertexFactory.Skinned ? Technique("OutlineMasked") : null;
+            _outlineParams = Parameter("OutlineParams");
+            _outlineColor = Parameter("OutlineColor");
             _viewProjection = Parameter("ViewProjection");
             _view = Parameter("View");
             _casterViewProjection = Parameter("CasterViewProjection");
@@ -446,6 +462,9 @@ internal sealed class PristonShaderLibrary : IDisposable
             _environmentMap?.SetValue(neutral);
             _environmentSh?.SetValue(noEnvironment);
             _brdfLut?.SetValue(neutral);
+            _cloudShadowMap = Parameter("CloudShadowMap");
+            _cloudShadowParams = Parameter("CloudShadowParams");
+            _cloudShadowMap?.SetValue(neutral);
             _shadowMap = Parameter("ShadowMap");
             _localLightCount = Parameter("LocalLightCount");
             _transientLightCount = Parameter("TransientLightCount");
@@ -493,6 +512,8 @@ internal sealed class PristonShaderLibrary : IDisposable
         public EffectTechnique Sky { get; }
         public EffectTechnique Caster { get; }
         public EffectTechnique CasterMasked { get; }
+        public EffectTechnique Outline { get; }
+        public EffectTechnique OutlineMasked { get; }
         public int TextureChanges { get; set; }
 
         public EffectTechnique SurfaceTechnique(bool masked, bool prepass) =>
@@ -581,6 +602,9 @@ internal sealed class PristonShaderLibrary : IDisposable
             _environmentMap?.SetValue(environmentOn ? environment.Atlas : _neutralTexture);
             _environmentSh?.SetValue(environmentOn ? environment.Sh : _noEnvironment);
             _brdfLut?.SetValue(environmentOn ? environment.BrdfLut : _neutralTexture);
+            var clouds = frame.CloudShadow;
+            _cloudShadowMap?.SetValue(clouds.Map ?? _neutralTexture);
+            _cloudShadowParams?.SetValue(clouds.Map is null ? Vector4.Zero : clouds.Params);
             _environmentParams?.SetValue(environmentOn
                 ? new Vector4(1f, PristonEnvironmentLighting.BaseSize, PristonEnvironmentLighting.AtlasWidth, PristonEnvironmentLighting.Levels)
                 : Vector4.Zero);
@@ -737,6 +761,12 @@ internal sealed class PristonShaderLibrary : IDisposable
                 _actorParams?.SetValue(parameters);
                 _actorParamsValue = parameters;
             }
+        }
+
+        public void ApplyOutline(Vector4 parameters, Vector4 color)
+        {
+            _outlineParams?.SetValue(parameters);
+            _outlineColor?.SetValue(color);
         }
 
         public void ApplyCaster(Texture2D texture, Vector2 uvScrollOffset)

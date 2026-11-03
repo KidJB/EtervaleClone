@@ -5,6 +5,9 @@ using PristonTale.Gameplay.Screens.Framework;
 using PristonTale.Gameplay.World;
 using PristonTale.Gameplay.UI;
 using PristonTale.Gameplay.UI.Widgets;
+using PristonTale.Contracts.Motion;
+using PristonTale.Gameplay.UI.Rendering;
+using PristonTale.Gameplay.World.Remote;
 
 namespace PristonTale.Gameplay.Screens.Gameplay;
 
@@ -13,6 +16,7 @@ public sealed class GameplayScreen : GameScreen
     private readonly EnteredCharacter _entered;
     private GameScene _scene;
     private GameplayHud _hud;
+    private readonly List<GroundLabel> _groundLabels = [];
     private KeyboardState _lastKeyboard;
     private bool _showRenderStats = true;
     private volatile PristonTale.Client.Net.WorldCatalog.WorldRenderCatalog _pendingHudCatalog;
@@ -42,19 +46,37 @@ public sealed class GameplayScreen : GameScreen
         _scene.PresenceObserved += _hud.StringEffect.Observe;
         _scene.PresenceObserved += _hud.ObserveQuests;
         _hud.QuestFanfare += _scene.PlayQuestFanfare;
+        _hud.CraftResult += _scene.PlayCraftResult;
         _scene.NpcSelected += _hud.OpenNpc;
+        _scene.ShopSellerSelected += _hud.ViewPersonalShop;
+        _scene.PickupToCursor = _hud.ExpectPickup;
+        _scene.PickupToCursorAnswered += _hud.PickupAnswered;
+        _hud.PersonalShops = _scene;
+        _scene.PresenceObserved += _hud.ObserveParty;
+        _hud.Parties = _scene;
+        _scene.PresenceObserved += _hud.ObserveTrade;
+        _hud.Trades = _scene;
+        _scene.PresenceObserved += _hud.ObserveContacts;
+        _hud.Contacts = _scene;
+        _hud.PlayerButtonsUsed += _scene.DismissPlayerButtons;
         _scene.SkillNotice += _hud.Chat.System;
         _hud.SummonModeRequested += _scene.ToggleSummonMode;
+        _hud.CrystalPetDismissRequested += _scene.DismissCrystalPets;
         _hud.RunToggleRequested += _scene.ToggleRun;
+        _hud.YahooKeyPressed += _scene.PressYahooKey;
         _hud.ItemSound += _scene.PlayItemSound;
         _hud.SummonAutomatic = _scene.SummonAutomatic;
         _hud.UseItem = _scene.UseItemAsync;
         _hud.Chat.PlayerName = _scene.Player.Name;
         _hud.Chat.Send = _scene.SendChatAsync;
         _hud.Overhead = _scene.Overhead;
+        _hud.GroundLabels = _groundLabels;
+        _hud.GroundLabelPlaced = _scene.PlaceGroundLabel;
         _scene.PresenceObserved += _hud.ObserveChat;
+        _scene.PresenceObserved += _hud.ObserveGuide;
         _hud.Chat.WhisperArrived += _scene.PlayWhisper;
         _hud.Chat.CloseRequested += RequestExit;
+        _hud.ExitRequested += RequestExit;
         _hud.Restart.Restart = _scene.RestartAsync;
         _hud.Restart.ExitRequested += RequestExit;
         _hud.WingGate.Travel = _scene.TravelWingGateAsync;
@@ -92,10 +114,11 @@ public sealed class GameplayScreen : GameScreen
                 return $"Shadows {shadows} | {_scene.Status}";
 
             var stats = _scene.LastRenderStats;
+            var poses = _scene.LastAnimationCounts;
             var hour = _scene.TimeOfDay;
             var clock = $"{(int)hour:00}:{(int)((hour - (int)hour) * 60):00}";
             return $"Shadows {shadows} | {clock} | Pos {_scene.PlayerPosition.X:F0} {-_scene.PlayerPosition.Z:F0} | Lights {_scene.StageLightCount} | " +
-                   $"Draw {stats.DrawCalls} | " +
+                   $"Draw {stats.DrawCalls} | Pose {poses.Posed}/{poses.Posed + poses.Reused} | " +
                    $"Shadow S{(stats.SunShadowUpdated ? 1 : 0)}/L{stats.LampShadowMapsUpdated}/D{stats.ShadowDrawCalls} | " +
                    $"Vis {stats.VisibleBatches}/{stats.TotalBatches} | Tri {stats.Triangles} | State {stats.StateChanges} | " +
                    $"View {_scene.RenderDebugView}";
@@ -117,11 +140,19 @@ public sealed class GameplayScreen : GameScreen
         _hud.World = new HudWorldView(field?.Id, field?.Underground == true, _scene.ActiveMapRectangle, _scene.PlayerPosition,
             _scene.PlayerForward, _scene.TimeOfDay, _scene.RunFlag, mapHidden, neighbour, neighbourMap);
         _hud.PremiumTimers = _scene.PremiumTimers;
+        _hud.NextBoss = _scene.NextBoss;
+        _hud.BossSpots = _scene.BossSpots;
+        _hud.BossList = _scene.BossList;
         _hud.InCastleField = field?.State == Simulation.World.FieldState.Castle;
+        _hud.InTown = field?.State == Simulation.World.FieldState.Village;
+        _hud.ShopSigns = _scene.ShopSigns;
         _hud.PlayerDead = _scene.PlayerDead;
+        _hud.PlayerActing = _scene.PlayerActing;
+        _hud.PlayerActionStarts = _scene.PlayerActionStarts;
         _hud.RestartOffer = _scene.RestartOffer;
         _hud.Update(_scene.Owner);
         _scene.PointerCaptured = _hud.PointerCaptured;
+        _scene.MovementLocked = _hud.HoldsPlayer;
         _scene.KeyboardCaptured = _hud.KeyboardCaptured;
         _hud.Chat.SelfId = _scene.SelfEntityId;
         _scene.CameraInputEnabled = Context.IsWindowActive && !Context.Presentation.AwaitingConfirmation;
@@ -139,6 +170,10 @@ public sealed class GameplayScreen : GameScreen
         }
         _scene.Update(gameTime);
         _hud.TargetId = _scene.SelectedTargetId;
+        _hud.HelperPet = _scene.SelfHelperPet();
+        _hud.HoveredId = _scene.HoveredTargetId;
+        _hud.TracedId = _scene.TracedTargetId;
+        _hud.ButtonsPlayerId = _scene.ReachedPlayerId;
         _lastKeyboard = Keyboard.GetState();
     }
 
@@ -147,10 +182,7 @@ public sealed class GameplayScreen : GameScreen
         _hud.RenderPortrait();
         Context.GraphicsDevice.Clear(_scene.SkyColor);
         _scene.Draw();
-        Context.SpriteBatch.Begin();
-        _scene.DrawGroundLabels(Context.SpriteBatch, Context.Font);
-        _scene.DrawSummonPlates(Context.SpriteBatch, Context.Font);
-        Context.SpriteBatch.End();
+        _scene.CollectGroundLabels(_groundLabels);
         _scene.DrawCombatText(Context.SpriteBatch, Context.Font);
         _hud.Draw();
     }
@@ -165,31 +197,31 @@ public sealed class GameplayScreen : GameScreen
 
         if (Pressed(keyboard, Keys.D1))
         {
-            _scene.DebugForceMotion(PristonActorMotion.Stand);
+            _scene.DebugForceMotion(MotionCode.Stand);
         }
         if (Pressed(keyboard, Keys.D2))
         {
-            _scene.DebugForceMotion(PristonActorMotion.Walk);
+            _scene.DebugForceMotion(MotionCode.Walk);
         }
         if (Pressed(keyboard, Keys.D3))
         {
-            _scene.DebugForceMotion(PristonActorMotion.Run);
+            _scene.DebugForceMotion(MotionCode.Run);
         }
         if (Pressed(keyboard, Keys.D4))
         {
-            _scene.DebugForceMotion(PristonActorMotion.Attack);
+            _scene.DebugForceMotion(MotionCode.Attack);
         }
         if (Pressed(keyboard, Keys.D5))
         {
-            _scene.DebugForceMotion(PristonActorMotion.Damage);
+            _scene.DebugForceMotion(MotionCode.Damage);
         }
         if (Pressed(keyboard, Keys.D6))
         {
-            _scene.DebugForceMotion(PristonActorMotion.Dead);
+            _scene.DebugForceMotion(MotionCode.Dead);
         }
         if (Pressed(keyboard, Keys.D7))
         {
-            _scene.DebugForceMotion(PristonActorMotion.Skill);
+            _scene.DebugForceMotion(MotionCode.Skill);
         }
     }
 
@@ -209,24 +241,20 @@ public sealed class GameplayScreen : GameScreen
         {
             _scene.CycleRenderDebugView();
         }
-        if (Pressed(keyboard, Keys.OemComma))
-        {
-            _scene.AdvanceTimeOfDay(-1f);
-        }
-        if (Pressed(keyboard, Keys.OemPeriod))
-        {
-            _scene.AdvanceTimeOfDay(1f);
-        }
-        if (Pressed(keyboard, Keys.P))
-        {
-            _scene.ToggleClockHold();
-        }
     }
 
     private bool Pressed(KeyboardState keyboard, Keys key) =>
         keyboard.IsKeyDown(key) && !_lastKeyboard.IsKeyDown(key);
 
     public override bool HandleEscape() => _hud?.ClosePanel() == true;
+
+    // The scene clears its hovered entity while the HUD has the pointer, so windows show the arrow unless the HUD imposes
+    // one (a shop's mode, a dragged item).
+    public override HudCursorKind Cursor =>
+        _scene is null || _hud is null
+            ? HudCursorKind.Default
+            : _hud.CursorOverride ?? HudCursor.ForHovered(_scene.HoveredDropId != Guid.Empty, Mouse.GetState().LeftButton == ButtonState.Pressed,
+                _hud.Combat.KindOf(_scene.HoveredTargetId, out var owner), owner);
 
     // The server's shutdown asks every client to save and quit: the game closes as from the window's close button.
     private void RequestExit() => Context.ExitRequested = true;
@@ -239,18 +267,30 @@ public sealed class GameplayScreen : GameScreen
             _scene.PresenceObserved -= _hud.StringEffect.Observe;
             _scene.PresenceObserved -= _hud.ObserveQuests;
             _scene.PresenceObserved -= _hud.ObserveChat;
+            _scene.PresenceObserved -= _hud.ObserveGuide;
             _hud.Chat.WhisperArrived -= _scene.PlayWhisper;
             _hud.Chat.CloseRequested -= RequestExit;
+            _hud.ExitRequested -= RequestExit;
             _hud.Restart.ExitRequested -= RequestExit;
             _hud.QuestFanfare -= _scene.PlayQuestFanfare;
+            _hud.CraftResult -= _scene.PlayCraftResult;
             _scene.NpcSelected -= _hud.OpenNpc;
+            _scene.ShopSellerSelected -= _hud.ViewPersonalShop;
+            _scene.PresenceObserved -= _hud.ObserveParty;
+            _scene.PresenceObserved -= _hud.ObserveTrade;
+            _scene.PresenceObserved -= _hud.ObserveContacts;
+            _hud.PlayerButtonsUsed -= _scene.DismissPlayerButtons;
             _scene.SkillNotice -= _hud.Chat.System;
             _hud.SummonModeRequested -= _scene.ToggleSummonMode;
+            _hud.CrystalPetDismissRequested -= _scene.DismissCrystalPets;
             _hud.RunToggleRequested -= _scene.ToggleRun;
+            _hud.YahooKeyPressed -= _scene.PressYahooKey;
             _hud.ItemSound -= _scene.PlayItemSound;
         }
 
         _hud?.Dispose();
         _scene?.Dispose();
     }
+
+    public override Task Closing => _scene?.Closing ?? Task.CompletedTask;
 }

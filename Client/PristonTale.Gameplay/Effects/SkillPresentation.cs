@@ -3,12 +3,15 @@ using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
 using PristonTale.Client.Net.Presence;
 using PristonTale.Effects;
-using PristonTale.Effects.Effects;
 using PristonTale.Effects.Vfx;
 using PristonTale.Engine3D.Diagnostics;
 using PristonTale.Engine3D.Rendering.Lighting;
 using PristonTale.Protocol.Packets;
 using PristonTale.Simulation.Skills;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Skills;
+using PristonTale.Contracts.Units;
+using PristonTale.Engine3D;
 
 namespace PristonTale.Gameplay.Effects;
 
@@ -22,6 +25,9 @@ public interface ISkillSceneHost : IVfxAnchors
     // Plays the skill's motion on the caster; loop counts the repeats of weapon-clip skills. For a skill clip rate is
     // the playback rate; for a weapon clip it multiplies the caster's attack rate.
     void PlaySkillMotion(ulong entityId, SkillMotionPlan plan, float durationMs, float rate, int loop);
+
+    // The caster's attack playback rate (1 when unknown); weapon-clip skills speed it up.
+    float AttackRateOf(ulong entityId);
 
     // A released charge: the caster's skill clip jumps to the frame and plays on at the rate.
     void SeekSkillMotion(ulong entityId, int framesFromStart, float rate) { }
@@ -42,27 +48,27 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
     private static readonly TimeSpan CompileBudget = TimeSpan.FromMilliseconds(2);
 
     private readonly ISkillSceneHost _host;
-    private readonly LegacyEffectLibrary _legacy;
+    private readonly EffectLibrary _effectLibrary;
     private readonly PristonTransientLights _lights;
     private readonly SkillSoundBank _sounds;
     private readonly IClientLog _log;
     private readonly List<Pending> _pending = new(32);
-    private readonly Dictionary<ulong, VfxInstance> _projectiles = new();
-    private readonly List<VfxInstance> _castEffects = new();
+    private readonly Dictionary<ulong, VfxHandle> _projectiles = new();
+    private readonly List<(ulong CasterId, VfxHandle Effect)> _castEffects = new();
     // Impacts each caster's current cast has had (per-hit sounds and effects).
     private readonly Dictionary<ulong, int> _impacts = new();
     private readonly Random _soundRandom = new();
     private bool _effectSoundsLoaded;
 
-    public SkillPresentation(GraphicsDevice device, ContentManager content, LegacyEffectLibrary legacy, PristonTransientLights lights, ISkillSceneHost host,
+    public SkillPresentation(GraphicsDevice device, ContentManager content, EffectLibrary library, PristonTransientLights lights, ISkillSceneHost host,
         SkillSoundBank sounds, IClientLog log)
     {
         _host = host;
-        _legacy = legacy;
+        _effectLibrary = library;
         _lights = lights;
         _sounds = sounds;
         _log = log;
-        Library = legacy.Vfx.Library;
+        Library = library.Vfx.Library;
         System = new VfxSystem(host, this, Library);
         Renderer = new VfxRenderer(device, content);
         Statuses.Added += OnStatusAdded;
@@ -121,7 +127,7 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
 
     public void Update(float seconds, double nowMs)
     {
-        if (!_legacy.Vfx.Ready && _legacy.Vfx.Compile(CompileBudget) || _legacy.Vfx.Ready && !_effectSoundsLoaded)
+        if (!_effectLibrary.Vfx.Ready && _effectLibrary.Vfx.Compile(CompileBudget) || _effectLibrary.Vfx.Ready && !_effectSoundsLoaded)
         {
             _effectSoundsLoaded = true;
             _sounds.Preload(Library.Names.SelectMany(name => Library.TryGet(name, out var effect) ? effect.Definition.Sounds.SelectMany(sound => sound.AllPaths) : []));
@@ -166,21 +172,22 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
     }
 
     // Starts a named effect at a point with a full orientation (scripts carried by other effects, monster skills).
-    public VfxInstance SpawnAt(string name, Vector3 point, Matrix orientation)
+    public VfxHandle SpawnAt(string name, Vector3 point, Matrix orientation)
     {
-        if (!Library.TryGet(name, out var effect) || System.Spawn(effect, new VfxSpawn(0, 0, point, 0f)) is not { } instance)
+        if (!Library.TryGet(name, out var effect))
         {
-            return null;
+            return default;
         }
 
-        instance.SetOrientation(orientation);
-        return instance;
+        var handle = System.Spawn(effect, new VfxSpawn(0, 0, point, 0f));
+        handle.SetOrientation(orientation);
+        return handle;
     }
 
     // Spawns a named effect directly (probes, previews).
-    public VfxInstance Spawn(string name, ulong casterId, ulong targetId, Vector3 point, float facing = 0f)
+    public VfxHandle Spawn(string name, ulong casterId, ulong targetId, Vector3 point, float facing = 0f)
     {
-        return Library.TryGet(name, out var effect) ? System.Spawn(effect, new VfxSpawn(casterId, targetId, point, facing)) : null;
+        return Library.TryGet(name, out var effect) ? System.Spawn(effect, new VfxSpawn(casterId, targetId, point, facing)) : default;
     }
 
     void IVfxServices.AddLight(Vector3 position, Color color, int power, int decay) => _lights?.Add(position, color, power, decay);
@@ -241,9 +248,9 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
         Looks.Cast(skillEvent, rule, nowMs);
         var position = Position(skillEvent.CasterId, skillEvent.Position);
         var facing = -skillEvent.Facing;
-        if (rule.CastEffect.Length > 0 && Spawn(rule.CastEffect, skillEvent.CasterId, skillEvent.TargetId, position, facing) is { } cast)
+        if (rule.CastEffect.Length > 0 && Spawn(rule.CastEffect, skillEvent.CasterId, skillEvent.TargetId, position, facing) is { Spawned: true } cast)
         {
-            _castEffects.Add(cast);
+            _castEffects.Add((skillEvent.CasterId, cast));
         }
 
         _sounds.Play(rule.CastSound, position, _host.ListenerPosition);
@@ -263,7 +270,7 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
         var to = Position(skillEvent.TargetId, skillEvent.Position);
         var planar = new Vector2(to.X - from.X, to.Z - from.Z).Length();
         var seconds = SkillProjectile.FlightMs(planar) / 1000f;
-        if (Spawn(rule.ProjectileEffect, skillEvent.CasterId, skillEvent.TargetId, from, -skillEvent.Facing) is { } projectile)
+        if (Spawn(rule.ProjectileEffect, skillEvent.CasterId, skillEvent.TargetId, from, -skillEvent.Facing) is { Spawned: true } projectile)
         {
             projectile.Travel(from, to, MathF.Max(0.05f, seconds), rule.ProjectileArc);
             _projectiles[skillEvent.CasterId] = projectile;
@@ -281,8 +288,8 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
         var plan = SkillFormulas.Plan(rule, skillEvent.Rank);
         var remainingFrames = Math.Max(1, plan.Frames - charge.FullFrame);
         var rate = skillEvent.DurationMs > 0f
-            ? Math.Clamp(remainingFrames * Simulation.World.Motion.MotionTiming.MsPerFrame / skillEvent.DurationMs, 0.1f, 8f)
-            : charge.ReleaseSpeed / 80f;
+            ? Math.Clamp(remainingFrames * GameUnits.FrameMs / skillEvent.DurationMs, 0.1f, 8f)
+            : charge.ReleaseSpeed / SkillFormulas.FrameStepAtRateOne;
         _host.SeekSkillMotion(skillEvent.CasterId, charge.FullFrame, rate);
         if (rule.Projectile && rule.ProjectileEffect.Length > 0)
         {
@@ -316,7 +323,7 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
             return perHit == SkillRule.Silent ? "" : perHit;
         }
 
-        var mode = (skillEvent.Flags & SkillEventFlags.ModeMask) >> SkillEventFlags.ModeShift;
+        var mode = skillEvent.Flags.Mode();
         if ((skillEvent.Flags & SkillEventFlags.Charged) != 0 && rule.Charge?.Full is { ImpactEffect.Length: > 0 } full)
         {
             return full.ImpactEffect;
@@ -399,7 +406,7 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
         var target = Position(skillEvent.TargetId, skillEvent.Position);
         if ((skillEvent.Flags & SkillEventFlags.Chain) != 0)
         {
-            var from = new Vector3(skillEvent.Position.X, skillEvent.Position.Y, -skillEvent.Position.Z);
+            var from = WorldSpace.Mirror(skillEvent.Position);
             if (Spawn(rule.ImpactEffect, skillEvent.CasterId, skillEvent.TargetId, from, -skillEvent.Facing) is { } link)
             {
                 link.Travel(from, target, ChainLinkSeconds);
@@ -426,12 +433,12 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
 
         for (var index = _castEffects.Count - 1; index >= 0; index--)
         {
-            var effect = _castEffects[index];
+            var (caster, effect) = _castEffects[index];
             if (!effect.Alive)
             {
                 _castEffects.RemoveAt(index);
             }
-            else if (effect.Spawn.CasterId == casterId)
+            else if (caster == casterId)
             {
                 effect.Stop();
                 _castEffects.RemoveAt(index);
@@ -442,7 +449,7 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
     private void ObserveCombat(CombatEventInfo combat)
     {
         var self = _host.SelfId;
-        if (combat.Kind == RemoteCombatEventKind.Evade)
+        if (combat.Kind == CombatEventKind.Evade)
         {
             if (combat.TargetId == self && TryAbove(combat.TargetId, out var evaded))
             {
@@ -452,7 +459,7 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
             return;
         }
 
-        if (combat.Kind == RemoteCombatEventKind.Revive)
+        if (combat.Kind == CombatEventKind.Revive)
         {
             if (_host.TryGetPosition(combat.TargetId, out var risen))
             {
@@ -462,7 +469,7 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
             return;
         }
 
-        if (combat.Kind == RemoteCombatEventKind.Heal)
+        if (combat.Kind == CombatEventKind.Heal)
         {
             if (combat.Damage > 0 && TryAbove(combat.TargetId, out var healed))
             {
@@ -472,7 +479,7 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
             return;
         }
 
-        if (combat.Kind != RemoteCombatEventKind.Hit || combat.Damage <= 0 || combat.AttackerId != self && combat.TargetId != self)
+        if (combat.Kind != CombatEventKind.Hit || combat.Damage <= 0 || combat.AttackerId != self && combat.TargetId != self)
         {
             return;
         }
@@ -499,17 +506,13 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
 
     private void OnStatusAdded(ulong entityId, StatusEntry entry)
     {
-        entry.Presentation = SpawnAura(entityId, entry);
+        entry.Aura = SpawnAura(entityId, entry);
     }
 
     private void OnStatusRemoved(ulong entityId, StatusEntry entry)
     {
-        if (entry.Presentation is VfxInstance aura)
-        {
-            aura.Stop();
-        }
-
-        entry.Presentation = null;
+        entry.Aura.Stop();
+        entry.Aura = default;
     }
 
     // Aura effects are finite; one that ran out while its status is still active starts again. A status that arrived before
@@ -518,20 +521,20 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
     {
         foreach (var (entity, entry) in Statuses.All())
         {
-            if (entry.Presentation is null or VfxInstance { Alive: false } && entry.RemainingMs(nowMs) > 500d)
+            if (!entry.Aura.Alive && entry.RemainingMs(nowMs) > 500d)
             {
-                entry.Presentation = SpawnAura(entity, entry);
+                entry.Aura = SpawnAura(entity, entry);
             }
         }
     }
 
     // Effects that draw an element (enchants, companions) report it as the status value; their aura has a variant per
     // element ("<aura>.ice") when one is defined.
-    private VfxInstance SpawnAura(ulong entityId, StatusEntry entry)
+    private VfxHandle SpawnAura(ulong entityId, StatusEntry entry)
     {
         if (!SkillRuleCatalog.TryGet(entry.Code, out var rule) || rule.BuffEffect.Length == 0 || !_host.TryGetPosition(entityId, out var position))
         {
-            return null;
+            return default;
         }
 
         var name = rule.BuffEffect;
@@ -573,28 +576,20 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
             return position;
         }
 
-        // Transport is PT-global (x, z); presentation uses (x, -z).
-        return new Vector3(fallbackTransport.X, fallbackTransport.Y, -fallbackTransport.Z);
+        return WorldSpace.Mirror(fallbackTransport);
     }
 
     // Skill clips: the playback rate that makes the clip last the duration the server scheduled. Weapon clips: the
-    // speed-up the skill applies on top of the caster's attack rate.
-    private static float MotionRate(SkillRule rule, SkillEventInfo skillEvent)
+    // speed-up the server applied on top of the caster's attack rate (SkillFormulas.WeaponClipSpeedup).
+    private float MotionRate(SkillRule rule, SkillEventInfo skillEvent)
     {
         var plan = SkillFormulas.Plan(rule, skillEvent.Rank);
         if (plan.Motion == SkillMotion.Skill && plan.Frames > 0 && skillEvent.DurationMs > 0f)
         {
-            return Math.Clamp(plan.Frames * Simulation.World.Motion.MotionTiming.MsPerFrame / skillEvent.DurationMs, 0.1f, 8f);
+            return Math.Clamp(plan.Frames * GameUnits.FrameMs / skillEvent.DurationMs, 0.1f, 8f);
         }
 
-        // A weapon clip multiplies the caster's own attack rate: the skill's speed steps (1.0 = one attack rate) and its
-        // rate percent; a fixed frame step is relative to the plain attack rate.
-        if (plan.Speed > 0)
-        {
-            return plan.Speed / 80f;
-        }
-
-        return (1f + 0.125f * rule.At(rule.AttackSpeedSteps, skillEvent.Rank)) * rule.MotionRatePercent / 100f;
+        return SkillFormulas.WeaponClipSpeedup(rule, skillEvent.Rank, _host.AttackRateOf(skillEvent.CasterId));
     }
 
     public void Dispose()

@@ -4,7 +4,7 @@ using PristonTale.Simulation.World;
 
 namespace PristonTale.WorldImport;
 
-internal static class NpcPlacementExport
+public static class NpcPlacementExport
 {
     public static void Write(string root, string output)
     {
@@ -22,8 +22,18 @@ internal static class NpcPlacementExport
             return files.GetValueOrDefault(key);
         }
 
+        // Every NPC file in path order, named and given its id as the import does, so an unregistered file gets the same key.
         var parser = new NpcParser();
-        var reader = new SpcReader(source => Resolve(source) is { } path ? parser.Parse(path).Name : null);
+        var npcs = files
+            .Where(static file => file.Key.StartsWith("NPC/", StringComparison.OrdinalIgnoreCase) && file.Key.IndexOf('/', 4) < 0
+                && file.Key.EndsWith(".npc", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static file => file.Value, StringComparer.Ordinal)
+            .Select(file => parser.Parse(file.Value))
+            .ToList();
+        NpcParser.ShareNames(npcs);
+        var registry = IdentityRegistry.Npcs();
+        var ids = npcs.ToDictionary(static npc => npc.File, npc => registry.Resolve(npc.File, npc.DisplayName), StringComparer.OrdinalIgnoreCase);
+        var reader = new SpcReader();
         var placements = new List<Placement>();
         foreach (var definition in new WorldCatalog().AllFields)
         {
@@ -39,14 +49,14 @@ internal static class NpcPlacementExport
             int missing = 0;
             foreach (var placement in field.FixedNpcs)
             {
-                if (Resolve(placement.SourceFile) is null)
+                if (!ids.TryGetValue(placement.SourceFile, out var npc))
                 {
                     missing++;
                     Console.WriteLine($"Missing NPC source: field={definition.FieldCode}, file={placement.SourceFile}");
                     continue;
                 }
 
-                placements.Add(new Placement(definition.FieldCode, placement.NpcName, placement.X, placement.Z,
+                placements.Add(new Placement(definition.FieldCode, npc.Id, npc.Key, placement.X, placement.Z,
                     placement.Angle, placement.Y, placement.SourceFile));
             }
 
@@ -57,5 +67,5 @@ internal static class NpcPlacementExport
         Console.WriteLine($"Exported {placements.Count} NPC placements across all configured fields.");
     }
 
-    private sealed record Placement(int FieldCode, string NpcName, int X, int Z, int Angle, int Y, string SourceFile);
+    private sealed record Placement(int FieldCode, int NpcId, string NpcKey, int X, int Z, int Angle, int Y, string SourceFile);
 }

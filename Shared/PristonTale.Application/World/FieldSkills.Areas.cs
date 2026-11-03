@@ -3,6 +3,7 @@ using PristonTale.Simulation.Combat;
 using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.Skills;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Contracts.Skills;
 
 namespace PristonTale.Application.World;
 
@@ -186,8 +187,8 @@ internal sealed partial class FieldSkills
 
         for (var link = 1; link < _targets.Count; link++)
         {
-            _skillEvents.Add(new SkillEventView(caster.EntityId, _targets[link]!.EntityId, cast.Rule.Code, SkillEventPhaseView.Impact, cast.Rank,
-                SkillEventFlagsView.Chain | SkillEventFlagsView.Area, 0f, 0f, _targets[link - 1]!.Position, 0f, link, linkLength));
+            _skillEvents.Add(new SkillEventView(caster.EntityId, _targets[link]!.EntityId, cast.Rule.Code, SkillEventPhase.Impact, cast.Rank,
+                SkillEventFlags.Chain | SkillEventFlags.Area, 0f, 0f, _targets[link - 1]!.Position, 0f, link, linkLength));
         }
     }
 
@@ -271,7 +272,7 @@ internal sealed partial class FieldSkills
             power = crit ? CombatResolver.ApplyCrit(power) : power;
         }
 
-        var damage = SkillFormulas.PowerAgainst(power, main, cast.Rank, monster.Def, character.Effects.Totals, monster.Effects.Totals);
+        var damage = SkillFormulas.MainSpellPowerAgainst(power, main, cast.Rank, monster.Def, character.Effects.Totals, monster.Effects.Totals);
         Pay(caster, monster, SkillFormulas.WithUndeadBonus(damage, character.Effects.Totals, monster.Def), crit);
     }
 
@@ -322,6 +323,6 @@ internal sealed partial class FieldSkills
             return;
         }
 
-        HealPlayer(caster, caster, Math.Min(drained, caster.MaxHp * damage.LifeToCasterCapPercent / 100));
+        HealPlayer(caster, caster, Math.Min(drained, caster.MaxLife * damage.LifeToCasterCapPercent / 100));
     }
 }

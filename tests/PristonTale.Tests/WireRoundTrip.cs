@@ -22,38 +22,74 @@ internal sealed class WireRoundTrip
     {
         _encoder = new PresenceEncoder(self, data ?? new WorldDataHolder());
         Catalog = new WorldRenderCatalog();
-        _decoder = new PresenceDecoder(Catalog, _requests.Enqueue) { SelfSerial = self };
+        _decoder = new PresenceDecoder(Catalog, _requests.Enqueue) { SelfEntityId = self };
     }
 
     public WorldRenderCatalog Catalog { get; }
 
     public int BytesSent => _sink.Bytes;
 
+    // The descriptions the client had to ask for.
+    public int DescriptionRequests { get; private set; }
+
+    // How many of the next descriptions the server pushes are lost on the way, as the rate limit drops replies.
+    public int DropPushedDescriptions { get; set; }
+
+    // The entries of the last snapshot pushed, as the wire carried them.
+    public List<PresenceEntry> LastEntries { get; } = [];
+
     public List<PresenceUpdate> Push(in WorldSnapshot snapshot)
     {
         _encoder.Encode(snapshot, _sink);
+        LastEntries.Clear();
         var updates = new List<PresenceUpdate>();
         while (_sink.Packets.Count > 0 || _requests.Count > 0)
         {
             while (_sink.Packets.TryDequeue(out var packet))
             {
+                var code = BitConverter.ToUInt32(packet, 4);
+                if (code == EtervaleOpcodes.EntityDescription && DropPushedDescriptions > 0 && _requests.Count == 0 && !_answering)
+                {
+                    DropPushedDescriptions--;
+                    continue;
+                }
+
+                if (code == EtervaleOpcodes.PresenceEntries)
+                {
+                    PresenceEntriesReader.Read(packet, (in PresenceEntry entry) => LastEntries.Add(entry));
+                }
+
                 if (_decoder.TryHandle(packet, out var update) && update is not null)
                 {
                     updates.Add(update);
                 }
             }
 
-            while (_requests.TryDequeue(out var serial))
+            _answering = true;
+            while (_requests.TryDequeue(out var entityId))
             {
-                if (_encoder.Describe(serial) is { } info)
-                {
-                    var buffer = new byte[EntityDescriptionPacket.MaximumSize];
-                    _sink.Packets.Enqueue(buffer[..info.Write(buffer)]);
-                }
+                DescriptionRequests++;
+                _encoder.SendRequestedDescription(entityId, _sink);
             }
+
+            _answering = false;
         }
 
         return updates;
+    }
+
+    private bool _answering;
+
+    // The client's decoder, for measuring it alone over packets taken with Encode.
+    public PresenceDecoder Decoder => _decoder;
+
+    // The packets the server sends for one snapshot, not yet decoded.
+    public List<byte[]> Encode(in WorldSnapshot snapshot)
+    {
+        _encoder.Encode(snapshot, _sink);
+        var packets = _sink.Packets.ToList();
+        _sink.Packets.Clear();
+        return packets;
     }
 
     // Merges one snapshot's updates into the single view the scene would observe.

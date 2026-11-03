@@ -1,8 +1,9 @@
 namespace PristonTale.Application.World;
 
 // The descriptor revision of every entity of one field: it rises when anything a viewer's description shows changes
-// (level, maximum life, template, speed, attack rate, equipment, looks, village flag, owner, size). It is computed once per
-// tick for the whole field, so every viewer sees the same revision and the encoders never compare descriptions themselves.
+// (level, maximum life, template, speed, attack rate, equipment, looks, village flag, shop sign, owner, size). It is
+// computed once per tick for the whole field, so every viewer sees the same revision and the encoders never compare
+// descriptions themselves.
 internal sealed class FieldDescriptors
 {
     // Entries of entities that left are dropped after this many ticks without a view.
@@ -64,7 +65,7 @@ internal sealed class FieldDescriptors
 
     private readonly struct Descriptor(in EntityView view)
     {
-        private readonly int _maxHp = view.MaxHp;
+        private readonly int _maxLife = view.MaxLife;
         private readonly int _level = view.Level;
         private readonly uint _template = view.TemplateId;
         private readonly int _moveSpeed = view.MoveSpeed;
@@ -76,16 +77,17 @@ internal sealed class FieldDescriptors
         public bool Matches(in EntityView view)
         {
             var appearance = view.Appearance;
-            return _maxHp == view.MaxHp && _level == view.Level && _template == view.TemplateId && _moveSpeed == view.MoveSpeed
+            return _maxLife == view.MaxLife && _level == view.Level && _template == view.TemplateId && _moveSpeed == view.MoveSpeed
                 && _attackRate.Equals(view.AttackRate) && _owner == view.OwnerId && _scale.Equals(view.ModelScale)
                 && _appearance.Tier == appearance.Tier && _appearance.HairIndex == appearance.HairIndex && _appearance.FaceIndex == appearance.FaceIndex
                 && _appearance.InVillage == appearance.InVillage && _appearance.HelperPet == appearance.HelperPet && _appearance.Phoenix == appearance.Phoenix
-                && _appearance.BigHead == appearance.BigHead && _appearance.JobCode == appearance.JobCode
+                && _appearance.BigHead == appearance.BigHead && _appearance.Class == appearance.Class
                 && string.Equals(_appearance.WeaponKey, appearance.WeaponKey, StringComparison.Ordinal)
                 && string.Equals(_appearance.ArmorKey, appearance.ArmorKey, StringComparison.Ordinal)
                 && string.Equals(_appearance.OffHandKey, appearance.OffHandKey, StringComparison.Ordinal)
                 && _appearance.WeaponGlow == appearance.WeaponGlow && _appearance.OffHandGlow == appearance.OffHandGlow
                 && string.Equals(_appearance.Name, appearance.Name, StringComparison.Ordinal)
+                && string.Equals(_appearance.ShopSign, appearance.ShopSign, StringComparison.Ordinal)
                 && string.Equals(_appearance.ModelName, appearance.ModelName, StringComparison.Ordinal)
                 && string.Equals(_appearance.ModelName2, appearance.ModelName2, StringComparison.Ordinal);
         }

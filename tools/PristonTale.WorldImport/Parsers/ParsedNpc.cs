@@ -3,11 +3,14 @@ using PristonTale.Simulation.World.Npcs;
 namespace PristonTale.WorldImport.Parsers;
 
 // Importer DTO for one NPC `.npc` (NpcParser) and its linked name file. Services are the typed services in click
-// order (the `npc_services` rows); the boolean flags and codes mirror the older `npcs.svc_*` columns. Shop item
-// references are raw 5-character codes, resolved by the Importer.
+// order (the `npc_services` rows). Shop item references are raw 5-character codes, resolved by the Importer.
 public sealed class ParsedNpc
 {
-    public required string Name { get; init; }
+    // The authored identity, shared by the files of one NPC; a file without an English name takes another's.
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string Name { get; init; } = "";
+    // The definition file's name, which is the NPC's identity (field placements name it).
+    public string File { get; init; } = "";
     public string DisplayName { get; set; } = "";
     public int PortraitOffsetY { get; set; }
     public int PortraitOffsetZ { get; set; }
@@ -16,10 +19,12 @@ public sealed class ParsedNpc
     public int SoundCode { get; set; }
     public float ModelScale { get; set; } = 1f;
     public int MoveRange { get; set; } = 64;
-    // *속성 적 makes the character hostile; *레벨 its level; *크기 its shadow size (-1 none).
+    // *속성 적 makes the character hostile; *레벨 its level; *크기 its shadow size (-1 none); *계급 its class, a quest
+    // code from 1000. Null when the file does not set them (NpcParser.TakePlacement).
     public bool Hostile { get; set; }
     public int Level { get; set; }
-    public int SizeLevel { get; set; }
+    public int? SizeLevel { get; set; }
+    public int? Class { get; set; }
     // *출현간격 slot, cycle: the NPC appears only when the field's draw modulo the cycle equals the slot (cycle 0: always).
     public int AppearSlot { get; set; }
     public int AppearCycle { get; set; }
@@ -27,31 +32,9 @@ public sealed class ParsedNpc
     // Keys of the file no rule reads; the importer reports them.
     public List<string> UnknownKeys { get; } = [];
 
-    public bool SvcWarehouse { get; set; }
-    public bool SvcShop { get; set; }
-    public bool SvcSkillMaster { get; set; }
-    public bool SvcJobChange { get; set; }
-    public bool SvcTeleport { get; set; }
-    public bool SvcItemMix { get; set; }
-    public bool SvcItemAging { get; set; }
-    public bool SvcSmelting { get; set; }
-    public bool SvcManufacture { get; set; }
-    public bool SvcMixtureReset { get; set; }
-    public bool SvcClan { get; set; }
-    public bool SvcBlessCastle { get; set; }
-    public bool SvcQuest { get; set; }
-    public bool SvcEventBooth { get; set; }
-    public bool SvcCollectMoney { get; set; }
-    public bool SvcGiveMoney { get; set; }
-
-    public int JobChangeCode { get; set; }
-    public int TeleportCode { get; set; }
-    public int QuestCode { get; set; }
-    public int QuestParam { get; set; }
-
-    // Dialog lines of the chosen locale (at most 20) and the key they came from.
+    // The English lines players read (at most 20), and the Korean lines left out for want of a translation.
     public List<string> Dialog { get; } = [];
-    public string DialogKey { get; set; } = "";
+    public List<string> UntranslatedDialog { get; } = [];
 
     public List<NpcService> Services { get; } = [];
 

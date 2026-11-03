@@ -32,7 +32,7 @@ public sealed class HudNpcPanel(
     private static readonly Color Unavailable = new(130, 130, 130);
     private static readonly Color Highlight = new(255, 220, 90);
 
-    private Task<NpcInteraction> _pending;
+    private readonly HudRequest<NpcInteraction> _request = new(log, "NPC interaction failed");
     private string[] _dialog = [];
     private NpcServiceOffer[] _services = [];
     private bool _dismissed;
@@ -49,10 +49,12 @@ public sealed class HudNpcPanel(
         offer.Kind is NpcServiceKind.QuestGiver or NpcServiceKind.QuestScript or NpcServiceKind.SkillMaster or NpcServiceKind.ItemAging
         || offer.Kind == NpcServiceKind.WarpGate && offer.Value <= 1;
 
-    // As in the original, an NPC whose only working service is a shop or a warehouse opens that window at once; the
-    // dialog appears when there is a choice to make, such as a quest beside the shop.
+    // As in the original, an NPC whose only working service is a shop, a warehouse, the aging or the mixing opens that
+    // window at once, and a skill master opens the skill window in training mode (its class change is a button there).
     public NpcServiceOffer DirectService =>
-        Current is { Ok: true } && !CanTrain && _services.Length == 1 && _services[0].Kind is NpcServiceKind.Shop or NpcServiceKind.Warehouse
+        Current is not { Ok: true } ? null
+        : CanTrain ? _services.Length == 0 ? Current.Services.First(static offer => offer.Kind == NpcServiceKind.SkillMaster) : null
+        : _services.Length == 1 && _services[0].Kind is NpcServiceKind.Shop or NpcServiceKind.Warehouse or NpcServiceKind.ItemAging or NpcServiceKind.ItemMix
             ? _services[0]
             : null;
     public IReadOnlyList<TeleportOffer> Destinations { get; private set; } = [];
@@ -73,59 +75,27 @@ public sealed class HudNpcPanel(
 
     public static Rectangle DestinationButton(int index, int count) => ServiceButton(index, count, 1);
 
-    // The skill master box is centred on the window; the original showed no help box beside it, so it moves right of the dialog.
-    public static Point SkillMasterOrigin(HudLayout layout)
-    {
-        var origin = new Point(layout.Width / 2 - 93 - 30, layout.Height / 2 - 63 - 100);
-        return new Rectangle(origin, new Point(188, 128)).Intersects(Box) ? new Point(Box.Right + 8, origin.Y) : origin;
-    }
-
-    public static Rectangle SkillMasterBox(HudLayout layout) => new(SkillMasterOrigin(layout), new Point(188, 128));
-    public static Rectangle TrainingButton(HudLayout layout) => SkillMasterButton(layout, 0);
-    public static Rectangle ClassChangeButton(HudLayout layout) => SkillMasterButton(layout, 1);
-    public static Rectangle ExitButton(HudLayout layout) => SkillMasterButton(layout, 2);
-
-    private static Rectangle SkillMasterButton(HudLayout layout, int index)
-    {
-        var origin = SkillMasterOrigin(layout);
-        return new Rectangle(origin.X + 21 + 51 * index, origin.Y + 22, 44, 44);
-    }
-
     public void Request(ulong entityId)
     {
-        if (_pending is null && interact is not null)
+        if (!_request.Pending && interact is not null)
         {
             Current = null;
             _dismissed = false;
             _firstLine = 0;
             Destinations = [];
-            _pending = InteractAsync(entityId);
-        }
-    }
-
-    private async Task<NpcInteraction> InteractAsync(ulong entityId)
-    {
-        try
-        {
-            return await interact(entityId);
-        }
-        catch (Exception exception)
-        {
-            log.Error("NPC interaction failed", exception);
-            return NpcInteraction.Rejected("Connection error. Please try again.");
+            _request.Start(() => interact(entityId), _ => NpcInteraction.Rejected(HudRequest.ConnectionError));
         }
     }
 
     public void Update(SpriteFont font)
     {
         ReadyToOpen = false;
-        if (_pending is null || !_pending.IsCompleted)
+        if (!_request.TryTake(out var current))
         {
             return;
         }
 
-        Current = _pending.Result;
-        _pending = null;
+        Current = current;
         if (_dismissed)
         {
             Current = null;
@@ -145,7 +115,7 @@ public sealed class HudNpcPanel(
     private static NpcServiceOffer[] Buttons(NpcInteraction interaction)
     {
         return interaction.Services
-            .Where(offer => offer.Kind != NpcServiceKind.SkillMaster && offer.Available && !IsQuestRole(offer))
+            .Where(offer => offer.Kind != NpcServiceKind.SkillMaster && offer.Available && (offer.Kind == NpcServiceKind.ItemAging || !IsQuestRole(offer)))
             .GroupBy(offer => HudNpcArt.Label(offer.Kind, offer.Value))
             .Select(group => group.First())
             .Take(ButtonColumns * MaxButtonRows)
@@ -217,7 +187,7 @@ public sealed class HudNpcPanel(
         }
     }
 
-    public void Draw(HudPainter painter, HudLayout layout, Point pointer, bool showSkillMaster, bool classChange = false)
+    public void Draw(HudPainter painter, Point pointer)
     {
         if (Current is null)
         {
@@ -239,19 +209,13 @@ public sealed class HudNpcPanel(
         {
             var barX = BoxX + (SizeW - 1) * 32 + 80 - 6;
             var height = capacity * 15 + 16;
-            painter.Stretch(HudArt.ScrollBar, new Rectangle(barX, BoxY + 53, 8, height));
-            var travel = (height - 20) * _firstLine / Math.Max(1, lines.Length - capacity);
-            painter.Sprite(HudArt.ScrollButton, barX - 4, BoxY + 53 + travel);
+            painter.ScrollBar(barX, BoxY + 53, height, _firstLine, lines.Length - capacity);
         }
 
         DrawButtons(painter, pointer);
         var ok = OkButton;
         painter.Sprite(HudArt.HelpButton, ok.X - 9, ok.Y - 4);
         painter.Sprite(ok.Contains(pointer) ? HudArt.OkYellow : HudArt.OkGray, ok.X, ok.Y);
-        if (showSkillMaster && CanTrain && Destinations.Count == 0)
-        {
-            DrawSkillMaster(painter, layout, pointer, classChange);
-        }
     }
 
     private void DrawButtons(HudPainter painter, Point pointer)
@@ -305,22 +269,5 @@ public sealed class HudNpcPanel(
         painter.Stretch(HudArt.HelpTitle, new Rectangle(bounds.X + End, bounds.Y, bounds.Width - End * 2, ButtonHeight),
             new Rectangle(End, 0, ButtonWidth - End * 2, ButtonHeight), tint);
         painter.Sprite(HudArt.HelpTitle, bounds.Right - End, bounds.Y, new Rectangle(ButtonWidth - End, 0, End, ButtonHeight), tint);
-    }
-
-    private static void DrawSkillMaster(HudPainter painter, HudLayout layout, Point pointer, bool classChange)
-    {
-        var origin = SkillMasterOrigin(layout);
-        painter.Sprite(HudArt.SkillMasterBox, origin.X, origin.Y);
-        var training = TrainingButton(layout);
-        painter.Sprite(training.Contains(pointer) ? HudArt.SelectSkill : HudArt.SelectSkillGray, training.X, training.Y);
-        var job = ClassChangeButton(layout);
-        painter.Sprite(classChange && job.Contains(pointer) ? HudArt.SelectJob : HudArt.SelectJobGray, job.X, job.Y);
-        var exit = ExitButton(layout);
-        if (exit.Contains(pointer))
-        {
-            painter.Sprite(HudArt.SkillMasterExit, exit.X, exit.Y);
-        }
-
-        painter.Text(classChange && job.Contains(pointer) ? "Rank up" : "Skill training", origin.X + 23, origin.Y + 73);
     }
 }

@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 
 namespace PristonTale.Protocol.Binary;
 
-// Sequential little-endian writer for x86 Priston structs. Callers size the destination from the struct layout.
+// Sequential little-endian writer for the Etervale messages. Callers size the destination from the message layout.
 public ref struct PacketWriter
 {
     private readonly Span<byte> _buffer;
@@ -77,10 +77,18 @@ public ref struct PacketWriter
         _position += 16;
     }
 
-    public void Bytes(ReadOnlySpan<byte> value)
+    public void Bytes(scoped ReadOnlySpan<byte> value)
     {
         value.CopyTo(_buffer[_position..]);
         _position += value.Length;
+    }
+
+    // {uint16 ByteLength, UTF-8 bytes} encoded in place; the caller has fitted the text to its field (Utf8Text).
+    public void Utf8(string text)
+    {
+        var count = System.Text.Encoding.UTF8.GetBytes(text, _buffer[(_position + 2)..]);
+        UInt16((ushort)count);
+        _position += count;
     }
 
     public void Zero(int count)

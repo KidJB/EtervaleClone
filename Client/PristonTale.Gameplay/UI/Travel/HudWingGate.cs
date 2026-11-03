@@ -1,12 +1,13 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using PristonTale.Application.World;
 using PristonTale.Engine3D.Diagnostics;
 using PristonTale.Gameplay.UI.Quests;
 using PristonTale.Gameplay.UI.Rendering;
 using PristonTale.Gameplay.UI.Widgets;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.World;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Units;
 
 namespace PristonTale.Gameplay.UI.Travel;
 
@@ -28,13 +29,12 @@ public sealed class HudWingGate(IClientLog log)
     public const string CancelButton = "image/clanImage/MessageBox/c.bmp";
     public const string CancelButtonHover = "image/clanImage/MessageBox/c1.bmp";
     // The rings start every forty frames of the original's seventy a second while an icon is hovered.
-    private const double FrameMs = 1000d / 70;
     private const int RingPeriodFrames = 40;
     private static readonly Color TitleColor = new(255, 255, 240);
 
     public static readonly string[] Art = [WingGates.MapArt, WingGates.IconArt, WingGates.SelectArt, CancelBox, CancelButton, CancelButtonHover];
 
-    private Task<WingGateOutcome> _pending;
+    private readonly HudRequest<WingGateOutcome> _request = new(log, "Wing gate trip failed");
     private WingGateDestination _confirm;
     private WingGateDestination _ringAt;
     private double _ringStartMs = double.NegativeInfinity;
@@ -48,7 +48,7 @@ public sealed class HudWingGate(IClientLog log)
 
     public bool IsOpen { get; private set; }
     public bool Confirming => _confirm is not null;
-    public bool Pending => _pending is not null;
+    public bool Pending => _request.Pending;
     public string Message { get; private set; } = "";
     public int Completions { get; private set; }
     public WingGateOutcome LastOutcome { get; private set; }
@@ -160,13 +160,11 @@ public sealed class HudWingGate(IClientLog log)
 
     public void Update()
     {
-        if (_pending is null || !_pending.IsCompleted)
+        if (!_request.TryTake(out var outcome))
         {
             return;
         }
 
-        var outcome = _pending.Result;
-        _pending = null;
         LastOutcome = outcome;
         Message = WingGates.Message(outcome.Status);
         Completions++;
@@ -184,8 +182,7 @@ public sealed class HudWingGate(IClientLog log)
         if (_confirm is not null)
         {
             painter.Flush();
-            HudMessageBox.Draw(painter, _confirm.Name, "Do you want to", pointer);
-            painter.TextCentered("move there?", HudMessageBox.Bounds.Left, HudMessageBox.Bounds.Right, HudMessageBox.Bounds.Y + 60);
+            HudMessageBox.Draw(painter, _confirm.Name, "Do you want to", pointer, "move there?");
         }
     }
 
@@ -225,7 +222,7 @@ public sealed class HudWingGate(IClientLog log)
             }
         }
 
-        if (hovered is not null && (!ReferenceEquals(hovered, _ringAt) || nowMs - _ringStartMs >= RingPeriodFrames * FrameMs))
+        if (hovered is not null && (!ReferenceEquals(hovered, _ringAt) || nowMs - _ringStartMs >= RingPeriodFrames * GameUnits.TickMs))
         {
             _ringAt = hovered;
             _ringStartMs = nowMs;
@@ -233,7 +230,7 @@ public sealed class HudWingGate(IClientLog log)
 
         if (_ringAt is not null)
         {
-            var frame = (int)((nowMs - _ringStartMs) / FrameMs);
+            var frame = (int)((nowMs - _ringStartMs) / GameUnits.TickMs);
             var origin = Icon(_ringAt);
             for (var ring = 0; ring < 3; ring++)
             {
@@ -252,7 +249,7 @@ public sealed class HudWingGate(IClientLog log)
     }
 
     private static WingGateWing Wing(OwnerState state) =>
-        state is null ? null : WingGates.BestWing(state.Items.Where(static item => item.Slot < 0).Select(static item => item.Code));
+        state is null ? null : WingGates.BestWing(state.Items.Where(static item => item.InBag || item.QuestBox >= 0).Select(static item => item.Code));
 
     private void Report(WingGateStatus status)
     {
@@ -268,19 +265,8 @@ public sealed class HudWingGate(IClientLog log)
             return;
         }
 
-        _pending = TravelAsync(destination.Index);
+        var index = destination.Index;
+        _request.Start(() => Travel(index), _ => new WingGateOutcome(WingGateStatus.StorageFailed, index));
     }
 
-    private async Task<WingGateOutcome> TravelAsync(int destination)
-    {
-        try
-        {
-            return await Travel(destination);
-        }
-        catch (Exception exception)
-        {
-            log.Error("Wing gate trip failed", exception);
-            return new WingGateOutcome(WingGateStatus.StorageFailed, destination);
-        }
-    }
 }

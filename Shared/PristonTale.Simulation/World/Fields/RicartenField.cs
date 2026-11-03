@@ -1,3 +1,5 @@
+using PristonTale.Simulation.World;
+
 namespace PristonTale.Simulation.World.Fields;
 
 public static class RicartenField
@@ -25,8 +27,10 @@ public static class RicartenField
             "Field\\Ricarten\\v-ani14.smd"
         ])
     {
-        FieldCode = 3,
+        FieldCode = FieldCodes.Ricarten,
         HazeReduction = 0.2f,
+        // Ricarten stands in the clouds: a light mist of its own in the mornings.
+        MorningMist = 0.8f,
         Center = new FieldPoint(2596, -18738),
         StartPoints =
         [

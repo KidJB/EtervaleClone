@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using PristonTale.Simulation.Characters;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Gameplay.Screens.CharacterSelect;
 
@@ -11,6 +12,8 @@ internal sealed class CharSelectViewModel
 {
     public int StateIndex;
     public string ErrorMessage = string.Empty;
+
+    public string ServerName = string.Empty;
     public double ElapsedSeconds;
 
     public bool RosterHasChars;
@@ -55,6 +58,10 @@ internal sealed class CharacterSelectView
 
         DrawFrame(viewport);
         DrawTitle(viewport, m.StateIndex);
+        if (!string.IsNullOrEmpty(m.ServerName))
+        {
+            _sb.DrawString(_font, m.ServerName, new Vector2(16f, 20f), Color.Gold, 0f, Vector2.Zero, InfoPanelValueScale, SpriteEffects.None, 0f);
+        }
 
         switch (m.StateIndex)
         {

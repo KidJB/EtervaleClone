@@ -1,5 +1,6 @@
 using System.Numerics;
 using PristonTale.Simulation.Characters;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Persistence.Abstractions.Characters;
 
@@ -57,9 +58,9 @@ public static class CharacterRecordFactory
             Equipment: JsonText.EmptyObject,
             Skills: JsonText.EmptyArray,
             Quests: JsonText.EmptyObject,
-            DerivedStats: JsonText.EmptyObject,
             Premium: JsonText.EmptyObject,
-            LastPlayedAt: null);
+            LastPlayedAt: null,
+            StarterGiftsReceived: 0);
     }
 
     public static CharacterRecord FromLiveSession(
@@ -84,6 +85,9 @@ public static class CharacterRecordFactory
             Money = character.Money,
             StatPoints = character.StatPoints,
             Tier = character.Tier,
+            StarterGiftsReceived = character.StarterGiftsReceived,
+            HelpPet = (short)character.HelpPet,
+            HelpPetHidden = character.HelpPetHidden,
             Strength = attributes.Strength,
             Spirit = attributes.Spirit,
             Talent = attributes.Talent,
@@ -102,7 +106,6 @@ public static class CharacterRecordFactory
             CharacterStateCodec.CaptureInventory(character),
             CharacterStateCodec.CaptureEquipment(character),
             CharacterStateCodec.CaptureSkills(character),
-            DerivedStatsDto.From(character.Derived),
             SavedPremium.Capture(character),
             QuestStateCodec.Capture(character.Quests));
     }

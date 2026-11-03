@@ -1,6 +1,6 @@
 # Glossary
 
-Domain terms, abbreviations and legacy format names used in the code and the other docs. Each entry names the doc
+Domain terms, abbreviations and original format names used in the code and the other docs. Each entry names the doc
 that explains it in depth.
 
 ## Read this when
@@ -13,9 +13,11 @@ that explains it in depth.
 | Term | Meaning | Doc |
 |---|---|---|
 | World unit | Coordinate unit of fields and actors; authored and wire positions store it as fixed point ×256 | world.md |
-| Fixed point ×256 (`FixedScale`) | Wire, stage and model coordinates are value × 256 (`PristonUnits.FixedScale`) | protocol.md |
-| Angle 4096 | A full turn is 4096 angle units (`PristonUnits.AngleTurn`) | protocol.md |
-| PT-global coordinates | Wire and authored `(x, z)`; the client's render world uses `(x, -z)` (`GameScene.RemapToWorld`) | client.md |
+| Fixed point ×256 (`FixedScale`) | Wire, stage and model coordinates are value × 256 (`GameUnits.FixedScale`, Contracts) | architecture.md |
+| Angle 4096 | A full turn is 4096 angle units (`GameUnits.AngleTurn`) | architecture.md |
+| Tick (70 Hz) | Authored behaviour and effect timing step, 1/70 s (`GameUnits.TicksPerSecond`, `TickMs`) | architecture.md |
+| Frame ticks | An animation frame is 160 ticks of the clip timeline and lasts 33 ms at rate 1 (`GameUnits.FrameTicks`, `FrameMs`) | architecture.md |
+| PT-global coordinates | Wire and authored `(x, z)`; the client's render world uses `(x, -z)` (`WorldSpace`, `RemoteEntityManager.ApplyServer`) | client.md |
 | Field | A map area with its own stage, spawns, NPCs and gates; live on the server as a `FieldInstance` | world.md |
 | Field code | Integer field id; the server keys live fields by it. The string field id is the stage base name | world.md |
 | Field clock | Per-field millisecond time (`NowMs`) starting at 0; cooldowns are rebased on field change | application.md |
@@ -35,14 +37,17 @@ that explains it in depth.
 | Brood (character) | A class's race: Tempskron or Morion (`CharacterBrood`) | simulation.md |
 | Brood (monster) | Monster family: Normal, Undead, Mutant, Demon, Mechanic, User (`MonsterBrood`); used by skill bonuses and filters | skills.md |
 | Tier / job tier | Class rank 0..3 (`Job1`..`Job4`); opens skill-window rows; below tier 3 experience stops at level 100 | simulation.md |
-| JobBitCode | Class bit mask for item restrictions; differs from `MotionJobMask` (`1 << (JobCode-1)`) used by animation tables | simulation.md |
+| JobBitCode | Class bit mask for item restrictions; mapped from `PlayerClass` by `JobBits`; differs from `MotionJobMask` (`1 << (Class-1)`) used by animation tables | simulation.md |
 | Catalog key | 5-character authored item key, 3-character category + 2 digits (`WA101`) | simulation.md |
-| Item code | 32-bit item code `family << 8 \| ordinal` derived from the item key by `ItemCodes`; stored as `item_code_mask` | simulation.md |
+| Entity id | 64-bit id of a player, monster or NPC in the world; the wire, the views and the client use it (`EntityId`, `NpcId`, `TargetId`) | protocol.md |
+| Life, mana, stamina | The three pools; every layer names them `Life`/`MaxLife`, `Mana`/`MaxMana`, `Stamina`/`MaxStamina` (the world tables keep a `hp` column) | simulation.md |
+| Item code | 32-bit item code `family << 8 \| ordinal` derived from the item key by `ItemCodes` when the catalog loads | simulation.md |
 | Item roll | The values one item copy was made with (`ItemRoll`): stats, requirements, price, specialization | simulation.md |
 | Shop form | The lowest form of an item, as NPC shops sell it (`ItemRoller.Lower`) | simulation.md |
 | Specialization | A copy made for one class (`ItemRoll.SpecJob`); grants its bonuses only to that class | simulation.md |
 | Carried weight | Weight of every owned item (potions one per unit) against `MaxWeight`; over it a character walks only | simulation.md |
-| `item_code_mask = 0` | Imported item whose category has no verified numeric code; the runtime skips it | world-import.md |
+| Item definition | What copies of an item code are made from: its regular, quest or named-unique variant (`item_definitions`) | persistence.md |
+| Catalog language | A `languages` code; every catalog name and NPC line is stored per language, English (`en`) required | persistence.md |
 | Anchor | Inventory cell index (`y * Width + x`) of an item's top-left corner | simulation.md |
 | Rolled bonus | Per-instance `ItemStatBlock` added to the definition's base stats | simulation.md |
 | Absorption | Flat damage reduction against players, percent reduction against monsters | simulation.md |
@@ -80,7 +85,7 @@ that explains it in depth.
 | Bonus drop | Independent per-10,000 chance roll on top of the weighted main drops | world.md |
 | Kill payout | Kill result: credited player, experience, rolled drops | application.md |
 | Motion clip | INX frame window plus event offsets; 160 ticks per frame | world.md |
-| Monster / NPC code | 1-based position in the loaded catalog; shifts on re-import, never persist it | world-import.md |
+| Monster / NPC code | The importer's registry id (`Identities/*.json`); the same in every database and across imports | world-import.md |
 
 ## Server, sessions and transactions
 
@@ -89,14 +94,18 @@ that explains it in depth.
 | Tick | One `WorldServer.Tick` at 20 Hz; the only thread that mutates world state | architecture.md |
 | Command queue | Bounded single-reader channel of world commands drained by the tick | application.md |
 | Command quota | `World:MaxPendingCommandsPerPlayer` queued commands per player; over it, `WorldBusyException` | application.md |
-| Prepare / persist / commit | Validate and build a candidate on the tick, store it off the tick, apply it on the tick | application.md |
+| Prepare / commit | Validate and build a candidate on the tick, apply it on the tick, then queue it for storage (a transfer is stored between the two) | application.md |
 | Candidate | Clone of the character a transaction is applied to before commit | application.md |
 | `SaveGate` | Per-session semaphore serialising saves and durable character operations | application.md |
+| Save sequence | `characters.save_seq`: the order of a character's captures; storage keeps the highest it was given | persistence.md |
+| Checkpoint | The world's capture of every playing character once per `World:CheckpointSeconds` for background storage | application.md |
+| Item transfer | A logged change of hands of items or gold: trade, personal shop, warehouse, ground throw and pickup, game-master gift (`item_transfers`) | application.md |
+| Currency sink | Where gold leaves the economy (`CurrencySink`); the totals per period are logged in `currency_sinks` | application.md |
+| Save journal | Captures storage refused while the server stopped, stored by the next start before players enter | application.md |
 | Operation id | Client GUID per durable command; same id and command replays, different command conflicts | application.md |
 | `WorldSnapshot` | Per-field state built each tick and specialised per receiver with `OwnerState` | application.md |
-| `WorldOutbox` | Per-connection channel keeping the latest entity state and every event; overflow disconnects | application.md |
+| `WorldOutbox` | Per-connection channel keeping the latest entity state and every event; a reader 4096 events behind loses them (`EventsLost`) | application.md |
 | Typed NPC service | `npc_services` row (`NpcServiceKind`, values, text) in click order | world-import.md |
-| `svc_*` flags | Older boolean NPC service columns, read only when an NPC has no `npc_services` rows | persistence.md |
 
 ## Protocol
 
@@ -116,13 +125,13 @@ that explains it in depth.
 |---|---|---|
 | GameServer data | Authored server data in `assets/GameServer` (items, monsters, NPCs, fields), CP949 text | world-import.md |
 | CP949 | Korean code page of every authored text file and of names inside binary records | world-import.md |
-| Identity name | Verbatim authored name other files reference; differs from the display name | world-import.md |
-| Variant | Every parsed definition kept in `world_entity_variants`; the catalog keeps one per identity | world-import.md |
+| Identity name | Verbatim authored monster name spawn tables reference; differs from the English name. NPCs are identified by their file | world-import.md |
+| Variant | Every parsed definition kept in `world_entity_variants`; the catalog keeps one per item code and monster identity, and every NPC file | world-import.md |
 | Unresolved reference | Reference with no target, kept in `world_import_unresolved_refs` | world-import.md |
 | `.zhoon` | Name/locale file linked from item, monster and NPC definitions | world-import.md |
 | `.inf` / `.npc` / `.txt` | Monster, NPC and item definition files | world-import.md |
 | `.spm` / `.spp` / `.spc` | Field spawn table / binary spawn points / binary fixed-NPC placements | world-import.md |
-| SMD / SMB / INX | Legacy stage-or-model mesh / skeleton / model-info and motion table files | rendering.md |
+| SMD / SMB / INX | Original stage-or-model mesh / skeleton / model-info and motion table files | rendering.md |
 | `.vfx.json` | Etervale's data-driven visual effect definition | effects.md |
 | `JsonText` | JSON column wrapper: TEXT on SQLite, `jsonb` on PostgreSQL | persistence.md |
 
@@ -132,7 +141,7 @@ that explains it in depth.
 |---|---|---|
 | EV100 | Exposure value at ISO 100 used by the camera model | rendering.md |
 | Pre-exposure | Multiplier applied to scene radiance so a white lit surface is near 1 | rendering.md |
-| Legacy light level | Authored light value, mapped to illuminance as level^1.4 × 10 lux | rendering.md |
+| Original light level | Authored light value, mapped to illuminance as level^1.4 × 10 lux | rendering.md |
 | Mesopic vision | Final-pass blend of dim pixels toward scotopic luminance in the night hue | rendering.md |
 | Floor light | Actor tint from the stage's authored vertex light under its feet | rendering.md |
 | Depth pre-pass | Depth, normals and motion of opaque surfaces and cut-outs; needed by AO, SSR, volumetric light, soft particles | rendering.md |

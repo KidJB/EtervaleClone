@@ -3,12 +3,9 @@ using PristonTale.Simulation.Items;
 
 namespace PristonTale.Simulation.World.Npcs;
 
-// Account storage kept by warehouse NPCs: the original 9x9 grid of 22-pixel cells, at most 100 items and 1000 weight.
-// Quest items and crafting materials stay with the character, as in the original.
+// Account storage kept by warehouse NPCs: the store grid (StoreGrid), at most 100 items and 1000 weight.
 public sealed class WarehouseStorage
 {
-    public const int Columns = 9;
-    public const int Rows = 9;
     public const int MaxItems = 100;
     public const int MaxWeight = 1000;
     public const long MaxMoney = 100_000_000;
@@ -24,7 +21,7 @@ public sealed class WarehouseStorage
         Money = money;
     }
 
-    public Inventory Grid { get; } = new(Columns, Rows);
+    public Inventory Grid { get; } = StoreGrid.Create();
     public long Money { get; private set; }
     public long Revision { get; private set; }
 
@@ -33,106 +30,83 @@ public sealed class WarehouseStorage
         get
         {
             var weight = 0;
-            foreach (var item in Items())
+            foreach (var item in Grid.Items())
             {
-                weight += ItemWeight(item);
+                weight += CarriedWeight.Of(item);
             }
 
             return weight;
         }
     }
 
-    public int Count => Items().Count();
+    public int Count => Grid.Items().Count();
 
-    public IEnumerable<ItemInstance> Items()
-    {
-        for (var anchor = 0; anchor < Grid.Capacity; anchor++)
-        {
-            if (Grid[anchor] is { } item)
-            {
-                yield return item;
-            }
-        }
-    }
+    // What BoundItems.CanHandOver lets go, potions apart.
+    public static bool CanStore(PlayerCharacter character, ItemInstance item) =>
+        BoundItems.CanHandOver(character, item) && !RefusedOnSetDown(item.Definition.Kind);
 
-    public static bool CanStore(ItemInstance item) => item.Definition.Kind is not (ItemKind.Quest or ItemKind.Material);
+    // The rule a view can check from the item's kind and key (the quest's own items are the server's to refuse).
+    public static bool CanStore(ItemKind kind, string key) => BoundItems.CanHandOver(kind, key) && !RefusedOnSetDown(kind);
 
-    public static int ItemWeight(ItemInstance item) => Math.Max(0, item.Definition.Weight) * item.Count;
+    // The original places a potion over the grid as any item and refuses it only when it is set down, with
+    // ItemRuleMessages.PotionNotStored; the other items CanStore refuses show red where they would land.
+    public static bool RefusedOnSetDown(ItemKind kind) => kind == ItemKind.Potion;
 
     public WarehouseStorage Clone()
     {
         var clone = new WarehouseStorage(Revision, Money);
-        for (var anchor = 0; anchor < Grid.Capacity; anchor++)
-        {
-            if (Grid[anchor] is { } item)
-            {
-                clone.Grid.TryPlace(item.Copy(item.Count, preserveId: true), anchor);
-            }
-        }
-
+        clone.Grid.CopyFrom(Grid);
         return clone;
     }
 
     public bool Restore(ItemInstance item, int anchor) => Count < MaxItems && Grid.TryPlace(item, anchor);
 
-    public NpcServiceStatus TryDeposit(PlayerCharacter character, Guid itemId, int anchor)
+    // An item set down on the grid, as the original sets it: on free cells (-1: the first that fit), or over one stored
+    // item, which goes to the item's bag cell (or wherever the bag has room) and is carried in turn. covered is the item
+    // the client saw under it, or empty.
+    public NpcServiceStatus TryDeposit(PlayerCharacter character, Guid itemId, int anchor, Guid covered = default)
     {
         var source = character.Inventory.Find(itemId);
-        if (source < 0 || character.Inventory[source] is not { } item || !CanStore(item) || Quests.RankUpByQuestWeapon.IsBound(character, item))
+        if (source < 0 || character.Inventory[source] is not { } item || !CanStore(character, item) || !TryCovered(Grid, anchor, item, covered, out var displaced))
         {
             return NpcServiceStatus.Rejected;
         }
 
-        if (Weight + ItemWeight(item) > MaxWeight || Count >= MaxItems)
+        if (displaced is null && Count >= MaxItems)
         {
             return NpcServiceStatus.NoSpace;
         }
 
-        var stored = anchor >= 0 ? Grid.TryPlace(item, anchor) : Grid.TryAdd(item);
-        if (!stored)
-        {
-            return NpcServiceStatus.NoSpace;
-        }
-
-        character.Inventory.TakeAt(source);
-        Revision++;
-        return NpcServiceStatus.Ok;
+        return Weigh(character, item, displaced) is var weighed && weighed != NpcServiceStatus.Ok ? weighed
+            : SetDown(character.Inventory, source, Grid, anchor, displaced) ? Changed() : NpcServiceStatus.NoSpace;
     }
 
-    public NpcServiceStatus TryWithdraw(PlayerCharacter character, Guid itemId, int anchor)
+    // A stored item set down in the bag: on free cells, or over one bag item, which goes to the stored item's cell (or
+    // wherever the grid has room) and is carried in turn.
+    public NpcServiceStatus TryWithdraw(PlayerCharacter character, Guid itemId, int anchor, Guid covered = default)
     {
         var source = Grid.Find(itemId);
-        if (source < 0 || Grid[source] is not { } item)
+        if (source < 0 || Grid[source] is not { } item || !TryCovered(character.Inventory, anchor, item, covered, out var displaced)
+            || displaced is not null && !CanStore(character, displaced))
         {
             return NpcServiceStatus.Rejected;
         }
 
-        if (!CarriedWeight.CanTake(character, CarriedWeight.Of(item)))
-        {
-            return NpcServiceStatus.OverWeight;
-        }
-
-        var placed = anchor >= 0 ? character.Inventory.TryPlace(item, anchor) : character.Inventory.TryAdd(item);
-        if (!placed)
-        {
-            return NpcServiceStatus.NoSpace;
-        }
-
-        Grid.TakeAt(source);
-        Revision++;
-        return NpcServiceStatus.Ok;
+        return Weigh(character, displaced, item) is var weighed && weighed != NpcServiceStatus.Ok ? weighed
+            : SetDown(Grid, source, character.Inventory, anchor, displaced) ? Changed() : NpcServiceStatus.NoSpace;
     }
 
-    public NpcServiceStatus TryMove(Guid itemId, int anchor)
+    // A stored item set down elsewhere on the grid, over free cells or one other stored item (carried in turn).
+    public NpcServiceStatus TryMove(Guid itemId, int anchor, Guid covered = default)
     {
         var source = Grid.Find(itemId);
-        if (source < 0 || !Grid.TryMove(source, anchor))
+        if (source < 0 || anchor < 0 || Grid[source] is not { } item || !CanStore(item.Definition.Kind, item.Definition.CatalogKey)
+            || !TryCovered(Grid, anchor, item, covered, out var displaced))
         {
             return NpcServiceStatus.Rejected;
         }
 
-        Revision++;
-        return NpcServiceStatus.Ok;
+        return (displaced is null ? Grid.TryMove(source, anchor) : Grid.TrySwap(source, anchor)) ? Changed() : NpcServiceStatus.Rejected;
     }
 
     public NpcServiceStatus TryDepositGold(PlayerCharacter character, long amount)
@@ -171,21 +145,67 @@ public sealed class WarehouseStorage
         return NpcServiceStatus.Ok;
     }
 
-    public WarehouseView View()
+    // Whether the warehouse can bear `stored` coming in and the character `taken` coming out to it (either may be null);
+    // a side whose load falls is never refused, even over its limit.
+    private NpcServiceStatus Weigh(PlayerCharacter character, ItemInstance stored, ItemInstance taken)
     {
-        var items = new List<OwnedItemView>();
-        for (var anchor = 0; anchor < Grid.Capacity; anchor++)
+        var change = (stored is null ? 0 : CarriedWeight.Of(stored)) - (taken is null ? 0 : CarriedWeight.Of(taken));
+        if (change > 0 && Weight + change > MaxWeight)
         {
-            if (Grid[anchor] is { } item)
-            {
-                var definition = item.Definition;
-                var key = item.Sealed ? PristonTale.Simulation.Items.Usable.Puzzles.LuckyBagIcon : definition.CatalogKey;
-                items.Add(new OwnedItemView(item.InstanceId, item.Sealed ? ItemCodes.Parse(key) : definition.Code,
-                    item.Sealed ? PristonTale.Simulation.Items.Usable.Puzzles.LuckyBagName : item.DisplayName, definition.Kind, item.Count, anchor, -1,
-                    definition.GridWidth, definition.GridHeight, key));
-            }
+            return NpcServiceStatus.NoSpace;
         }
 
-        return new WarehouseView(Revision, Money, Weight, MaxWeight, Columns, Rows, items);
+        return change < 0 && !CarriedWeight.CanTake(character, -change) ? NpcServiceStatus.OverWeight : NpcServiceStatus.Ok;
+    }
+
+    private NpcServiceStatus Changed()
+    {
+        Revision++;
+        return NpcServiceStatus.Ok;
+    }
+
+    // The one item of `to` that `item` set down at anchor lies over (null on free cells). False when it lies over more,
+    // or over another item than the client saw (its view was stale). Anchor -1 (the first free cells) covers nothing.
+    private static bool TryCovered(Inventory to, int anchor, ItemInstance item, Guid expected, out ItemInstance displaced)
+    {
+        displaced = null;
+        if (anchor < 0)
+        {
+            return expected == Guid.Empty;
+        }
+
+        var under = to.Covered(anchor, item.Definition, to.Find(item.InstanceId));
+        if (under == Inventory.Several)
+        {
+            return false;
+        }
+
+        displaced = under >= 0 ? to[under] : null;
+        return (displaced?.InstanceId ?? Guid.Empty) == expected;
+    }
+
+    // The item at source of `from` set down at anchor of `to`; the displaced item of `to` goes to the source cell or
+    // wherever `from` has room. Both sides are checked before either changes.
+    private static bool SetDown(Inventory from, int source, Inventory to, int anchor, ItemInstance displaced)
+    {
+        var item = from[source];
+        if (displaced is null)
+        {
+            return (anchor >= 0 ? to.TryPlace(item, anchor) : to.TryAdd(item)) && from.TakeAt(source) is not null;
+        }
+
+        var under = to.Find(displaced.InstanceId);
+        if (!to.CanExchange(under, item, anchor) || !from.CanExchange(source, displaced))
+        {
+            return false;
+        }
+
+        return to.TryExchange(under, item, anchor) && from.TryExchange(source, displaced);
+    }
+
+    public WarehouseView View()
+    {
+        var items = Grid.Occupied().Select(static cell => OwnedItemView.Of(cell.Item, cell.Anchor, -1)).ToArray();
+        return new WarehouseView(Revision, Money, Weight, MaxWeight, StoreGrid.Columns, StoreGrid.Rows, items);
     }
 }

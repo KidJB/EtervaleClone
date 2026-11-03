@@ -11,6 +11,11 @@ public sealed class FieldAudioController : IDisposable
     internal const float PositionalAmbientVolume = 1f;
     internal const float MusicFadeSeconds = 3.6f;
     private const float PositionalBlendRate = 8f;
+    private const long ItemSoundRepeatMs = 300;
+    internal const float RainVolume = 0.8f;
+    // Under a roof the rain is heard this much.
+    internal const float ShelteredRain = 0.45f;
+    private const float RainBlendRate = 3f;
 
     private readonly PristonAudioLibrary _library;
     private IReadOnlyList<FieldAmbient> _ambients = [];
@@ -25,6 +30,10 @@ public sealed class FieldAudioController : IDisposable
     private int _positionalAmbientCode = -1;
     private float _musicFadeRemaining;
     private float _positionalTargetVolume;
+    private SoundEffect _lastItemSound;
+    private SoundEffectInstance _rain;
+    private float _rainTarget;
+    private long _lastItemSoundAt;
 
     public FieldAudioController(PristonAudioLibrary library)
     {
@@ -57,6 +66,46 @@ public sealed class FieldAudioController : IDisposable
         UpdatePositionalAmbience(listenerPosition, seconds);
     }
 
+    // The weather's sound, before Update: the rain's loop by the rain, softer under a roof. The field ambience keeps
+    // playing under the clouds and the rain, as the original's did; the rain only adds its loop.
+    public void UpdateWeather(float rain, bool sheltered, float seconds)
+    {
+        _rainTarget = _library.SoundEnabled ? MathHelper.Clamp(rain, 0f, 1f) * RainVolume * (sheltered ? ShelteredRain : 1f) : 0f;
+        if (_rain is null && _rainTarget > 0.001f && _library.RainSound is { } sound)
+        {
+            _rain = sound.CreateInstance();
+            _rain.IsLooped = true;
+            _rain.Volume = 0f;
+            _rain.Play();
+        }
+
+        if (_rain is null)
+        {
+            return;
+        }
+
+        _rain.Volume = MathHelper.Lerp(_rain.Volume, _rainTarget, 1f - MathF.Exp(-RainBlendRate * seconds));
+        if (_rainTarget <= 0.001f && _rain.Volume < 0.002f)
+        {
+            StopRain();
+        }
+    }
+
+    public void PlayThunder(float volume)
+    {
+        if (_library.SoundEnabled && _library.ThunderSound is { } sound)
+        {
+            sound.Play(MathHelper.Clamp(volume, 0f, 1f), 0f, 0f);
+        }
+    }
+
+    private void StopRain()
+    {
+        _rain?.Stop();
+        _rain?.Dispose();
+        _rain = null;
+    }
+
     public void PlayPortalWarp()
     {
         if (_library.SoundEnabled)
@@ -74,13 +123,23 @@ public sealed class FieldAudioController : IDisposable
         }
     }
 
-    // An item entering, leaving or moving in the pack; gold rings the coin.
+    // An item entering, leaving or moving in the pack; gold rings the coin. The same sound asked again within
+    // ItemSoundRepeatMs (a command's reply and the owner state that shows its item) plays once.
     public void PlayItem(string catalogKey, bool gold = false)
     {
-        if (_library.SoundEnabled && (gold ? _library.CoinSound : _library.ItemSound(catalogKey)) is { } sound)
+        if (!_library.SoundEnabled || (gold ? _library.CoinSound : _library.ItemSound(catalogKey)) is not { } sound)
         {
-            sound.Play(1f, 0f, 0f);
+            return;
         }
+
+        var now = Environment.TickCount64;
+        if (ReferenceEquals(sound, _lastItemSound) && now - _lastItemSoundAt < ItemSoundRepeatMs)
+        {
+            return;
+        }
+
+        (_lastItemSound, _lastItemSoundAt) = (sound, now);
+        sound.Play(1f, 0f, 0f);
     }
 
     public void PlayQuestFanfare()
@@ -88,6 +147,14 @@ public sealed class FieldAudioController : IDisposable
         if (_library.SoundEnabled)
         {
             _library.QuestFanfareSound.Play(1f, 0f, 0f);
+        }
+    }
+
+    public void PlayCraftResult(bool success)
+    {
+        if (_library.SoundEnabled)
+        {
+            (success ? _library.QuestFanfareSound : _library.CraftFailureSound).Play(1f, 0f, 0f);
         }
     }
 
@@ -116,13 +183,13 @@ public sealed class FieldAudioController : IDisposable
         var attenuation = (int)((distanceSquared - innerRadiusSquared) / 1100f);
         attenuation = Math.Clamp(attenuation, 0, 400);
 
-        var legacyVolume = 400 - attenuation;
-        if (legacyVolume <= 100)
+        var originalVolume = 400 - attenuation;
+        if (originalVolume <= 100)
         {
             return 0f;
         }
 
-        var playbackVolume = Math.Min(legacyVolume + 100, 399);
+        var playbackVolume = Math.Min(originalVolume + 100, 399);
         return playbackVolume / 400f;
     }
 
@@ -326,5 +393,6 @@ public sealed class FieldAudioController : IDisposable
         StopMusic();
         StopFieldAmbience();
         StopPositionalAmbience();
+        StopRain();
     }
 }

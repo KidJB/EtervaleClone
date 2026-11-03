@@ -57,11 +57,12 @@ public sealed partial class FieldInstance
     {
         var monster = ((ISpawnSink)this).Spawn(definition, position, -1, _rng.NextUnit() * MathF.Tau);
         monster.DropsDisabled = !drops;
+        _spawner.SeedIdleDespawn(monster);
         return monster;
     }
 
-    internal MonsterInstance CallGameMasterPet(WorldPlayer owner, MonsterDefinition definition, float lifetimeMs) =>
-        _skills.CallGameMasterPet(owner, definition, lifetimeMs);
+    internal MonsterInstance CallGameMasterPet(WorldPlayer owner, MonsterDefinition definition, float lifetimeMs, Vector3? position = null) =>
+        _skills.CallGameMasterPet(owner, definition, lifetimeMs, position is { } at ? Terrain.PlaceOnFloor(at) : null);
 
     // An item copy or gold a game master made, dropped on the floor under the position.
     internal bool DropForGameMaster(ItemInstance? item, int gold, Vector3 position, ulong ownerId) =>

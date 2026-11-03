@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Xna.Framework;
 using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.Rendering;
+using PristonTale.Contracts.Motion;
 
 namespace PristonTale.Tests;
 
@@ -13,7 +14,7 @@ internal static class BinaryCursorTests
         yield return ("binary cursor preserves fixed string fields and little-endian widths", FieldsAsync);
         yield return ("binary cursor rejects negative positions, overflow and truncated fields", BoundsAsync);
         yield return ("binary matrix parsing preserves scalar conversion and axis mapping", MatricesAsync);
-        yield return ("render clock preserves sub-millisecond frames and legacy uint wrap", ClockAsync);
+        yield return ("render clock preserves sub-millisecond frames and original uint wrap", ClockAsync);
         yield return ("INX reader preserves complete fixed-width motion records", InxLayoutAsync);
         yield return ("SMD reader accepts verified model signatures and preserves stale file trailers", ModelLayoutsAsync);
         yield return ("SMD stage reader decodes classic WORD and EU DWORD area indexes", StageAreaLayoutsAsync);
@@ -100,7 +101,7 @@ internal static class BinaryCursorTests
         clock.Advance(TimeSpan.Zero);
         Assert.True(clock.Milliseconds == 1000, "negative delta reversed the render clock");
         clock.Advance(TimeSpan.FromTicks(((long)uint.MaxValue - 999) * TimeSpan.TicksPerMillisecond));
-        Assert.True(clock.Milliseconds == 0, "legacy millisecond counter did not wrap modulo 2^32");
+        Assert.True(clock.Milliseconds == 0, "original millisecond counter did not wrap modulo 2^32");
         clock.Advance(TimeSpan.FromTicks(9999));
         clock.Advance(TimeSpan.FromTicks(1));
         Assert.True(clock.Milliseconds == 1, "fractional remainder was discarded");
@@ -117,7 +118,7 @@ internal static class BinaryCursorTests
         WriteAscii(bytes, 196, 16, "BodyH");
 
         var motion = motionOffset;
-        WriteUInt32(bytes, motion, (uint)PristonActorMotion.Stand);
+        WriteUInt32(bytes, motion, (uint)MotionCode.Stand);
         WriteUInt32(bytes, motion + 4, 0x11223344u);
         WriteUInt32(bytes, motion + 8, 7);
         WriteUInt32(bytes, motion + 12, 0x55667788u);

@@ -4,11 +4,13 @@ using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Simulation.World.Npcs;
 using PristonTale.Simulation.World.Spawning;
+using PristonTale.Contracts.Motion;
 
 namespace PristonTale.Application.World;
 
-// Night and day, from the server's clock. At night the event creatures of the field (code 100: the wolverines) walk at
-// random spawn points and come back when killed, and every event-creature NPC leaves; at dawn the creatures warp away
+// Night and day, from the server's clock. At night the event creatures of the field (code 100: the wolverines) walk from
+// the field's first active spawn point a player stands near (the field's first active point with nobody near) and come
+// back there when killed, and every event-creature NPC leaves; at dawn the creatures warp away
 // and the NPCs return. A nightmare field spawns its monsters only at night, when its people turn into the night creature
 // where they stand; at dawn its monsters die and its people return, the ones with an appearance draw only when the new
 // draw picks them.
@@ -22,6 +24,7 @@ public sealed partial class FieldInstance
     private readonly Dictionary<int, ulong> _eventCreatures = new();
     private readonly Dictionary<ulong, WorldNpc> _hiddenNpcs = new();
     private int _appearDraw = -1;
+    private MonsterDefinition[]? _nightCreatures;
 
     // Set by the world before each step.
     internal bool Night { get; set; }
@@ -82,7 +85,7 @@ public sealed partial class FieldInstance
                 creature.VanishOnWarp = true;
                 creature.TargetId = 0;
                 creature.AiState = MonsterAiState.Idle;
-                creature.Motion = MonsterMotionState.Warp;
+                creature.Motion = MotionState.Warp;
                 creature.SpecialMsLeft = TuningFor(creature.Def).WarpDurationMs;
             }
         }
@@ -96,7 +99,7 @@ public sealed partial class FieldInstance
                 {
                     monster.Life = 0;
                     monster.AiState = MonsterAiState.Dead;
-                    monster.Motion = MonsterMotionState.Dead;
+                    monster.Motion = MotionState.Dead;
                     _combat.BeginCorpse(monster.EntityId);
                 }
             }
@@ -114,18 +117,18 @@ public sealed partial class FieldInstance
         }
     }
 
-    // An event creature of this field that is not walking (never opened, or killed and gone) walks again at a random point.
+    // An event creature of this field that is not walking (never opened, or killed and gone) walks again.
     private void ReopenEventCreatures()
     {
-        foreach (var creature in _catalog.All)
+        _nightCreatures ??= _catalog.All.Where(c => c.EventCode == NightCreatureEvent && c.EventInfo == FieldId).ToArray();
+        foreach (var creature in _nightCreatures)
         {
-            if (creature.EventCode != NightCreatureEvent || creature.EventInfo != FieldId
-                || _eventCreatures.TryGetValue(creature.Code, out var id) && _monsters.ContainsKey(id))
+            if (_eventCreatures.TryGetValue(creature.Code, out var id) && _monsters.ContainsKey(id))
             {
                 continue;
             }
 
-            if (RandomSpawnPoint() is { } point)
+            if (EventCreaturePoint() is { } point)
             {
                 var opened = ((ISpawnSink)this).Spawn(creature, point, -1, _rng.Range(0, 359));
                 opened.StaysUntilDawn = true;
@@ -134,16 +137,28 @@ public sealed partial class FieldInstance
         }
     }
 
-    private Vector3? RandomSpawnPoint()
+    // Where an event creature opens: the first active spawn point, in the field's order, that a player stands near; the
+    // first active point when nobody is near (where the creatures stand when night falls on an empty field).
+    private Vector3? EventCreaturePoint()
     {
-        var points = _spawnPoints.Where(static point => point.Active).ToList();
-        if (points.Count == 0)
+        Vector3? first = null;
+        foreach (var point in _spawnPoints)
         {
-            return null;
+            if (!point.Active)
+            {
+                continue;
+            }
+
+            var position = FieldSpawner.PointToWorld(point);
+            if (((IPlayerProximity)this).AnyPlayerNear(position))
+            {
+                return position;
+            }
+
+            first ??= position;
         }
 
-        var chosen = points[_rng.Range(0, points.Count - 1)];
-        return new Vector3(chosen.X, 0f, chosen.Z);
+        return first;
     }
 
     private MonsterDefinition? NightmareCreature() =>

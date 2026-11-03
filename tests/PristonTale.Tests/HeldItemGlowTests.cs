@@ -4,6 +4,8 @@ using PristonTale.Gameplay.Effects;
 using PristonTale.Protocol.Packets;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -74,8 +76,8 @@ internal static class HeldItemGlowTests
             $"the appearance does not carry the +9 class-up glow: {appearance.WeaponGlow}");
 
         var glow = new DescribedGlow(9, 150, 60, 0, -20, 1.5f, 2, 10, true);
-        var looks = new DescribedPlayer(2, 3, 1, 4, "char/tmABCD/tmh-b01.inf", 1, 2, 3, false, false, 0, 0) { WeaponGlow = glow };
-        var packet = new EntityDescriptionPacket(7, 4, DescribedKind.Player, 80, 3, 1f, "Shining", "char/tmABCD/b001.ini", looks);
+        var looks = new DescribedPlayer(PlayerClass.Mechanician, 3, 1, 4, "char/tmABCD/tmh-b01.inf", 1, 2, 3, false, false, 0, 0) { WeaponGlow = glow };
+        var packet = new EntityDescriptionPacket(7, 4, EntityKind.Player, 80, 3, 1f, "Shining", "char/tmABCD/b001.ini", looks);
         var buffer = new byte[EntityDescriptionPacket.MaximumSize];
         var read = EntityDescriptionPacket.Read(buffer.AsSpan(0, packet.Write(buffer)));
         Assert.True(read.Player is { } described && described.WeaponGlow == glow && described.OffHandGlow == DescribedGlow.None,

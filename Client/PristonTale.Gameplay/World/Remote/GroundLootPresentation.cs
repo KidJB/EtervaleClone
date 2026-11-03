@@ -6,19 +6,28 @@ using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.World.Loot;
+using PristonTale.Contracts.Motion;
+using PristonTale.Engine3D;
 
 namespace PristonTale.Gameplay.World.Remote;
 
 // The server settles drops on its copy of the stage collision; its height selects the surface among stacked floors.
 public delegate bool FloorHeightQuery(float x, float referenceHeight, float z, out float y);
 
+// A drop's name to draw over the scene: its screen point (back-buffer pixels) and whether the cursor is on the drop.
+public readonly record struct GroundLabel(Guid Id, string Text, Vector2 Anchor, bool Hovered);
+
 public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader loader, string root, IClientLog log) : IDisposable
 {
+    // Two labels swap places in the stacking order only once the farther one stands this much nearer than the other: drops
+    // a ring cell apart in one row lie at nearly one depth, which the camera's slightest turn would otherwise flip.
+    internal const float OrderHysteresis = 12f;
+
     private readonly Dictionary<Guid, Entry> _entries = new();
+    private readonly List<Entry> _labelOrder = [];
     private readonly Dictionary<string, Task<PristonActor>> _prepared = new(StringComparer.OrdinalIgnoreCase);
     private int _floorRevision;
     private Guid _hovered;
-    private readonly GroundLootLabelLayout _labels = new();
 
     public void InvalidateFloor() => _floorRevision++;
 
@@ -26,7 +35,13 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
     {
         foreach (var id in update.GroundRemoved)
         {
-            if (_entries.Remove(id, out var entry) && entry.Handle.IsValid)
+            if (!_entries.Remove(id, out var entry))
+            {
+                continue;
+            }
+
+            entry.Shown = false;
+            if (entry.Handle.IsValid)
             {
                 scene.RemoveActor(entry.Handle);
             }
@@ -78,7 +93,7 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
             {
                 var source = entry.Drop.Position;
                 entry.FloorFound = floor(source.X, source.Y, -source.Z, out float height);
-                entry.Position = new Vector3(source.X, height, -source.Z);
+                entry.Position = WorldSpace.Mirror(new Vector3(source.X, height, source.Z));
                 entry.FloorRevision = _floorRevision;
             }
 
@@ -100,7 +115,7 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
                 entry.Offset = -RestingHeight(actor.Mesh.Bounds, entry.Rotation);
                 try
                 {
-                    entry.Handle = scene.AddActor(new PristonActorInstance(actor, World(entry), PristonActorMotion.Stand));
+                    entry.Handle = scene.AddActor(new PristonActorInstance(actor, World(entry), MotionCode.Stand));
                 }
                 catch (Exception exception)
                 {
@@ -193,41 +208,107 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
         return id != Guid.Empty;
     }
 
-    public void DrawLabels(SpriteBatch batch, SpriteFont font, Viewport viewport, PristonCamera camera, Guid hovered = default, bool showAll = false)
+    // The labels to draw this frame, each anchored at its own drop 16 units up, in the order the HUD stacks them: nearest
+    // first, kept from frame to frame (SettleOrder) and a newly named drop placed by its depth. Holding A names the drops
+    // 32 to 768 units from the camera; the hovered drop is named at any distance. The HUD reports where each label landed
+    // (SetLabelBounds) so a click on it picks the drop.
+    public void CollectLabels(Viewport viewport, PristonCamera camera, Guid hovered, bool showAll, List<GroundLabel> labels)
     {
+        labels.Clear();
         _hovered = hovered;
-        _labels.Begin(viewport.Bounds, font.LineSpacing + 4);
         foreach (var entry in _entries.Values)
         {
             entry.LabelBounds = Rectangle.Empty;
-            if (!entry.FloorFound || (!showAll && entry.Drop.Id != hovered))
-            {
-                continue;
-            }
+            entry.Shown = TryAnchorLabel(entry, viewport, camera, entry.Drop.Id == hovered, showAll);
+        }
 
-            float depth = -Vector3.Transform(entry.Position, camera.View).Z;
-            if (entry.Drop.Id != hovered && (depth < 32 || depth >= 768))
+        var kept = 0;
+        for (var index = 0; index < _labelOrder.Count; index++)
+        {
+            var entry = _labelOrder[index];
+            entry.Ordered = entry.Shown;
+            if (entry.Shown)
             {
-                continue;
+                _labelOrder[kept++] = entry;
             }
+        }
 
-            var point = viewport.Project(entry.Position + Vector3.Up * 16, camera.Projection, camera.View, Matrix.Identity);
-            if (point.Z < 0 || point.Z > 1 || point.X < 0 || point.Y < 0 || point.X > viewport.Width || point.Y > viewport.Height)
+        _labelOrder.RemoveRange(kept, _labelOrder.Count - kept);
+        foreach (var entry in _entries.Values)
+        {
+            if (entry.Shown && !entry.Ordered)
             {
-                continue;
+                entry.Ordered = true;
+                InsertByDepth(_labelOrder, entry, static entry => entry.LabelDepth);
             }
+        }
 
-            var size = font.MeasureString(entry.Label);
-            if (!_labels.TryPlace(new Vector2(point.X, point.Y), (int)MathF.Ceiling(size.X) + 8, out var bounds))
+        SettleOrder(_labelOrder, static entry => entry.LabelDepth);
+        foreach (var entry in _labelOrder)
+        {
+            labels.Add(new GroundLabel(entry.Drop.Id, entry.Label, entry.LabelAnchor, entry.Drop.Id == hovered));
+        }
+    }
+
+    private static bool TryAnchorLabel(Entry entry, Viewport viewport, PristonCamera camera, bool hovered, bool showAll)
+    {
+        if (!entry.FloorFound || (!showAll && !hovered))
+        {
+            return false;
+        }
+
+        float depth = -Vector3.Transform(entry.Position, camera.View).Z;
+        if (!hovered && (depth < 32 || depth >= 768))
+        {
+            return false;
+        }
+
+        var point = viewport.Project(entry.Position + Vector3.Up * 16, camera.Projection, camera.View, Matrix.Identity);
+        if (point.Z < 0 || point.Z > 1)
+        {
+            return false;
+        }
+
+        entry.LabelDepth = depth;
+        entry.LabelAnchor = new Vector2(point.X, point.Y);
+        return true;
+    }
+
+    // Before the first item that lies farther.
+    internal static void InsertByDepth<T>(List<T> order, T item, Func<T, float> depth)
+    {
+        var index = 0;
+        while (index < order.Count && depth(order[index]) <= depth(item))
+        {
+            index++;
+        }
+
+        order.Insert(index, item);
+    }
+
+    // Neighbours swap only while the first lies farther than the second by more than OrderHysteresis; each swap undoes one
+    // such pair and makes none, so the passes end.
+    internal static void SettleOrder<T>(List<T> order, Func<T, float> depth)
+    {
+        for (var swapped = true; swapped;)
+        {
+            swapped = false;
+            for (var index = 1; index < order.Count; index++)
             {
-                continue;
+                if (depth(order[index - 1]) > depth(order[index]) + OrderHysteresis)
+                {
+                    (order[index - 1], order[index]) = (order[index], order[index - 1]);
+                    swapped = true;
+                }
             }
+        }
+    }
 
+    public void SetLabelBounds(Guid id, Rectangle bounds)
+    {
+        if (_entries.TryGetValue(id, out var entry))
+        {
             entry.LabelBounds = bounds;
-            var position = new Vector2(bounds.X + 4, bounds.Y + 2);
-            batch.DrawString(font, entry.Label, position + Vector2.One, Color.Black);
-            var color = entry.Drop.Id == hovered ? new Color(180, 180, 180) : new Color(110, 110, 110);
-            batch.DrawString(font, entry.Label, position, color);
         }
     }
 
@@ -242,6 +323,7 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
         }
 
         _entries.Clear();
+        _labelOrder.Clear();
         _prepared.Clear();
     }
 
@@ -254,6 +336,10 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
         public Vector3 Position { get; set; }
         public float Offset { get; set; }
         public Rectangle LabelBounds { get; set; }
+        public Vector2 LabelAnchor { get; set; }
+        public float LabelDepth { get; set; }
+        public bool Shown { get; set; }
+        public bool Ordered { get; set; }
         public int FloorRevision { get; set; } = -1;
         public bool FloorFound { get; set; }
         public bool PublishFailed { get; set; }

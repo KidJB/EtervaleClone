@@ -114,6 +114,8 @@ dotnet run --project tools/PristonTale.GltfExport -c Release --no-build -- <armo
 - Option names are case-insensitive; options that take a value accept it once; any other `--` argument is an error.
 - A physique `.smd` model with a sibling `.smb` is exported skinned to that skeleton.
 - Textures are converted to PNG in a temporary directory that is deleted afterwards.
+- Alpha modes follow the engine's queue (`PristonMaterialRuntimeFactory.Classify`): a cut-out is `MASK` even when
+  flagged to draw late (the foliage), a late colour blend or a transparent material is `BLEND`, the rest `OPAQUE`.
 - `PTGLTF_DEBUG=1` prints full exception stacks and cleanup failures. Exit 0 on success, 1 on any error.
 
 ## WorldImport (`ptworld`)
@@ -217,6 +219,7 @@ movement every 200 ms (5 Hz) and draining presence:
 | `walk` | Walk a 150-unit circle through the spawn at 100 units/s; a forced warp restarts the circle from the authoritative position |
 | `fight` | Lock a held basic attack on the nearest wild monster in sight (900 units) and walk to 28 units of it, reporting the target |
 | `cast` | Walk to 70 units of the nearest wild monster and cast `--skill` at it, again when the cooldown the server answered ends (at least every 3 s) |
+| `items` | Stand still and switch the bag page every `--item-ms`: a stored inventory command, queued for storage as a potion or a pickup is. The bot expects the newer of its last answer's revision and the owner state's, and switches away from the page the owner state shows |
 | `mixed` | Half walk, three in ten fight, two in ten cast (by bot index) |
 
 Hunters move from the position the server shows them at (the stage's walls change it), and every forced warp counts as
@@ -228,7 +231,7 @@ dotnet run --project tools/PristonTale.DevAccounts -c Release --no-build -- --sq
   create-bots cw 2000 bot-pw --class Mechanician --level 20 --field 2 --at 4184,-11016 --spacing 0 \
   --skills 0x01010002:5,0x01010003:3
 dotnet run --project Server/PristonTale.Server -c Release --no-build -- --Database:SqlitePath=<copy.db> \
-  --Network:Port=10037 --Network:MaxConnectionsPerIp=0 --Server:ReportSeconds=10
+  --Network:Port=10037 --Network:MaxConnectionsPerIp=0 --Network:MaxHandshakesPerIp=0 --Server:ReportSeconds=10
 dotnet run --project tools/PristonTale.LoadTest -c Release --no-build -- --count 2000 --address tcp://127.0.0.1:10037 \
   --prefix cw --mode mixed --seconds 60 --ramp 100 --server-pid <pid> --report 10
 ```
@@ -241,17 +244,21 @@ dotnet run --project tools/PristonTale.LoadTest -c Release --no-build -- --count
 | `--password <text>` | `bot-pw` | Shared password |
 | `--seconds <n>` | `60` | Measured time in the world after the ramp |
 | `--ramp <n>` | `50` | Bots started per second (minimum 1) |
-| `--mode <mode>` | `walk` | `walk`, `fight`, `cast` or `mixed` (see above) |
+| `--mode <mode>` | `walk` | `walk`, `fight`, `cast`, `items` or `mixed` (see above) |
 | `--skill <hex>` | `0x01010002` | Skill the casters use (Mechanic Bomb) |
 | `--server-pid <pid>` | none | Also samples that local process's CPU (cores) and working set |
 | `--report <n>` | `5` | Seconds between report lines |
+| `--item-ms <n>` | `1000` | Milliseconds between a bot's stored commands in `items` mode (minimum 50) |
 
 - Every report it prints bots playing, failures, received KiB/s (total and per bot), updates/s, the bots' own hits/s,
   casts/s and accepted casts/s, position corrections and, with `--server-pid`, server CPU and working set; at the end,
-  entered, failed, corrections, leave timeouts, the mean KiB/s per bot and the refused casts by status.
+  entered, failed, corrections, leave timeouts, the mean KiB/s per bot and the refused casts by status. In `items` mode
+  each report also prints the stored commands answered per second, the refusals, and the answer time's p50, p99 and
+  maximum in milliseconds; the end lists the refusals by message. A refusal before the world answers no revision, and
+  the bot keeps the one it expected.
 - Exit 0 without failures, 2 with any bot failure, 1 on a usage error. Only the first 10 failures are printed.
-- `--Network:MaxConnectionsPerIp=0` disables the per-address connection limit (default 8); every bot connects from one
-  address. Measured results and the server's capacity design are in [protocol.md](protocol.md) (Server capacity).
+- `--Network:MaxConnectionsPerIp=0 --Network:MaxHandshakesPerIp=0` disables the per-address connection and handshake
+  limits (defaults 8 and 4); every bot connects from one address. Measured results and the server's capacity design are in [protocol.md](protocol.md) (Server capacity).
 
 ## WorldJson (`ptworldjson`)
 
@@ -290,14 +297,16 @@ dotnet run --project tools/PristonTale.VfxImport -c Release --no-build -- import
 Development-time font preparation; the game never converts fonts at run time. Needs Python 3 with `fontTools`.
 
 ```bash
-python3 tools/ui/build_font.py <NotoSansCJK.ttc> <OFL.txt>
+python3 tools/ui/build_font.py <DejaVuSans.ttf> <LICENSE>
 ```
 
-- `collection`: a TrueType collection containing `Noto Sans CJK KR`; `license`: its license text.
-- Subsets to Latin, Latin Extended, Greek, Cyrillic, general punctuation, Hangul compatibility jamo and Hangul
-  syllables; drops vertical tables; instances weight 400; renames the family to `Priston UI Sans`.
-- Writes `assets/Hud/Fonts/PristonUiSans-Regular.otf`, copies the license to `assets/Hud/Fonts/OFL.txt` and regenerates
-  `Client/PristonTale/Content/Fonts/UI.spritefont` (size 18, kerning, one character region per contiguous run).
+- `font`: `DejaVuSans.ttf` of the DejaVu fonts release (2.37, `dejavu-fonts-ttf-2.37.zip`); `license`: its `LICENSE`.
+- The interface text is DejaVu Sans, the default face the original's portable build draws its 14-pixel interface
+  text with; Etervale shows no Korean text, so the font carries Latin only.
+- Copies the font to `assets/Hud/Fonts/DejaVuSans.ttf` and the license to `assets/Hud/Fonts/DejaVu-LICENSE.txt`, and
+  regenerates `Client/PristonTale/Content/Fonts/UI.spritefont`: 21 points (a 28-pixel em at the pipeline's 96 dpi,
+  drawn at half scale for the 14-pixel text: `HudPainter.BakePixels`, `TextScale`), kerning, and one character region
+  per contiguous run of the glyphs it has among Basic Latin, Latin-1, Latin Extended-A and general punctuation.
   Rebuild the client afterwards to bake the glyphs.
 
 ## Blender scripts (`3d_glb/blender/`)
@@ -325,8 +334,9 @@ Run from Blender's Scripting tab after importing GLBs produced by `ptgltf`.
   for the class clips, then `play_animation.py`.
 - Seed a test login: `create-account`, then `add-char`, against the database the server uses.
 - Check a protocol or skill change end to end: start the server, run SmokeClient without and with `--character`.
-- Measure capacity: `create-bots` (with placed characters for hunting modes) on a copy, server with
-  `--Network:MaxConnectionsPerIp=0 --Server:ReportSeconds=10`, LoadTest, and the `--benchmark-presence` runner; update
+- Measure capacity: `create-bots` (with placed characters for hunting modes) on a copy, the `players.starter_gifts`
+  setting off (characters LoadTest creates would receive their gifts), server with
+  `--Network:MaxConnectionsPerIp=0 --Network:MaxHandshakesPerIp=0 --Server:ReportSeconds=10`, LoadTest, and the `--benchmark-presence` runner; update
   the tables in [protocol.md](protocol.md) when results change.
 - Add a CLI option: update the tool's parsing and usage text and the matching table in this doc together.
 

@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Simulation.Characters;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Gameplay.Screens.CharacterSelect;
 
@@ -156,20 +157,6 @@ internal sealed class CharSelectAssets : IDisposable
             _faceThumbs[index, 0] = _loader.LoadUiTexture(_assetPath(spec.Dir), spec.Normal[index]);
             _faceThumbs[index, 1] = _loader.LoadUiTexture(_assetPath(spec.Dir), spec.Selected[index]);
         }
-    }
-
-    public IReadOnlyList<Texture2D> LoadFlipbook(string dir, IReadOnlyList<string> names)
-    {
-        var frames = new List<Texture2D>(names.Count);
-        foreach (var name in names)
-        {
-            var tex = _loader.LoadTexture(_assetPath(dir), name, string.Empty);
-            if (tex != null && tex != _loader.White)
-            {
-                frames.Add(tex);
-            }
-        }
-        return frames;
     }
 
     private Texture2D Ui(string name) => _loader.LoadUiTexture(_assetPath(UiDir), name);

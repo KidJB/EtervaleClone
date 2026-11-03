@@ -10,10 +10,9 @@ namespace PristonTale.WorldImport.Parsers;
 // KeyMaps.MonsterResistances). *시야 sight is stored RAW (the runtime squares it;
 // the schema/Simulation expect the raw reach).
 //
-// The name is preserved VERBATIM (including the original's leading/trailing spaces inside the quotes,
-// e.g. " 산타고블린 ") because field .spm spawn tables cross-reference monsters by this exact
-// string — trimming would break the join; quoted strings are copied verbatim between the quotes.
-// The separate *Name label supplied by these files is trimmed into DisplayName for the HUD.
+// The authored identity (*이름) is read VERBATIM, spaces included, because field .spm spawn tables reference monsters by
+// this exact string; the importer turns it into the monster's id and English key (IdentityRegistry) and keeps nothing
+// else of it. The English name is *E_NAME, then *Name, then *B_NAME.
 public sealed class MonsterInfParser
 {
     public ParsedMonster Parse(string path)
@@ -23,11 +22,10 @@ public sealed class MonsterInfParser
         string name = "", model = "";
         int soundCode = 0;
         float modelScale = 1f;
-        var displayName = "";
-        var displayRank = 0;
+        var labels = new Dictionary<string, string>(StringComparer.Ordinal);
         int portraitY = 0, portraitZ = 0;
         int level = 0, atkMin = 0, atkMax = 0, atkSpeed = 0, atkRange = 0, accuracy = 0;
-        int defence = 0, absorb = 0, block = 0, hp = 0, sight = 0;
+        int defence = 0, absorb = 0, block = 0, life = 0, sight = 0;
         int skDmgMin = 0, skDmgMax = 0, skDist = 0, skRange = 0, skRating = 0, skCurse = 0;
         int moveSpeed = 0, moveRange = 0, iq = 0, groupMin = 0, groupMax = 0, activeHour = 0;
         ulong exp = 0;
@@ -46,7 +44,7 @@ public sealed class MonsterInfParser
         int eventCode = 0, eventInfo = 0;
         var eventModel = "";
         var unknown = new List<string>();
-        var dropItems = new List<ParsedDropMain>();
+        var dropLines = new List<ParsedDropLine>();
         var dropsPlus = new List<ParsedDropPlus>();
 
         foreach (var sourceLine in lines)
@@ -60,23 +58,7 @@ public sealed class MonsterInfParser
             var t = new Tokenizer(line);
             t.NextWord();
 
-            // Display name: *E_NAME, then *Name, then *B_NAME (the Brazilian build's English text).
-            var locale = key.Equals("*E_NAME", StringComparison.OrdinalIgnoreCase) ? 3
-                : key.Equals(KeyMaps.CharDisplayName, StringComparison.OrdinalIgnoreCase) ? 2
-                : key.Equals("*B_NAME", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-            if (locale > 0)
-            {
-                var label = t.NextValueOrQuoted().Trim();
-                if (label.Length > 0 && locale >= displayRank)
-                {
-                    displayName = label;
-                    displayRank = locale;
-                }
-
-                continue;
-            }
-
-            if (KeyMaps.IsUnshippedLocale(key))
+            if (AuthoredLabels.TryRead(key, t, labels))
             {
                 continue;
             }
@@ -130,7 +112,7 @@ public sealed class MonsterInfParser
                     break;
                 case "*효과음":
                 case "*소리":
-                    soundCode = LegacyNpcSoundCode.Resolve(t.NextWord());
+                    soundCode = CharacterSoundCodes.Resolve(t.NextWord());
                     break;
                 case KeyMaps.MonLevel: level = t.NextInt(); break;
                 case KeyMaps.MonBoss:
@@ -150,7 +132,7 @@ public sealed class MonsterInfParser
                 case KeyMaps.MonAbsorb: absorb = t.NextInt(); break;
                 case KeyMaps.MonBlock: block = t.NextInt(); break;
                 case KeyMaps.MonSight: sight = t.NextInt(); break;                 // RAW (squared later)
-                case "*생명력": case "*라이프": hp = t.NextInt(); break;            // HP, dual alias
+                case "*생명력": case "*라이프": life = t.NextInt(); break;            // HP, dual alias
                 case KeyMaps.MonSkillDamage: skDmgMin = t.NextInt(); skDmgMax = t.NextInt(); break;
                 case KeyMaps.MonSkillDistance: skDist = t.NextInt(); break;
                 case KeyMaps.MonSkillRange: skRange = t.NextInt(); break;
@@ -180,7 +162,7 @@ public sealed class MonsterInfParser
                         break;
                     }
                 case KeyMaps.MonDrop:
-                    ParseDropLine(t, dropItems);
+                    ParseDropLine(t, dropLines);
                     break;
                 case KeyMaps.ItemLinkedFile:
                     break;
@@ -193,7 +175,7 @@ public sealed class MonsterInfParser
         var m = new ParsedMonster
         {
             Name = name,
-            DisplayName = displayName,
+            DisplayName = EnglishNames.Monster(path, AuthoredLabels.First(labels, "*E_NAME", "*NAME", "*B_NAME")),
             Model = model,
             SoundCode = soundCode,
             ModelScale = modelScale,
@@ -202,7 +184,7 @@ public sealed class MonsterInfParser
             Level = level,
             AttackMin = atkMin, AttackMax = atkMax,
             AttackSpeed = atkSpeed, AttackRange = atkRange, Accuracy = accuracy,
-            Defence = defence, AbsorbPct = absorb, BlockPct = block, Hp = hp,
+            Defence = defence, AbsorbPct = absorb, BlockPct = block, Life = life,
             Sight = sight,
             SkillDamageMin = skDmgMin, SkillDamageMax = skDmgMax,
             SkillDistance = skDist, SkillRange = skRange, SkillRatingPct = skRating, SkillCurseCode = skCurse,
@@ -217,43 +199,36 @@ public sealed class MonsterInfParser
         };
         m.UnknownKeys.AddRange(unknown);
         Array.Copy(res, m.Resistances, 8);
-        m.DropItems.AddRange(dropItems);
+        m.DropLines.AddRange(dropLines);
         m.DropsPlus.AddRange(dropsPlus);
         return m;
     }
 
-    // *아이템 <weight> [없음 | 돈 min max | code1 code2 ...]
-    // For an item-code list the original divides the percentage across the codes and appends one slot each.
-    private static void ParseDropLine(Tokenizer t, List<ParsedDropMain> dropItems)
+    // *아이템 <weight> [없음 | 돈 min max | code1 code2 ...], kept as written: the runtime splits an item line's weight
+    // among its codes, as the original does.
+    private static void ParseDropLine(Tokenizer t, List<ParsedDropLine> dropLines)
     {
         var weight = t.NextInt();
         var keyword = t.NextWord();
         if (keyword.Length == 0)
             return;
 
-        var kind = KeyMaps.ClassifyDropKeyword(keyword);
-        switch (kind)
+        switch (KeyMaps.ClassifyDropKeyword(keyword))
         {
             case DropKind.Nothing:
-                dropItems.Add(new ParsedDropMain(DropKind.Nothing, weight, null, 0, 0));
+                dropLines.Add(new ParsedDropLine(DropKind.Nothing, weight, 0, 0, []));
                 break;
             case DropKind.Gold:
                 {
                     var min = t.NextInt();
                     var max = t.NextInt();
-                    dropItems.Add(new ParsedDropMain(DropKind.Gold, weight, null, min, max));
+                    dropLines.Add(new ParsedDropLine(DropKind.Gold, weight, min, max, []));
                     break;
                 }
             default:
-                {
-                    // keyword was actually the first item code; collect it + the rest.
-                    var codes = new List<string> { keyword };
-                    codes.AddRange(t.RemainingWords());
-                    var per = codes.Count > 0 ? weight / codes.Count : weight;
-                    foreach (var c in codes)
-                        dropItems.Add(new ParsedDropMain(DropKind.Item, per, c, 0, 0));
-                    break;
-                }
+                // The keyword is the first item code.
+                dropLines.Add(new ParsedDropLine(DropKind.Item, weight, 0, 0, [keyword, .. t.RemainingWords()]));
+                break;
         }
     }
 

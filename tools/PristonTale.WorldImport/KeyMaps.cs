@@ -69,8 +69,7 @@ public static class KeyMaps
 
     // Monster (.inf) character tokens.
 
-    public const string CharName = "*이름";            // Legacy identity used by spawn references.
-    public const string CharDisplayName = "*Name";     // Display label authored in the supplied monster files.
+    public const string CharName = "*이름";            // Korean identity used by spawn references.
     public const string CharModel = "*모양파일";       // quoted model file
     public const string CharDialog = "*대화";          // dialog line (at most 20)
     public const string CharAttribute = "*속성";       // 적 = enemy, otherwise NPC
@@ -203,15 +202,25 @@ public static class KeyMaps
     public const string NpcEventCode = "*이벤트코드";     // event creature code
     public const string NpcEventInfo = "*이벤트정보";     // event creature information
 
-    // Localized name and dialog keys of the linked name files, by preference: English, then the Brazilian build's
-    // English text. The original compares them case-sensitively; some files spell them in mixed case.
-    public static readonly string[] NpcNameLocales = ["*E_NAME", "*B_NAME"];
+    // Name and dialog keys of the definition files and their linked name files. A key names the release a text was
+    // written for, not its language: the Brazilian build's B_NAME is mostly English and some files' J_NAME is
+    // Portuguese, so only the English choices below are imported. The original compares them case-sensitively; some
+    // files spell them in mixed case, so they match case-insensitively.
+    public static readonly string[] LabelKeys = ["*NAME", "*E_NAME", "*B_NAME", "*J_NAME", "*T_NAME"];
+    public static readonly string[] DialogKeys = ["*E_CHAT", "*B_CHAT", "*J_CHAT", "*T_CHAT"];
+
+    // The keys of an NPC's English name and dialog, by preference.
+    public static readonly string[] NpcNameLocales = ["*E_NAME", "*B_NAME", "*NAME"];
     public static readonly string[] NpcDialogLocales = ["*E_CHAT", "*B_CHAT"];
 
-    // Japanese names and lines: the game has no Japanese text, so they are read and left out.
-    public static readonly string[] UnshippedLocales = ["*J_NAME", "*J_CHAT"];
+    public static string? LabelKey(string key) => StoredKey(LabelKeys, key);
 
-    public static bool IsUnshippedLocale(string key) => UnshippedLocales.Contains(key, StringComparer.OrdinalIgnoreCase);
+    public static string? DialogKey(string key) => StoredKey(DialogKeys, key);
+
+    public static string StoredKey(string key) => key.TrimStart('*').ToUpperInvariant();
+
+    private static string? StoredKey(string[] keys, string key) =>
+        keys.Contains(key, StringComparer.OrdinalIgnoreCase) ? StoredKey(key) : null;
 
     // Keys present in the supplied NPC files that no original client handles, with the label kept for them.
     public static readonly (string Token, string Label)[] NpcUnportedServices =
@@ -239,49 +248,6 @@ public static class KeyMaps
     public static readonly string[] SpmMaxConcurrent = ["*최대동시출현수", "*MAX_ACTOR_POS"]; // concurrent limit
     public static readonly string[] SpmInterval = ["*출현간격", "*DELAY"];          // interval+ms
     public static readonly string[] SpmPerWave = ["*출현수", "*MAX_ACTOR"];          // monsters per wave
-
-    // There is no kind token in the data: the kind follows the family prefix of the 5-character item key, by its
-    // first two characters except where one group holds two kinds (WS1 bows, WS2 swords, OA2 bracelets).
-    public static ItemKind ClassifyKind(string code)
-    {
-        if (string.IsNullOrEmpty(code))
-            return ItemKind.Misc;
-        var category = code.Length >= 3 ? code[..3].ToUpperInvariant() : code.ToUpperInvariant();
-        if (category == "WS1")
-            return ItemKind.Bow;
-        if (category == "WS2")
-            return ItemKind.Sword;
-        if (category == "OA2")
-            return ItemKind.Bracelet;
-        var p = code.Length >= 2 ? code[..2].ToUpperInvariant() : code.ToUpperInvariant();
-        return p switch
-        {
-            "WA" => ItemKind.Axe,            // Axes
-            "WC" => ItemKind.Claw,           // Claws
-            "WH" => ItemKind.Hammer,         // Hammer
-            "WM" => ItemKind.Staff,          // magic staff
-            "WD" => ItemKind.Dagger,
-            "WN" => ItemKind.Phantom,
-            "WP" => ItemKind.Pole,           // Poles
-            "WS" => ItemKind.Sword,          // WS1 bows are handled above; other WS codes are swords
-            "WT" => ItemKind.ThrowingWeapon, // Throwing
-            "DA" => ItemKind.Armor,          // body armour
-            "DB" => ItemKind.Boots,          // boots
-            "DG" => ItemKind.Gloves,         // gloves
-            "DS" => ItemKind.Shield,         // shields
-            "OA" => ItemKind.Amulet,         // OA1 amulets; OA2 armlets are handled above
-            "OM" => ItemKind.Amulet,
-            "OR" => ItemKind.Ring,           // rings
-            "FO" => ItemKind.ForceOrb,       // force orb
-            "OS" => ItemKind.Sheltom,        // Sheltom
-            "PM" => ItemKind.Potion,         // Mana potion
-            "PL" => ItemKind.Potion,         // Life potion
-            "PS" => ItemKind.Potion,         // Stamina potion
-            "QT" => ItemKind.Quest,          // quest item
-            "MA" => ItemKind.Material,       // crafting material
-            _ => ItemKind.Misc,
-        };
-    }
 
     // The eight-element ResistanceBlock order, for documentation/iteration.
     public static readonly string[] ElementOrder =

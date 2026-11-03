@@ -8,6 +8,9 @@ using PristonTale.Engine3D.IO;
 using PristonTale.Engine3D.Physics;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Gameplay.Effects;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Units;
+using PristonTale.Assets;
 
 namespace PristonTale.Gameplay.Screens.Opening;
 
@@ -34,7 +37,6 @@ internal sealed class OpeningCinematic : IDisposable
     ];
 
     private const float AutoCameraTicksPerStep = 50f;
-    private const float OpeningTimestep = 1f / 70f;
     private const float CinemaEndTicks = 166000f;
     private const int WarpFrameStart = 472;
     private const int WarpFrameEnd = 473;
@@ -55,11 +57,11 @@ internal sealed class OpeningCinematic : IDisposable
     private readonly PristonActorLoader _actorLoader;
 
     private readonly PristonRenderer _renderer;
-    private readonly LegacyEffectLibrary _effectLibrary;
+    private readonly EffectLibrary _effectLibrary;
     private readonly VfxRenderer _effects;
     private VfxSystem _effectSystem;
     private readonly Random _particleRandom = new(0x5054);
-    private LegacyMeteorEffects _terrainFire;
+    private MeteorEffects _terrainFire;
     private PristonCamera _camera;
     private PristonCameraPath _cameraPath;
     private float _pathTicks;
@@ -73,7 +75,7 @@ internal sealed class OpeningCinematic : IDisposable
     private readonly string _assetRoot;
 
     public OpeningCinematic(GraphicsDevice graphicsDevice, ContentManager content, IClientLog log,
-        Func<string, string> assetPath, string assetRoot, PristonSkyLibrary sky = null, PresentationSettings presentation = null, LegacyEffectLibrary effects = null)
+        Func<string, string> assetPath, string assetRoot, PristonSkyLibrary sky = null, PresentationSettings presentation = null, EffectLibrary effects = null)
     {
         _graphicsDevice = graphicsDevice;
         _log = log;
@@ -107,8 +109,8 @@ internal sealed class OpeningCinematic : IDisposable
             var collision = new PristonCollisionWorld(stage);
             // The converted scripts are registered here, while loading, so the flight never waits for them.
             _effectLibrary.Vfx.CompileAll();
-            _effectSystem = new VfxSystem(new NoAnchors(), new SceneLights(_renderer), _effectLibrary.Vfx.Library);
-            _terrainFire = new LegacyMeteorEffects(new SystemScriptEffects(_effectSystem, _effectLibrary.Vfx.Library), _renderer.TransientLights, collision);
+            _effectSystem = new VfxSystem(VfxNoAnchors.Instance, new TransientLightServices(_renderer.TransientLights), _effectLibrary.Vfx.Library);
+            _terrainFire = new MeteorEffects(new SystemScriptEffects(_effectSystem, _effectLibrary.Vfx.Library), _renderer.TransientLights, collision);
         }
         _renderer.ConfigureFieldLighting(intensity: 4f, rangeScale: 1f, overrideLights: null, glowIntensity: 1f, glowScale: 1f);
         _renderer.AddStage(stage, LoadScenery());
@@ -121,7 +123,7 @@ internal sealed class OpeningCinematic : IDisposable
         _camera = new PristonCamera(_fallbackTarget, Vector3.Forward, OpeningCameraSettings);
 
         var camFile = _assetPath(CameraPathFile);
-        if (PristonFileResolver.Exists(camFile))
+        if (AssetFiles.Exists(camFile))
         {
             _cameraPath = PristonCameraPath.ReadCam(camFile);
             _cameraPath.AddWarpFrame(WarpFrameStart, WarpFrameEnd);
@@ -146,9 +148,9 @@ internal sealed class OpeningCinematic : IDisposable
         if (_cameraPath is { HasPath: true })
         {
             _stepAccumulator += dt;
-            while (_stepAccumulator >= OpeningTimestep)
+            while (_stepAccumulator >= GameUnits.TickSeconds)
             {
-                _stepAccumulator -= OpeningTimestep;
+                _stepAccumulator -= GameUnits.TickSeconds;
                 _pathTicks += AutoCameraTicksPerStep;
                 if (_pathTicks < CinemaEndTicks)
                 {
@@ -224,7 +226,7 @@ internal sealed class OpeningCinematic : IDisposable
         foreach (var (relative, world) in SceneryModels)
         {
             var path = _assetPath(relative);
-            if (!PristonFileResolver.Exists(path))
+            if (!AssetFiles.Exists(path))
             {
                 _log.Warn($"[Opening] scenery missing, skipped: {relative}");
                 continue;
@@ -247,7 +249,7 @@ internal sealed class OpeningCinematic : IDisposable
         {
             var meshPath = _assetPath(mesh);
             var skeletonPath = _assetPath(skeleton);
-            if (!PristonFileResolver.Exists(meshPath) || !PristonFileResolver.Exists(skeletonPath))
+            if (!AssetFiles.Exists(meshPath) || !AssetFiles.Exists(skeletonPath))
             {
                 _log.Warn($"[Opening] NPC missing, skipped: {mesh}");
                 continue;
@@ -255,7 +257,7 @@ internal sealed class OpeningCinematic : IDisposable
             try
             {
                 var actor = _actorLoader.LoadSkinned(meshPath, skeletonPath);
-                _renderer.AddActor(new PristonActorInstance(actor, Matrix.Identity, PristonActorMotion.Any));
+                _renderer.AddActor(new PristonActorInstance(actor, Matrix.Identity, MotionCode.Any));
             }
             catch (Exception ex)
             {
@@ -272,27 +274,4 @@ internal sealed class OpeningCinematic : IDisposable
     }
 
     // The flight has no entities to anchor effects to.
-    private sealed class NoAnchors : IVfxAnchors
-    {
-        public bool TryGetPosition(ulong entityId, out Vector3 position)
-        {
-            position = default;
-            return false;
-        }
-
-        public bool TryGetBone(ulong entityId, string bone, out Vector3 position)
-        {
-            position = default;
-            return false;
-        }
-    }
-
-    private sealed class SceneLights(PristonRenderer renderer) : IVfxServices
-    {
-        public void AddLight(Vector3 position, Color color, int power, int decay) => renderer.TransientLights.Add(position, color, power, decay);
-
-        public void PlaySound(string path, Vector3 position, float volume)
-        {
-        }
-    }
 }

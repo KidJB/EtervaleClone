@@ -2,6 +2,8 @@ using Microsoft.Xna.Framework;
 using PristonTale.Client.Net.Presence;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Gameplay.Combat;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
 
 namespace PristonTale.Gameplay.World.Remote;
 
@@ -9,16 +11,14 @@ public sealed class RemoteEntity : RemoteEntityBase
 {
     private readonly IActorScene _scene;
     private readonly ActorHandle _body;
-    private readonly ActorHandle _head;
     private readonly PlayerActorHandles _handles;
 
-    public RemoteEntity(IActorScene scene, PlayerActorHandles handles, double timeMs, Vector3 position, float facing, RemoteMoveState moveState, int hp)
-        : base(RemoteEntityKind.Player, timeMs, position, facing, moveState, hp)
+    public RemoteEntity(IActorScene scene, PlayerActorHandles handles, double timeMs, Vector3 position, float facing, MotionState moveState, int life)
+        : base(EntityKind.Player, timeMs, position, facing, moveState, life)
     {
         _scene = scene;
         _handles = handles;
         _body = handles.Body;
-        _head = handles.Head;
     }
 
     public PlayerActorHandles Handles => _handles;
@@ -27,21 +27,18 @@ public sealed class RemoteEntity : RemoteEntityBase
 
     protected override void ApplyWorld(Matrix world)
     {
-        _scene.SetActorWorld(_body, world);
-        _scene.SetActorWorld(_head, world);
+        _handles.SetWorld(_scene, world);
     }
 
     protected override void ApplyMotionCommand(MotionCommand command)
     {
         if (command.Kind == MotionCommandKind.Restart)
         {
-            _scene.RestartActorMotion(_body, command.Motion);
-            _scene.RestartActorMotion(_head, command.Motion);
+            _handles.RestartMotion(_scene, command.Motion);
         }
         else
         {
-            _scene.SetActorMotion(_body, command.Motion);
-            _scene.SetActorMotion(_head, command.Motion);
+            _handles.SetMotion(_scene, command.Motion);
         }
     }
 
@@ -49,8 +46,7 @@ public sealed class RemoteEntity : RemoteEntityBase
     {
         // The body's equipment picks the weapon variant of a skill clip; the head follows the same clip.
         var resolved = _scene.ResolveSkillMotion(_body, motionIndex);
-        _scene.SetActorMotionIndex(_body, resolved);
-        _scene.SetActorMotionIndex(_head, resolved);
+        _handles.SetMotionIndex(_scene, resolved);
     }
 
     public ActorHandle Body => _body;
@@ -58,15 +54,13 @@ public sealed class RemoteEntity : RemoteEntityBase
     // A released charge: the skill clip jumps ahead and plays the rest at the new rate.
     public void SeekSkill(int framesFromStart, float rate)
     {
-        _scene.SeekActorMotion(_body, framesFromStart);
-        _scene.SeekActorMotion(_head, framesFromStart);
+        _handles.SeekMotion(_scene, framesFromStart);
         ApplyPlaybackRate(rate);
     }
 
     protected override void ApplyPlaybackRate(float rate)
     {
-        _scene.SetActorPlaybackRate(_body, rate);
-        _scene.SetActorPlaybackRate(_head, rate);
+        _handles.SetPlaybackRate(_scene, rate);
     }
 
     public override void Dispose()

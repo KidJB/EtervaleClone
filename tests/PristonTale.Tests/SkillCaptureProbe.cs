@@ -11,6 +11,9 @@ using PristonTale.Gameplay.World.Remote;
 using PristonTale.Protocol.Packets;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Skills;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Skills;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -46,7 +49,7 @@ internal sealed class SkillCaptureProbe : Game, ISkillSceneHost
     private PristonRenderer _renderer = null!;
     private PlayerActorComposer _composer = null!;
     private ActorLookPresenter _looks = null!;
-    private LegacyEffectLibrary _library = null!;
+    private EffectLibrary _library = null!;
     private SkillPresentation _presentation = null!;
     private PristonCamera _camera = null!;
     private RenderTarget2D _target = null!;
@@ -87,7 +90,7 @@ internal sealed class SkillCaptureProbe : Game, ISkillSceneHost
     {
         Directory.CreateDirectory(_output);
         _target = new RenderTarget2D(GraphicsDevice, 960, 540, false, SurfaceFormat.Color, DepthFormat.Depth24);
-        _library = LegacyEffectLibrary.LoadBootstrap(GraphicsDevice, Content, _assets, ConsoleClientLog.Instance);
+        _library = EffectLibrary.LoadBootstrap(GraphicsDevice, Content, _assets, ConsoleClientLog.Instance);
         _renderer = new PristonRenderer(GraphicsDevice, Content) { ShadowsEnabled = true, DayLengthSeconds = 0 };
         _renderer.SetTimeOfDay(17.5f);
         var material = new PristonMaterial(true, 1, 0, 1, true, new Vector3(0.08f, 0.08f, 0.09f), 0, 1, PristonMaterialSurfaceFlags.None, "", "", [], [], 0, 0, 0);
@@ -133,7 +136,7 @@ internal sealed class SkillCaptureProbe : Game, ISkillSceneHost
 
         if (_cast < 0)
         {
-            _dummy = _composer.Compose(_assets, _visuals[^1], 0, World(TargetPosition, MathHelper.Pi), PristonActorMotion.Stand);
+            _dummy = _composer.Compose(_assets, _visuals[^1], 0, World(TargetPosition, MathHelper.Pi), MotionCode.Stand);
             BeginCast(0);
         }
     }
@@ -226,7 +229,7 @@ internal sealed class SkillCaptureProbe : Game, ISkillSceneHost
         {
             // The effects alone on a dark backdrop: the exposed stage hides additive light.
             GraphicsDevice.SetRenderTarget(_target);
-            GraphicsDevice.Clear(new Color(18, 18, 22));
+            GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.DepthBuffer, new Color(18, 18, 22).ToVector4(), PristonDepth.Clear, 0);
             Renderer().DisplayOutput = true;
             _presentation.Draw(_camera.View, _camera.Projection, _camera.Position, null!);
             Renderer().DisplayOutput = false;
@@ -312,7 +315,7 @@ internal sealed class SkillCaptureProbe : Game, ISkillSceneHost
         _frame = 0;
         _time = 0f;
         var facing = MathF.Atan2(TargetPosition.X - CasterPosition.X, TargetPosition.Z - CasterPosition.Z);
-        _caster = _composer.Compose(_assets, _visuals[index], 0, World(CasterPosition, facing), PristonActorMotion.Stand);
+        _caster = _composer.Compose(_assets, _visuals[index], 0, World(CasterPosition, facing), MotionCode.Stand);
         _warmup = 30;
     }
 
@@ -388,6 +391,8 @@ internal sealed class SkillCaptureProbe : Game, ISkillSceneHost
         _looks.Apply(entityId, handles, Casts[_cast].OffHand.StartsWith("DS", StringComparison.Ordinal) && entityId == CasterId, look);
     }
 
+    public float AttackRateOf(ulong entityId) => 1f;
+
     public void PlaySkillMotion(ulong entityId, SkillMotionPlan plan, float durationMs, float rate, int loop)
     {
         if (entityId != CasterId)
@@ -405,8 +410,8 @@ internal sealed class SkillCaptureProbe : Game, ISkillSceneHost
             return;
         }
 
-        _renderer.RestartActorMotion(_caster.Body, PristonActorMotion.Attack);
-        _renderer.RestartActorMotion(_caster.Head, PristonActorMotion.Attack);
+        _renderer.RestartActorMotion(_caster.Body, MotionCode.Attack);
+        _renderer.RestartActorMotion(_caster.Head, MotionCode.Attack);
         _renderer.SetActorPlaybackRate(_caster.Body, rate);
         _renderer.SetActorPlaybackRate(_caster.Head, rate);
     }

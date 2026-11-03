@@ -1,9 +1,14 @@
 namespace PristonTale.Persistence.Abstractions.WorldData;
 
+// Id: the importer's stable monster id, also the runtime monster code; Key: its unique English key; Name: its English
+// name (monster_texts), null without one.
 public sealed record MonsterRecord(
-    string Name,
+    int Id,
+    string Key,
+    string? Name,
     string Model,
     int Level,
+    int Hp,
     int AttackMin,
     int AttackMax,
     int AttackSpeed,
@@ -12,7 +17,7 @@ public sealed record MonsterRecord(
     int Defence,
     int AbsorbPct,
     int BlockPct,
-    int Hp,
+    int StunPct,
     int Sight,
     int SkillDamageMin,
     int SkillDamageMax,
@@ -30,59 +35,63 @@ public sealed record MonsterRecord(
     short Nature,
     short Brood,
     short Class,
+    bool Hostile,
     int ResBionic,
     int ResEarth,
     int ResFire,
     int ResIce,
-    int ResLighting,
+    int ResLightning,
     int ResPoison,
     int ResWater,
     int ResWind,
-    int StunPct,
-    string DisplayName = "Monster",
-    int SoundCode = 0,
-    float ModelScale = 1,
-    int PortraitOffsetY = 0,
-    int PortraitOffsetZ = 0,
-    int QuestCode = 0,
-    string EventItem = "",
-    int PotionCount = 0,
-    int PotionPercent = 0,
-    bool Hostile = true,
-    int SizeLevel = -1,
-    int ResMagic = 0,
-    int MoveType = 0,
-    int SpecialAttackPct = 0,
-    int GoldMin = 0,
-    int GoldMax = 0,
-    int GoldPct = 0,
-    string EventModel = "",
-    int EventCode = 0,
-    int EventInfo = 0)
+    int ResMagic,
+    int SizeLevel,
+    int SoundCode,
+    float ModelScale,
+    int PortraitOffsetY,
+    int PortraitOffsetZ,
+    int QuestCode,
+    string? EventItem,
+    int PotionCount,
+    int PotionPercent,
+    int MoveType,
+    int SpecialAttackPct,
+    int GoldMin,
+    int GoldMax,
+    int GoldPct,
+    string EventModel,
+    int EventCode,
+    int EventInfo,
+    int MaxDropsPerKill,
+    bool DropsSeenByAll)
 {
-    public MonsterDropConfigRecord? DropConfig { get; init; }
+    public IReadOnlyList<MonsterDropLineRecord> DropLines { get; init; } = [];
 
-    public IReadOnlyList<MonsterDropItemRecord> DropItems { get; init; } = [];
-
-    public IReadOnlyList<MonsterDropPlusRecord> DropsPlus { get; init; } = [];
+    public IReadOnlyList<MonsterBonusDropRecord> BonusDrops { get; init; } = [];
 }
 
-public sealed record MonsterDropConfigRecord(
-    string MonsterName,
-    int MaxItemsPerKill,
-    bool AllPlayersSee);
-
-public sealed record MonsterDropItemRecord(
-    long Id,
-    string MonsterName,
+// One authored drop line: its weight and nothing, gold (GoldMin..GoldMax) or items (Items, the weight split evenly
+// among them; a null code is an item the catalog lacks, which keeps its share and drops nothing).
+public sealed record MonsterDropLineRecord(
+    int MonsterId,
+    int Line,
+    int Weight,
     int Kind,
-    int Weight,
-    string? ItemCode,
     int GoldMin,
-    int GoldMax);
+    int GoldMax)
+{
+    public IReadOnlyList<string?> Items { get; init; } = [];
+}
 
-public sealed record MonsterDropPlusRecord(
-    long Id,
-    string MonsterName,
-    int Weight,
+public sealed record MonsterDropLineItemRecord(
+    int MonsterId,
+    int Line,
+    int Ordinal,
+    string? ItemCode);
+
+// An independent extra drop: Chance percent of ItemCode (null when the catalog lacks it).
+public sealed record MonsterBonusDropRecord(
+    int MonsterId,
+    int Ordinal,
+    int Chance,
     string? ItemCode);

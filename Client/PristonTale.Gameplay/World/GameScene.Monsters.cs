@@ -3,6 +3,7 @@ using PristonTale.Client.Net.Presence;
 using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Gameplay.Effects;
+using PristonTale.Contracts.Combat;
 
 namespace PristonTale.Gameplay.World;
 
@@ -32,14 +33,13 @@ public sealed partial class GameScene : IMonsterScene
 
         foreach (var combatEvent in update.Events)
         {
-            if (combatEvent.Kind == RemoteCombatEventKind.SwingBegin)
+            if (combatEvent.Kind == CombatEventKind.SwingBegin)
             {
                 _monsterFx.ObserveSwing(combatEvent.AttackerId, combatEvent.TargetId);
             }
-            else if (combatEvent.Kind == RemoteCombatEventKind.Hit && combatEvent.Skill)
+            else if (combatEvent.Kind == CombatEventKind.Hit && combatEvent.Skill)
             {
-                var position = combatEvent.TargetId == _remote?.SelfEntityId && _playerBody is not null ? _playerBody.Position
-                    : _remote is not null && _remote.TryGetDrawnPosition(combatEvent.TargetId, out var drawn) ? drawn : Vector3.Zero;
+                var position = TryGetDrawnPosition(combatEvent.TargetId, out var drawn) ? drawn : Vector3.Zero;
                 _monsterFx.ObserveSkillHit(combatEvent.AttackerId, combatEvent.TargetId, position);
             }
         }
@@ -80,8 +80,7 @@ public sealed partial class GameScene : IMonsterScene
 
         if (entityId == _remote.SelfEntityId)
         {
-            _renderer.SetActorColorAdd(_playerBodyActor, tint);
-            _renderer.SetActorColorAdd(_playerHeadActor, tint);
+            PlayerActors.SetColorAdd(_actorScene, tint);
             return;
         }
 
@@ -90,6 +89,21 @@ public sealed partial class GameScene : IMonsterScene
         for (var index = 0; index < count; index++)
         {
             _renderer.SetActorColorAdd(handles[index], tint);
+        }
+    }
+
+    void IMonsterScene.SetEntityCorpse(ulong entityId, float fade, float dim)
+    {
+        if (_renderer is null || _remote is null)
+        {
+            return;
+        }
+
+        Span<ActorHandle> handles = stackalloc ActorHandle[8];
+        var count = _remote.CopyActorHandles(entityId, handles);
+        for (var index = 0; index < count; index++)
+        {
+            _renderer.SetActorCorpse(handles[index], fade, dim);
         }
     }
 }

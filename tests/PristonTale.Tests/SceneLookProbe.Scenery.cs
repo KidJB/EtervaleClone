@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.IO;
 using PristonTale.Engine3D.Rendering;
+using PristonTale.Assets;
 
 namespace PristonTale.Tests;
 
@@ -10,7 +11,7 @@ namespace PristonTale.Tests;
 // on an animated scenery model beside it with the same orientation (drawn by the skinned surface path, as actors are),
 // under the noon and the 17:00 sun. Fails when the animated quad's luminance or saturation differs from the stage
 // quad's (the animated scenery drawn at full white beside the darker stage read as grey chrome), or when its specular
-// light alone (the Specular debug view) is brighter than the stage quad's: no chrome on a legacy non-metal.
+// light alone (the Specular debug view) is brighter than the stage quad's: no chrome on a original non-metal.
 internal sealed partial class SceneLookProbe
 {
     private const string SceneryTexture = "metal_w.BMP";
@@ -26,7 +27,7 @@ internal sealed partial class SceneLookProbe
     private void LoadScenery()
     {
         var reader = new PristonSmdReader(new PristonAssetCache());
-        var ricarten = reader.ReadStage(PristonFileResolver.Resolve(Path.Combine(_root, "Field/Ricarten/village-2.smd")));
+        var ricarten = reader.ReadStage(AssetFiles.Resolve(Path.Combine(_root, "Field/Ricarten/village-2.smd")));
         var material = ricarten.Materials.First(m => m.InUse && string.Equals(m.TextureName, SceneryTexture, StringComparison.OrdinalIgnoreCase));
         var path = Path.Combine(_root, "Field/Ricarten/scenery-probe.smd");
         var (corners, uvs) = SceneryQuad(StaticCentre);
@@ -86,7 +87,7 @@ internal sealed partial class SceneLookProbe
     {
         if (_frames == 160)
         {
-            _sceneryHour = 17f;
+            _sceneryHour = 20f;
             _renderer.SetTimeOfDay(_sceneryHour);
             _renderer.ResetTemporalState();
         }

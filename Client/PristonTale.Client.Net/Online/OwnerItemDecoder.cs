@@ -14,6 +14,7 @@ internal sealed class OwnerItemDecoder
     private long _partsRevision = -1;
     private long _detailsRevision = -1;
     private OwnerItemStatusPacket? _status;
+    private IReadOnlyList<AgingProgressView> _aging = [];
 
     public void OnDetails(ItemDetailsPartPacket part)
     {
@@ -41,6 +42,9 @@ internal sealed class OwnerItemDecoder
 
     public void OnStatus(OwnerItemStatusPacket status) => _status = status;
 
+    public void OnAging(AgingProgressPacket progress) =>
+        _aging = progress.Entries.Select(static entry => new AgingProgressView(entry.InstanceId, entry.Count, entry.Goal)).ToArray();
+
     public IReadOnlyList<OwnedItemView> Attach(long revision, IReadOnlyList<OwnedItemView> items)
     {
         if (revision != _detailsRevision)
@@ -53,6 +57,7 @@ internal sealed class OwnerItemDecoder
 
     public OwnerState Apply(OwnerState owner)
     {
+        owner = owner with { Aging = _aging };
         if (_status is not { } status)
         {
             return owner;
@@ -76,7 +81,8 @@ internal sealed class OwnerItemDecoder
         };
     }
 
-    private static ItemDetailView View(ItemDetailEntry e)
+    // The values of one copy as its wire entry carries them (owner items and the copies a personal shop offers).
+    internal static ItemDetailView View(ItemDetailEntry e)
     {
         var r = e.Resistances;
         var spec = new ItemSpecBonus(e.SpecAbsorb, e.SpecDefence, e.SpecMoveSpeed, e.SpecBlock, e.SpecAttackSpeed, e.SpecCritical, e.SpecShootingRange,
@@ -88,6 +94,12 @@ internal sealed class OwnerItemDecoder
             e.Price, e.SpecJob, spec);
         return new ItemDetailView(e.DurabilityCurrent, e.DurabilityMax, e.UpgradeLevel, roll, e.Critical, e.AttackSpeed, e.ShootingRange,
             e.PotionSpace, e.MagicMastery, e.Weight, e.UniqueItem, (e.Flags & ItemDetailEntry.FlagTwoHanded) != 0,
-            (e.Flags & ItemDetailEntry.FlagClassAllowed) != 0);
+            (e.Flags & ItemDetailEntry.FlagClassAllowed) != 0)
+        {
+            AgingCount = e.AgingCount,
+            AgingGoal = e.AgingGoal,
+            MixSheltom = e.MixSheltom,
+            MixStats = (Simulation.Items.Mixing.MixStat)e.MixStats
+        };
     }
 }

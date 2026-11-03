@@ -1,6 +1,8 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using PristonTale.Engine3D.Formats;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Units;
 
 namespace PristonTale.Engine3D.Rendering;
 
@@ -62,34 +64,13 @@ public sealed partial class PristonRenderer
         var position = Vector3.Zero;
         if (bone >= 0)
         {
-            var stand = SelectActorMotion(runtime.Instance.Actor, PristonActorMotion.Stand, runtime.Instance.MotionContext);
-            var frame = stand.EndFrame > stand.StartFrame ? stand.StartFrame * 160f : runtime.Frame;
-            position = runtime.SampleSkeletonAt(frame)[bone].Translation;
+            var stand = SelectActorMotion(runtime.Instance.Actor, MotionCode.Stand, runtime.Instance.MotionContext);
+            var frame = stand.EndFrame > stand.StartFrame ? stand.StartFrame * GameUnits.FrameTicks : runtime.Frame;
+            position = runtime.SampleSkeletonAt(frame, stand.EndFrame * GameUnits.FrameTicks)[bone].Translation;
         }
 
         var bounds = ModelBounds(runtime);
         anchor = new PristonPortraitAnchor(position, bone >= 0, AuthoredHeight(runtime.Instance.Actor.Mesh, bounds.Max.Y), bounds, runtime.World);
-        return true;
-    }
-
-    // The model's authored height above its origin (the animated bounds' top while the file records none); false until
-    // the actor's geometry is resident.
-    public bool TryGetActorHeight(ActorHandle handle, out float height)
-    {
-        height = 0f;
-        if (!TryResolveActor(handle, out var runtime) || runtime.Batches.Count == 0)
-        {
-            return false;
-        }
-
-        var top = runtime.Batches[0].Bounds.Max.Y;
-        for (var index = 1; index < runtime.Batches.Count; index++)
-        {
-            top = MathF.Max(top, runtime.Batches[index].Bounds.Max.Y);
-        }
-
-        var authored = AuthoredHeight(runtime.Instance.Actor.Mesh, 0f);
-        height = authored > 0f ? authored * runtime.World.Up.Length() : top - runtime.World.Translation.Y;
         return true;
     }
 
@@ -114,7 +95,7 @@ public sealed partial class PristonRenderer
 
         if (authored > 0)
         {
-            reach = authored / 256f;
+            reach = authored / GameUnits.FixedScale;
             return true;
         }
 
@@ -134,7 +115,7 @@ public sealed partial class PristonRenderer
             }
         }
 
-        return height > 0 ? height / 256f : fallback;
+        return height > 0 ? height / GameUnits.FixedScale : fallback;
     }
 
     // The batches hold the animated world bounds; the anchor wants them in the actor's model space.
@@ -229,7 +210,7 @@ public sealed partial class PristonRenderer
 
         _stateCache.BeginFrame();
         _stateCache.InvalidateDeviceState();
-        _stateCache.SetDepthStencilState(DepthStencilState.Default);
+        _stateCache.SetDepthStencilState(PristonDepth.Write);
         _stateCache.SetSamplerState0(PristonSamplerStates.AnisotropicWrap);
         _shaders.ApplyFrame(frame);
 

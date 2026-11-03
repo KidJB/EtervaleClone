@@ -5,16 +5,14 @@ using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.Progression;
 using PristonTale.Simulation.Quests;
 using PristonTale.Simulation.Skills;
+using PristonTale.Simulation.PersonalShops;
 using PristonTale.Simulation.World.Npcs;
 
 namespace PristonTale.Simulation.Characters;
 
-public sealed class PlayerCharacter
+public sealed partial class PlayerCharacter
 {
     private readonly Dictionary<EquipmentSlot, ItemInstance> _equipment = new();
-    private readonly List<AppliedInventoryOperation> _inventoryOperations = new();
-    private readonly List<AppliedProgressionOperation> _progressionOperations = new();
-    private readonly List<AppliedServiceOperation> _serviceOperations = new();
 
     public PlayerCharacter(CharacterClass characterClass, string name, int level = 1, CharacterAttributes attributes = null)
     {
@@ -43,6 +41,44 @@ public sealed class PlayerCharacter
     public int SkillPoints { get; private set; }
     public int EliteSkillPoints { get; private set; }
     public short Tier { get; private set; }
+
+    public int StarterGiftsReceived { get; private set; } = StarterGifts.Count;
+
+    public void RestoreStarterGifts(int received) =>
+        StarterGiftsReceived = received is >= 0 and <= StarterGifts.Count
+            ? received
+            : throw new ArgumentOutOfRangeException(nameof(received), "A character received 0 to StarterGifts.Count starter gifts.");
+
+    // The beginner's pet (HelpPets): its kind (0 before one is drawn) and whether the player hid it.
+    public int HelpPet { get; private set; }
+    public bool HelpPetHidden { get; private set; }
+
+    public void RestoreHelpPet(int kind, bool hidden)
+    {
+        HelpPet = kind is >= 0 and <= HelpPets.Kinds ? kind : throw new ArgumentOutOfRangeException(nameof(kind), "A help pet is 0 to HelpPets.Kinds.");
+        HelpPetHidden = hidden;
+    }
+
+    // A character below HelpPets.LeaveLevel without a pet draws one.
+    public void MeetHelpPet(World.Ai.ISimRng rng)
+    {
+        if (HelpPet == 0 && Level < HelpPets.LeaveLevel)
+        {
+            HelpPet = rng.NextInclusive(1, HelpPets.Kinds);
+        }
+    }
+
+    // Shows or hides the beginner's pet while it is there; false otherwise.
+    public bool ToggleHelpPet()
+    {
+        if (HelpPet == 0 || Level >= HelpPets.LeaveLevel)
+        {
+            return false;
+        }
+
+        HelpPetHidden = !HelpPetHidden;
+        return true;
+    }
 
     // Quest progress: the running quest, finished quests and the logs whose bits pay lasting rewards.
     public QuestJournal Quests { get; private set; } = new();
@@ -108,7 +144,10 @@ public sealed class PlayerCharacter
         return taken;
     }
 
-    public bool ReceiveGroundLoot(ItemInstance item, int gold)
+    // intoBag: the item goes into the bag as a stack of its own (InventoryCommand.PickupToBag) for the client to carry, or
+    // to the hand (Held) when the page shown has no room, as the original puts it on the mouse; unless the special item
+    // box keeps it or the hand is full, when it is received as any item.
+    public bool ReceiveGroundLoot(ItemInstance item, int gold, bool intoBag = false)
     {
         if (InventoryRevision == long.MaxValue)
         {
@@ -117,7 +156,8 @@ public sealed class PlayerCharacter
 
         if (item is not null)
         {
-            return gold == 0 && Items.CarriedWeight.CanTake(this, Items.CarriedWeight.Of(item)) && Inventory.TryAdd(item);
+            return gold == 0 && Items.CarriedWeight.CanTake(this, Items.CarriedWeight.Of(item))
+                && (intoBag && !QuestItemBox.Keeps(item.Definition.Code) && (Inventory.TryPlaceFirstFree(item) || TryHold(item)) || TryReceive(item));
         }
 
         if (gold <= 0 || !TryChangeMoney(gold))
@@ -145,10 +185,11 @@ public sealed class PlayerCharacter
     public CharacterAttributes Attributes { get; private set; }
     public Inventory Inventory { get; private set; } = new();
     public long InventoryRevision { get; private set; }
-    public IReadOnlyList<AppliedInventoryOperation> InventoryOperations => _inventoryOperations;
-    public IReadOnlyList<AppliedServiceOperation> ServiceOperations => _serviceOperations;
+    public OperationHistory<AppliedInventoryOperation> InventoryOperations { get; } = new();
+    public OperationHistory<AppliedServiceOperation> ServiceOperations { get; } = new();
+    public OperationHistory<AppliedShopPurchase> ShopPurchases { get; } = new();
     public long ProgressionRevision { get; private set; }
-    public IReadOnlyList<AppliedProgressionOperation> ProgressionOperations => _progressionOperations;
+    public OperationHistory<AppliedProgressionOperation> ProgressionOperations { get; } = new();
     public LearnedSkills Skills { get; }
     public IReadOnlyDictionary<EquipmentSlot, ItemInstance> Equipment => _equipment;
 
@@ -157,7 +198,7 @@ public sealed class PlayerCharacter
 
     public PremiumTimers Premium { get; } = new();
 
-    public ItemUseHistory ItemUses { get; } = new();
+    public OperationHistory<AppliedItemUse> ItemUses { get; } = new();
 
     private DerivedStats _derived;
     private long _derivedEffectsRevision = -1;
@@ -266,20 +307,16 @@ public sealed class PlayerCharacter
 
     // Whether the slot can hold the item at all, usable or not: a saved item whose requirements are no longer met stays
     // worn without adding anything.
-    public bool CanHold(EquipmentSlot slot, ItemInstance item)
+    public bool CanHold(EquipmentSlot slot, ItemInstance item) =>
+        Fits(slot, item) && PairAllows(slot, item, GetEquipped(EquipmentSlot.Weapon), GetEquipped(EquipmentSlot.OffHand));
+
+    // The hand rule of a weapon and off-hand pair, held or stored: a two-handed weapon leaves the off hand empty.
+    private static bool PairAllows(EquipmentSlot slot, ItemInstance item, ItemInstance weapon, ItemInstance offHand) => slot switch
     {
-        if (!Fits(slot, item))
-        {
-            return false;
-        }
-
-        if (slot == EquipmentSlot.Weapon && item.Definition.TwoHanded && GetEquipped(EquipmentSlot.OffHand) is not null)
-        {
-            return false;
-        }
-
-        return slot != EquipmentSlot.OffHand || GetEquipped(EquipmentSlot.Weapon)?.Definition.TwoHanded != true;
-    }
+        EquipmentSlot.Weapon => !item.Definition.TwoHanded || offHand is null,
+        EquipmentSlot.OffHand => weapon?.Definition.TwoHanded != true,
+        _ => true
+    };
 
     private bool Fits(EquipmentSlot slot, ItemInstance item)
     {
@@ -288,10 +325,7 @@ public sealed class PlayerCharacter
             return false;
         }
 
-        var definition = item.Definition;
-        var sameSlot = definition.EquipSlot == slot;
-        var ringSlot = definition.Kind == ItemKind.Ring && slot is EquipmentSlot.RingLeft or EquipmentSlot.RingRight;
-        if (!sameSlot && !ringSlot)
+        if (!ItemEquipmentMetadata.Fits(item.Definition.Kind, item.Definition.EquipSlot, slot))
         {
             return false;
         }
@@ -305,6 +339,22 @@ public sealed class PlayerCharacter
         }
 
         return true;
+    }
+
+    // A received item (TryReceive) goes on the first empty slot that may hold it, as the original's client wears what it
+    // receives; false when none may.
+    private bool TryWearReceived(ItemInstance item)
+    {
+        for (var slot = (EquipmentSlot)0; (int)slot < EquipmentSlots.Count; slot++)
+        {
+            if (GetEquipped(slot) is null && CanEquip(slot, item))
+            {
+                Equip(slot, item);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // The item replaced in the slot takes the bag cell; a two-handed weapon also sends the off-hand item to the bag, and
@@ -466,90 +516,102 @@ public sealed class PlayerCharacter
             throw new ArgumentOutOfRangeException(nameof(revision));
         }
 
-        _inventoryOperations.Clear();
-        foreach (var operation in operations)
-        {
-            if (_inventoryOperations.Count >= 64 || operation is null || operation.Command is null
-                || operation.Command.OperationId == Guid.Empty || operation.Revision > revision || operation.Revision < 1
-                || _inventoryOperations.Any(existing => existing.Command.OperationId == operation.Command.OperationId))
-            {
-                throw new ArgumentException("Invalid inventory operation history.");
-            }
-
-            _inventoryOperations.Add(operation);
-        }
-
+        InventoryOperations.Restore(operations, operation => operation.Revision >= 1 && operation.Revision <= revision, "inventory operation");
         InventoryRevision = revision;
     }
 
     public void RecordInventoryOperation(InventoryCommand command)
     {
-        if (_inventoryOperations.Count == 64)
-        {
-            _inventoryOperations.RemoveAt(0);
-        }
-
-        _inventoryOperations.Add(new AppliedInventoryOperation(command, InventoryRevision));
+        InventoryOperations.Record(new AppliedInventoryOperation(command, InventoryRevision));
     }
 
     public void RestoreServiceHistory(IEnumerable<AppliedServiceOperation> operations)
     {
-        _serviceOperations.Clear();
-        foreach (var operation in operations)
-        {
-            if (_serviceOperations.Count >= 64 || operation?.Command is null || operation.Command.OperationId == Guid.Empty
-                || operation.Revision < 0 || operation.Revision > InventoryRevision
-                || _serviceOperations.Any(existing => existing.Command.OperationId == operation.Command.OperationId))
-            {
-                throw new ArgumentException("Invalid NPC service operation history.");
-            }
-
-            _serviceOperations.Add(operation);
-        }
+        ServiceOperations.Restore(operations, operation => operation.Revision >= 0 && operation.Revision <= InventoryRevision, "NPC service operation");
     }
 
     public void RecordServiceOperation(NpcServiceCommand command)
     {
-        if (_serviceOperations.Count == 64)
-        {
-            _serviceOperations.RemoveAt(0);
-        }
-
-        _serviceOperations.Add(new AppliedServiceOperation(command, InventoryRevision));
+        ServiceOperations.Record(new AppliedServiceOperation(command, InventoryRevision));
     }
 
-    public ItemInstance FindOwnedItem(Guid instanceId)
+    public void RestorePurchaseHistory(IEnumerable<AppliedShopPurchase> purchases)
     {
-        var anchor = Inventory.Find(instanceId);
-        if (anchor >= 0)
-        {
-            return Inventory[anchor];
-        }
+        ShopPurchases.Restore(purchases, purchase => purchase.Revision >= 0 && purchase.Revision <= InventoryRevision, "personal shop purchase");
+    }
 
-        foreach (var equipped in _equipment.Values)
+    public void RecordShopPurchase(PersonalShopPurchase purchase)
+    {
+        ShopPurchases.Record(new AppliedShopPurchase(purchase, InventoryRevision));
+    }
+
+    // Aging counts change no stat and so leave the inventory revision alone.
+    public long AgingRevision { get; private set; }
+
+    public bool TallyAging(Items.Aging.AgingCounter counter, int amount = 1)
+    {
+        var reached = false;
+        foreach (var item in _equipment.Values)
         {
-            if (equipped.InstanceId == instanceId)
+            var before = item.Maturity;
+            if (before is not null && Items.Aging.AgingRules.CounterOf(item) == counter)
             {
-                return equipped;
+                reached |= Items.Aging.AgingRules.Tally(item, amount);
+                if (!ReferenceEquals(before, item.Maturity))
+                {
+                    AgingRevision++;
+                }
             }
         }
 
-        return null;
+        return reached;
     }
+
+    public bool HasMaturedItem => OwnedItems().Any(Items.Aging.AgingRules.Matured);
+
+    public bool MatureAgedItems()
+    {
+        var matured = false;
+        foreach (var item in OwnedItems())
+        {
+            matured |= Items.Aging.AgingRules.Mature(item);
+        }
+
+        if (matured)
+        {
+            OnInventoryChanged();
+        }
+
+        return matured;
+    }
+
+    public ItemInstance FindOwnedItem(Guid instanceId) => OwnedItems().FirstOrDefault(item => item.InstanceId == instanceId);
 
     public IEnumerable<ItemInstance> OwnedItems()
     {
-        for (var anchor = 0; anchor < Inventory.Capacity; anchor++)
+        foreach (var item in Inventory.Items())
         {
-            if (Inventory[anchor] is { } item)
-            {
-                yield return item;
-            }
+            yield return item;
         }
 
         foreach (var equipped in _equipment.Values)
         {
             yield return equipped;
+        }
+
+        foreach (var (_, potion) in Belt.Occupied())
+        {
+            yield return potion;
+        }
+
+        foreach (var (_, kept) in QuestBox.Occupied())
+        {
+            yield return kept;
+        }
+
+        foreach (var hidden in HiddenItems())
+        {
+            yield return hidden;
         }
     }
 
@@ -577,28 +639,28 @@ public sealed class PlayerCharacter
     {
         var clone = new PlayerCharacter(Class, Name, Level, Attributes);
         clone.RestoreProgress(Experience, Money, StatPoints, Tier, SkillPoints, EliteSkillPoints);
-        for (var anchor = 0; anchor < Inventory.Capacity; anchor++)
-        {
-            if (Inventory[anchor] is { } item)
-            {
-                clone.Inventory.TryPlace(item.Copy(item.Count, preserveId: true), anchor);
-            }
-        }
-
+        clone.Inventory.CopyFrom(Inventory);
         foreach (var equipped in _equipment)
         {
             clone.Equip(equipped.Key, equipped.Value.Copy(1, preserveId: true));
         }
+
+        clone.Belt.CopyFrom(Belt);
+        clone.QuestBox.CopyFrom(QuestBox);
+        clone.CopySides(this);
 
         foreach (var skill in Skills.Ranks)
         {
             clone.Skills.Restore(skill.Key, skill.Value, Skills.UsesOf(skill.Key));
         }
 
-        clone.RestoreInventoryHistory(InventoryRevision, _inventoryOperations);
-        clone.RestoreServiceHistory(_serviceOperations);
-        clone.RestoreProgressionHistory(ProgressionRevision, _progressionOperations);
+        clone.RestoreInventoryHistory(InventoryRevision, InventoryOperations);
+        clone.RestoreServiceHistory(ServiceOperations);
+        clone.RestorePurchaseHistory(ShopPurchases);
+        clone.RestoreProgressionHistory(ProgressionRevision, ProgressionOperations);
         clone.Quests = Quests.Clone();
+        clone.RestoreStarterGifts(StarterGiftsReceived);
+        clone.RestoreHelpPet(HelpPet, HelpPetHidden);
         clone.Premium.CopyFrom(Premium);
         clone.ItemUses.CopyFrom(ItemUses);
         clone.Recompute();
@@ -648,12 +710,7 @@ public sealed class PlayerCharacter
         }
 
         ProgressionRevision++;
-        if (_progressionOperations.Count == 64)
-        {
-            _progressionOperations.RemoveAt(0);
-        }
-
-        _progressionOperations.Add(new AppliedProgressionOperation(command, ProgressionRevision));
+        ProgressionOperations.Record(new AppliedProgressionOperation(command, ProgressionRevision));
         return true;
     }
 
@@ -664,19 +721,7 @@ public sealed class PlayerCharacter
             throw new ArgumentOutOfRangeException(nameof(revision));
         }
 
-        _progressionOperations.Clear();
-        foreach (var operation in operations)
-        {
-            if (_progressionOperations.Count >= 64 || operation?.Command is null || operation.Command.OperationId == Guid.Empty
-                || operation.Revision < 1 || operation.Revision > revision
-                || _progressionOperations.Any(existing => existing.Command.OperationId == operation.Command.OperationId))
-            {
-                throw new ArgumentException("Invalid progression operation history.");
-            }
-
-            _progressionOperations.Add(operation);
-        }
-
+        ProgressionOperations.Restore(operations, operation => operation.Revision >= 1 && operation.Revision <= revision, "progression operation");
         ProgressionRevision = revision;
     }
 
@@ -764,8 +809,16 @@ public sealed class PlayerCharacter
             _equipment.Add(equipped.Key, equipped.Value);
         }
 
-        RestoreInventoryHistory(candidate.InventoryRevision, candidate._inventoryOperations);
-        RestoreServiceHistory(candidate._serviceOperations);
+        Belt.CopyFrom(candidate.Belt);
+        QuestBox.CopyFrom(candidate.QuestBox);
+        HiddenBag = candidate.HiddenBag;
+        (_storedWeapon, _storedOffHand) = (candidate._storedWeapon, candidate._storedOffHand);
+        (BagPage, WeaponSet) = (candidate.BagPage, candidate.WeaponSet);
+        Held = candidate.Held;
+
+        RestoreInventoryHistory(candidate.InventoryRevision, candidate.InventoryOperations);
+        RestoreServiceHistory(candidate.ServiceOperations);
+        RestorePurchaseHistory(candidate.ShopPurchases);
         Recompute();
         Life = Math.Min(Life, MaxLife);
         Mana = Math.Min(Mana, MaxMana);

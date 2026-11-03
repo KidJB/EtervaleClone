@@ -11,6 +11,11 @@ using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World.Fields;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Simulation.World.Spawning;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Skills;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -71,11 +76,12 @@ internal static class SkillSystemTests
     private static Task CooldownAsync()
     {
         SkillRuleCatalog.TryGet(0x08010002, out var fireBolt);
-        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 0, 0) == 17150, "low mastery is not the gauge's longest fill");
+        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 0, 0, 0) == 17150, "low mastery is not the gauge's longest fill");
         // Talent 150 gives proficiency 5000: M = 84 + 2 - 50 = 36 -> still the 36-70 bracket.
-        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 150, 0) == 17150, "M 36 left the slowest bracket");
-        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 150, 300) == 8330, "M 33 should fill in 8.33 s");
-        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 150, 5000) == 490, "full proficiency should reach the 0.49 s floor");
+        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 150, 0, 0) == 17150, "M 36 left the slowest bracket");
+        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 150, 0, 300) == 8330, "M 33 should fill in 8.33 s");
+        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 0, 50, 300) == 8330, "item mastery did not count toward proficiency");
+        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 150, 0, 5000) == 490, "full proficiency should reach the 0.49 s floor");
         Assert.True(SkillFormulas.UsesAfterCast(0, 5, 0, 1) == 100 && SkillFormulas.UsesAfterCast(0, 4, 0, 1) == 0, "use counter changed");
         Assert.True(SkillFormulas.UsesAfterCast(0, 6, 0, 4) == 100 && SkillFormulas.UsesAfterCast(0, 5, 0, 4) == 0, "rank did not lengthen the streak");
         Assert.True(SkillFormulas.UsesAfterCast(0, 9, 8, 1) == 100 && SkillFormulas.UsesAfterCast(0, 17, 15, 3) == 100, "window position streak changed");
@@ -205,35 +211,34 @@ internal static class SkillSystemTests
         var buffer = new byte[FrameCodec.MaxFrameSize];
         var cast = new SkillCastPacket(7, 0x08010002, 99, 256, -512, 1024, 300, 12345);
         Assert.True(SkillCastPacket.Read(buffer.AsSpan(0, cast.Write(buffer))) == cast, "cast round trip");
-        var result = new SkillCastResultPacket(7, 0x08010002, SkillCastStatus.Cooldown, 3, 17150, 900, 40, 70, 88);
+        var result = new SkillCastResultPacket(7, 0x08010002, SkillCastVerdict.Cooldown, 3, 17150, 900, 40, 70, 88);
         Assert.True(SkillCastResultPacket.Read(buffer.AsSpan(0, result.Write(buffer))) == result, "cast result round trip");
         SkillEventEntry[] events =
         [
-            new(1, 2, 0x08010004, SkillEventPhase.Start, 4, SkillEventFlags.Area | SkillEventFlags.Projectile, 714f, 414f, 10, 20, 30, 1024, 0, 76),
-            new(1, 2, 0x08010004, SkillEventPhase.Impact, 4, SkillEventFlags.Area, 0f, 0f, 10, 20, 30, 1024, 3, 76)
+            new(1, 2, 0x08010004, SkillEventPhase.Start, 4, SkillEventFlags.Area | SkillEventFlags.Projectile, 714f, 414.5f, 320, 640, -960, 1024, 0, 76),
+            new(1, 2, 0x08010004, SkillEventPhase.Impact, 4, SkillEventFlags.Area, 0f, 0f, 320, 640, -960, 1024, 3, 76)
         ];
-        var length = SkillEventList.Write(buffer, events);
-        Assert.True(SkillEventList.Read(buffer.AsSpan(0, length)).SequenceEqual(events), "skill events round trip");
+        var length = SkillEventList.Write(buffer, events, NoEventHandles.Instance, out _);
+        Assert.True(SkillEventList.Read(buffer.AsSpan(0, length), NoEventHandles.Instance).SequenceEqual(events), "skill events round trip");
         StatusEffectEntry[] statuses =
         [
             new(2, 1, 0x06010001, StatusEffectOp.Add, 1, (byte)EffectSourceKind.PlayerSkill, (byte)ControlFlags.Stun, StatusEffectFlags.Harmful, 10000, 10000, 0),
             new(1, 0, 0x0A000001, StatusEffectOp.Remove, 1, (byte)EffectSourceKind.Item, 0, StatusEffectFlags.Permanent, 0, 0, 5)
         ];
-        length = StatusEffectList.Write(buffer, statuses);
-        Assert.True(StatusEffectList.Read(buffer.AsSpan(0, length)).SequenceEqual(statuses), "status round trip");
+        length = StatusEffectList.Write(buffer, statuses, NoEventHandles.Instance, out _);
+        Assert.True(StatusEffectList.Read(buffer.AsSpan(0, length), NoEventHandles.Instance).SequenceEqual(statuses), "status round trip");
         var cooldowns = new SkillCooldownsPacket(55, [new SkillCooldownEntry(0x08010002, 1000, 17150)]);
         var read = SkillCooldownsPacket.Read(buffer.AsSpan(0, cooldowns.Write(buffer)));
         Assert.True(read.ServerTick == 55 && read.Cooldowns.SequenceEqual(cooldowns.Cooldowns), "cooldowns round trip");
 
-        length = SkillEventList.Write(buffer, events);
-        buffer[16 + 20] = 9;
-        Assert.ThrowsAsync(() => Task.Run(() => SkillEventList.Read(buffer.AsSpan(0, length).ToArray()))).Wait();
-        length = StatusEffectList.Write(buffer, statuses);
-        BitConverter.TryWriteBytes(buffer.AsSpan(16 + 32), 20000);
-        Assert.ThrowsAsync(() => Task.Run(() => StatusEffectList.Read(buffer.AsSpan(0, length).ToArray()))).Wait();
-        length = SkillEventList.Write(buffer, events);
-        BitConverter.TryWriteBytes(buffer.AsSpan(12), 3);
-        Assert.ThrowsAsync(() => Task.Run(() => SkillEventList.Read(buffer.AsSpan(0, length).ToArray()))).Wait();
+        length = SkillEventList.Write(buffer, events, NoEventHandles.Instance, out _);
+        buffer[EventWire.HeaderSize] = 9;
+        Assert.Throws<InvalidDataException>(() => SkillEventList.Read(buffer.AsSpan(0, length).ToArray(), NoEventHandles.Instance), "a malformed SkillEventList was read");
+        length = StatusEffectList.Write(buffer, [statuses[0] with { RemainingMs = 20000 }], NoEventHandles.Instance, out _);
+        Assert.Throws<InvalidDataException>(() => StatusEffectList.Read(buffer.AsSpan(0, length).ToArray(), NoEventHandles.Instance), "a malformed StatusEffectList was read");
+        length = SkillEventList.Write(buffer, events, NoEventHandles.Instance, out _);
+        BitConverter.TryWriteBytes(buffer.AsSpan(EventWire.HeaderSize - 2), (ushort)3);
+        Assert.Throws<InvalidDataException>(() => SkillEventList.Read(buffer.AsSpan(0, length).ToArray(), NoEventHandles.Instance), "a malformed SkillEventList was read");
         return Task.CompletedTask;
     }
 
@@ -282,15 +287,15 @@ internal static class SkillSystemTests
         Assert.True(outcome.Accepted && player.Character.Mana == manaBefore - 25, "mana not spent on the server");
         field.Step(0.05f);
         var start = field.SnapshotSkillEvents().Single();
-        Assert.True(start.Phase == SkillEventPhaseView.Start && start.HitAtMs > 0 && start.DurationMs > start.HitAtMs, "start timing missing");
+        Assert.True(start.Phase == SkillEventPhase.Start && start.HitAtMs > 0 && start.DurationMs > start.HitAtMs, "start timing missing");
         var lifeBefore = monster.Life;
         var impactTick = -1;
         var hits = new List<CombatEventView>();
         for (var tick = 1; tick < 60 && impactTick < 0; tick++)
         {
             field.Step(0.05f);
-            hits.AddRange((field.SnapshotEvents() ?? []).Where(value => value.Kind == CombatEventKindView.Hit && value.AttackerId == player.EntityId));
-            if (field.SnapshotSkillEvents().Any(value => value.Phase == SkillEventPhaseView.Impact))
+            hits.AddRange((field.SnapshotEvents() ?? []).Where(value => value.Kind == CombatEventKind.Hit && value.AttackerId == player.EntityId));
+            if (field.SnapshotSkillEvents().Any(value => value.Phase == SkillEventPhase.Impact))
             {
                 impactTick = tick;
             }
@@ -314,8 +319,8 @@ internal static class SkillSystemTests
         for (var tick = 0; tick < 20 * 60; tick++)
         {
             field.Step(0.05f);
-            added.AddRange(field.SnapshotStatusEvents().Where(value => value.Op == StatusEventOpView.Add));
-            removed.AddRange(field.SnapshotStatusEvents().Where(value => value.Op == StatusEventOpView.Remove));
+            added.AddRange(field.SnapshotStatusEvents().Where(value => value.Op == StatusEffectOp.Add));
+            removed.AddRange(field.SnapshotStatusEvents().Where(value => value.Op == StatusEffectOp.Remove));
             if (tick == 100)
             {
                 Assert.True(player.Character.Derived.Absorption >= absorption + 3, "absorb buff did not change derived stats");
@@ -337,18 +342,18 @@ internal static class SkillSystemTests
         }
 
         Assert.True(stunned && target.Life < target.Def.Combat.MaxLife, "Shield Strike did not damage and stun");
-        Assert.True(target.Motion == MonsterMotionState.Stand && target.AiState != MonsterAiState.Attack, "stunned monster kept acting");
+        Assert.True(target.Motion == MotionState.Stand && target.AiState != MonsterAiState.Attack, "stunned monster kept acting");
         return Task.CompletedTask;
     }
 
     private static Task WireAsync()
     {
         var round = new WireRoundTrip(1);
-        var view = new EntityView(1, EntityKindView.Player, true, Vector3.Zero, 0, MoveStateView.Skill, 10, 100, 100, default);
+        var view = new EntityView(1, EntityKind.Player, true, Vector3.Zero, 0, MotionState.Skill, 10, 100, 100, default);
         var snapshot = new WorldSnapshot(5, [view], fieldId: 3)
         {
-            SkillEvents = [new SkillEventView(1, 1, 0x05010002, SkillEventPhaseView.Start, 2, SkillEventFlagsView.SelfCast, 900f, 400f, Vector3.Zero, 0f, 0, 0f)],
-            StatusEvents = [new StatusEventView(1, 1, 0x05010002, StatusEventOpView.Add, 1, 2, 0, false, false, 5000, 5000, 12)],
+            SkillEvents = [new SkillEventView(1, 1, 0x05010002, SkillEventPhase.Start, 2, SkillEventFlags.SelfCast, 900f, 400f, Vector3.Zero, 0f, 0, 0f)],
+            StatusEvents = [new StatusEventView(1, 1, 0x05010002, StatusEffectOp.Add, 1, 2, 0, false, false, 5000, 5000, 12)],
             Cooldowns = [new SkillCooldownView(0x05010002, 17000, 17150)]
         };
         var updates = round.Push(snapshot);

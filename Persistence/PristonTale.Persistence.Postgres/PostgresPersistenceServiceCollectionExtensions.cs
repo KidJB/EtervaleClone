@@ -5,7 +5,10 @@ using Npgsql;
 using PristonTale.Persistence.Abstractions;
 using PristonTale.Persistence.Abstractions.Accounts;
 using PristonTale.Persistence.Abstractions.Characters;
+using PristonTale.Persistence.Abstractions.Contacts;
 using PristonTale.Persistence.Abstractions.GameMasters;
+using PristonTale.Persistence.Abstractions.GameLogs;
+using PristonTale.Persistence.Abstractions.Settings;
 using PristonTale.Persistence.Abstractions.Warehouses;
 using PristonTale.Persistence.Abstractions.WorldData;
 using PristonTale.Persistence.Migrations;
@@ -15,9 +18,15 @@ namespace PristonTale.Persistence.Postgres;
 
 public static class PostgresPersistenceServiceCollectionExtensions
 {
-    public static IServiceCollection AddPristonPostgres(this IServiceCollection services, string connectionString)
+    // Below PostgreSQL's default max_connections (100, three reserved), so a full pool never meets "too many clients".
+    public const int DefaultMaxPoolSize = 20;
+
+    // maxPoolSize replaces the connection string's Maximum Pool Size.
+    public static IServiceCollection AddPristonPostgres(this IServiceCollection services, string connectionString, int maxPoolSize = DefaultMaxPoolSize)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxPoolSize, 1);
+        connectionString = new NpgsqlConnectionStringBuilder(connectionString) { MaxPoolSize = maxPoolSize }.ConnectionString;
 
         DefaultTypeMap.MatchNamesWithUnderscores = true;
 
@@ -29,7 +38,10 @@ public static class PostgresPersistenceServiceCollectionExtensions
         services.AddSingleton<ICharacterRepository, DapperCharacterRepository>();
         services.AddSingleton<IWorldDataRepository, DapperWorldDataRepository>();
         services.AddSingleton<IWarehouseRepository, DapperWarehouseRepository>();
+        services.AddSingleton<IContactRepository, DapperContactRepository>();
         services.AddSingleton<IGameMasterRepository, DapperGameMasterRepository>();
+        services.AddSingleton<IGameLogRepository, DapperGameLogRepository>();
+        services.AddSingleton<IServerSettingsRepository, DapperServerSettingsRepository>();
         services.AddSingleton<IDatabaseMigrator, FluentMigratorDatabaseMigrator>();
 
         services.AddFluentMigratorCore()

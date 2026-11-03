@@ -1,8 +1,10 @@
+using PristonTale.Contracts.Characters;
+
 namespace PristonTale.Client.Net.Presence;
 
 public sealed record PlayerAppearanceInfo(
     string Name,
-    int JobCode,
+    PlayerClass Class,
     int Tier,
     int FaceIndex,
     int HairIndex,
@@ -19,4 +21,7 @@ public sealed record PlayerAppearanceInfo(
     // How the held weapon and off-hand item glow.
     public Simulation.Items.HeldItemGlow WeaponGlow { get; init; } = Simulation.Items.HeldItemGlow.None;
     public Simulation.Items.HeldItemGlow OffHandGlow { get; init; } = Simulation.Items.HeldItemGlow.None;
+
+    // The sign of the personal shop the player sells from; empty when it sells nothing.
+    public string ShopSign { get; init; } = "";
 }

@@ -5,10 +5,12 @@ namespace PristonTale.WorldImport.Parsers;
 
 // Importer DTO for one monster .inf (MonsterInfParser). Mirrors the monsters
 // row plus the drop child rows. Drop item references are kept as RAW 5-char code strings (resolved to
-// item_templates.code by the Importer).
+// items.code by the Importer).
 public sealed class ParsedMonster
 {
-    public required string Name { get; init; }
+    // The authored identity, which the source files reference; the importer maps it to the monster's id and key.
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string Name { get; init; } = "";
     public string DisplayName { get; init; } = "";
     public string Model { get; init; } = "";
     public int SoundCode { get; init; }
@@ -24,7 +26,7 @@ public sealed class ParsedMonster
     public int Defence { get; init; }
     public int AbsorbPct { get; init; }
     public int BlockPct { get; init; }
-    public int Hp { get; init; }
+    public int Life { get; init; }
     public int Sight { get; init; }       // RAW reach (NOT squared)
     public int SkillDamageMin { get; init; }
     public int SkillDamageMax { get; init; }
@@ -70,17 +72,15 @@ public sealed class ParsedMonster
     // Keys of the file no rule reads; the importer reports them.
     public List<string> UnknownKeys { get; } = [];
 
-    // Drop config (1:1) + the weighted main slots + plus-drops.
+    // Drop settings, the *아이템 lines in authored order and the bonus drops.
     public bool AllPlayersSee { get; set; }
     public int MaxItemsPerKill { get; set; }
-    public List<ParsedDropMain> DropItems { get; } = [];
+    public List<ParsedDropLine> DropLines { get; } = [];
     public List<ParsedDropPlus> DropsPlus { get; } = [];
 }
 
-// One main *아이템 weighted slot. Item drops keep one row per code (the source divides the
-// percentage across the code list). Gold uses GoldMin/GoldMax; nothing/gold
-// carry no item code.
-public sealed record ParsedDropMain(DropKind Kind, int Weight, string? ItemCode, int GoldMin, int GoldMax);
+// One main *아이템 line: its weight and nothing, gold (GoldMin..GoldMax) or the raw codes of its items.
+public sealed record ParsedDropLine(DropKind Kind, int Weight, int GoldMin, int GoldMax, IReadOnlyList<string> Codes);
 
-// One *추가아이템 independently-rolled bonus drop (percent + one item code).
-public sealed record ParsedDropPlus(int Weight, string? ItemCode);
+// One *추가아이템 independently-rolled bonus drop (chance percent + one item code).
+public sealed record ParsedDropPlus(int Chance, string? ItemCode);

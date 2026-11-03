@@ -1,7 +1,7 @@
 # Effects and VFX
 
-Particle and skill-effect runtime of the client: `Client/PristonTale.Effects/` (native VFX system, legacy particle
-engine), the effect data under `<assetRoot>/Effect/Vfx/`, the converter `tools/PristonTale.VfxImport` (`ptvfx`) that
+Particle and skill-effect runtime of the client: `Client/PristonTale.Effects/` (the VFX system every effect plays on),
+the effect data under `<assetRoot>/Effect/Vfx/`, the converter `tools/PristonTale.VfxImport` (`ptvfx`) that
 writes that data, and the gameplay glue in `Client/PristonTale.Gameplay/Effects/` that turns skill events into effects.
 
 ## Read this when
@@ -11,7 +11,6 @@ writes that data, and the gameplay glue in `Client/PristonTale.Gameplay/Effects/
 - Adding a field to the `.vfx.json` format, a builtin texture, or a new layer behaviour.
 - Debugging an effect that is invisible, a white square, stuck alive, at the wrong position or on the wrong bone.
 - Working on skill looks on actors (tints, translucency, shield swaps, enlarged weapons, afterimages) or costume wings.
-- Working on potion or character-select effects that use the legacy `EffectsEngine`.
 
 ## Code map
 
@@ -26,11 +25,10 @@ writes that data, and the gameplay glue in `Client/PristonTale.Gameplay/Effects/
 | [`Client/PristonTale.Effects/Vfx/VfxSystem.cs`](../Client/PristonTale.Effects/Vfx/VfxSystem.cs) | `VfxSystem`, `VfxInstance`, emitter and trail simulation, `IVfxAnchors`, `IVfxServices` |
 | `Client/PristonTale.Effects/Vfx/VfxRenderer*.cs` | Quads of every layer in one dynamic vertex buffer; effect models through their own draws |
 | `Client/PristonTale.Effects/Vfx/VfxBuiltinTextures.cs` | Procedural `builtin:` sprite textures |
-| `Client/PristonTale.Effects/Legacy/BillboardSequence.cs` | Original animated billboards (`Effect/AnimationData/*.ini`) and their tick-exact player |
-| `Client/PristonTale.Effects/Legacy/`, `EffectsEngine.cs`, `Effects/`, `Particles/`, `Rendering/` | Legacy particle engine used by potions, character select and the combat-effects probe |
-| [`Client/PristonTale.Gameplay/Effects/VfxContent.cs`](../Client/PristonTale.Gameplay/Effects/VfxContent.cs) | Loads the catalog, models, animations and textures on a worker; registers them on the game thread in 2 ms slices |
+| `Client/PristonTale.Effects/Scripts/BillboardSequence.cs` | Original animated billboards (`Effect/AnimationData/*.ini`) and their tick-exact player |
+| [`Client/PristonTale.Gameplay/Effects/VfxContent.cs`](../Client/PristonTale.Gameplay/Effects/VfxContent.cs) | Loads the catalog, models, animations and textures on a worker; registers them on the game thread in 2 ms slices; an animation no catalog file names (effects built in code) is read on first use |
 | [`Client/PristonTale.Gameplay/Effects/SkillPresentation.cs`](../Client/PristonTale.Gameplay/Effects/SkillPresentation.cs) | Implements `IVfxServices`, maps skill events and statuses to effects |
-| `Client/PristonTale.Gameplay/Effects/ScriptEffects.cs` | `IScriptEffects`: monster and meteor code start converted scripts (`particle.<name>`) through the skill presentation or a scene's own `VfxSystem` (the opening flight) |
+| `Client/PristonTale.Gameplay/Effects/ScriptEffects.cs` | `IScriptEffects`: meteors, force-orb hits and premium pet shots start converted scripts (`particle.<name>`) through a `VfxSystem` (the skill presentation's, or the opening flight's own); `VfxNoAnchors` and `TransientLightServices` serve a scene without entities |
 | [`Client/PristonTale.Gameplay/Effects/MonsterPresentation.cs`](../Client/PristonTale.Gameplay/Effects/MonsterPresentation.cs) | Monster effects: follows each monster's clip and starts `vfx.monster.*`; monster status effects and body tints |
 | `Client/PristonTale.Gameplay/Effects/MonsterVisualFamilies.cs` | Sound family (and level, size) to effect family |
 | `Client/PristonTale.Gameplay/Effects/ActorLooks.cs`, `World/Remote/ActorLookPresenter.cs` | `ActorLookBook`: skill looks per entity from statuses, casts and impacts; the presenter paints them on actors (tint, opacity, overlay, wobble, shield swap, weapon copy, afterimage echoes) |
@@ -61,7 +59,7 @@ Files load in ordinal order of their relative path. A name defined again replace
 an error by the catalog, so shipped data keeps names unique). A file that cannot be read, parsed or validated is
 reported (`[Effects] <file>: <reason>`) and skipped as a whole; the other files still load.
 
-Loading: `LegacyEffectLibrary.LoadBootstrap` creates `VfxContent`, whose worker reads the catalog, parses effect models
+Loading: `EffectLibrary.LoadBootstrap` creates `VfxContent`, whose worker reads the catalog, parses effect models
 (with their sibling `.smb` skeleton), reads animated billboards and decodes every texture. `SkillPresentation.Update`
 then registers prepared definitions on the game thread for at most 2 ms per frame and never waits for the worker;
 effects requested before their registration are skipped. Probes, tools and the opening's load call
@@ -117,7 +115,7 @@ seconds, as the original's fast stop does. `StopNow()` ends the instance at once
 |---|---|
 | emitter | `texture`, `frameColumns`/`frameRows` (1), `blend`, `intensity` (1), `softness` (16), `anchor` (Point), `bone`, `offset`, `local`, `delay`, `emitTime` (0 = whole duration), `rate`, `burst`, `maxParticles` (64), `lifetime` [1,1], `speed`, `direction` [0,1,0], `spread` deg, `shape` (Point/Sphere/Ring/Disc), `radius`, `gravity`, `drag`, `size` keys (half extent), `color` keys (linear RGBA), `rotation`, `spin`, `align` (Camera/Ground/Velocity), `stretch` (0.02) |
 | trail | `texture`, `blend`, `intensity`, `anchor` (Caster), `bone`, `offset`, `width` (12, full), `lifetime` (0.25 per point), `delay`, `emitTime`, `color` keys head -> tail |
-| light | `anchor`, `offset` [0,30,0], `color` [r,g,b] 0..1, `power` (160), `decay` (4 per tick), `delay`; legacy light units (radius power/2, brightness power x colour / 256) |
+| light | `anchor`, `offset` [0,30,0], `color` [r,g,b] 0..1, `power` (160), `decay` (4 per tick), `delay`; original light units (radius power/2, brightness power x colour / 256) |
 | sound | `path` (asset-relative wave), `variants` (further takes; each play picks one of `path` and these at random), `delay`, `volume` (1), `pick`; played at the caster |
 
 A key is `{ "t": 0..1, "v": [..] }` with non-decreasing `t`, sampled linearly and clamped.
@@ -147,7 +145,8 @@ resetting values. Particle pools hold at most 100 live particles.
 A converted particle stream: `texture`, `blend`, `shape` (Billboard, Ground, Upright, Trail), `count` live at most,
 `loops` (0 = until stopped), `rate` range drawn each frame, `delay`, `lifetime`, offset box `radiusMin`/`radiusMax`,
 gravity box (drawn every frame), `anchor`, `bone`, `offset`, `follow`, and `events` (`t`, `ramp`, `set`, `min`, `max`,
-`mode`). Properties: `Size`, `Stretch`, `Color`, `Red`..`Alpha`, `Velocity` (Vector, Outward, Inward) and its axes,
+`mode`). A particle that lives until stopped moves with its stream's anchor as `follow` does: it belongs to the effect
+(a monster's ground circle the original traces on a bone), so a followed child carries it along. Properties: `Size`, `Stretch`, `Color`, `Red`..`Alpha`, `Velocity` (Vector, Outward, Inward) and its axes,
 `Angle` and axes, `Orbit` and axes (turn the particle's offset), `Clock` (restart the event clock at a time).
 
 ### Part (`VfxPartDefinition`)
@@ -162,7 +161,7 @@ seconds; a zero lifetime lives as long as its animation, model clip or flight, o
 | Model | `model`, `skeleton`, `modelStart`, `modelFrames`, `modelSpeed` (clip frames per second), `loopFrom`, `angles`, `tumble`, `scale`, `pulse` + `pulsePeriod`, `faceGoal` (face the velocity) |
 | Fade | `fade`: `Rise` (up over 25.5 % of the life, down at the same rate), `Fall` (down over the last 25.5 %), `InOut` (`fadeIn`, `fadeOut` seconds); `fadeOut` also times the fade after arriving |
 | Place | `anchor`, `bone`, `boneWorld` (full bone transform, offset in bone space), `offset`, `follow`, `turn` (true), `jitterMin`/`jitterMax`, `ring` radius with `ringStart` + `ringStep` x index or `ringRandom`, `shell` (ellipsoid radii), `slideFrom` (a billboard sliding on the screen from that many pixels of a 600-pixel-high view, negative left, closing like `VfxScreenSlide`: 35 px every fourth tick, 3 fewer each time down to 4, rising 2 px a tick 45 ticks after it closed) |
-| Motion | `radial` (outward along the ring angle), `rise`, `velocityMin`/`velocityMax`, `burst` (along the shell direction), `gravity`, `swirl` (deg/s about the vertical), `moveTime` (stop after) |
+| Motion | `radial` (outward along the ring angle), `rise`, `velocityMin`/`velocityMax`, `burst` (along the shell direction), `gravity`, `swirl` (deg/s about the vertical) + `swirlGrowth` (deg/s per second), `spiral` (the velocity turns too: the straight path turned about the origin), `moveTime` (stop after; with `end: Hold` the part then exits there, keeping its velocity for a line's length); `swirl`, `swirlGrowth` and `moveTime` are ranges drawn per part |
 | Goal | `goal` (Caster, Target, Point) + `goalOffset`, `speed`, `reach`, `lift` (lob under `gravity`), `end`: `Vanish`, `LastFrame` (keep flying through the last frame or `fadeOut`), `Hold` (stop and fade out) |
 | Orbit | `orbitRadius`, `orbitSpeed`, `orbitTilt`, `orbitRise`, `orbitGrowth`, `orbitPhase` + `orbitPhaseStep`, `orbitAlternate`; with a goal the orbit starts at the goal's bearing and distance |
 | Effects | `endEffect` (where a part arrives or its life ends), `everyEffect` every `every` seconds at each part, `carryEffect` (started at birth, moved with the part, stopped when it ends) |
@@ -171,9 +170,13 @@ Use `carryEffect` for converted particle scripts that stream until stopped; `eve
 
 ## Runtime: `VfxSystem`
 
-- `Spawn(CompiledVfx, VfxSpawn(CasterId, TargetId, Point, Facing))` returns a pooled instance, or null at 1024 live
-  instances. `Update(seconds)` clamps the step to 0.1 s, refreshes caster and target positions, updates every layer,
-  fires one-shots and children, and returns dead instances to the pool.
+- `Spawn(CompiledVfx, VfxSpawn(CasterId, TargetId, Point, Facing))` returns a `VfxHandle` to a pooled instance (not
+  `Spawned` at 1024 live instances). The handle carries the instance's generation: once the effect ends and the
+  instance runs another, the handle's `Alive` is false and its `Stop`, `MoveTo` and `Travel` reach nothing.
+  `Update(seconds)` clamps the step to 0.1 s, refreshes caster and target positions, updates every layer, fires
+  one-shots and children, and returns dead instances to the pool.
+- Children, end, every and carry effects are looked up by name and cached once found; a name missing while the
+  definitions are still registering is looked up again on the next spawn.
 - `Travel(from, to, seconds, arc)` moves `Point` (projectiles, chain links, companion strikes) and stops the instance on
   arrival; parts with `follow` ride it, parts with a `goal` fly on their own and finish their flight after a stop.
 - Anchors: `Point` is the spawn point; `Caster`/`Target` the entity position, replaced by a bone through
@@ -233,6 +236,11 @@ actors. Families come from `MonsterVisualFamilies` by sound code, split where th
 mephit; witch, succubus, incubus and incubus summoner; evil plant and maple; doom guard from level 65, doom lord when
 larger; the level-50 scorpion's snail shot). An undefined name shows nothing. Shared helpers of a family use other
 roles (`vfx.monster.hulk.hit`, `vfx.monster.revived.fx.*`).
+
+A corpse darkens from 200 70 Hz ticks after its death clip starts, by half a light unit a tick, to 100 of 256 at 400
+ticks (`MonsterPresentation.CorpseDim`); the bodies of light (Figon, Stygian Lord, Guardian Saint, the fire elemental,
+Chaos Cara) fade by two alpha units of 256 a tick and are gone in about 1.8 s (`CorpseFade`). The renderer keeps this
+apart from the skill looks (`PristonRenderer.SetActorCorpse`: a fade multiplying the opacity and light taken away).
 
 Statuses that monster skills put on players and monsters (`MonsterStatuses`) show while they run: poison
 (`vfx.monster.status.poison` and a green tint), the bloody knight's stun (`vfx.monster.status.bloodyknightstun`), the
@@ -422,6 +430,7 @@ appearance (`PlayerAppearanceView.WeaponGlow`, `OffHandGlow`) and description, s
 - An item aged +4 to +20 (`UpgradeLevel`) takes its level's colour with blink 9 instead: +4 light purple, +5 yellow,
   +6 green, +7 blue, +8 purple, +9 orange, +10 red, +11 teal, +12 light green, +13 purple, +14 deep pink, +15 sky blue,
   +16 light orange, +17 brown, +18 blue violet, +19 light yellow, +20 white.
+- A mixed copy whose highest sheltom is Devine (6) to Mirage (10) takes the matching mixing colour with blink 9.
 - A colour of the aging table (from +7) or of the mixing table brings its item mix texture (`mixS_01..05`,
   `mixM_01..05` under `image/sinImage/Items/DropItem`) and scroll form (8..14), whatever gave the colour.
 - `ItemDefinition.DisplayEffect` non-zero: the class-up light.
@@ -444,8 +453,7 @@ bow's along it).
 ## Limitations
 
 - There is no mixing yet, so no item carries a mixing colour.
-- Monsters that fade out or darken as corpses keep their full colour; monster effects keep their authored size whatever
-  the model size.
+- Monster effects keep their authored size whatever the model size.
 - Skill events carry no critical flag (Double Crash's critical flash), no block, reflect or absorb event (the Divine
   Inhalation and Godly Shield block flash, Holy Reflection's reflected blow, Energy Shield's absorb burst, enchanted
   weapon hits, the enchant flash on an ally) and only the primary target of an area (Divine Lightning, Extinction, Soul

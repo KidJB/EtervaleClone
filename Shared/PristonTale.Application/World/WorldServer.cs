@@ -3,16 +3,23 @@ using PristonTale.Simulation.World.Spawning;
 using PristonTale.Simulation.Progression;
 using PristonTale.Simulation.World.Npcs;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Numerics;
 using System.Threading.Channels;
+using PristonTale.Application.GameLogs;
+using PristonTale.Contracts.World;
+using PristonTale.Application.Saves;
+using PristonTale.Persistence.Abstractions.GameLogs;
 using PristonTale.Application.Sessions;
 using PristonTale.Persistence.Abstractions.Characters;
 using PristonTale.Simulation.Combat;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
+using PristonTale.Simulation.PersonalShops;
 using PristonTale.Simulation.Skills;
 using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Fields;
+using PristonTale.Contracts.Skills;
 
 namespace PristonTale.Application.World;
 
@@ -20,7 +27,9 @@ public sealed partial class WorldServer
 {
     public const int TickHz = 20;
 
-    private readonly Channel<WorldCommand> _commands = Channel.CreateBounded<WorldCommand>(new BoundedChannelOptions(65536)
+    public const int CommandQueueCapacity = 65536;
+
+    private readonly Channel<WorldCommand> _commands = Channel.CreateBounded<WorldCommand>(new BoundedChannelOptions(CommandQueueCapacity)
     {
         SingleReader = true,
         FullMode = BoundedChannelFullMode.Wait
@@ -39,14 +48,21 @@ public sealed partial class WorldServer
     private readonly TimeProvider _clock;
     private readonly long _clockOrigin;
     private readonly BossSpawnSchedule _bossSchedule;
+    // Rebuilt on the tick thread when a pass in it has come; fields read it in parallel.
+    private BossList _bossList = BossList.Empty;
     private readonly FieldTerrainCatalog _terrain;
-    private readonly WorldServerOptions _options;
+    private WorldServerOptions _options;
+    private readonly ICharacterSaves? _saves;
+    private readonly IGameLog? _log;
     // Commands each player has waiting in the shared queue; entries are dropped when the player leaves the world.
     private readonly ConcurrentDictionary<ulong, PendingCommands> _pendingByPlayer = new();
 
+    // A player's commands waiting in the queue, and apart from them their movement reports: a burst of reports a held
+    // session sends at once must never fill the quota of the commands behind it.
     private sealed class PendingCommands
     {
         public int Count;
+        public int Movements;
     }
 
     private sealed record Connection(
@@ -58,6 +74,10 @@ public sealed partial class WorldServer
         public OwnerState? LastOwner { get; set; }
 
         public long CooldownRevision { get; set; } = -1;
+
+        // The tick the next starter gift is due on, and whether the gift service holds a request for it.
+        public uint NextGiftTick { get; set; }
+        public bool GiftRequested { get; set; }
     }
 
     public WorldServer(
@@ -66,8 +86,12 @@ public sealed partial class WorldServer
         TimeProvider? clock = null,
         ISimRng? bossRng = null,
         FieldTerrainCatalog? terrain = null,
-        WorldServerOptions? options = null)
+        WorldServerOptions? options = null,
+        ICharacterSaves? saves = null,
+        IGameLog? log = null)
     {
+        _saves = saves;
+        _log = log;
         _options = (options ?? WorldServerOptions.Default).Validated();
         _worldData = worldData;
         _terrain = terrain ?? new FieldTerrainCatalog();
@@ -99,15 +123,58 @@ public sealed partial class WorldServer
             terrain: _terrain.Get(fieldId));
         ConfigureQuests(field);
         field.State = _catalog.TryGetFieldByCode(fieldId, out var definition) ? definition.State : FieldState.Forest;
-        field.ItemEventRates = _options.ItemEvents;
+        ApplyOptions(field, _options);
         field.Event = _catalog.TryGetFieldByCode(fieldId, out var described) ? described.FieldEvent : FieldEventKind.None;
+        field.Rains = described is not null && WeatherSchedule.Rains(described);
         field.DropLedger = DropLedgerFor(_worldData.Current.Items);
         _fields.Add(fieldId, field);
         return field;
     }
 
+    public WorldServerOptions Options => Volatile.Read(ref _options);
+
+    public Task ApplyOptionsAsync(WorldServerOptions options)
+    {
+        var validated = options.Validated();
+        return EnqueueAsync(NoOwner, () =>
+        {
+            Volatile.Write(ref _options, validated);
+            foreach (var field in _fields.Values)
+            {
+                ApplyOptions(field, validated);
+            }
+
+            return true;
+        }, waitForCapacity: true);
+    }
+
+    private static void ApplyOptions(FieldInstance field, WorldServerOptions options)
+    {
+        field.ItemEventRates = options.ItemEvents;
+        field.ExperienceMultiplier = options.ExperienceMultiplier;
+        field.ExperienceEventPercent = options.ExperienceEventPercent;
+        field.Aging = options.Aging;
+        field.Mixing = options.Mixing;
+    }
+
     // The game clock in game milliseconds: the Unix time plus the configured offset (World:ClockOffsetMinutes game minutes).
     public long GameClockMs => _clock.GetUtcNow().ToUnixTimeMilliseconds() + _options.ClockOffsetMinutes * (long)WorldClock.MinuteMs;
+
+    // The weather of the fields that take rain: a game master's (/weather) while one is set, else the schedule on the
+    // game clock while World:Weather is on, else clear.
+    private WeatherState Weather => _weatherOverride
+        ?? (_options.Weather ? WeatherSchedule.At(GameClockMs, _options.WeatherCycleMinutes) : WeatherState.Clear);
+
+    private WeatherState? _weatherOverride;
+
+    // A game master's weather for every field, or null to follow the schedule again; the weather then.
+    public Task<WeatherState> SetWeatherAsync(ulong issuerId, WeatherState? weather) => EnqueueAsync(issuerId, () =>
+    {
+        _weatherOverride = weather;
+        return Weather;
+    });
+
+    public Task<WeatherState> WeatherNowAsync(ulong issuerId) => EnqueueAsync(issuerId, () => Weather);
 
     private DailyDropLedger? _dropLedger;
 
@@ -129,6 +196,7 @@ public sealed partial class WorldServer
             }
 
             var field = GetField(fieldId);
+            player.Character.MeetHelpPet(field.Rng);
             // A saved place without a floor (outside the stage) enters at the field's first start point instead.
             if (!field.Terrain.TryPlaceOnFloor(player.Position, out var position))
             {
@@ -138,7 +206,7 @@ public sealed partial class WorldServer
 
             player.EnterField(position, definition.State == FieldState.Village);
             field.Add(player);
-            _connections.Add(player.EntityId, new Connection(fieldId, player, outbound, session));
+            _connections.Add(player.EntityId, new Connection(fieldId, player, outbound, session) { NextGiftTick = GiftTick(StarterGifts.FirstDelay) });
             _membershipChanged = true;
             UpdatePlacement(session, fieldId, player.Position, definition.State == FieldState.Village);
             return true;
@@ -146,21 +214,25 @@ public sealed partial class WorldServer
     }
 
     // Leaving must not be refused: it waits for queue room and is exempt from the player's quota.
-    public Task<bool> LeaveAsync(int fieldId, ulong entityId, ChannelWriter<WorldSnapshot> outbound)
+    // The character is captured in the same tick it leaves, so a player who leaves dead is stored at the town restart.
+    public Task<WorldLeave> LeaveAsync(int fieldId, ulong entityId, ChannelWriter<WorldSnapshot> outbound)
     {
         return EnqueueAsync(NoOwner, () =>
         {
             if (!_connections.TryGetValue(entityId, out var connection) || !ReferenceEquals(connection.Outbound, outbound))
             {
-                return false;
+                return new WorldLeave(false, null);
             }
 
-            UpdatePlacement(connection.Session, connection.FieldId, connection.Player.Position);
+            var save = connection.Session is { } session ? CaptureLeaving(session, connection) : null;
+            LeaveParty(connection.Player);
+            LeaveTrade(connection.Player);
+
             _fields[connection.FieldId].Remove(entityId);
             _connections.Remove(entityId);
             _pendingByPlayer.TryRemove(entityId, out _);
             _membershipChanged = true;
-            return true;
+            return new WorldLeave(true, save, TakeNotices());
         }, waitForCapacity: true);
     }
 
@@ -173,6 +245,14 @@ public sealed partial class WorldServer
     {
         return EnqueueAsync(player.EntityId, () =>
         {
+            // Reports keep naming the new field until the client hears the move committed: an already-made move is a success,
+            // not a refusal the session would answer with a forced warp.
+            if (_connections.TryGetValue(player.EntityId, out var current) && ReferenceEquals(current.Outbound, outbound)
+                && current.FieldId == newFieldId && oldFieldId != newFieldId)
+            {
+                return true;
+            }
+
             if (!WorldPosition.IsValid(requestedPosition)
                 || player.IsDead
                 || !_connections.TryGetValue(player.EntityId, out var connection)
@@ -187,9 +267,9 @@ public sealed partial class WorldServer
             }
 
             // The request's placement never becomes authoritative. Gates retain position; warps use catalog exits.
-            TransferPlayer(player, _fields[oldFieldId], GetField(newFieldId));
             var inVillage = destination.State == FieldState.Village;
             var terrain = GetField(newFieldId).Terrain;
+            Relocate(connection, newFieldId, arrival.Position, inVillage);
             if (arrival.IsWarp)
             {
                 // Warp exits carry an authored height; settle on the floor at or just below it rather than on a roof.
@@ -199,12 +279,7 @@ public sealed partial class WorldServer
             {
                 player.CrossGate(inVillage);
             }
-            _membershipChanged = true;
-            _connections[player.EntityId] = connection with
-            {
-                FieldId = newFieldId
-            };
-            UpdatePlacement(connection.Session, newFieldId, arrival.Position, inVillage);
+
             return true;
         });
     }
@@ -252,30 +327,85 @@ public sealed partial class WorldServer
 
     public Task<CharacterSaveSnapshot?> CaptureForSaveAsync(PlayerSession session)
     {
-        return EnqueueAsync<CharacterSaveSnapshot?>(NoOwner, () =>
+        return EnqueueAsync(NoOwner, () => CaptureForSave(session, _connections.GetValueOrDefault(session.EntityId)), waitForCapacity: true);
+    }
+
+    private CharacterSaveSnapshot? CaptureForSave(PlayerSession session, Connection? connection)
+    {
+        if (session.Character is null || session.Loaded is null)
         {
-            if (session.Character is null || session.Loaded is null)
+            return null;
+        }
+
+        if (connection is not null)
+        {
+            if (connection.Player.IsDead && CaptureDead(session, connection.Player.Character, connection.FieldId, connection.Player.Position) is { } dead)
             {
-                return null;
+                return dead;
             }
 
-            if (_connections.TryGetValue(session.EntityId, out var connection))
+            UpdatePlacement(session, connection.FieldId, connection.Player.Position);
+        }
+
+        return CharacterRecordFactory.Capture(session.Loaded, session.Character, session.FieldId, session.SpawnPosition);
+    }
+
+    // A durable operation still holding the save gate commits after this tick, possibly on another character too (a
+    // personal shop sale): the leave save then waits for it and captures the character it leaves (no snapshot here), a
+    // dead one through its town restart.
+    private CharacterSaveSnapshot? CaptureLeaving(PlayerSession session, Connection connection)
+    {
+        if (session.SaveGate.CurrentCount > 0)
+        {
+            return CaptureForSave(session, connection);
+        }
+
+        UpdatePlacement(session, connection.FieldId, connection.Player.Position);
+        session.LeftDead = connection.Player.IsDead;
+        return null;
+    }
+
+    // Each playing character is captured once per CheckpointSeconds, on the tick its entity id falls on, unless an
+    // operation holds its save gate (that operation queues its own capture).
+    private void Checkpoint(uint serverTick)
+    {
+        if (_saves is null)
+        {
+            return;
+        }
+
+        var period = (ulong)_options.CheckpointSeconds * TickHz;
+        foreach (var connection in _connections.Values)
+        {
+            if (connection.Session is { IsPlaying: true } session && (serverTick + connection.Player.EntityId) % period == 0
+                && session.SaveGate.CurrentCount > 0 && CaptureForSave(session, connection) is { } snapshot)
             {
-                if (connection.Player.IsDead && CaptureDead(session, connection) is { } dead)
-                {
-                    return dead;
-                }
-
-                UpdatePlacement(session, connection.FieldId, connection.Player.Position);
+                _saves.Enqueue(session, snapshot);
             }
+        }
+    }
 
-            return CharacterRecordFactory.Capture(session.Loaded, session.Character, session.FieldId, session.SpawnPosition);
-        }, waitForCapacity: true);
+    // The save of a character that left dead while an operation held its gate, once that operation is done.
+    public Task<CharacterSaveSnapshot?> CaptureLeftAsync(PlayerSession session)
+    {
+        return EnqueueAsync(NoOwner, () => session.Character is null || session.Loaded is null
+            ? null
+            : CaptureDead(session, session.Character, session.FieldId, session.SpawnPosition)
+                ?? CharacterRecordFactory.Capture(session.Loaded, session.Character, session.FieldId, session.SpawnPosition), waitForCapacity: true);
     }
 
     public int PlayerCount => Volatile.Read(ref _playerCount);
 
     // Tick-thread state: callers must not run concurrently with Tick.
+    // Tick only. The session's connection while the session owns it, which a commit or an abort still needs after the
+    // player started leaving.
+    private bool TryGetOwnConnection(PlayerSession session, out Connection connection) =>
+        _connections.TryGetValue(session.EntityId, out connection!) && ReferenceEquals(connection.Session, session);
+
+    // Tick only. The session's connection while its character plays in the world.
+    private bool TryGetPlaying(PlayerSession session, out Connection connection) =>
+        TryGetOwnConnection(session, out connection) && session.IsPlaying && session.Character is not null;
+
     internal long FieldNowMs(int fieldId) => _fields.TryGetValue(fieldId, out var field) ? field.NowMs : 0;
 
     internal FieldInstance? FieldFor(int fieldId) => _fields.GetValueOrDefault(fieldId);
@@ -285,8 +415,7 @@ public sealed partial class WorldServer
     {
         return EnqueueAsync<PreparedCharacterOperation<ProgressionOutcome>?>(session.EntityId, () =>
         {
-            if (!session.IsPlaying || session.Character is null || session.Loaded is null
-                || !_connections.TryGetValue(session.EntityId, out var connection) || !ReferenceEquals(connection.Session, session))
+            if (session.Loaded is null || !TryGetPlaying(session, out var connection))
             {
                 return null;
             }
@@ -304,7 +433,7 @@ public sealed partial class WorldServer
             if (!ReferenceEquals(session.Character, operation.Original) || operation.Candidate is null
                 || !operation.Original.ApplyProgression(operation.Candidate.ProgressionOperations[^1].Command))
             {
-                throw new InvalidOperationException("Character ownership changed during progression commit.");
+                throw new CommitInvariantException("Character ownership changed during progression commit.");
             }
 
             Currency.Record(GameMasters.CurrencySink.SkillTraining, moneyBefore - operation.Original.Money);
@@ -317,26 +446,39 @@ public sealed partial class WorldServer
     {
         return EnqueueAsync<PreparedCharacterOperation<InventoryOutcome>?>(session.EntityId, () =>
         {
-            if (!session.IsPlaying || session.Character is null || session.Loaded is null
-                || !_connections.TryGetValue(session.EntityId, out var connection) || !ReferenceEquals(connection.Session, session))
+            if (session.Loaded is null || !TryGetPlaying(session, out var connection))
             {
                 return null;
             }
 
-            var original = session.Character;
-            foreach (var applied in original.InventoryOperations)
+            var original = connection.Player.Character;
+            if (original.InventoryOperations.Find(command.OperationId) is { } applied)
             {
-                if (applied.Command.OperationId == command.OperationId)
-                {
-                    var duplicate = applied.Command == command;
-                    return new PreparedCharacterOperation<InventoryOutcome>(original, null, null,
-                        new InventoryOutcome(duplicate, applied.Revision, duplicate ? "already committed" : "operation identity conflict"));
-                }
+                var duplicate = applied.Command == command;
+                return new PreparedCharacterOperation<InventoryOutcome>(original, null, null,
+                    new InventoryOutcome(duplicate, applied.Revision, duplicate ? "already committed" : "operation identity conflict"));
+            }
+
+            if (connection.Player.Shop is not null && command.Action != InventoryAction.ConsumePotion)
+            {
+                return new PreparedCharacterOperation<InventoryOutcome>(original, null, null,
+                    new InventoryOutcome(false, original.InventoryRevision, PersonalShopMessages.Of(PersonalShopStatus.Selling)));
+            }
+
+            if (connection.Player.Offers(command.ItemId))
+            {
+                return new PreparedCharacterOperation<InventoryOutcome>(original, null, null,
+                    new InventoryOutcome(false, original.InventoryRevision, Simulation.Trades.TradeMessages.InTrade));
             }
 
             if (command.Action == InventoryAction.Pickup)
             {
-                return GroundPickupTransactions.Prepare(session, connection.Player, _fields[connection.FieldId], command);
+                return GroundPickupTransactions.Prepare(session, connection.Player, _fields[connection.FieldId], command, GoldSharers(connection));
+            }
+
+            if (command.Action is InventoryAction.Drop or InventoryAction.DropGold)
+            {
+                return GroundThrowTransactions.Prepare(session, connection.Player, _fields[connection.FieldId], command);
             }
 
             if (command.Action == InventoryAction.ConsumePotion && (connection.Player.IsDead || connection.Player.HasPendingPotion))
@@ -350,16 +492,15 @@ public sealed partial class WorldServer
             {
                 return new PreparedCharacterOperation<InventoryOutcome>(original, null, null,
                     new InventoryOutcome(false, original.InventoryRevision,
-                        InventoryCommands.Refusal(original, command) ?? "invalid operation or stale inventory revision"));
+                        InventoryCommands.Refusal(original, command) ?? ItemRuleMessages.StaleInventory));
             }
 
             candidate.RecordInventoryOperation(command);
             var snapshot = CharacterRecordFactory.Capture(session.Loaded, candidate, connection.FieldId, connection.Player.Position);
-            var outcome = new InventoryOutcome(true, candidate.InventoryRevision, "committed");
+            var outcome = new InventoryOutcome(true, candidate.InventoryRevision, "");
             if (command.Action == InventoryAction.ConsumePotion)
             {
-                var anchor = original.Inventory.Find(command.ItemId);
-                return new PreparedPotionOperation(original, candidate, snapshot, outcome, original.Inventory[anchor]!.Definition.Potion!);
+                return new PreparedPotionOperation(original, candidate, snapshot, outcome, original.FindOwnedItem(command.ItemId)!.Definition.Potion!);
             }
 
             return new PreparedCharacterOperation<InventoryOutcome>(original, candidate, snapshot, outcome);
@@ -373,48 +514,114 @@ public sealed partial class WorldServer
             // SaveGate remains held through commit, including when the connection leaves during storage I/O.
             if (!ReferenceEquals(session.Character, operation.Original) || operation.Candidate is null)
             {
-                throw new InvalidOperationException("Character ownership changed during inventory commit.");
+                throw new CommitInvariantException("Character ownership changed during inventory commit.");
             }
 
+            // A pickup of what a character threw is a transfer from that character; a monster's drop is not logged.
+            var picking = operation as PreparedPickupOperation;
+            var thrower = picking?.Ground.ThrownBy(picking.DropId) ?? FieldGroundLoot.NoThrower;
+            var pickedUp = thrower != FieldGroundLoot.NoThrower ? Transfer(ItemTransferKind.GroundPickup, picking!.DropId, session.FieldId) : null;
+            pickedUp?.Arrived(operation.Original, operation.Candidate, thrower, CharacterIdOf(session));
             operation.Original.CommitInventoryOperation(operation.Candidate);
             if (operation is PreparedPickupOperation pickup)
             {
+                pickedUp?.Gold(thrower, CharacterIdOf(session), pickup.Gold);
                 if (!operation.Original.TryChangeMoney(pickup.Gold))
                 {
-                    throw new InvalidOperationException("Money changed beyond capacity during pickup commit.");
+                    throw new CommitInvariantException("Money changed beyond capacity during pickup commit.");
+                }
+
+                // A member who left or reloaded since the pickup was prepared, or who can no longer take its part, gets nothing.
+                foreach (var share in pickup.Shares)
+                {
+                    if (_connections.TryGetValue(share.MemberId, out var member) && ReferenceEquals(member.Player.Character, share.Character)
+                        && TakesGoldShare(member) && MoneyLimits.CanCarry(share.Character, share.Gold))
+                    {
+                        share.Character.TryChangeMoney(share.Gold);
+                        pickedUp?.Gold(thrower, CharacterIdOf(member.Session), share.Gold);
+                    }
                 }
 
                 pickup.Ground.Resolve(pickup.DropId, pickup.OperationId, committed: true);
+                Log(pickedUp);
             }
-            if (operation is PreparedPotionOperation potion && _connections.TryGetValue(session.EntityId, out var connection)
-                && ReferenceEquals(connection.Session, session))
+            if (operation is PreparedThrowOperation thrown)
+            {
+                if (!operation.Original.TryChangeMoney(-thrown.Gold))
+                {
+                    throw new CommitInvariantException("Money changed beyond capacity during a gold throw commit.");
+                }
+
+                var dropId = thrown.Field.GroundLoot.PlaceThrown(thrown.Item, thrown.Gold, thrown.Position, thrown.ThrowerId, thrown.Field.NowMs,
+                    CharacterIdOf(session) ?? FieldGroundLoot.NoThrower);
+                if (Transfer(ItemTransferKind.GroundThrow, dropId, thrown.Field.FieldId) is { } throwLog)
+                {
+                    if (thrown.Item is { } item)
+                    {
+                        throwLog.Item(CharacterIdOf(session), null, null, item, item.Count);
+                    }
+
+                    throwLog.Gold(CharacterIdOf(session), null, thrown.Gold);
+                    Log(throwLog);
+                }
+            }
+
+            if (operation is PreparedPotionOperation potion && TryGetOwnConnection(session, out var connection))
             {
                 connection.Player.QueuePotion(potion.Potion);
+                // A seller may drink the potions it offers.
+                connection.Player.PruneShop();
             }
 
             return true;
         }, waitForCapacity: true);
     }
+
+    // The party members who split a pickup's gold with the picker: in its field and share range.
+    private List<WorldPlayer> GoldSharers(Connection picker)
+    {
+        var sharers = new List<WorldPlayer>();
+        if (picker.Player.Party is not { } party)
+        {
+            return sharers;
+        }
+
+        foreach (var id in party.Members)
+        {
+            if (id != picker.Player.EntityId && _connections.TryGetValue(id, out var member) && member.FieldId == picker.FieldId
+                && Simulation.Parties.PartyRules.InShareRange(picker.Player.Position, member.Player.Position) && TakesGoldShare(member))
+            {
+                sharers.Add(member.Player);
+            }
+        }
+
+        return sharers;
+    }
+
+    // A member whose save gate is held is left out: its durable operation (a trade's receipt, a sale) checked the gold it
+    // may carry before the share, and its commit must not land past that limit.
+    private static bool TakesGoldShare(Connection member) => member.Session?.SaveGate.CurrentCount != 0;
 
     public IReadOnlyList<(int FieldId, int PlayerCount)> ActiveFieldCounts()
     {
         return Volatile.Read(ref _activeCounts);
     }
 
-    public Task<bool> AbortCharacterOperationAsync<T>(PreparedCharacterOperation<T> operation)
-    {
-        return EnqueueAsync(NoOwner, () =>
-        {
-            if (operation is PreparedPickupOperation pickup)
-            {
-                pickup.Ground.Resolve(pickup.DropId, pickup.OperationId, committed: false);
-            }
+    private const ulong NoOwner = 0;
 
-            return true;
-        }, waitForCapacity: true);
+    // The rows of a transfer committed now; null when no game log is attached.
+    private TransferLog? Transfer(ItemTransferKind kind, Guid transferId, int fieldId) =>
+        _log is null ? null : new TransferLog(kind, transferId.ToString(), fieldId, _clock.GetUtcNow().UtcDateTime);
+
+    private void Log(TransferLog? transfer)
+    {
+        if (transfer is { Rows.Count: > 0 })
+        {
+            _log!.ItemTransfers(transfer.Rows);
+        }
     }
 
-    private const ulong NoOwner = 0;
+    private static long? CharacterIdOf(PlayerSession? session) => session?.Loaded?.Id;
 
     public int PendingCommandsOf(ulong entityId) => _pendingByPlayer.TryGetValue(entityId, out var pending) ? Volatile.Read(ref pending.Count) : 0;
 
@@ -474,6 +681,11 @@ public sealed partial class WorldServer
         return await result;
     }
 
+    // The last tick's commands and the time its serial command phase and its fields' parallel step and publication took.
+    public readonly record struct TickPhases(int Commands, double CommandsMs, double FieldsMs);
+
+    public TickPhases LastPhases { get; private set; }
+
     public void Tick(float dt, uint serverTick)
     {
         if (!float.IsFinite(dt) || dt <= 0f)
@@ -481,7 +693,10 @@ public sealed partial class WorldServer
             return;
         }
 
-        for (var processed = 0; processed < CommandsPerTick && _commands.Reader.TryRead(out var command); processed++)
+        _serverTick = serverTick;
+        var started = Stopwatch.GetTimestamp();
+        var processed = 0;
+        for (; processed < CommandsPerTick && _commands.Reader.TryRead(out var command); processed++)
         {
             if (command.Action is { } action)
             {
@@ -493,6 +708,8 @@ public sealed partial class WorldServer
             }
         }
 
+        var commandsDone = Stopwatch.GetTimestamp();
+        RefreshParties(serverTick);
         var localNow = _clock.GetLocalNow();
         bool bossPassDue = _bossSchedule.TryBeginPass(localNow, _clock.GetElapsedTime(_clockOrigin));
         int? bossHour = bossPassDue ? localNow.Hour : null;
@@ -502,8 +719,20 @@ public sealed partial class WorldServer
         var nowSeconds = _clock.GetUtcNow().ToUnixTimeSeconds();
         // Fields share only immutable catalogs and the thread-safe id allocator, so they step in parallel.
         var night = WorldClock.IsNight(WorldClock.HoursAt(GameClockMs));
-        Parallel.ForEach(_activeFields, field => StepField(field, dt, serverTick, bossHour, nowSeconds, night));
+        var weather = Weather;
+        var bossMinute = _bossSchedule.Minute;
+        if (_bossList.Due(localNow, bossMinute))
+        {
+            var data = _worldData.Current;
+            _bossList = BossList.Build(data.FieldSpawns, data.Monsters, _catalog, localNow, bossMinute);
+        }
+
+        Parallel.ForEach(_activeFields, field => StepField(field, dt, serverTick, bossHour, nowSeconds, night, weather, localNow, bossMinute));
+        LastPhases = new TickPhases(processed, Stopwatch.GetElapsedTime(started, commandsDone).TotalMilliseconds,
+            Stopwatch.GetElapsedTime(commandsDone).TotalMilliseconds);
         ApplyQuestTravels();
+        Checkpoint(serverTick);
+        OfferStarterGifts(serverTick);
 
         if (!_membershipChanged)
         {
@@ -524,10 +753,12 @@ public sealed partial class WorldServer
         Volatile.Write(ref _activeCounts, counts.AsReadOnly());
     }
 
-    private void StepField(FieldInstance field, float dt, uint serverTick, int? bossHour, long nowSeconds, bool night)
+    private void StepField(FieldInstance field, float dt, uint serverTick, int? bossHour, long nowSeconds, bool night, WeatherState weather,
+        DateTimeOffset localNow, int bossMinute)
     {
         field.Premium.NowSeconds = nowSeconds;
         field.Night = night;
+        field.SetWeather(weather);
         field.Step(dt, bossHour);
         if (field.PlayerCount == 0)
         {
@@ -548,7 +779,12 @@ public sealed partial class WorldServer
             StatusEvents = field.SnapshotStatusEvents(),
             ItemEffects = field.ItemEvents.Snapshot(),
             ActiveStatuses = field.Statuses.Snapshot,
-            FieldNowMs = field.NowMs
+            FieldNowMs = field.NowMs,
+            Weather = field.Weather,
+            NextBoss = field.NextBoss(localNow, bossMinute),
+            BossSpots = field.BossSpots(),
+            BossList = _bossList,
+            LocalNow = localNow.DateTime
         };
         frame.Routes.Rebuild(snapshot.Events, snapshot.SkillEvents, snapshot.StatusEvents, snapshot.ItemEffects);
         foreach (var entityId in field.PlayerIds)
@@ -562,7 +798,11 @@ public sealed partial class WorldServer
                 connection.Outbound.TryWrite(snapshot.WithOwner(owner, cooldowns) with
                 {
                     Quest = connection.Player.QuestState.TakeUpdate(connection.Player.Character),
-                    Restart = connection.Player.IsDead ? DeathPenalty.Offer(connection.Player.Character, field.State) : null
+                    Restart = connection.Player.IsDead ? DeathPenalty.Offer(connection.Player.Character, field.State) : null,
+                    Party = connection.Player.Party?.View,
+                    PartyRequest = connection.Player.PartyRequest,
+                    Trade = connection.Player.Trade?.ViewFor(entityId),
+                    TradeRequest = connection.Player.TradeRequest
                 });
                 // Only an outbox pins and releases frames; any other writer may keep the snapshot forever.
                 frame.Retained |= connection.Outbound is not WorldOutbox.OutboxWriter;
@@ -572,6 +812,24 @@ public sealed partial class WorldServer
 
     // Moves a player between field instances on the command phase: its cooldowns and running statuses follow it onto the
     // destination's clock.
+    // Tick only. Puts the connection's player in fieldCode (moving it from its field when that differs) and records where
+    // the session now is; the caller then stands the player at position (EnterField, CrossGate or a restart).
+    private void Relocate(Connection connection, int fieldCode, Vector3 position, bool inVillage)
+    {
+        // A shop sells where its seller opened it, and a trade happens where it opened.
+        connection.Player.CloseShop();
+        LeaveTrade(connection.Player);
+
+        if (connection.FieldId != fieldCode)
+        {
+            TransferPlayer(connection.Player, _fields[connection.FieldId], GetField(fieldCode));
+            _connections[connection.Player.EntityId] = connection with { FieldId = fieldCode };
+        }
+
+        _membershipChanged = true;
+        UpdatePlacement(connection.Session, fieldCode, position, inVillage);
+    }
+
     private static void TransferPlayer(WorldPlayer player, FieldInstance from, FieldInstance to)
     {
         var statuses = from.Statuses.Take(player.EntityId);
@@ -579,6 +837,7 @@ public sealed partial class WorldServer
         player.Cooldowns.Rebase(from.NowMs, to.NowMs);
         to.Add(player);
         to.Statuses.Carry(player.EntityId, statuses, from.NowMs, to.NowMs);
+        to.ArriveWithoutCrystalPets(player);
     }
 
     private static void UpdatePlacement(PlayerSession? session, int fieldId, Vector3 position, bool? inVillage = null)

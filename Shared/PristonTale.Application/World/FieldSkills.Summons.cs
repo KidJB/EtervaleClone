@@ -5,6 +5,8 @@ using PristonTale.Simulation.Skills;
 using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Skills;
 
 namespace PristonTale.Application.World;
 
@@ -16,6 +18,7 @@ namespace PristonTale.Application.World;
 internal sealed partial class FieldSkills
 {
     private const float SummonSpawnOffset = 48f;
+    private const int CompassPoints = 8;
     private const float SummonRetaliationLockMs = 4000f;
     private const float SummonVerticalSight = 140f;
 
@@ -27,7 +30,7 @@ internal sealed partial class FieldSkills
     private bool CallSummon(WorldPlayer owner, SkillRule rule, int rank)
     {
         var summon = rule.Summon;
-        if (summon is null || owner.Appearance.InVillage || !_host.TryFindMonsterDefinition(summon.Monster, out var definition))
+        if (summon is null || owner.InVillage || !_host.TryFindMonsterDefinition(summon.Monster, out var definition))
         {
             return false;
         }
@@ -71,7 +74,7 @@ internal sealed partial class FieldSkills
         monster.Aggressive = aggressive;
         monster.TargetId = 0;
         monster.AiState = MonsterAiState.Idle;
-        monster.Motion = MonsterMotionState.Stand;
+        monster.Motion = MotionState.Stand;
         _summons[owner.EntityId] = monster.EntityId;
         _summonSkills[owner.EntityId] = code;
 
@@ -83,23 +86,50 @@ internal sealed partial class FieldSkills
         }
     }
 
-    // One of the eight compass points around the owner whose floor is near the owner's height, else the owner's spot.
+    // The heading of one of the eight compass points (any whole number, taken round the compass).
+    internal static float CompassAngle(ulong point) => (int)(point % CompassPoints) * MathF.Tau / CompassPoints;
+
+    // One of the eight compass points around the owner whose floor is near the owner's height, preferring one no monster
+    // stands on (several pets are not called into each other), else the owner's spot.
     private Vector3 SpawnPoint(WorldPlayer owner)
     {
-        var start = _rng.NextExclusive(0, 8);
-        for (var attempt = 0; attempt < 8; attempt++)
+        var start = _rng.NextExclusive(0, CompassPoints);
+        Vector3? crowded = null;
+        for (var attempt = 0; attempt < CompassPoints; attempt++)
         {
-            var angle = (start + attempt) % 8 * MathF.PI / 4f;
+            var angle = CompassAngle((ulong)(start + attempt));
             var point = new Vector3(owner.Position.X + MathF.Sin(angle) * SummonSpawnOffset, owner.Position.Y,
                 owner.Position.Z + MathF.Cos(angle) * SummonSpawnOffset);
             if (_host.Terrain.TryFloorNear(point, FieldTerrain.DropTolerance, out var height) && MathF.Abs(height - owner.Position.Y) < FieldTerrain.DropTolerance
                 && !_host.Terrain.CrossesWall(owner.Position, point))
             {
-                return point with { Y = height };
+                var floor = point with { Y = height };
+                if (!_host.MonsterStandsAt(floor))
+                {
+                    return floor;
+                }
+
+                crowded ??= floor;
             }
         }
 
-        return owner.Position;
+        return crowded ?? owner.Position;
+    }
+
+    // A summon too far from its owner is placed beside the owner (SpawnPoint), not on the owner's spot where the others
+    // would land; false when no floor is there.
+    private bool TryRecallBeside(MonsterInstance summon, WorldPlayer owner)
+    {
+        var point = SpawnPoint(owner);
+        if (!_host.Terrain.TryFloorNear(point, FieldTerrain.DropTolerance, out var height))
+        {
+            return false;
+        }
+
+        summon.Position = point with { Y = height };
+        summon.TargetId = 0;
+        summon.AiState = MonsterAiState.Idle;
+        return true;
     }
 
     // Ends the owner's summon: it dies where it stands and the owner's status ends.
@@ -145,6 +175,11 @@ internal sealed partial class FieldSkills
             return StepCrystalPet(summon, tuning, dtMs);
         }
 
+        if (_gameMasterPets.Contains(summon.EntityId))
+        {
+            return StepGameMasterPet(summon, tuning, dtMs);
+        }
+
         var ownerId = summon.OwnerId;
         var current = _summons.TryGetValue(ownerId, out var id) && id == summon.EntityId;
         if (!summon.IsAlive)
@@ -171,19 +206,18 @@ internal sealed partial class FieldSkills
             return null;
         }
 
-        if (SummonBrain.NeedsRecall(summon, owner.Position))
+        if (SummonBrain.NeedsRecall(summon, owner.Position) && !TryRecallBeside(summon, owner))
         {
-            if (!_host.Terrain.TryFloorNear(owner.Position, FieldTerrain.DropTolerance, out var height))
-            {
-                DismissSummon(ownerId);
-                return null;
-            }
-
-            summon.Position = owner.Position with { Y = height };
-            summon.TargetId = 0;
-            summon.AiState = MonsterAiState.Idle;
+            DismissSummon(ownerId);
+            return null;
         }
 
+        return FollowAndFight(summon, owner, tuning, dtMs);
+    }
+
+    // A summon or pet that may go on: it follows its owner and fights the target its orders name.
+    private MonsterAttackEvent? FollowAndFight(MonsterInstance summon, WorldPlayer owner, MonsterAiTuning tuning, float dtMs)
+    {
         summon.SinceRetargetMs += dtMs;
         var target = SummonTarget(summon, owner, tuning);
         var orders = target is null
@@ -228,26 +262,17 @@ internal sealed partial class FieldSkills
         return nearest;
     }
 
-    // A summon's blow on an enemy: its accuracy against the target's defence, a roll of its damage (or its skill damage)
-    // less the target's absorption. The struck monster turns on the summon unless its player target is closer.
+    // A summon's blow on an enemy (FieldMonsterSkills.BlowOnMonster). The struck monster turns on the summon unless its
+    // player target is closer.
     public void ResolveSummonHit(MonsterInstance summon, in MonsterAttackEvent landed)
     {
         if (!summon.IsAlive || !_host.TryGetMonster(landed.TargetEntityId, out var target) || !Strikeable(target)
-            || !_host.TryGetPlayer(summon.OwnerId, out var owner))
+            || !_host.TryGetPlayer(summon.OwnerId, out var owner)
+            || FieldMonsterSkills.BlowOnMonster(_rng, summon, target, landed.IsSkill) is not { } damage)
         {
             return;
         }
 
-        var combat = summon.Def.Combat;
-        var attack = new AttackProfile(combat.AttackRatingAccuracy, combat.AttackDamage.Min, combat.AttackDamage.Max, combat.Level, Element.Bionic, 0, 0, 0);
-        var defence = DefenderProfile.FromMonster(target);
-        if (!CombatResolver.RollHit(_rng, CombatResolver.HitChance(attack, defence)))
-        {
-            return;
-        }
-
-        var range = landed.IsSkill && summon.Def.Skill.SkillDamage.Max > 0 ? summon.Def.Skill.SkillDamage : combat.AttackDamage;
-        var damage = CombatResolver.ApplyAbsorbMonster(_rng.Range(range.Min, Math.Max(range.Min, range.Max)), target.Def.Combat.Absorption);
         Retaliate(target, summon);
         Pay(owner, target, damage, false, source: summon.EntityId);
         SlowFromWeb(summon, target);

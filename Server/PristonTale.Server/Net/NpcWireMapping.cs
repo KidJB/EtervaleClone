@@ -9,7 +9,7 @@ internal static class NpcWireMapping
     public static void SendState(NpcServiceRequestPacket request, NpcServiceReply reply, Action<ClientSession.PacketWrite> send)
     {
         var operation = request.OperationId;
-        var npc = request.NpcSerial;
+        var npc = request.NpcId;
         if (reply.Catalog is { } catalog)
         {
             var entries = catalog.Take(ShopCatalogPacket.MaxItems)
@@ -30,7 +30,7 @@ internal static class NpcWireMapping
         if (reply.Warehouse is { } warehouse)
         {
             var entries = warehouse.Items.Take(WarehousePacket.MaxItems)
-                .Select(item => new WarehouseItemEntry(item.InstanceId, item.Code, (byte)item.Kind, item.Count, item.Anchor, (short)item.Width,
+                .Select(item => new StoreItemEntry(item.InstanceId, item.Code, (byte)item.Kind, item.Count, item.Anchor, (short)item.Width,
                     (short)item.Height, item.Name))
                 .ToArray();
             send(new WarehousePacket(operation, npc, warehouse.Revision, warehouse.Money, warehouse.Weight, warehouse.MaxWeight,
@@ -43,6 +43,11 @@ internal static class NpcWireMapping
                 .Select(offer => new TeleportEntry(offer.Index, offer.FieldCode, offer.Price, offer.MinimumLevel, offer.Name))
                 .ToArray();
             send(new TeleportListPacket(operation, npc, entries).Write);
+        }
+
+        if (reply.Work is { } work)
+        {
+            send(new ItemWorkPacket(operation, npc, request.Service, work.Result, work.ItemId, work.Code).Write);
         }
 
         var outcome = reply.Outcome;

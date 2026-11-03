@@ -1,15 +1,16 @@
-using PristonTale.Application.World;
+using Microsoft.Xna.Framework;
 using PristonTale.Simulation.World;
+using PristonTale.Contracts.World;
 
 namespace PristonTale.Gameplay.World;
 
 // The wing warp stones (WingGates): stepping on one holds the player on it and opens the wing warp map; walking off it
-// closes the map, and the map opens again only after the player left the stone. A trip the server accepts lands with a
-// forced FieldWarp, where the return sparkle and the warp sound play.
+// closes the map, and the map opens again only after the player left the stone. As in the original, a chosen trip shows
+// the return sparkle and plays the warp sound on the stone, and the trip itself leaves two seconds later.
 public sealed partial class GameScene
 {
+    private const int WingTripDelayMs = 2000;
     private FieldWarpGate _wingStone;
-    private volatile bool _wingTripLanding;
 
     // The player stepped on a stone of this field; the screen opens the wing warp map.
     public event Action<int> WingGateEntered;
@@ -19,21 +20,26 @@ public sealed partial class GameScene
 
     public int FieldLimitLevel(int fieldCode) => _worldCatalog is not null && _worldCatalog.TryGetFieldByCode(fieldCode, out var field) ? field.LimitLevel : 0;
 
+    // The channel and token are taken before the delay: its continuation runs on the pool, where a teardown in between
+    // could have cleared or disposed them.
     public async Task<WingGateOutcome> TravelWingGateAsync(int destination)
     {
-        if (_playChannel is null)
+        var channel = _playChannel;
+        if (channel is null)
         {
             return new WingGateOutcome(WingGateStatus.Rejected, destination);
         }
 
-        _wingTripLanding = true;
-        var outcome = await _playChannel.TravelWingGateAsync(destination, _presenceCts.Token);
-        if (!outcome.Ok)
+        var token = _presenceCts.Token;
+
+        if (_playerBody is not null)
         {
-            _wingTripLanding = false;
+            PlayReturn(_playerBody.Position);
+            _fieldAudio?.PlayPortalWarp();
         }
 
-        return outcome;
+        await Task.Delay(WingTripDelayMs, token);
+        return await channel.TravelWingGateAsync(destination, token);
     }
 
     private void UpdateWingStone()
@@ -64,7 +70,7 @@ public sealed partial class GameScene
             return;
         }
 
-        if (_wingStone is not null || PlayerDead || _player is not null && _player.Level < standing.LimitLevel)
+        if (_wingStone is not null || PlayerDead || PlayerLevel < standing.LimitLevel)
         {
             return;
         }
@@ -74,7 +80,7 @@ public sealed partial class GameScene
         _lootInteraction?.Cancel();
         StopPredictedMovement();
         HoldAtSpecialWarp(standing);
-        _reportDue = true;
+        _reports.Request();
         WingGateEntered?.Invoke(_activeField.Definition.FieldCode);
     }
 }

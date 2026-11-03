@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework.Graphics;
 using PristonTale.Engine3D.Diagnostics;
 using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.IO;
+using PristonTale.Assets;
 
 namespace PristonTale.Engine3D.Rendering;
 
@@ -11,6 +12,7 @@ public sealed class PristonTextureLoader : IDisposable
 {
     private readonly GraphicsDevice _graphicsDevice;
     private readonly IClientLog _log;
+    private readonly SurfaceFormat _format;
     private readonly ConcurrentDictionary<string, Texture2D> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Lazy<Task<PreparedTexture>>> _preparing = new(StringComparer.OrdinalIgnoreCase);
     private static readonly SemaphoreSlim DecodeSlots = new(2, 2);
@@ -19,10 +21,13 @@ public sealed class PristonTextureLoader : IDisposable
     private Texture2D _white;
     private sealed record PreparedTexture(int Width, int Height, Color[][] Levels);
 
-    public PristonTextureLoader(GraphicsDevice graphicsDevice, IClientLog log = null)
+    // Scene textures upload as sRGB formats, so the sampler decodes them before filtering and shaders read linear
+    // colour. displayReferred keeps the encoded values (the sky's layers are composed in sRGB); UI textures always do.
+    public PristonTextureLoader(GraphicsDevice graphicsDevice, IClientLog log = null, bool displayReferred = false)
     {
         _graphicsDevice = graphicsDevice;
         _log = log ?? ConsoleClientLog.Instance;
+        _format = displayReferred ? SurfaceFormat.Color : SurfaceFormat.ColorSRgb;
     }
 
     public Texture2D White => _white;
@@ -170,7 +175,7 @@ public sealed class PristonTextureLoader : IDisposable
             prepared = Prepare(assetDirectory, textureName, opacityName);
         }
 
-        var texture = Upload(key, prepared);
+        var texture = Upload(key, prepared, _format);
         _cache[key] = texture;
         _preparing.TryRemove(key, out _);
         return texture;
@@ -224,19 +229,19 @@ public sealed class PristonTextureLoader : IDisposable
         }
 
         var prepared = PrepareUi(assetDirectory, textureName, colorKey);
-        var texture = Upload(key, prepared);
+        var texture = Upload(key, prepared, SurfaceFormat.Color);
         _cache[key] = texture;
         return texture;
     }
 
-    private Texture2D Upload(string key, PreparedTexture prepared)
+    private Texture2D Upload(string key, PreparedTexture prepared, SurfaceFormat format)
     {
         if (prepared.Levels.Length == 0)
         {
             return White;
         }
 
-        var texture = CreateTexture(key, prepared);
+        var texture = new Texture2D(_graphicsDevice, prepared.Width, prepared.Height, prepared.Levels.Length > 1, format) { Name = key };
         try
         {
             for (var level = 0; level < prepared.Levels.Length; level++)
@@ -254,19 +259,6 @@ public sealed class PristonTextureLoader : IDisposable
         return texture;
     }
 
-    private Texture2D CreateTexture(string key, PreparedTexture prepared)
-    {
-        return new Texture2D(
-            _graphicsDevice,
-            prepared.Width,
-            prepared.Height,
-            prepared.Levels.Length > 1,
-            SurfaceFormat.Color)
-        {
-            Name = key
-        };
-    }
-
     private PreparedTexture PrepareUi(string directory, string name, PristonUiColorKey colorKey)
     {
         var path = ResolvePath(directory, name);
@@ -276,7 +268,7 @@ public sealed class PristonTextureLoader : IDisposable
             return new PreparedTexture(0, 0, []);
         }
 
-        var image = ReadImage(path);
+        var image = PristonImageDecoder.Decode(AssetFiles.ReadAllBytes(path), Path.GetExtension(path), bmpCoverage: true);
         if (!image.IsValid)
         {
             _log.Warn($"UI texture '{path}' is invalid; using shared white fallback.");
@@ -329,7 +321,7 @@ public sealed class PristonTextureLoader : IDisposable
 
     private static DecodedPristonImage ReadImage(string path)
     {
-        return PristonImageDecoder.Decode(PristonFileResolver.ReadAllBytes(path), Path.GetExtension(path));
+        return PristonImageDecoder.Decode(AssetFiles.ReadAllBytes(path), Path.GetExtension(path));
     }
 
     private static string CacheKey(string directory, string name, string opacity)
@@ -340,7 +332,7 @@ public sealed class PristonTextureLoader : IDisposable
     internal static string ResolvePath(string directory, string name)
     {
         var normalized = name.Replace('\\', Path.DirectorySeparatorChar);
-        var resolved = PristonFileResolver.Resolve(Path.Combine(directory, normalized));
+        var resolved = AssetFiles.Resolve(Path.Combine(directory, normalized));
         if (File.Exists(resolved))
         {
             return resolved;
@@ -357,7 +349,7 @@ public sealed class PristonTextureLoader : IDisposable
 
         )
         {
-            var candidate = PristonFileResolver.Resolve(stem + extension);
+            var candidate = AssetFiles.Resolve(stem + extension);
             if (File.Exists(candidate))
             {
                 return candidate;

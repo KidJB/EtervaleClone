@@ -1,87 +1,50 @@
+using PristonTale.Application.Saves;
 using PristonTale.Application.Sessions;
 using PristonTale.Application.World;
-using PristonTale.Persistence.Abstractions.Characters;
 using PristonTale.Simulation.Quests;
 
 namespace PristonTale.Application.Services;
 
-// Quest requests and the quest upkeep outside the tick: the world prepares on the tick, the character is stored here
-// under the save gate, then the world commits. A request that changes nothing answers without a write.
-public sealed class QuestAppService(ISessionRegistry sessions, ICharacterRepository characters, WorldServer world)
+// Quest requests and the quest upkeep outside the tick: the world prepares on the tick and commits, and the character is
+// stored in the background (DurableOperations). A request that changes nothing answers without a save.
+public sealed class QuestAppService(ISessionRegistry sessions, ICharacterSaves saves, WorldServer world)
 {
     // How long the upkeep waits for the save gate before trying again later.
     private static readonly TimeSpan UpkeepGateWait = TimeSpan.FromSeconds(2);
 
+    private readonly DurableOperations _durable = new(saves);
+
     public async Task<QuestOutcome> RequestAsync(string sessionToken, QuestCommand command, CancellationToken ct = default)
     {
-        if (!sessions.TryGet(sessionToken, out var session))
-        {
-            return QuestOutcome.Failed(QuestStatus.Rejected, "invalid session");
-        }
-
-        if (!await session.SaveGate.WaitAsync(0, ct))
-        {
-            return QuestOutcome.Failed(QuestStatus.Busy, "save or character operation pending; retry");
-        }
-
-        try
-        {
-            var prepared = await world.PrepareQuestAsync(session, command);
-            if (prepared is null)
+        using var lease = await _durable.AdmitAsync(sessions, sessionToken, ct);
+        return await lease.RunAsync(
+            session => world.PrepareQuestAsync(session, command),
+            world.CommitQuestAsync,
+            prepared => prepared.Outcome,
+            failure => failure switch
             {
-                return QuestOutcome.Failed(QuestStatus.Rejected, "character is not playing");
-            }
-
-            if (prepared.Snapshot is null)
-            {
-                return prepared.Outcome;
-            }
-
-            // Finish an admitted transaction despite cancellation. Retrying its operation id recovers the outcome.
-            if (!await characters.UpdateAsync(prepared.Snapshot.Encode(), CancellationToken.None))
-            {
-                return QuestOutcome.Failed(QuestStatus.StorageFailed, "storage rejected operation; character unchanged");
-            }
-
-            await world.CommitQuestAsync(session, prepared);
-            return prepared.Outcome;
-        }
-        finally
-        {
-            session.SaveGate.Release();
-        }
+                DurableFailure.NoSession => QuestOutcome.Failed(QuestStatus.Rejected, "invalid session"),
+                DurableFailure.Busy => QuestOutcome.Failed(QuestStatus.Busy, "save or character operation pending; retry"),
+                _ => QuestOutcome.Failed(QuestStatus.Rejected, "character is not playing")
+            });
     }
 
-    // Stores the quest work the tick queued for a player (quest drops, weapon growth, expired items). Returns false when
-    // the work is still pending and must be tried again.
+    // Applies the quest work the tick queued for a player (quest drops, weapon growth, expired items) and queues the
+    // character for storage. Returns false when the work is still pending: the save gate stayed busy, and the field
+    // signals it again.
     public async Task<bool> RunUpkeepAsync(PlayerSession session, CancellationToken ct = default)
     {
-        if (!await session.SaveGate.WaitAsync(UpkeepGateWait, ct))
+        using var lease = await _durable.AdmitAsync(session, UpkeepGateWait, ct);
+        if (lease.Failure is not null)
         {
             await world.DeferQuestUpkeepAsync(session);
             return false;
         }
 
-        try
-        {
-            var prepared = await world.PrepareQuestUpkeepAsync(session);
-            if (prepared?.Snapshot is null)
-            {
-                return true;
-            }
-
-            if (!await characters.UpdateAsync(prepared.Snapshot.Encode(), CancellationToken.None))
-            {
-                await world.AbortQuestUpkeepAsync(session, prepared);
-                return false;
-            }
-
-            await world.CommitQuestAsync(session, prepared);
-            return true;
-        }
-        finally
-        {
-            session.SaveGate.Release();
-        }
+        return await lease.RunAsync(
+            world.PrepareQuestUpkeepAsync,
+            world.CommitQuestAsync,
+            _ => true,
+            failure => failure == DurableFailure.NotPlaying);
     }
 }

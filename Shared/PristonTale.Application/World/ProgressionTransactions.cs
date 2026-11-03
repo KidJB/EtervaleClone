@@ -11,21 +11,19 @@ internal static class ProgressionTransactions
         PlayerSession session, WorldPlayer player, FieldInstance field, ProgressionCommand command)
     {
         var original = player.Character;
-        foreach (var operation in original.ProgressionOperations)
+        if (original.ProgressionOperations.Find(command.OperationId) is { } operation)
         {
-            if (operation.Command.OperationId == command.OperationId)
-            {
-                var replay = operation.Command == command;
-                return new PreparedCharacterOperation<ProgressionOutcome>(original, null, null,
-                    new ProgressionOutcome(replay, operation.Revision, replay ? "already committed" : "operation identity conflict"));
-            }
+            var replay = operation.Command == command;
+            return new PreparedCharacterOperation<ProgressionOutcome>(original, null, null,
+                new ProgressionOutcome(replay, operation.Revision, replay ? "already committed" : "operation identity conflict"));
         }
 
         if (player.IsDead || command.Action == ProgressionAction.LearnSkill
-            && (!field.TryGetNpc(command.NpcEntityId, out var npc) || !npc.Definition.Has(NpcServiceKind.SkillMaster) || !NpcServiceTransactions.CanReach(player, npc)))
+            && (!field.TryGetNpc(command.NpcEntityId, out var npc) || !npc.Definition.Has(NpcServiceKind.SkillMaster) || !NpcServiceTransactions.CanReach(player, npc)
+                || !Simulation.Quests.QuestClasses.IsHomeTown(player.Character, field.FieldId)))
         {
             return new PreparedCharacterOperation<ProgressionOutcome>(original, null, null,
-                new ProgressionOutcome(false, original.ProgressionRevision, "approach a skill master while alive"));
+                new ProgressionOutcome(false, original.ProgressionRevision, "approach your town's skill master while alive"));
         }
 
         var candidate = original.CloneForInventoryOperation();
@@ -37,6 +35,6 @@ internal static class ProgressionTransactions
 
         var snapshot = CharacterRecordFactory.Capture(session.Loaded!, candidate, field.FieldId, player.Position);
         return new PreparedCharacterOperation<ProgressionOutcome>(original, candidate, snapshot,
-            new ProgressionOutcome(true, candidate.ProgressionRevision, "committed"));
+            new ProgressionOutcome(true, candidate.ProgressionRevision, ""));
     }
 }

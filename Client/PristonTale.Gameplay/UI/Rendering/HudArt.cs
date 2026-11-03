@@ -1,4 +1,5 @@
 using PristonTale.Simulation.Characters;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Gameplay.UI.Rendering;
 
@@ -39,10 +40,7 @@ public static class HudArt
     public const string RestartField = Inter + "ReStart/ReStart_Field.bmp";
     public const string RestartTown = Inter + "ReStart/ReStart_Town.bmp";
     public const string RestartExit = Inter + "ReStart/ReStart_Exit.bmp";
-    public const string SkillMasterBox = RestartMain;
-    public const string SkillMasterExit = RestartExit;
-    public const string SelectSkill = Inter + "SkillIcon/Select_Skill.bmp";
-    public const string SelectSkillGray = Inter + "SkillIcon/G_Select_Skill.bmp";
+    // The class change button of the skill window, gray until a rank-up quest is open to the pupil.
     public const string SelectJobGray = Inter + "SkillIcon/G_Select_ChangeJob.bmp";
     public const string SelectJob = Inter + "SkillIcon/Select_ChangeJob.bmp";
 
@@ -56,6 +54,10 @@ public static class HudArt
 
     public const string SkillNormal = Sin + "skill/Skill_Normal.bmp";
     public const string SkillWindow = Sin + "skill/Skil24.bmp";
+    // The skill window's second page (a fifth tier this version has no skills for) and the arrows between the pages.
+    public const string SkillWindowSecond = Sin + "skill/Skil25.bmp";
+    public const string SkillPageForward = Sin + "skill/RightArrow.bmp";
+    public const string SkillPageBack = Sin + "skill/LeftArrow.bmp";
     public const string SkillSelect = Sin + "skill/SelectSkill.bmp";
     public const string SkillGauge = Sin + "skill/Gage.bmp";
     public const string SkillGaugeBack = Sin + "skill/Gage-3.bmp";
@@ -68,6 +70,23 @@ public static class HudArt
     public const string CoverMiddle = Sin + "Inven/CoverMiddle.bmp";
     public const string CoverSmall = Sin + "Inven/CoverSmall.bmp";
     public const string PotionBack = Sin + "Inven/PotionBack.bmp";
+    public const string SideLeft = Sin + "Inven/LeftArrow.bmp";
+    public const string SideRight = Sin + "Inven/RightArrow.bmp";
+
+    // The labels the original shows above an inventory button under the pointer: the bag page (A, B), the weapon pair
+    // (A, B) and the close button.
+    public static readonly string[] PageHints = [Sin + "Inven/InfoBox/ButtonItemA.bmp", Sin + "Inven/InfoBox/ButtonItemB.bmp"];
+    public static readonly string[] PairHints = [Sin + "Inven/InfoBox/ButtonA.bmp", Sin + "Inven/InfoBox/ButtonB.bmp"];
+    public const string CloseHint = Sin + "Inven/InfoBox/ButtonExit.bmp";
+
+    // The special item box: its button closed and open (or under the pointer), the 44-pixel box drawn for each of its
+    // boxes over the bag, and its labels (open it, close it).
+    public const string QuestBoxButton = Sin + "Inven/QuestItem_.bmp";
+    public const string QuestBoxButtonOpen = Sin + "Inven/QuestItem.bmp";
+    public const string QuestBoxTile = Sin + "Inven/QuestItembox.bmp";
+    public const string QuestBoxHint = Sin + "Inven/InfoBox/Questitem.bmp";
+    public const string QuestBoxCloseHint = Sin + "Inven/InfoBox/close.bmp";
+    public const string QuestBoxGlow = Sin + "Effect/InterEffect/UC-hall.tga";
 
     public const string Status = Sin + "Status/Status.bmp";
     public const string StatusPoint = Sin + "Status/StatusPoint.bmp";
@@ -95,6 +114,8 @@ public static class HudArt
     public const string HelpButton = Sin + "help/box-test-title2.bmp";
     public const string ScrollBar = Sin + "help/scl_bar.tga";
     public const string ScrollButton = Sin + "help/scl_icon.tga";
+    // The guide box (HudPainter.GuideBox): corners, edges and fill, left to right and top to bottom.
+    public static readonly string[] GuideBox = Enumerable.Range(1, 9).Select(index => $"{Sin}Help/GH-Box0{index}.tga").ToArray();
 
     public const string MessageBox = Sin + "MessageBox/BoxMain.tga";
     public const string NoticeLeft = Sin + "MessageBox/CutBox/BoxLeft.tga";
@@ -106,6 +127,11 @@ public static class HudArt
     public const string YesYellow = Sin + "MessageBox/Button_Yes_Yellow.bmp";
     public const string NoGray = Sin + "MessageBox/Button_No_Glay.bmp";
     public const string NoYellow = Sin + "MessageBox/Button_No_Yellow.bmp";
+    public const string CancelGray = Sin + "MessageBox/Button_Cancel_Glay.bmp";
+    public const string CancelYellow = Sin + "MessageBox/Button_Cancel_Yellow.bmp";
+    public const string CountField = Sin + "MessageBox/COUNT.bmp";
+    public const string CountUp = Sin + "MessageBox/Arrow_Up.bmp";
+    public const string CountDown = Sin + "MessageBox/Arrow_Down.bmp";
 
     public const string MapBox = "image/MapBox.tga";
     public const string MapArrow = "image/ARROW.tga";
@@ -123,14 +149,17 @@ public static class HudArt
     [
         Menu1, Menu2, GrowLeft, GrowMiddle, GrowRight, Life, Mana, Stamina, Experience, Time, Sun, Moon,
         Walk, CameraAuto, CameraFixed, MapOn, RunInfo, WalkInfo, CameraHandInfo, MapOnInfo, MapOffInfo,
-        SystemMenu, SystemSettings, SystemHelp, SystemExit, RestartMain, RestartField, RestartTown, RestartExit, SelectSkill, SelectSkillGray, SelectJobGray, SelectJob,
+        SystemMenu, SystemSettings, SystemHelp, SystemExit, RestartMain, RestartField, RestartTown, RestartExit, SelectJobGray, SelectJob,
         .. MenuButtons, .. MenuButtonsDown, .. MenuInfo,
-        SkillNormal, SkillWindow, SkillSelect, SkillGauge, SkillGaugeBack, SkillGaugePassive, .. ShortKeys,
-        Inventory, PuzzleBoard, CoverLarge, CoverMiddle, CoverSmall, PotionBack, Status, StatusPoint, StatusArrow, StatusArrowDown,
+        SkillNormal, SkillWindow, SkillWindowSecond, SkillPageForward, SkillPageBack, SkillSelect, SkillGauge, SkillGaugeBack, SkillGaugePassive, .. ShortKeys,
+        Inventory, PuzzleBoard, CoverLarge, CoverMiddle, CoverSmall, PotionBack, SideLeft, SideRight, .. PageHints, .. PairHints, CloseHint,
+        QuestBoxButton, QuestBoxButtonOpen, QuestBoxTile, QuestBoxHint, QuestBoxCloseHint, QuestBoxGlow,
+        Status, StatusPoint, StatusArrow, StatusArrowDown,
         .. InfoBox,
         HelpTopLeft, HelpTop, HelpTopRight, HelpLeft, HelpCenter, HelpRight, HelpBottomLeft, HelpBottom, HelpBottomRight, HelpLine,
-        HelpTitle, HelpButton, ScrollBar, ScrollButton,
+        HelpTitle, HelpButton, ScrollBar, ScrollButton, .. GuideBox,
         MessageBox, NoticeLeft, NoticeCenter, NoticeRight, OkGray, OkYellow, YesGray, YesYellow, NoGray, NoYellow,
+        CancelGray, CancelYellow, CountField, CountUp, CountDown,
         MapBox, MapArrow, MapNpc, TargetBox, EnergyBack, EnergyFill,
         BroodNormal, BroodMutant, BroodUndead, BroodDemon, BroodMechanic
     ];

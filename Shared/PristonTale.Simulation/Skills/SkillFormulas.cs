@@ -5,6 +5,7 @@ using PristonTale.Simulation.Items.Usable;
 using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Simulation.World.Motion;
+using PristonTale.Contracts.Skills;
 
 namespace PristonTale.Simulation.Skills;
 
@@ -24,12 +25,12 @@ public static partial class SkillFormulas
     // The original gauge advances once per 14 ms tick.
     public const int CooldownTickMs = 14;
     private const int Gauge = 35;
-    private const float FrameStepAtRateOne = 80f;
+    public const float FrameStepAtRateOne = 80f;
 
     // Proficiency = min(talent / 3 + item mastery, 50) x 100 + uses (100 per completed use streak), at most 10000.
     // Mastery units M = base + perRank x rank - proficiency / 100, clamped to 1..70. The 35-step gauge then fills one
     // step every max(1, 35 / floor(70 / M)) ticks: from 0.49 s (M 1-3) to 17.15 s (M 36-70).
-    public static int CooldownMs(SkillRule rule, int rank, int talent, int uses, int itemMastery = 0)
+    public static int CooldownMs(SkillRule rule, int rank, int talent, int itemMastery, int uses)
     {
         if (rule.MasteryBase == 0 && rule.MasteryPerRank == 0)
         {
@@ -187,6 +188,9 @@ public static partial class SkillFormulas
         return (Math.Max(0.1f, attackRate) + 0.125f * steps) * rule.MotionRatePercent / 100f * rule.MotionSpeedPercent / 100f;
     }
 
+    // How many times faster than a plain swing a weapon-clip skill plays the caster's attack clip.
+    public static float WeaponClipSpeedup(SkillRule rule, int rank, float attackRate) => MotionRate(rule, rank, attackRate) / Math.Max(0.1f, attackRate);
+
     // The playback rate of a skill clip at rank 1 (see MotionRate).
     public static float SkillClipRate(SkillRule rule, float attackRate) => MotionRate(rule, 1, attackRate);
 
@@ -199,7 +203,7 @@ public static partial class SkillFormulas
         if (plan.Motion == SkillMotion.Attack)
         {
             var loops = Math.Max(1, rule.At(rule.Loops, rank));
-            var speedup = rate / Math.Max(0.1f, attackRate);
+            var speedup = WeaponClipSpeedup(rule, rank, attackRate);
             var clip = attackClip.DurationMs / speedup;
             var hit = attackClip.HitAtMs / speedup;
             var hits = new float[loops];
@@ -289,11 +293,9 @@ public static partial class SkillFormulas
     public static int WithBroodBonus(int damage, SkillRule rule, MonsterDefinition target, int rank = 0) =>
         WithBroodBonus(damage, rule.Damage, target, rank);
 
-    public static int WithBroodBonus(int damage, SkillDamageRule rule, int rank, MonsterDefinition target) => WithBroodBonus(damage, rule, target, rank);
-
     public static int WithBroodBonus(int damage, SkillDamageRule rule, MonsterDefinition target, int rank)
     {
-        if (rule is null || damage <= 0 || !BroodMatches(rule, target))
+        if (rule is null || damage <= 0 || !MatchesBrood(rule.BonusBroods, target))
         {
             return damage;
         }
@@ -380,14 +382,19 @@ public static partial class SkillFormulas
     public static int PowerAgainst(int power, SkillRule rule, MonsterDefinition target, ModifierTotals attacker, ModifierTotals defender, int rank = 0) =>
         PowerAgainst(power, rule.Damage, target, attacker, defender, rank);
 
-    // Element resistance first (divided by the rule's divisor), then the brood bonus (the original area order),
-    // absorption and the dealt/taken scaling.
+    // Element resistance first (divided by the rule's divisor), then a spell's magic resistance, the brood bonus (the
+    // original area order), absorption and the dealt/taken scaling. Resistances run -100 (double damage) to 100 (none).
     public static int PowerAgainst(int power, SkillDamageRule damage, MonsterDefinition target, ModifierTotals attacker, ModifierTotals defender, int rank)
     {
         var resistances = ModifierRules.Resistances(defender, target.Combat.Resistances);
         var value = damage.ResistanceDivisor > 1
             ? power - power * Math.Clamp(resistances[damage.Element] / damage.ResistanceDivisor, -100, 100) / 100
             : CombatResolver.ApplyElement(power, damage.Element, resistances);
+        if (damage.Magic)
+        {
+            value = CombatResolver.ApplyResistance(value, target.MagicResistance);
+        }
+
         value = WithBroodBonus(value, damage, target, rank);
         value = CombatResolver.ApplyAbsorbMonster(value, target.Combat.Absorption + defender.Flat(StatKind.Absorption));
         return ModifierRules.ScaleDamage(value, attacker, defender);
@@ -469,18 +476,4 @@ public static partial class SkillFormulas
     private static int LevelDivisor(SkillDamageRule damage, int rank) =>
         damage.LevelDivisorByRank.Length == 10 ? damage.LevelDivisorByRank[Math.Clamp(rank, 1, 10) - 1] : damage.LevelDivisor;
 
-    public static bool BroodMatches(SkillDamageRule damage, MonsterDefinition target) => target is not null && BroodListed(damage.BonusBroods, target);
-
-    public static bool BroodListed(string[] broods, MonsterDefinition target)
-    {
-        foreach (var name in broods)
-        {
-            if (Enum.TryParse<MonsterBrood>(name, ignoreCase: true, out var brood) && target.Brood == brood)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }

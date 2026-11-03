@@ -13,6 +13,9 @@ using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.Skills;
 using PristonTale.Simulation.World.Monsters.Skills;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Skills;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -66,7 +69,7 @@ internal sealed class MonsterSkillCaptureProbe : Game, ISkillSceneHost, IMonster
     private PristonRenderer _renderer = null!;
     private ModelActorComposer _monsters = null!;
     private PlayerActorComposer _players = null!;
-    private LegacyEffectLibrary _library = null!;
+    private EffectLibrary _library = null!;
     private SkillPresentation _presentation = null!;
     private MonsterPresentation _monsterEffects = null!;
     private PristonCamera _camera = null!;
@@ -106,9 +109,9 @@ internal sealed class MonsterSkillCaptureProbe : Game, ISkillSceneHost, IMonster
     {
         Directory.CreateDirectory(_output);
         _target = new RenderTarget2D(GraphicsDevice, 960, 540, false, SurfaceFormat.Color, DepthFormat.Depth24);
-        _library = LegacyEffectLibrary.LoadBootstrap(GraphicsDevice, Content, _assets, ConsoleClientLog.Instance);
+        _library = EffectLibrary.LoadBootstrap(GraphicsDevice, Content, _assets, ConsoleClientLog.Instance);
         _renderer = new PristonRenderer(GraphicsDevice, Content) { ShadowsEnabled = true, DayLengthSeconds = 0 };
-        _renderer.SetTimeOfDay(17.5f);
+        _renderer.SetTimeOfDay(21.25f);
         var material = new PristonMaterial(true, 1, 0, 1, true, new Vector3(0.08f, 0.08f, 0.09f), 0, 1, PristonMaterialSurfaceFlags.None, "", "", [], [], 0, 0, 0);
         var floor = new Color(26, 25, 23);
         var stage = new PristonStage("monster-fixture.smd", [material],
@@ -145,7 +148,7 @@ internal sealed class MonsterSkillCaptureProbe : Game, ISkillSceneHost, IMonster
 
         if (_case < 0)
         {
-            _player = _players.Compose(_assets, _playerVisuals, 0, World(PlayerPosition, MathF.PI, 1f), PristonActorMotion.Stand);
+            _player = _players.Compose(_assets, _playerVisuals, 0, World(PlayerPosition, MathF.PI, 1f), MotionCode.Stand);
             Begin(0);
         }
     }
@@ -170,7 +173,7 @@ internal sealed class MonsterSkillCaptureProbe : Game, ISkillSceneHost, IMonster
         _frame = 0;
         _time = 0f;
         var current = _cases[index];
-        _monster = _monsters.Compose(_assets, current.Model, World(MonsterPosition, Facing, current.Scale), PristonActorMotion.Stand).Handle;
+        _monster = _monsters.Compose(_assets, current.Model, World(MonsterPosition, Facing, current.Scale), MotionCode.Stand).Handle;
         _warmup = 30;
     }
 
@@ -264,7 +267,7 @@ internal sealed class MonsterSkillCaptureProbe : Game, ISkillSceneHost, IMonster
         if (_frame > 0)
         {
             GraphicsDevice.SetRenderTarget(_target);
-            GraphicsDevice.Clear(new Color(18, 18, 22));
+            GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.DepthBuffer, new Color(18, 18, 22).ToVector4(), PristonDepth.Clear, 0);
             _presentation.Renderer.DisplayOutput = true;
             _presentation.Draw(_camera.View, _camera.Projection, _camera.Position, null!);
             _presentation.Renderer.DisplayOutput = false;
@@ -320,11 +323,17 @@ internal sealed class MonsterSkillCaptureProbe : Game, ISkillSceneHost, IMonster
     public bool TryGetBoneWorld(ulong entityId, string bone, out Matrix world) =>
         _renderer.TryGetActorBoneWorld(entityId == MonsterId ? _monster : _player.Body, bone, out world);
 
+    public float AttackRateOf(ulong entityId) => 1f;
+
     public void PlaySkillMotion(ulong entityId, SkillMotionPlan plan, float durationMs, float rate, int loop)
     {
     }
 
     public bool TryGetActorMotion(ActorHandle actor, out PristonMotionInfo motion, out float ticks) => _renderer.TryGetActorMotion(actor, out motion, out ticks);
+
+    public void SetEntityCorpse(ulong entityId, float fade, float dim)
+    {
+    }
 
     public void SetEntityTint(ulong entityId, Vector3 tint)
     {

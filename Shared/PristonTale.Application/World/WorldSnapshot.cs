@@ -1,21 +1,22 @@
 using PristonTale.Simulation.World.Loot;
 using System.Numerics;
 using PristonTale.Simulation.Characters;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Skills;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Application.World;
-
-public enum EntityKindView { Player, Monster, Npc }
-
-public enum MoveStateView { Idle, Walking, Running, Attack, Damage, Dead, Skill, Eat, Warp }
 
 public readonly struct PlayerAppearanceView
 {
     public PlayerAppearanceView(
-        string name, int jobCode, int tier, int faceIndex, int hairIndex,
+        string name, PlayerClass playerClass, int tier, int faceIndex, int hairIndex,
         string modelName, string modelName2)
     {
         Name = name;
-        JobCode = jobCode;
+        Class = playerClass;
         Tier = tier;
         FaceIndex = faceIndex;
         HairIndex = hairIndex;
@@ -37,8 +38,11 @@ public readonly struct PlayerAppearanceView
     public bool Phoenix { get; init; }
     public int BigHead { get; init; }
 
+    // The sign of the personal shop the player sells from, empty when it sells nothing.
+    public string ShopSign { get; init; } = "";
+
     public string Name { get; }
-    public int JobCode { get; }
+    public PlayerClass Class { get; }
     public int Tier { get; init; }
     public int FaceIndex { get; }
     public int HairIndex { get; }
@@ -49,8 +53,8 @@ public readonly struct PlayerAppearanceView
 public readonly struct EntityView
 {
     public EntityView(
-        ulong entityId, EntityKindView kind, bool isSelf, Vector3 position, float facing,
-        MoveStateView moveState, int level, int hp, int maxHp,
+        ulong entityId, EntityKind kind, bool isSelf, Vector3 position, float facing,
+        MotionState moveState, int level, int life, int maxLife,
         PlayerAppearanceView appearance, uint templateId = 0,
         int moveSpeed = 0, float attackRate = 1f, ulong attackTargetId = 0, ulong attackSequence = 0)
     {
@@ -61,8 +65,8 @@ public readonly struct EntityView
         Facing = facing;
         MoveState = moveState;
         Level = level;
-        Hp = hp;
-        MaxHp = maxHp;
+        Life = life;
+        MaxLife = maxLife;
         Appearance = appearance;
         TemplateId = templateId;
         MoveSpeed = moveSpeed;
@@ -72,7 +76,7 @@ public readonly struct EntityView
     }
 
     public ulong EntityId { get; }
-    public EntityKindView Kind { get; }
+    public EntityKind Kind { get; }
 
     // A summon's owner and its own model size (0 keeps the catalog size).
     public ulong OwnerId { get; init; }
@@ -91,11 +95,11 @@ public readonly struct EntityView
 
     public Vector3 Position { get; }
     public float Facing { get; }
-    public MoveStateView MoveState { get; }
+    public MotionState MoveState { get; }
     public int Level { get; }
 
-    public int Hp { get; }
-    public int MaxHp { get; }
+    public int Life { get; }
+    public int MaxLife { get; }
 
     public PlayerAppearanceView Appearance { get; }
     public uint TemplateId { get; }
@@ -107,65 +111,13 @@ public readonly struct EntityView
     public ulong AttackSequence { get; }
 }
 
-public enum CombatEventKindView
-{
-    SwingBegin = 1,
-
-    Hit = 2,
-    PotionBegin = 3,
-    PotionApplied = 4,
-    MonsterSkillImpact = 5,
-    // A skill or periodic effect restored life; Damage carries the amount.
-    Heal = 6,
-    // The target evaded a monster's attack through a skill effect.
-    Evade = 7,
-    // A dead player rose again (a revive skill); Damage carries the life it returns with.
-    Revive = 8,
-    // A player blocked a monster's normal attack; no damage reaches them.
-    Block = 9,
-    // A player's swing missed its target (its weapon's miss sound plays for everyone near).
-    Miss = 10,
-    // A player gained a level: the level-up burst and chime for everyone near.
-    LevelUp = 11,
-    // A player trained a skill rank: the skill-learn light and sound for everyone near.
-    SkillLearned = 12,
-}
-
-public enum SkillEventPhaseView : byte
-{
-    Start = 1,
-    Impact = 2,
-    Cancel = 3,
-    // A held charge was released: the motion jumps ahead; DurationMs and HitAtMs give the new remaining timeline.
-    Release = 4
-}
-
-[Flags]
-public enum SkillEventFlagsView : ushort
-{
-    None = 0,
-    Area = 1,
-    Projectile = 2,
-    SelfCast = 4,
-    // A chain link, a strike of the caster's familiar, a buff given to another player, a counter strike of a shield
-    // buff and a fully charged resolution.
-    Chain = 8,
-    Companion = 16,
-    Ally = 32,
-    Counter = 64,
-    Charged = 128,
-    // Two bits: the resolution mode picked for the cast (Mode1 = 256, Mode2 = 512).
-    Mode1 = 256,
-    Mode2 = 512
-}
-
 public readonly record struct SkillEventView(
     ulong CasterId,
     ulong TargetId,
     uint SkillCode,
-    SkillEventPhaseView Phase,
+    SkillEventPhase Phase,
     int Rank,
-    SkillEventFlagsView Flags,
+    SkillEventFlags Flags,
     float DurationMs,
     float HitAtMs,
     Vector3 Position,
@@ -173,19 +125,11 @@ public readonly record struct SkillEventView(
     int TargetCount,
     float Radius);
 
-public enum StatusEventOpView : byte
-{
-    Add = 1,
-    Refresh = 2,
-    Remove = 3,
-    Tick = 4
-}
-
 public readonly record struct StatusEventView(
     ulong EntityId,
     ulong SourceId,
     uint StatusCode,
-    StatusEventOpView Op,
+    StatusEffectOp Op,
     int Stacks,
     byte SourceKind,
     byte Control,
@@ -200,7 +144,7 @@ public readonly record struct SkillCooldownView(uint SkillCode, int RemainingMs,
 public readonly struct CombatEventView
 {
     public CombatEventView(
-        ulong attackerId, ulong targetId, CombatEventKindView kind,
+        ulong attackerId, ulong targetId, CombatEventKind kind,
         float durationMs = 0f, float hitAtMs = 0f, int damage = 0, bool crit = false, bool killed = false, int resources = 0,
         int sourceSoundCode = 0, Vector3 position = default, float facing = 0f)
     {
@@ -220,7 +164,7 @@ public readonly struct CombatEventView
 
     public ulong AttackerId { get; }
     public ulong TargetId { get; }
-    public CombatEventKindView Kind { get; }
+    public CombatEventKind Kind { get; }
     public float DurationMs { get; }
     public float HitAtMs { get; }
     public int Damage { get; }
@@ -273,6 +217,9 @@ public readonly struct WorldSnapshot
     // null when every event belongs to ServerTick.
     public EventSegment[]? EventSegments { get; init; }
 
+    // Set when the reader fell so far behind that its outbox dropped the events it had not read.
+    public bool EventsLost { get; init; }
+
     // The field's shared frame of this tick (views and grid) and its generation; null for snapshots built by hand.
     public PresenceFrame? Frame { get; init; }
     public int FrameGeneration { get; init; }
@@ -293,11 +240,34 @@ public readonly struct WorldSnapshot
     public ActiveStatusSet ActiveStatuses { get; init; }
     public long FieldNowMs { get; init; }
 
+    // The field's weather (FieldInstance.Weather); the encoder sends it when it changes.
+    public WeatherState Weather { get; init; }
+
+    // The field's next boss pass (null without bosses); the encoder sends it when the pass or the field changes.
+    public Simulation.World.Spawning.BossCountdown? NextBoss { get; init; }
+
+    // The field's bosses at their spot (FieldInstance.BossSpots); the encoder sends the list when the array changes.
+    public BossSpotView[] BossSpots { get; init; } = [];
+
+    // Every boss of the world (WorldServer, shared by all receivers) and the local time it is measured against; the
+    // encoder sends the list when it is a new one.
+    public BossList BossList { get; init; } = BossList.Empty;
+    public DateTime LocalNow { get; init; }
+
     // The receiver's quest changes: the journal view when it changed, quest notices and a dialog the world opened.
     public QuestUpdate? Quest { get; init; }
 
     // What standing up again would cost the receiver; set while it is dead.
     public Simulation.Progression.RestartOffer? Restart { get; init; }
+
+    // The receiver's party (null when it has none) and the request to join one it has not answered; every snapshot
+    // carries the current ones, and the encoder sends what changed.
+    public PartyView? Party { get; init; }
+    public PartyRequest? PartyRequest { get; init; }
+
+    // The receiver's trade window (null when it trades with nobody) and the request to trade it has not answered.
+    public TradeView? Trade { get; init; }
+    public TradeRequest? TradeRequest { get; init; }
 
     public WorldSnapshot WithOwner(OwnerState? owner, SkillCooldownView[]? cooldowns = null) => new(ServerTick, Entities, Events, FieldId, owner, GroundDrops)
     {
@@ -309,7 +279,12 @@ public readonly struct WorldSnapshot
         FieldNowMs = FieldNowMs,
         Frame = Frame,
         FrameGeneration = FrameGeneration,
-        Cooldowns = cooldowns
+        Cooldowns = cooldowns,
+        Weather = Weather,
+        NextBoss = NextBoss,
+        BossSpots = BossSpots,
+        BossList = BossList,
+        LocalNow = LocalNow
     };
 
     internal WorldSnapshot WithPin(ulong key) => this with { Pinned = true, PinKey = key };
@@ -325,8 +300,17 @@ public readonly struct WorldSnapshot
         Frame = Frame,
         FrameGeneration = FrameGeneration,
         Cooldowns = Cooldowns,
+        Weather = Weather,
+        NextBoss = NextBoss,
+        BossSpots = BossSpots,
+        BossList = BossList,
+        LocalNow = LocalNow,
         Quest = Quest,
         Restart = Restart,
+        Party = Party,
+        PartyRequest = PartyRequest,
+        Trade = Trade,
+        TradeRequest = TradeRequest,
         Pinned = Pinned,
         PinKey = PinKey
     };

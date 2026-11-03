@@ -158,21 +158,30 @@ public static class HudUsableTooltip
         _ => string.Create(CultureInfo.InvariantCulture, $"{seconds}sec")
     };
 
+    // An empty action adds no line.
     public static void Draw(HudPainter painter, HudLayout layout, Point pointer, string name, IReadOnlyList<string> lines, string action)
     {
-        var all = lines.Append(action).ToArray();
-        var textWidth = Math.Max(painter.Measure(name), all.Select(painter.Measure).DefaultIfEmpty(0).Max());
+        var hasAction = !string.IsNullOrEmpty(action);
+        var count = lines.Count + (hasAction ? 1 : 0);
+        var textWidth = Math.Max(painter.Measure(name), hasAction ? painter.Measure(action) : 0);
+        for (var index = 0; index < lines.Count; index++)
+        {
+            textWidth = Math.Max(textWidth, painter.Measure(lines[index]));
+        }
+
         var width = Math.Min(layout.Width - 8, textWidth + 24);
-        var size = HudPainter.InfoBoxBounds(0, 0, width, 31 + all.Length * 17);
+        var size = HudPainter.InfoBoxBounds(0, 0, width, 31 + count * 17);
         var bounds = layout.PlaceOverlay(new Point(pointer.X - size.Width / 2, pointer.Y - size.Height - 8), size.Width, size.Height);
         bounds = HudPainter.InfoBoxBounds(bounds.X, bounds.Y, bounds.Width, bounds.Height);
         painter.Flush();
         painter.InfoBox(bounds);
         painter.TextCentered(painter.Fit(name, bounds.Width - 16), bounds.Left, bounds.Right, bounds.Y + 9, new Color(255, 255, 180));
-        for (var index = 0; index < all.Length; index++)
+        for (var index = 0; index < count; index++)
         {
-            var color = index == all.Length - 1 ? new Color(200, 200, 200) : new Color(150, 220, 255);
-            painter.TextCentered(painter.Fit(all[index], bounds.Width - 16), bounds.Left, bounds.Right, bounds.Y + 26 + 17 * index, color);
+            var isAction = index == lines.Count;
+            var text = isAction ? action : lines[index];
+            var color = isAction ? new Color(200, 200, 200) : new Color(150, 220, 255);
+            painter.TextCentered(painter.Fit(text, bounds.Width - 16), bounds.Left, bounds.Right, bounds.Y + 26 + 17 * index, color);
         }
     }
 }

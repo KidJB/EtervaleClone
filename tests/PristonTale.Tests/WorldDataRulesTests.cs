@@ -10,6 +10,8 @@ using PristonTale.Simulation.World.Fields;
 using PristonTale.Simulation.World.Loot;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Simulation.World.Spawning;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -24,7 +26,9 @@ internal static class WorldDataRulesTests
         yield return ("ten hammer blows in a row give the player a big head and turn the monster into its event form", HammerAsync);
         yield return ("the game clock runs a day in 19.2 minutes with night from 23:00 to 4:00", ClockAsync);
         yield return ("night creatures walk at night and come back when killed, their NPCs leave, and both turn at dawn", NightCreaturesAsync);
+        yield return ("a night creature opens at the field's first active spawn point a player is near, else at its first active point", NightCreaturePointsAsync);
         yield return ("a nightmare field spawns only at night, its people turn into the night creature and return at dawn", NightmareAsync);
+        yield return ("a monster's magic resistance cuts a spell's damage from -100 (double) to 100 (only the least hit), not a weapon skill's", MagicResistanceAsync);
     }
 
     private static Task DeathGoldAsync()
@@ -68,7 +72,7 @@ internal static class WorldDataRulesTests
 
     private static Task SetBonusAsync()
     {
-        var set = new ItemSetDefinition(1, 2, 400, 2f, 1.5f, 0f, 0f, 0f, "체력+400");
+        var set = new ItemSetDefinition(1, 2, 400, 2f, 1.5f, 0f, 0f, 0f);
         var axe = new ItemDefinition(ItemCodes.Parse("WA130"), "Verus Axe", ItemKind.Axe, EquipmentSlot.Weapon) { CatalogKey = "WA130", SetCode = 1 };
         var armor = new ItemDefinition(ItemCodes.Parse("DA302"), "Verus Armor", ItemKind.Armor, EquipmentSlot.Armor) { CatalogKey = "DA302", SetCode = 1 };
         var catalog = new ItemCatalog([axe, armor], sets: [set]);
@@ -142,13 +146,32 @@ internal static class WorldDataRulesTests
 
         field.Night = false;
         field.Step(0.05f);
-        Assert.True(again.VanishOnWarp && again.Motion == MonsterMotionState.Warp && field.Npcs.Count == 1, "dawn did not warp the creature or return its NPC");
+        Assert.True(again.VanishOnWarp && again.Motion == MotionState.Warp && field.Npcs.Count == 1, "dawn did not warp the creature or return its NPC");
         for (var index = 0; index < 200 && field.MonstersForInspection.Any(); index++)
         {
             field.Step(0.05f);
         }
 
         Assert.True(!field.MonstersForInspection.Any(), "the night creature did not leave after its warp");
+        return Task.CompletedTask;
+    }
+
+    private static Task NightCreaturePointsAsync()
+    {
+        var wolverine = Monster(1, MonsterClass.Normal) with { EventCode = 100, EventInfo = 1, SoundCode = 0x11E0, Ai = MonsterAi.Default };
+        var points = new[] { new SpawnPoint(900, 900, false), new SpawnPoint(500, 500, true), new SpawnPoint(4000, 4000, true), new SpawnPoint(8000, 8000, true) };
+        var data = new FieldSpawnData(points, [], [], []);
+        var empty = new FieldInstance(1, data, new MonsterCatalog([wolverine]), new EntityIdAllocator(), new CombatRng(3)) { Night = true };
+        empty.Step(0.05f);
+        Assert.True(Vector3.Distance(empty.MonstersForInspection.Single().Position, new Vector3(500, 0, 500)) < 64,
+            "with nobody near, the creature did not open at the field's first active point");
+
+        var watched = new FieldInstance(1, data, new MonsterCatalog([wolverine]), new EntityIdAllocator(), new CombatRng(3)) { Night = true };
+        watched.Add(new WorldPlayer(1, new Vector3(8000, 0, 8100), new CharacterClassRegistry().CreatePlayer(PlayerClass.Fighter, "Hunter", 30), false, default));
+        watched.Step(0.05f);
+        var creature = watched.MonstersForInspection.Single(monster => monster.Def.Code == wolverine.Code);
+        Assert.True(Vector3.Distance(creature.Position, new Vector3(8000, 0, 8000)) < 64,
+            $"the creature opened at {creature.Position}, not at the active point near the player");
         return Task.CompletedTask;
     }
 
@@ -182,6 +205,20 @@ internal static class WorldDataRulesTests
         field.Night = false;
         field.Step(0.05f);
         Assert.True(field.Npcs.Count == 1 && field.MonstersForInspection.All(monster => !monster.IsAlive), "dawn did not end the night");
+        return Task.CompletedTask;
+    }
+
+    private static Task MagicResistanceAsync()
+    {
+        var spell = new Simulation.Skills.SkillDamageRule { SpiritMinDivisor = 4, SpiritMaxDivisor = 2 };
+        var blade = new Simulation.Skills.SkillDamageRule();
+        var none = Simulation.Modifiers.ModifierTotals.Empty;
+        int Against(Simulation.Skills.SkillDamageRule rule, int resistance) =>
+            Simulation.Skills.SkillFormulas.PowerAgainst(400, rule, Monster(1, MonsterClass.Normal) with { MagicResistance = resistance }, none, none, 1);
+        Assert.True(spell.Magic && !blade.Magic, "a spell or a weapon skill is classed wrongly");
+        Assert.True(Against(spell, 0) == 400 && Against(spell, 50) == 200 && Against(spell, 100) == 1 && Against(spell, -100) == 800
+            && Against(spell, 150) == 1, $"magic resistance does not scale a spell's damage: {Against(spell, 0)} {Against(spell, 50)} {Against(spell, 100)} {Against(spell, -100)} {Against(spell, 150)}");
+        Assert.True(Against(blade, 50) == 400, "magic resistance cut a weapon skill");
         return Task.CompletedTask;
     }
 

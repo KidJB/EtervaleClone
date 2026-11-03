@@ -4,12 +4,17 @@ using PristonTale.Gameplay.UI.Rendering;
 using PristonTale.Gameplay.UI.Widgets;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
+using PristonTale.Simulation.Items.Aging;
+using PristonTale.Simulation.Items.Mixing;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Gameplay.UI.Inventory;
 
+public readonly record struct AgingGauge(int Level, int Count, int Goal);
+
 // The original item box: the name, every stat the copy carries with the original labels, the requirements (red when the
 // owner does not meet them), then the class specialization. Each line is label and value as one centred string, one
-// text line apart.
+// text line apart. An aged copy shows its aging gauge under the name and the stats its aging raises in light blue.
 public static class HudItemDetailTooltip
 {
     public const int LineHeight = 16;
@@ -23,11 +28,19 @@ public static class HudItemDetailTooltip
     public static readonly Color SpecColor = new(164, 199, 41);
     public static readonly Color PriceColor = new(247, 243, 193);
     public static readonly Color HintColor = new(200, 200, 200);
+    public static readonly Color AgingColor = new(119, 200, 254);
+    public static readonly Color MixedNameColor = new(150, 255, 255);
+    public static readonly Color MixedColor = new(110, 165, 250);
+    public static readonly Color HuntColor = new(125, 180, 175);
+    private const int GaugeWidth = 130;
+    private const int GaugeFill = 125;
 
     private static readonly string[] ResistanceLabels =
         ["Organic Type:  ", "Nature Type:  ", "Flame Type:  ", "Frost Type:  ", "Lightning Type:  ", "Poison Type: ", "Water Type:  ", "Wind Type:  "];
 
-    public static List<(string Text, Color Color)> Lines(OwnedItemView item, OwnerState owner, string price, string hint)
+    // hunt: a growing quest weapon's hunt line (RankUpByQuestWeapon.HuntLine), set off by a blank line on each side under
+    // the name, as the original's box shows it.
+    public static List<(string Text, Color Color)> Lines(OwnedItemView item, OwnerState owner, string price, string hint, string hunt = null)
     {
         var lines = new List<(string, Color)>();
         var details = item.Details;
@@ -39,33 +52,56 @@ public static class HudItemDetailTooltip
         }
 
         var roll = details.Roll;
-        var nameColor = details.UniqueItem != 0 ? UniqueColor : details.UpgradeLevel > 0 ? AgedColor : NameColor;
+        var nameColor = details.UniqueItem != 0 ? UniqueColor : details.MixSheltom > 0 ? MixedNameColor : details.UpgradeLevel > 0 ? AgedColor : NameColor;
+        var mixed = details.MixStats;
         lines.Add((item.Name, nameColor));
-        Add(lines, roll.DamageMin != 0 || roll.DamageMax != 0, "Attack Power:  ", $"{roll.DamageMin}-{roll.DamageMax}");
-        Add(lines, details.AttackSpeed != 0, "Weapon Speed:  ", Whole(details.AttackSpeed));
+        var aged = Aged(details);
+        if (aged)
+        {
+            lines.Add(("", ValueColor));
+            lines.Add(("", ValueColor));
+        }
+
+        if (!string.IsNullOrEmpty(hunt))
+        {
+            lines.Add(("", ValueColor));
+            lines.Add((hunt, HuntColor));
+            lines.Add(("", ValueColor));
+        }
+
+        var raised = aged && details.UpgradeLevel > 0 ? AgingRules.RaisedBy(item.CatalogKey) : AgedStats.None;
+        Add(lines, roll.DamageMin != 0 || roll.DamageMax != 0, "Attack Power:  ", $"{roll.DamageMin}-{roll.DamageMax}",
+            Raised(raised, AgedStats.Damage) ?? Mixed(mixed, MixStat.DamageMin | MixStat.DamageMax));
+        Add(lines, details.AttackSpeed != 0, "Weapon Speed:  ", Whole(details.AttackSpeed), Mixed(mixed, MixStat.AttackSpeed));
         Add(lines, details.ShootingRange != 0, "Range:  ", Whole(details.ShootingRange));
-        Add(lines, details.Critical != 0, "Critical:  ", details.Critical + "%");
-        Add(lines, roll.Defence != 0, "Defense Rating:  ", Whole(roll.Defence));
-        Add(lines, roll.AttackRating != 0, "Attack Rating:  ", Whole(roll.AttackRating));
-        Add(lines, roll.Absorb != 0, "Absorb Rating:  ", Tenths(roll.Absorb + ItemAbsorbCorrection.For(item.CatalogKey)));
-        Add(lines, roll.Block != 0, "Block Rating:  ", (int)roll.Block + "%");
-        Add(lines, roll.MoveSpeed != 0, "Speed:  ", Tenths(roll.MoveSpeed));
-        Add(lines, details.DurabilityCurrent != 0 || details.DurabilityMax != 0, "Integrity:  ", $"{details.DurabilityCurrent}/{details.DurabilityMax}");
+        Add(lines, details.Critical != 0, "Critical:  ", details.Critical + "%",
+            Raised(raised, AgedStats.Critical) ?? Mixed(mixed, MixStat.Critical));
+        Add(lines, roll.Defence != 0, "Defense Rating:  ", Whole(roll.Defence),
+            Raised(raised, AgedStats.Defence) ?? Mixed(mixed, MixStat.Defence));
+        Add(lines, roll.AttackRating != 0, "Attack Rating:  ", Whole(roll.AttackRating),
+            Raised(raised, AgedStats.AttackRating) ?? Mixed(mixed, MixStat.AttackRating));
+        Add(lines, roll.Absorb != 0, "Absorb Rating:  ", Tenths(roll.Absorb + ItemAbsorbCorrection.For(item.CatalogKey)),
+            Raised(raised, AgedStats.Absorb) ?? Mixed(mixed, MixStat.Absorb));
+        Add(lines, roll.Block != 0, "Block Rating:  ", (int)roll.Block + "%", Raised(raised, AgedStats.Block) ?? Mixed(mixed, MixStat.Block));
+        Add(lines, roll.MoveSpeed != 0, "Speed:  ", Tenths(roll.MoveSpeed), Mixed(mixed, MixStat.MoveSpeed));
+        Add(lines, details.DurabilityCurrent != 0 || details.DurabilityMax != 0, "Integrity:  ", $"{details.DurabilityCurrent}/{details.DurabilityMax}",
+            Raised(raised, AgedStats.Integrity));
         var resistances = roll.Resistances;
         short[] elements = [resistances.Bionic, resistances.Earth, resistances.Fire, resistances.Ice, resistances.Lighting, resistances.Poison,
             resistances.Water, resistances.Wind];
         for (var element = 0; element < elements.Length; element++)
         {
-            Add(lines, elements[element] != 0, ResistanceLabels[element], Whole(elements[element]));
+            Add(lines, elements[element] != 0, ResistanceLabels[element], Whole(elements[element]), Mixed(mixed, ElementStats[element]));
         }
 
         var forceOrb = item.Kind == ItemKind.ForceOrb;
-        Add(lines, roll.LifeRegen != 0 && !forceOrb, "HP Regen:  ", Tenths(roll.LifeRegen));
-        Add(lines, roll.ManaRegen != 0 && !forceOrb, "MP Regen: ", Tenths(roll.ManaRegen));
-        Add(lines, roll.StaminaRegen != 0 && !forceOrb, "STM Regen: ", Tenths(roll.StaminaRegen));
-        Add(lines, roll.AddLife != 0, "Add. HP: ", Whole(roll.AddLife));
-        Add(lines, roll.AddMana != 0, "Add. MP:  ", Whole(roll.AddMana));
-        Add(lines, roll.AddStamina != 0, "Add. STM:  ", Whole(roll.AddStamina));
+        Add(lines, roll.LifeRegen != 0 && !forceOrb, "HP Regen:  ", Tenths(roll.LifeRegen), Mixed(mixed, MixStat.LifeRegen));
+        Add(lines, roll.ManaRegen != 0 && !forceOrb, "MP Regen: ", Tenths(roll.ManaRegen), Mixed(mixed, MixStat.ManaRegen));
+        Add(lines, roll.StaminaRegen != 0 && !forceOrb, "STM Regen: ", Tenths(roll.StaminaRegen), Mixed(mixed, MixStat.StaminaRegen));
+        Add(lines, roll.AddLife != 0, "Add. HP: ", Whole(roll.AddLife), Mixed(mixed, MixStat.Life));
+        Add(lines, roll.AddMana != 0, "Add. MP:  ", Whole(roll.AddMana), Raised(raised, AgedStats.Mana) ?? Mixed(mixed, MixStat.Mana));
+        Add(lines, roll.AddStamina != 0, "Add. STM:  ", Whole(roll.AddStamina), Mixed(mixed, MixStat.Stamina));
+        Add(lines, details.MagicMastery != 0, "Magic APT:  ", Whole((int)details.MagicMastery));
         Add(lines, details.PotionSpace != 0, "Potion Storage:  ", Whole(details.PotionSpace));
 
         var level = owner?.Level ?? 0;
@@ -89,9 +125,30 @@ public static class HudItemDetailTooltip
         return lines;
     }
 
-    public static void Draw(HudPainter painter, HudLayout layout, Point pointer, IReadOnlyList<(string Text, Color Color)> lines)
+    public static AgingGauge? Gauge(OwnedItemView item, OwnerState owner)
     {
-        var textWidth = 0;
+        if (item?.Details is not { } details || !Aged(details))
+        {
+            return null;
+        }
+
+        var count = details.AgingCount;
+        var goal = details.AgingGoal;
+        foreach (var progress in owner?.Aging ?? [])
+        {
+            if (progress.InstanceId == item.InstanceId)
+            {
+                (count, goal) = (progress.Count, progress.Goal);
+            }
+        }
+
+        return new AgingGauge(details.UpgradeLevel, count, goal);
+    }
+
+    public static void Draw(HudPainter painter, HudLayout layout, Point pointer, IReadOnlyList<(string Text, Color Color)> lines,
+        AgingGauge? gauge = null)
+    {
+        var textWidth = gauge is null ? 0 : GaugeWidth;
         foreach (var line in lines)
         {
             textWidth = Math.Max(textWidth, painter.Measure(line.Text));
@@ -108,7 +165,43 @@ public static class HudItemDetailTooltip
             var y = index == 0 ? bounds.Y + 9 : bounds.Y + 26 + (index - 1) * LineHeight;
             painter.TextCentered(painter.Fit(lines[index].Text, bounds.Width - 16), bounds.Left, bounds.Right, y, lines[index].Color);
         }
+
+        if (gauge is { } aging)
+        {
+            DrawGauge(painter, bounds, aging);
+        }
     }
+
+    private static void DrawGauge(HudPainter painter, Rectangle bounds, AgingGauge gauge)
+    {
+        var center = bounds.X + bounds.Width / 2;
+        var top = bounds.Y + 26;
+        if (gauge.Goal > 0)
+        {
+            var left = center - GaugeWidth / 2;
+            painter.Sprite(Npc.HudCraftArt.AgingBar, left, top);
+            var fill = (int)(GaugeFill * Math.Clamp(gauge.Count / (float)gauge.Goal, 0f, 1f));
+            if (fill > 0)
+            {
+                painter.Sprite(Npc.HudCraftArt.AgingFill, left + 2, top + 7, new Rectangle(0, 0, fill, 4));
+            }
+        }
+        else
+        {
+            painter.Sprite(Npc.HudCraftArt.AgingPlate, center - 11, top);
+        }
+
+        painter.TextCentered($"+{gauge.Level}", center - 20, center + 20, top + 3, Color.Black, false, Point.Zero);
+    }
+
+    private static bool Aged(ItemDetailView details) => details.UpgradeLevel > 0 || details.AgingGoal > 0;
+
+    private static Color? Raised(AgedStats raised, AgedStats stat) => (raised & stat) != 0 ? AgingColor : null;
+
+    private static Color? Mixed(MixStat mixed, MixStat stats) => (mixed & stats) != 0 ? MixedColor : null;
+
+    private static readonly MixStat[] ElementStats =
+        [MixStat.Organic, MixStat.None, MixStat.Fire, MixStat.Ice, MixStat.Lightning, MixStat.Poison, MixStat.None, MixStat.None];
 
     private static void AddSpecialization(List<(string, Color)> lines, ItemRoll roll, bool forceOrb)
     {
@@ -145,11 +238,11 @@ public static class HudItemDetailTooltip
         }
     }
 
-    private static void Add(List<(string, Color)> lines, bool shown, string label, string value)
+    private static void Add(List<(string, Color)> lines, bool shown, string label, string value, Color? color = null)
     {
         if (shown)
         {
-            lines.Add((label + value, ValueColor));
+            lines.Add((label + value, color ?? ValueColor));
         }
     }
 
@@ -180,20 +273,7 @@ public static class HudItemDetailTooltip
 
     private static string SpecClassName(uint job)
     {
-        var characterClass = (JobBitCode)job switch
-        {
-            JobBitCode.Mechanician => PlayerClass.Mechanician,
-            JobBitCode.Fighter => PlayerClass.Fighter,
-            JobBitCode.Pikeman => PlayerClass.Pikeman,
-            JobBitCode.Archer => PlayerClass.Archer,
-            JobBitCode.Knight => PlayerClass.Knight,
-            JobBitCode.Atalanta => PlayerClass.Atalanta,
-            JobBitCode.Priestess => PlayerClass.Priestess,
-            JobBitCode.Magician => PlayerClass.Magician,
-            JobBitCode.Assassin => PlayerClass.Assassin,
-            JobBitCode.Shaman => PlayerClass.Shaman,
-            _ => (PlayerClass?)null
-        };
-        return characterClass.HasValue ? HudJobTitles.For(characterClass.Value)[0] : "Class";
+        var characterClass = JobBits.ClassOf((JobBitCode)job);
+        return characterClass.HasValue ? ClassProfiles.Of(characterClass.Value).Titles[0] : "Class";
     }
 }

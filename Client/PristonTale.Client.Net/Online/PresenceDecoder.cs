@@ -11,19 +11,28 @@ using PristonTale.Simulation.Items.Usable;
 using PristonTale.Simulation.World.Loot;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Simulation.World.Npcs;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Units;
 
 namespace PristonTale.Client.Net.Online;
 
-// Rebuilds the neutral presence model from the server's messages. An unknown serial in a presence message triggers a
-// DescribeEntity request; the object is published once its EntityDescription arrives, and a changed descriptor revision
-// (PresenceEntry.Revision) requests a fresh description.
-internal sealed class PresenceDecoder
+// Rebuilds the neutral presence model from the server's messages. Entries name entities by this connection's handles: a
+// spawn binds a handle to an entity id and its removal frees it. The server pushes a description ahead of the entry that
+// introduces it or its revision; an object whose description did not come (or a shared template's of another revision)
+// is asked with DescribeEntity. The object is published once its description is known. Event lists name entities by
+// the same handles.
+internal sealed class PresenceDecoder : IEventHandleReader
 {
     private const long DescriptionRetryMs = 1000;
+    // A description whose entity never spawned (one asked for that left meanwhile) is dropped after this long.
+    private const long UnspawnedDescriptionMs = 10_000;
     // The receive loop decodes; the connection's timer retries descriptions.
     private readonly object _gate = new();
     private readonly Dictionary<ulong, Tracked> _objects = new();
-    // Monster and NPC descriptions are shared by template, like the original client's enemy cache.
+    private readonly Dictionary<uint, ulong> _handles = new();
+    // Monster and NPC descriptions are shared by template (PresenceWire.TemplateKey), like the original client's enemy cache.
     private readonly Dictionary<uint, Description> _templates = new();
     private readonly WorldRenderCatalog _catalog;
     private readonly Action<ulong> _requestDescription;
@@ -37,16 +46,31 @@ internal sealed class PresenceDecoder
     private IReadOnlyList<OwnedSkillView> _skills = [];
     private long _tick;
     private double? _clockMs;
+    private IReadOnlyList<ItemDetailEntry> _tradeDetails = [];
+    // The states of a presence message are written into a list the decoder lends to its update; the consumer gives it
+    // back once applied (Recycle), and only the update it was lent to can. Once MaxLent loans are outstanding (a consumer
+    // that never gives them back) the decoder forgets them. The pool has its own lock, so the game thread's Recycle never
+    // waits on a decode.
+    private const int MaxLent = 1024;
+    private readonly object _poolGate = new();
+    private readonly Dictionary<List<EntityStateInfo>, PresenceUpdate> _lentStates = new();
+    private readonly Stack<List<EntityStateInfo>> _freeStates = new();
+    private readonly PresenceEntriesReader.EntryHandler _onEntry;
+    private List<EntitySpawnInfo>? _entrySpawns;
+    private List<EntityStateInfo>? _entryStates;
 
     public PresenceDecoder(WorldRenderCatalog catalog, Action<ulong> requestDescription)
     {
         _catalog = catalog;
         _requestDescription = requestDescription;
+        _onEntry = OnEntry;
     }
 
-    public ulong SelfSerial { get; set; }
+    public ulong SelfEntityId { get; set; }
 
     public int? FieldId { get; private set; }
+
+    bool IEventHandleReader.TryGetEntity(uint handle, out ulong entityId) => _handles.TryGetValue(handle, out entityId);
 
     // Decodes one presence packet; returns false for opcodes that are not part of presence.
     public bool TryHandle(ReadOnlySpan<byte> packet, out PresenceUpdate? update)
@@ -57,18 +81,30 @@ internal sealed class PresenceDecoder
         }
     }
 
-    // Asks again for the descriptions whose answer did not come within a second. The connection calls it about once a
-    // second: an object that stands still sends no entries that would trigger the request again.
+    // Asks again for the descriptions whose answer did not come within a second, and drops descriptions no spawn followed.
+    // The connection calls it about once a second: an object that stands still sends no entries that would trigger the
+    // request again.
     public void RetryDescriptions()
     {
         lock (_gate)
         {
-            foreach (var (serial, tracked) in _objects)
+            var now = Environment.TickCount64;
+            List<ulong>? unspawned = null;
+            foreach (var (entityId, tracked) in _objects)
             {
-                if (tracked.HasState && (tracked.Description is null || tracked.Description.Revision != tracked.Revision))
+                if (!tracked.HasState && now - tracked.DescribedAtMs > UnspawnedDescriptionMs)
                 {
-                    RequestDescription(serial, tracked, tracked.Revision);
+                    (unspawned ??= []).Add(entityId);
                 }
+                else if (tracked.HasState && (tracked.Description is null || tracked.Description.Revision != tracked.Revision))
+                {
+                    RequestDescription(entityId, tracked, tracked.Revision);
+                }
+            }
+
+            foreach (var entityId in unspawned ?? [])
+            {
+                _objects.Remove(entityId);
             }
         }
     }
@@ -81,7 +117,7 @@ internal sealed class PresenceDecoder
             EtervaleOpcodes.PresenceEntries => OnPresenceEntries(packet),
             EtervaleOpcodes.EntityDescription => OnDescription(EntityDescriptionPacket.Read(packet)),
             EtervaleOpcodes.RemoveObjects => OnRemoved(RemoveObjectList.Read(packet)),
-            EtervaleOpcodes.CombatEvents => OnCombatEvents(CombatEventList.Read(packet)),
+            EtervaleOpcodes.CombatEvents => OnCombatEvents(CombatEventList.Read(packet, this)),
             EtervaleOpcodes.GroundItems => OnGroundItems(GroundItemList.Read(packet)),
             EtervaleOpcodes.GroundItemsRemoved => Update([], []) with { GroundRemoved = GroundItemRemovals.Read(packet) },
             EtervaleOpcodes.FieldWarp => OnFieldWarp(FieldWarpPacket.Read(packet)),
@@ -89,12 +125,13 @@ internal sealed class PresenceDecoder
             EtervaleOpcodes.Inventory => OnInventory(InventoryPartPacket.Read(packet)),
             EtervaleOpcodes.Skills => OnSkills(SkillsPacket.Read(packet)),
             EtervaleOpcodes.PresenceClock => OnPresenceClock(PresenceClockPacket.Read(packet)),
-            EtervaleOpcodes.SkillEvents => OnSkillEvents(SkillEventList.Read(packet)),
-            EtervaleOpcodes.StatusEffects => OnStatusEffects(StatusEffectList.Read(packet)),
+            EtervaleOpcodes.SkillEvents => OnSkillEvents(SkillEventList.Read(packet, this)),
+            EtervaleOpcodes.StatusEffects => OnStatusEffects(StatusEffectList.Read(packet, this)),
             EtervaleOpcodes.SkillCooldowns => OnSkillCooldowns(SkillCooldownsPacket.Read(packet)),
             EtervaleOpcodes.SkillCastResult => OnSkillCastResult(SkillCastResultPacket.Read(packet)),
             EtervaleOpcodes.ItemDetails => OnItemDetails(ItemDetailsPartPacket.Read(packet)),
             EtervaleOpcodes.OwnerItemStatus => OnOwnerItemStatus(OwnerItemStatusPacket.Read(packet)),
+            EtervaleOpcodes.AgingProgress => OnAgingProgress(AgingProgressPacket.Read(packet)),
             EtervaleOpcodes.PremiumTimers => OnPremiumTimers(PremiumTimersPacket.Read(packet)),
             EtervaleOpcodes.ItemEffects => OnItemEffects(ItemEffectsPacket.Read(packet)),
             EtervaleOpcodes.RestartOffer => OnRestartOffer(RestartOfferPacket.Read(packet)),
@@ -102,16 +139,119 @@ internal sealed class PresenceDecoder
             EtervaleOpcodes.QuestNotices => OnQuestNotices(QuestNoticesPacket.Read(packet)),
             EtervaleOpcodes.ChatLine => OnChat(ChatLinePacket.Read(packet)),
             EtervaleOpcodes.CloseRequest => OnCloseRequest(packet),
+            EtervaleOpcodes.PartyMembers => OnPartyMembers(PartyMembersPacket.Read(packet)),
+            EtervaleOpcodes.PartyRequest => OnPartyRequest(PartyRequestPacket.Read(packet)),
+            EtervaleOpcodes.TradeDetails => OnTradeDetails(TradeDetailsPacket.Read(packet)),
+            EtervaleOpcodes.TradeState => OnTradeState(TradeStatePacket.Read(packet)),
+            EtervaleOpcodes.TradeAsked => OnTradeAsked(TradeAskedPacket.Read(packet)),
+            EtervaleOpcodes.ContactList => OnContactList(ContactListPacket.Read(packet)),
+            EtervaleOpcodes.Weather => Update([], []) with { Weather = WeatherPacket.Read(packet).Weather },
+            EtervaleOpcodes.BossTime => OnBossTime(BossTimePacket.Read(packet)),
+            EtervaleOpcodes.BossSpots => OnBossSpots(BossSpotsPacket.Read(packet)),
+            EtervaleOpcodes.BossList => OnBossList(BossListPacket.Read(packet)),
             _ => null
         };
         return update is not null || code is EtervaleOpcodes.PresenceEntries or EtervaleOpcodes.EntityDescription or EtervaleOpcodes.RemoveObjects
             or EtervaleOpcodes.CombatEvents or EtervaleOpcodes.GroundItems or EtervaleOpcodes.GroundItemsRemoved or EtervaleOpcodes.FieldWarp
             or EtervaleOpcodes.OwnerStatus or EtervaleOpcodes.Inventory or EtervaleOpcodes.Skills or EtervaleOpcodes.PresenceClock
             or EtervaleOpcodes.SkillEvents or EtervaleOpcodes.StatusEffects or EtervaleOpcodes.SkillCooldowns or EtervaleOpcodes.SkillCastResult
-            or EtervaleOpcodes.ItemDetails or EtervaleOpcodes.OwnerItemStatus
+            or EtervaleOpcodes.ItemDetails or EtervaleOpcodes.OwnerItemStatus or EtervaleOpcodes.AgingProgress
             or EtervaleOpcodes.PremiumTimers or EtervaleOpcodes.ItemEffects or EtervaleOpcodes.RestartOffer or EtervaleOpcodes.QuestJournal or EtervaleOpcodes.QuestNotices
-            or EtervaleOpcodes.ChatLine or EtervaleOpcodes.CloseRequest;
+            or EtervaleOpcodes.ChatLine or EtervaleOpcodes.CloseRequest or EtervaleOpcodes.PartyMembers or EtervaleOpcodes.PartyRequest
+            or EtervaleOpcodes.TradeDetails or EtervaleOpcodes.TradeState or EtervaleOpcodes.TradeAsked or EtervaleOpcodes.ContactList
+            or EtervaleOpcodes.Weather or EtervaleOpcodes.BossTime or EtervaleOpcodes.BossSpots or EtervaleOpcodes.BossList;
     }
+
+    public PresenceUpdate OnBossList(BossListPacket packet)
+    {
+        var bosses = new BossListInfo[packet.Bosses.Count];
+        for (var index = 0; index < bosses.Length; index++)
+        {
+            var boss = packet.Bosses[index];
+            bosses[index] = new BossListInfo(boss.BossName, boss.FieldName, (int)Math.Min(boss.SecondsLeft, int.MaxValue), boss.Exact);
+        }
+
+        return Update([], []) with { BossList = bosses };
+    }
+
+    public PresenceUpdate OnBossSpots(BossSpotsPacket packet)
+    {
+        var spots = new BossSpotInfo[packet.Spots.Count];
+        for (var index = 0; index < spots.Length; index++)
+        {
+            var spot = packet.Spots[index];
+            spots[index] = new BossSpotInfo(spot.BossName, GameUnits.FromFixed(spot.X), GameUnits.FromFixed(spot.Z), spot.Alive);
+        }
+
+        return Update([], []) with { BossSpots = spots };
+    }
+
+    public PresenceUpdate OnBossTime(BossTimePacket packet) =>
+        Update([], []) with { BossTime = new BossTimeInfo(packet.BossName, (int)Math.Min(packet.SecondsLeft, int.MaxValue), packet.Exact) };
+
+    private PresenceUpdate OnContactList(ContactListPacket packet) =>
+        Update([], []) with { Contacts = new ContactListInfo(packet.List, packet.Entries.Select(static entry => (entry.Name, entry.Online)).ToArray()) };
+
+    // The partner items' values arrive just before the window they belong to.
+    private PresenceUpdate? OnTradeDetails(TradeDetailsPacket packet)
+    {
+        _tradeDetails = packet.Items;
+        return null;
+    }
+
+    private PresenceUpdate OnTradeState(TradeStatePacket packet)
+    {
+        if (packet.PartnerId == 0)
+        {
+            return Update([], []) with { Trade = TradeInfo.None };
+        }
+
+        var items = new OwnedItemView[packet.PartnerItems.Count];
+        for (var index = 0; index < items.Length; index++)
+        {
+            var view = StoreItems.View(packet.PartnerItems[index]);
+            foreach (var detail in _tradeDetails)
+            {
+                if (detail.InstanceId == view.InstanceId)
+                {
+                    view = view with { Details = OwnerItemDecoder.View(detail) };
+                    break;
+                }
+            }
+
+            items[index] = view;
+        }
+
+        var own = new Simulation.Trades.TradeEntry[packet.Own.Count];
+        for (var index = 0; index < own.Length; index++)
+        {
+            own[index] = new Simulation.Trades.TradeEntry(packet.Own[index].ItemId, packet.Own[index].Cell);
+        }
+
+        return Update([], []) with
+        {
+            Trade = new TradeInfo(packet.PartnerId, packet.PartnerName, new Simulation.Trades.TradeOffer(own, packet.OwnMoney),
+                (packet.Flags & TradeStatePacket.OwnLocked) != 0, items, packet.PartnerMoney, (packet.Flags & TradeStatePacket.PartnerLocked) != 0)
+        };
+    }
+
+    private PresenceUpdate OnTradeAsked(TradeAskedPacket packet) =>
+        Update([], []) with { TradeRequest = new TradeRequestInfo(packet.FromId, packet.FromName) };
+
+    private PresenceUpdate OnPartyMembers(PartyMembersPacket packet)
+    {
+        var members = new PartyMemberInfo[packet.Members.Count];
+        for (var index = 0; index < members.Length; index++)
+        {
+            var member = packet.Members[index];
+            members[index] = new PartyMemberInfo(member.EntityId, member.Name, member.Level, member.Life, member.MaxLife, new Vector2(member.X, member.Z));
+        }
+
+        return Update([], []) with { Party = new PartyInfo(members) };
+    }
+
+    private PresenceUpdate OnPartyRequest(PartyRequestPacket packet) =>
+        Update([], []) with { PartyRequest = new PartyRequestInfo(packet.FromId, packet.FromName, packet.Recommended) };
 
     private PresenceUpdate OnChat(ChatLinePacket packet) =>
         Update([], []) with { Chat = [new ChatLineInfo(packet.Kind, packet.Speaker, packet.Text)] };
@@ -126,7 +266,7 @@ internal sealed class PresenceDecoder
         {
             var entry = entries[index];
             events[index] = new SkillEventInfo(entry.Caster, entry.Target, entry.SkillCode, entry.Phase, entry.Rank, entry.Flags, entry.DurationMs,
-                entry.HitAtMs, Position(entry.X, entry.Y, entry.Z), PristonUnits.FromAngle(entry.Angle), entry.TargetCount, entry.Radius);
+                entry.HitAtMs, Position(entry.X, entry.Y, entry.Z), GameUnits.FromAngle(entry.Angle), entry.TargetCount, entry.Radius);
         }
 
         return Update([], []) with { SkillEvents = events, ServerTimeMs = _clockMs };
@@ -202,84 +342,142 @@ internal sealed class PresenceDecoder
         return null;
     }
 
-    public PresenceUpdate? OnPresenceEntries(ReadOnlySpan<byte> packet)
+    private PresenceUpdate? OnPresenceEntries(ReadOnlySpan<byte> packet)
     {
-        var spawns = new List<EntitySpawnInfo>();
-        var states = new List<EntityStateInfo>();
-        _tick = PresenceEntriesReader.Read(packet, (in PresenceEntry entry) =>
+        // The message sets the presence clock its samples are taken at.
+        var clock = PresenceEntriesReader.Clock(packet);
+        _tick = clock.ServerTick;
+        _clockMs = clock.ServerTimeMs;
+        _entrySpawns = null;
+        lock (_poolGate)
         {
-            if (entry.Full)
-            {
-                ApplyFull(entry, spawns, states);
-            }
-            else
-            {
-                ApplyMotion(entry, states);
-            }
-        });
-        return spawns.Count == 0 && states.Count == 0 ? null : Update(spawns, states) with { ServerTimeMs = _clockMs };
-    }
-
-    private void ApplyFull(in PresenceEntry entry, List<EntitySpawnInfo> spawns, List<EntityStateInfo> states)
-    {
-        var serial = entry.Serial;
-        if (!_objects.TryGetValue(serial, out var tracked))
-        {
-            tracked = new Tracked();
-            _objects.Add(serial, tracked);
+            _entryStates = _freeStates.TryPop(out var free) ? free : new List<EntityStateInfo>(PresenceEntriesReader.Count(packet));
         }
 
-        if (serial == SelfSerial && entry.FieldCode >= 0)
+        PresenceEntriesReader.Read(packet, _onEntry);
+        var (spawns, states) = (_entrySpawns, _entryStates);
+        _entrySpawns = null;
+        _entryStates = null;
+        lock (_poolGate)
+        {
+            if (spawns is null && states.Count == 0)
+            {
+                _freeStates.Push(states);
+                return null;
+            }
+
+            if (_lentStates.Count >= MaxLent)
+            {
+                _lentStates.Clear();
+            }
+
+            var update = new PresenceUpdate(_tick, (IReadOnlyList<EntitySpawnInfo>?)spawns ?? [], states, [], [], FieldId) { ServerTimeMs = _clockMs };
+            _lentStates.Add(states, update);
+            return update;
+        }
+    }
+
+    // Gives back the states list of an update the consumer is done with; another update may then reuse it.
+    public void Recycle(PresenceUpdate update)
+    {
+        if (update.States is not List<EntityStateInfo> states)
+        {
+            return;
+        }
+
+        lock (_poolGate)
+        {
+            if (_lentStates.TryGetValue(states, out var holder) && ReferenceEquals(holder, update))
+            {
+                _lentStates.Remove(states);
+                states.Clear();
+                _freeStates.Push(states);
+            }
+        }
+    }
+
+    private void OnEntry(in PresenceEntry entry)
+    {
+        Tracked? tracked;
+        ulong entityId;
+        var states = _entryStates!;
+        if (entry.Spawn)
+        {
+            entityId = entry.EntityId;
+            if (!_objects.TryGetValue(entityId, out tracked))
+            {
+                tracked = new Tracked();
+                _objects.Add(entityId, tracked);
+            }
+            else if (tracked.Handle != entry.Handle && _handles.TryGetValue(tracked.Handle, out var bound) && bound == entityId)
+            {
+                _handles.Remove(tracked.Handle);
+            }
+
+            tracked.Handle = entry.Handle;
+            _handles[entry.Handle] = entityId;
+        }
+        else if (!_handles.TryGetValue(entry.Handle, out entityId) || !_objects.TryGetValue(entityId, out tracked) || !tracked.HasState)
+        {
+            // Only a spawn introduces an object.
+            return;
+        }
+
+        tracked.Point = entry.Absolute ? entry.Position : tracked.Point + entry.Position;
+        tracked.Position = tracked.Point.ToWorld();
+        tracked.Facing = entry.FacingRadians;
+        tracked.Motion = entry.Motion;
+        tracked.SampleTimeMs = _clockMs;
+        if (!entry.Spawn && entry.Fields == PresenceFields.None)
+        {
+            if (tracked.Published)
+            {
+                states.Add(State(entityId, tracked));
+            }
+
+            return;
+        }
+
+        var fields = entry.Fields;
+        var described = tracked.Description;
+        if ((fields & PresenceFields.FieldCode) != 0 && entityId == SelfEntityId && entry.FieldCode >= 0)
         {
             FieldId = entry.FieldCode;
         }
 
-        tracked.Hp = entry.Hp;
-        tracked.MaxHp = entry.MaxHp;
-        tracked.Target = entry.Target;
-        tracked.Sequence = entry.AttackSequence;
-        tracked.Position = entry.Position;
-        tracked.Facing = entry.Facing;
-        tracked.Motion = MoveState(entry.Motion);
-        tracked.SampleTimeMs = _clockMs;
+        tracked.Life = (fields & PresenceFields.Life) != 0 ? entry.Life : tracked.Life;
+        tracked.MaxLife = (fields & PresenceFields.MaxLife) != 0 ? entry.MaxLife : tracked.MaxLife;
+        tracked.Target = (fields & PresenceFields.Target) != 0 ? entry.Target : tracked.Target;
+        tracked.Sequence = (fields & PresenceFields.AttackSequence) != 0 ? entry.AttackSequence : tracked.Sequence;
+        tracked.Template = (fields & PresenceFields.Template) != 0 ? entry.Template : tracked.Template;
+        tracked.Revision = (fields & PresenceFields.Revision) != 0 ? entry.Revision : tracked.Revision;
         tracked.HasState = true;
-        if (tracked.Description is null && entry.Template != 0 && _templates.TryGetValue(entry.Template, out var shared)
-            && shared.Revision == entry.Revision)
+        if ((tracked.Description is null || tracked.Description.Revision != tracked.Revision) && tracked.Template != 0
+            && _templates.TryGetValue(tracked.Template, out var shared) && shared.Revision == tracked.Revision)
         {
             tracked.Description = shared;
         }
 
-        tracked.Revision = entry.Revision;
-        if (tracked.Description is null || tracked.Description.Revision != entry.Revision)
+        if (tracked.Description is null || tracked.Description.Revision != tracked.Revision)
         {
-            RequestDescription(serial, tracked, entry.Revision);
+            RequestDescription(entityId, tracked, tracked.Revision);
         }
 
-        Publish(serial, tracked, spawns, states);
-    }
-
-    private void ApplyMotion(in PresenceEntry entry, List<EntityStateInfo> states)
-    {
-        var serial = entry.Serial;
-        if (!_objects.TryGetValue(serial, out var tracked) || !tracked.HasState)
+        // What a state does not carry (max life, the description) reaches a shown object as a refresh, which the scene
+        // applies as a spawn of a known id.
+        if (tracked.Published && tracked.Description is not null
+            && ((fields & (PresenceFields.MaxLife | PresenceFields.Template | PresenceFields.Revision)) != 0 || !ReferenceEquals(described, tracked.Description)))
         {
-            // A motion entry never introduces an object; its next full entry does.
+            (_entrySpawns ??= []).Add(Spawn(entityId, tracked));
             return;
         }
 
-        tracked.Position = entry.Position;
-        tracked.Facing = entry.Facing;
-        tracked.Motion = MoveState(entry.Motion);
-        tracked.SampleTimeMs = _clockMs;
-        if (tracked.Published)
-        {
-            states.Add(State(serial, tracked));
-        }
+        Publish(entityId, tracked, states);
     }
 
     // One GETPLAYERINFO per revision, repeated after a second when its answer does not come: the server drops requests
     // beyond its rate bucket (a crowd entering view at once), and an object without a description is never shown.
-    private void RequestDescription(ulong serial, Tracked tracked, int revision)
+    private void RequestDescription(ulong entityId, Tracked tracked, int revision)
     {
         var now = Environment.TickCount64;
         if (tracked.RequestedRevision == revision && now - tracked.RequestedAtMs < DescriptionRetryMs)
@@ -289,10 +487,10 @@ internal sealed class PresenceDecoder
 
         tracked.RequestedRevision = revision;
         tracked.RequestedAtMs = now;
-        _requestDescription(serial);
+        _requestDescription(entityId);
     }
 
-    private void Publish(ulong serial, Tracked tracked, List<EntitySpawnInfo> spawns, List<EntityStateInfo> states)
+    private void Publish(ulong entityId, Tracked tracked, List<EntityStateInfo> states)
     {
         if (tracked.Description is null)
         {
@@ -302,33 +500,35 @@ internal sealed class PresenceDecoder
         if (!tracked.Published)
         {
             tracked.Published = true;
-            spawns.Add(Spawn(serial, tracked));
+            (_entrySpawns ??= []).Add(Spawn(entityId, tracked));
         }
         else
         {
-            states.Add(State(serial, tracked));
+            states.Add(State(entityId, tracked));
         }
     }
 
     public PresenceUpdate? OnDescription(EntityDescriptionPacket packet)
     {
-        var serial = packet.Serial;
-        if (!_objects.TryGetValue(serial, out var tracked))
+        var entityId = packet.EntityId;
+        if (!_objects.TryGetValue(entityId, out var tracked))
         {
-            return null;
+            // Pushed ahead of the spawn it describes.
+            tracked = new Tracked { DescribedAtMs = Environment.TickCount64 };
+            _objects.Add(entityId, tracked);
         }
 
-        var description = new Description(packet.Revision, Kind(packet.Kind), packet);
+        var description = new Description(packet.Revision, packet.Kind, packet);
         tracked.Description = description;
         if (packet.Template is { } template)
         {
             // A summon's description names its owner, so it never stands for the wild monsters of its template.
             if (template.Template != 0 && template.Owner == 0)
             {
-                _templates[template.Template] = description;
+                _templates[PresenceWire.TemplateKey(description.Kind, template.Template)] = description;
             }
 
-            if (description.Kind == RemoteEntityKind.Monster)
+            if (description.Kind == EntityKind.Monster)
             {
                 _catalog.Register(new MonsterRenderInfo(template.Template, packet.Model, template.TemplateScale, packet.Name, packet.Level,
                     (MonsterBrood)template.Brood, template.PortraitY, template.PortraitZ, (int)template.SoundCode, template.Class)
@@ -336,7 +536,7 @@ internal sealed class PresenceDecoder
                     ShadowSize = template.ShadowSize
                 });
             }
-            else if (description.Kind == RemoteEntityKind.Npc)
+            else if (description.Kind == EntityKind.Npc)
             {
                 _catalog.Register(new NpcRenderInfo(template.Template, packet.Model, template.TemplateScale, packet.Name,
                     new NpcServiceSet(template.NpcServices), (int)template.SoundCode, template.PortraitY, template.PortraitZ)
@@ -346,24 +546,35 @@ internal sealed class PresenceDecoder
             }
         }
 
-        if (!tracked.HasState)
+        // A description pushed ahead of the entry that brings its revision waits for that entry, which refreshes the object.
+        if (!tracked.HasState || tracked.Published && description.Revision != tracked.Revision)
         {
             return null;
         }
 
         // A new description is a full refresh, which the scene applies as a spawn of a known id.
         tracked.Published = true;
-        return Update([Spawn(serial, tracked)], []);
+        return Update([Spawn(entityId, tracked)], []);
     }
 
-    public PresenceUpdate OnRemoved(ulong[] serials)
+    public PresenceUpdate OnRemoved(ulong[] entityIds)
     {
-        var removed = new List<ulong>(serials.Length);
-        foreach (var serial in serials)
+        var removed = new List<ulong>(entityIds.Length);
+        foreach (var entityId in entityIds)
         {
-            if (_objects.Remove(serial, out var tracked) && tracked.Published)
+            if (!_objects.Remove(entityId, out var tracked))
             {
-                removed.Add(serial);
+                continue;
+            }
+
+            if (_handles.TryGetValue(tracked.Handle, out var bound) && bound == entityId)
+            {
+                _handles.Remove(tracked.Handle);
+            }
+
+            if (tracked.Published)
+            {
+                removed.Add(entityId);
             }
         }
 
@@ -375,9 +586,9 @@ internal sealed class PresenceDecoder
         var events = new List<CombatEventInfo>(entries.Length);
         foreach (var entry in entries)
         {
-            events.Add(new CombatEventInfo(entry.Attacker, entry.Target, (RemoteCombatEventKind)entry.Kind, entry.DurationMs, entry.HitAtMs,
+            events.Add(new CombatEventInfo(entry.Attacker, entry.Target, entry.Kind, entry.DurationMs, entry.HitAtMs,
                 entry.Damage, (entry.Flags & CombatEventFlags.Critical) != 0, (entry.Flags & CombatEventFlags.Killed) != 0, entry.Resources,
-                entry.SoundCode, Position(entry.X, entry.Y, entry.Z), PristonUnits.FromAngle(entry.Angle))
+                entry.SoundCode, Position(entry.X, entry.Y, entry.Z), GameUnits.FromAngle(entry.Angle))
             {
                 Clip = entry.Clip,
                 Skill = (entry.Flags & CombatEventFlags.Skill) != 0
@@ -392,7 +603,7 @@ internal sealed class PresenceDecoder
         var added = new List<GroundDropView>(items.Length);
         foreach (var item in items)
         {
-            var key = item.Gold ? "GG101" : ItemCodes.TryFormat(item.ItemCode, out var code) ? code : "";
+            var key = item.Gold ? ItemCodes.GoldKey : ItemCodes.KeyOf(item.ItemCode);
             added.Add(new GroundDropView(item.Id, item.ItemCode, key, item.Name, item.Amount, item.Gold, Position(item.X, item.Y, item.Z)));
         }
 
@@ -402,7 +613,7 @@ internal sealed class PresenceDecoder
     public PresenceUpdate OnFieldWarp(FieldWarpPacket warp)
     {
         FieldId = warp.Field;
-        _objects.TryGetValue(SelfSerial, out var self);
+        _objects.TryGetValue(SelfEntityId, out var self);
         var position = new Vector3(warp.X, warp.Y, warp.Z);
         if (self is not null)
         {
@@ -434,6 +645,12 @@ internal sealed class PresenceDecoder
     {
         _ownerItems.OnStatus(status);
         return null;
+    }
+
+    public PresenceUpdate? OnAgingProgress(AgingProgressPacket progress)
+    {
+        _ownerItems.OnAging(progress);
+        return OwnerUpdate();
     }
 
     public PresenceUpdate? OnInventory(InventoryPartPacket part)
@@ -471,8 +688,8 @@ internal sealed class PresenceDecoder
             return null;
         }
 
-        var owner = new OwnerState(status.Level, status.Experience, status.LevelStart, status.NextLevel, status.Money, status.Hp, status.MaxHp,
-            status.Mp, status.MaxMp, status.Sp, status.MaxSp, status.StatPoints, status.SkillPoints, status.Strength, status.Spirit, status.Talent,
+        var owner = new OwnerState(status.Level, status.Experience, status.LevelStart, status.NextLevel, status.Money, status.Life, status.MaxLife,
+            status.Mana, status.MaxMana, status.Stamina, status.MaxStamina, status.StatPoints, status.SkillPoints, status.Strength, status.Spirit, status.Talent,
             status.Agility, status.Health, status.DamageMin, status.DamageMax, status.Defence, status.Absorption, status.InventoryRevision, _items)
         {
             AttackRange = status.AttackRange,
@@ -482,42 +699,46 @@ internal sealed class PresenceDecoder
             SkillsRevision = status.SkillsRevision,
             Tier = status.Tier,
             EliteSkillPoints = status.EliteSkillPoints,
+            BagPage = status.BagPage,
+            WeaponSet = status.WeaponSet,
             Skills = _skills
         };
         return Update([], []) with { Owner = _ownerItems.Apply(owner) };
     }
 
     private static OwnedItemView Item(InventoryItemEntry entry) => new(entry.InstanceId, entry.Code, entry.Name, (ItemKind)entry.Kind, entry.Count,
-        entry.Anchor, entry.Slot, entry.Width, entry.Height, ItemCodes.TryFormat(entry.Code, out var key) ? key : "");
+        entry.Anchor, entry.Slot, entry.Width, entry.Height, ItemCodes.KeyOf(entry.Code));
 
-    private PresenceUpdate Update(List<EntitySpawnInfo> spawns, List<EntityStateInfo> states, List<ulong>? removed = null, List<CombatEventInfo>? events = null) =>
+    private PresenceUpdate Update(IReadOnlyList<EntitySpawnInfo> spawns, IReadOnlyList<EntityStateInfo> states, IReadOnlyList<ulong>? removed = null,
+        IReadOnlyList<CombatEventInfo>? events = null) =>
         new(_tick, spawns, states, removed ?? [], events ?? [], FieldId);
 
     private static Simulation.Items.HeldItemGlow Glow(in DescribedGlow glow) =>
         new(glow.R, glow.G, glow.B, glow.A, glow.Blink, glow.Scale, glow.Mix, glow.MixScroll, glow.ClassUp);
 
-    private EntitySpawnInfo Spawn(ulong serial, Tracked tracked)
+    private EntitySpawnInfo Spawn(ulong entityId, Tracked tracked)
     {
         var description = tracked.Description!;
         var packet = description.Packet;
         PlayerAppearanceInfo? player = null;
         if (packet.Player is { } looks)
         {
-            player = new PlayerAppearanceInfo(packet.Name, looks.Job, looks.Tier, looks.Face, looks.Hair, packet.Model, looks.HeadModel, packet.Level,
-                Key(looks.Weapon), Key(looks.Armor), Key(looks.OffHand), looks.InVillage)
+            player = new PlayerAppearanceInfo(packet.Name, looks.Class, looks.Tier, looks.Face, looks.Hair, packet.Model, looks.HeadModel, packet.Level,
+                ItemCodes.KeyOf(looks.Weapon), ItemCodes.KeyOf(looks.Armor), ItemCodes.KeyOf(looks.OffHand), looks.InVillage)
             {
                 HelperPet = looks.HelperPet,
                 Phoenix = looks.Phoenix,
                 BigHead = looks.BigHead,
                 WeaponGlow = Glow(looks.WeaponGlow),
-                OffHandGlow = Glow(looks.OffHandGlow)
+                OffHandGlow = Glow(looks.OffHandGlow),
+                ShopSign = looks.ShopSign
             };
         }
 
         var template = packet.Template;
         var owner = template is { Owner: not 0 } ? template.Owner : 0UL;
-        return new EntitySpawnInfo(serial, description.Kind, serial == SelfSerial, tracked.Position, tracked.Facing, tracked.Motion, tracked.Hp,
-            tracked.MaxHp, player, template?.Template ?? 0, packet.MoveSpeed, AttackRate(packet), tracked.Target, tracked.Sequence, tracked.SampleTimeMs,
+        return new EntitySpawnInfo(entityId, description.Kind, entityId == SelfEntityId, tracked.Position, tracked.Facing, tracked.Motion, tracked.Life,
+            tracked.MaxLife, player, template?.Template ?? 0, packet.MoveSpeed, AttackRate(packet), tracked.Target, tracked.Sequence, tracked.SampleTimeMs,
             packet.Name, packet.Level)
         {
             OwnerId = owner,
@@ -525,43 +746,20 @@ internal sealed class PresenceDecoder
         };
     }
 
-    private static EntityStateInfo State(ulong serial, Tracked tracked)
+    private static EntityStateInfo State(ulong entityId, Tracked tracked)
     {
         var packet = tracked.Description!.Packet;
-        return new EntityStateInfo(serial, tracked.Position, tracked.Facing, tracked.Motion, tracked.Hp, packet.MoveSpeed, AttackRate(packet),
+        return new EntityStateInfo(entityId, tracked.Position, tracked.Facing, tracked.Motion, tracked.Life, packet.MoveSpeed, AttackRate(packet),
             tracked.Target, tracked.Sequence, tracked.SampleTimeMs);
     }
 
     private static float AttackRate(EntityDescriptionPacket packet) =>
         float.IsFinite(packet.AttackRate) && packet.AttackRate > 0f ? packet.AttackRate : 1f;
 
-    private static string Key(uint code) => code != 0 && ItemCodes.TryFormat(code, out var key) ? key : "";
+    private static Vector3 Position(int x, int y, int z) => new(GameUnits.FromFixed(x), GameUnits.FromFixed(y), GameUnits.FromFixed(z));
 
-    private static Vector3 Position(int x, int y, int z) => new(PristonUnits.FromFixed(x), PristonUnits.FromFixed(y), PristonUnits.FromFixed(z));
 
-    private static RemoteEntityKind Kind(DescribedKind kind) => kind switch
-    {
-        DescribedKind.Player => RemoteEntityKind.Player,
-        DescribedKind.Monster => RemoteEntityKind.Monster,
-        DescribedKind.Npc => RemoteEntityKind.Npc,
-        _ => RemoteEntityKind.Unspecified
-    };
-
-    public static RemoteMoveState MoveState(byte motion) => motion switch
-    {
-        PresenceMotion.Stand => RemoteMoveState.Idle,
-        PresenceMotion.Walk => RemoteMoveState.Walking,
-        PresenceMotion.Run => RemoteMoveState.Running,
-        PresenceMotion.Attack => RemoteMoveState.Attack,
-        PresenceMotion.Damage => RemoteMoveState.Damage,
-        PresenceMotion.Dead => RemoteMoveState.Dead,
-        PresenceMotion.Skill => RemoteMoveState.Skill,
-        PresenceMotion.Eat => RemoteMoveState.Eat,
-        PresenceMotion.Warp => RemoteMoveState.Warp,
-        _ => RemoteMoveState.Unspecified
-    };
-
-    private sealed record Description(byte Revision, RemoteEntityKind Kind, EntityDescriptionPacket Packet);
+    private sealed record Description(byte Revision, EntityKind Kind, EntityDescriptionPacket Packet);
 
     private sealed class Tracked
     {
@@ -569,13 +767,17 @@ internal sealed class PresenceDecoder
         public int RequestedRevision { get; set; } = -1;
         public long RequestedAtMs { get; set; }
         public byte Revision { get; set; }
+        public uint Handle { get; set; }
+        public long DescribedAtMs { get; init; }
+        public uint Template { get; set; }
+        public PresencePoint Point { get; set; }
         public bool HasState { get; set; }
         public bool Published { get; set; }
         public Vector3 Position { get; set; }
         public float Facing { get; set; }
-        public RemoteMoveState Motion { get; set; }
-        public int Hp { get; set; }
-        public int MaxHp { get; set; }
+        public MotionState Motion { get; set; }
+        public int Life { get; set; }
+        public int MaxLife { get; set; }
         public ulong Target { get; set; }
         public ulong Sequence { get; set; }
         public double? SampleTimeMs { get; set; }

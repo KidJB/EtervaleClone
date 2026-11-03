@@ -7,6 +7,7 @@ using PristonTale.Simulation.Items;
 using PristonTale.Simulation.Items.Usable;
 using PristonTale.Simulation.World.Loot;
 using PristonTale.Simulation.World.Npcs;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -60,12 +61,12 @@ internal static class PuzzleTests
             Assert.True(character.Inventory.TryPlace(new ItemInstance(definitions[number - 1]), row * character.Inventory.Width + column), $"piece {number}");
         }
 
-        Assert.True(PuzzleExchange.TryExchange(character, catalog, new SeededRng(1), out _) == NpcServiceStatus.WrongPuzzle, "an unfinished puzzle was taken");
+        Assert.True(PuzzleExchange.TryExchange(character, catalog, new Simulation.World.Ai.SeededSimRng(1), out _) == NpcServiceStatus.WrongPuzzle, "an unfinished puzzle was taken");
         var (lastColumn, lastRow) = Puzzles.Cell(8);
         character.Inventory.TryPlace(new ItemInstance(definitions[7]), lastRow * character.Inventory.Width + lastColumn);
         var views = OwnerState.Capture(character, null, 0).Items.Select(static item => (item.CatalogKey, item.Anchor));
         Assert.True(Puzzles.Complete(views, character.Inventory.Width), "the client does not see the finished board");
-        Assert.True(PuzzleExchange.TryExchange(character, catalog, new SeededRng(1), out var prize) == NpcServiceStatus.Ok && prize is not null
+        Assert.True(PuzzleExchange.TryExchange(character, catalog, new Simulation.World.Ai.SeededSimRng(1), out var prize) == NpcServiceStatus.Ok && prize is not null
             && character.OwnedItems().All(item => !Puzzles.IsPiece(item.Definition.CatalogKey)) && character.OwnedItems().Count() == 1, "the exchange failed");
         Assert.True(NpcServiceAvailability.IsAvailable(new NpcService(NpcServiceKind.QuestEvent, Puzzles.CollectorEvent))
             && !NpcServiceAvailability.IsAvailable(new NpcService(NpcServiceKind.QuestEvent, 3)), "only the puzzle collector's event runs");
@@ -77,21 +78,13 @@ internal static class PuzzleTests
         var definition = new ItemDefinition(ItemCodes.Parse("PZ205"), "Knight 5", ItemKind.Misc, GridWidth: 2) { CatalogKey = "PZ205" };
         var loot = new FieldGroundLoot(new ItemCatalog([definition]));
         var drop = RolledDrop.Item(definition.Code) with { Sealed = true };
-        loot.Place(new KillPayout(1, 7, 0, [drop]), Vector3.Zero, true, 0, new SeededRng(3));
+        loot.Place(new KillPayout(1, 7, 0, [drop]), Vector3.Zero, true, 0, new Simulation.World.Ai.SeededSimRng(3));
         loot.Step(0);
         var state = loot.Snapshot().Single();
         Assert.True(state.View.CatalogKey == Puzzles.LuckyBagIcon && state.View.Name == Puzzles.LuckyBagName, "the ground did not show the lucky bag");
+        var owner = new WorldPlayer(7, state.View.Position, new CharacterClassRegistry().CreatePlayer(PlayerClass.Fighter, "Finder"), false, default);
+        Assert.True(loot.TryReserve(state.View.Id, Guid.NewGuid(), owner, out _, out var picked) && picked is { Sealed: true } && picked.InstanceId == state.View.Id,
+            "the picked-up piece lost its seal or its identity");
         return Task.CompletedTask;
-    }
-
-    private sealed class SeededRng(int seed) : Simulation.World.Ai.ISimRng
-    {
-        private readonly Random _random = new(seed);
-
-        public int NextExclusive(int minInclusive, int maxExclusive) => maxExclusive <= minInclusive ? minInclusive : _random.Next(minInclusive, maxExclusive);
-
-        public int NextInclusive(int minInclusive, int maxInclusive) => NextExclusive(minInclusive, maxInclusive + 1);
-
-        public float NextUnit() => (float)_random.NextDouble();
     }
 }

@@ -26,8 +26,9 @@ public sealed class GameClient : IDisposable
     private Task _shutdown;
     private SpriteFont _font;
     private HudAtlas _uiAtlas;
+    private HudCursor _cursor;
     private PristonSkyLibrary _sky;
-    private PristonTale.Gameplay.Effects.LegacyEffectLibrary _effects;
+    private PristonTale.Gameplay.Effects.EffectLibrary _effects;
     private PristonAudioLibrary _audio;
     private readonly PresentationSettings _presentation;
     private DisplayConfirmation _displayConfirmation;
@@ -60,8 +61,10 @@ public sealed class GameClient : IDisposable
         var font = _content.Load<SpriteFont>("Fonts/UI");
         _font = font;
         _uiAtlas = HudAtlas.LoadBootstrap(_graphicsDevice, _assetRoot, ConsoleClientLog.Instance);
+        _cursor = HudCursor.Load(_graphicsDevice, _assetRoot, ConsoleClientLog.Instance);
+        _cursor.Show(HudCursorKind.Default);
         _sky = PristonSkyLibrary.LoadBootstrap(_graphicsDevice, _assetRoot, ConsoleClientLog.Instance);
-        _effects = PristonTale.Gameplay.Effects.LegacyEffectLibrary.LoadBootstrap(_graphicsDevice, _content, _assetRoot, ConsoleClientLog.Instance);
+        _effects = PristonTale.Gameplay.Effects.EffectLibrary.LoadBootstrap(_graphicsDevice, _content, _assetRoot, ConsoleClientLog.Instance);
         _audio = PristonAudioLibrary.LoadBootstrap(_assetRoot, ConsoleClientLog.Instance);
         _audio.ApplySettings(_presentation.Requested);
         _backend = new GameServerConnection(_serverAddress);
@@ -87,6 +90,11 @@ public sealed class GameClient : IDisposable
 
     public bool HandleEscape() => _screen?.HandleEscape() == true;
 
+    // The diagnostics overlay (F9, as the original's debug display): the frame timing and the screen's status, drawn at
+    // the top left over everything.
+    public bool DiagnosticsShown { get; set; }
+    public string Diagnostics { get; set; } = string.Empty;
+
     // A character from the window's text input (the chat line reads it).
     public void TypeCharacter(char value) => _context?.TypedText.Push(value);
 
@@ -103,6 +111,7 @@ public sealed class GameClient : IDisposable
 
         _displayConfirmation?.Update();
         _screen?.Update(gameTime);
+        _cursor?.Show(_screen?.Cursor ?? HudCursorKind.Default);
         if (_pendingScreen != null)
         {
             var next = _pendingScreen;
@@ -117,12 +126,26 @@ public sealed class GameClient : IDisposable
         {
             _screen?.Draw();
             _displayConfirmation?.Draw();
+            DrawDiagnostics();
             return;
         }
 
         _graphicsDevice.Clear(Color.Black);
         _spriteBatch.Begin();
         _spriteBatch.DrawString(_font, StatusText, new Vector2(24f, 24f), Color.White);
+        _spriteBatch.End();
+    }
+
+    private void DrawDiagnostics()
+    {
+        if (!DiagnosticsShown || Diagnostics.Length == 0)
+        {
+            return;
+        }
+
+        _spriteBatch.Begin();
+        _spriteBatch.DrawString(_font, Diagnostics, new Vector2(9f, 9f), Color.Black);
+        _spriteBatch.DrawString(_font, Diagnostics, new Vector2(8f, 8f), Color.White);
         _spriteBatch.End();
     }
 
@@ -162,11 +185,25 @@ public sealed class GameClient : IDisposable
             return _shutdown;
         }
 
-        // GPU resources are released on the game thread. Network/database cleanup runs asynchronously.
-        _screen?.Dispose();
+        // GPU resources are released on the game thread. Network/database cleanup runs asynchronously, after the screen's
+        // closing work (leaving the world, so the server stores the character) has used the connection.
+        var screen = _screen;
+        screen?.Dispose();
+        var closing = screen?.Closing ?? Task.CompletedTask;
         _screen = null;
         _pendingScreen = null;
-        _shutdown = _backend is null ? Task.CompletedTask : Task.Run(() => DisposeBackendAsync(_backend));
+        var backend = _backend;
+        _shutdown = backend is null ? closing : Task.Run(async () =>
+        {
+            try
+            {
+                await closing;
+            }
+            finally
+            {
+                await DisposeBackendAsync(backend);
+            }
+        });
         return _shutdown;
     }
 
@@ -174,6 +211,7 @@ public sealed class GameClient : IDisposable
     {
         _ = BeginShutdown();
         _uiAtlas?.Dispose();
+        _cursor?.Dispose();
         _sky?.Dispose();
         _effects?.Dispose();
         _audio?.Dispose();

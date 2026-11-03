@@ -31,7 +31,7 @@ internal sealed class VfxCaptureProbe : Game, IVfxAnchors, IVfxServices
     private readonly string[] _effects;
     private readonly List<string> _failures = [];
     private PristonRenderer _renderer = null!;
-    private LegacyEffectLibrary _library = null!;
+    private EffectLibrary _library = null!;
     private VfxSystem _system = null!;
     private VfxRenderer _vfx = null!;
     private PristonCamera _camera = null!;
@@ -61,7 +61,7 @@ internal sealed class VfxCaptureProbe : Game, IVfxAnchors, IVfxServices
     {
         Directory.CreateDirectory(_output);
         _target = new RenderTarget2D(GraphicsDevice, 960, 540, false, SurfaceFormat.Color, DepthFormat.Depth24);
-        _library = LegacyEffectLibrary.LoadBootstrap(GraphicsDevice, Content, _assets, ConsoleClientLog.Instance);
+        _library = EffectLibrary.LoadBootstrap(GraphicsDevice, Content, _assets, ConsoleClientLog.Instance);
         _library.Vfx.CompileAll();
         _renderer = new PristonRenderer(GraphicsDevice, Content) { ShadowsEnabled = false, DayLengthSeconds = 0 };
         _renderer.SetTimeOfDay(12f);
@@ -114,7 +114,7 @@ internal sealed class VfxCaptureProbe : Game, IVfxAnchors, IVfxServices
 
         // The exposed scene reads almost white, which hides additive light; the same frame on a dark backdrop shows it.
         GraphicsDevice.SetRenderTarget(_target);
-        GraphicsDevice.Clear(new Color(18, 18, 22));
+        GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.DepthBuffer, new Color(18, 18, 22).ToVector4(), PristonDepth.Clear, 0);
         _vfx.DisplayOutput = true;
         _vfx.Draw(_system, _camera.View, _camera.Projection, _camera.Position, null);
         _vfx.DisplayOutput = false;

@@ -6,6 +6,8 @@ using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World.Loot;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Simulation.World.Npcs;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Combat;
 
 namespace PristonTale.Application.World;
 
@@ -267,7 +269,7 @@ public sealed partial class FieldInstance
         opponent.MinimumLife = master ? QuestArena.YieldLife(combat.MaxLife) : opponent.Potions > 0 ? 1 : 0;
         _monsters[opponent.EntityId] = opponent;
         _duels[opponent.EntityId] = new Duel(player.EntityId, duel.Quest, nowMs + QuestArena.OpponentLifetimeMs, master,
-            definition.SoundCode == LegacyNpcSoundCode.MagicMaster);
+            definition.SoundCode == CharacterSoundCodes.MagicMaster);
         player.QuestState.DuelOpponentId = opponent.EntityId;
         return opponent;
     }
@@ -361,7 +363,7 @@ public sealed partial class FieldInstance
             opponent.Potions--;
             var heal = QuestArena.PotionHeal(maxLife, duel.MagicMaster);
             opponent.Life = Math.Min(maxLife, opponent.Life + heal);
-            EmitCombatEvent(new CombatEventView(opponent.EntityId, opponent.EntityId, CombatEventKindView.Heal, damage: heal));
+            EmitCombatEvent(new CombatEventView(opponent.EntityId, opponent.EntityId, CombatEventKind.Heal, damage: heal));
             if (!duel.Master && opponent.Potions == 0)
             {
                 // Fury falls for good once its potions are gone.
@@ -369,7 +371,7 @@ public sealed partial class FieldInstance
             }
         }
 
-        var skilling = opponent.Motion == MonsterMotionState.Skill;
+        var skilling = opponent.Motion == MotionState.Skill;
         if (skilling && !duel.WasSkilling && duel.Master && !HelperAlive(duel) && _rng.NextExclusive(0, 100) < QuestArena.HelperPercent)
         {
             CallHelper(opponent, duel, player);
@@ -394,8 +396,8 @@ public sealed partial class FieldInstance
     // The skill master calls a metal golem or a wolverine, the magic master a fire elemental; one helper at a time.
     private void CallHelper(MonsterInstance opponent, Duel duel, WorldPlayer player)
     {
-        var sound = duel.MagicMaster ? LegacyNpcSoundCode.FireElemental
-            : _rng.NextExclusive(0, 2) == 0 ? LegacyNpcSoundCode.MetalGolem : LegacyNpcSoundCode.SummonedWolverine;
+        var sound = duel.MagicMaster ? CharacterSoundCodes.FireElemental
+            : _rng.NextExclusive(0, 2) == 0 ? CharacterSoundCodes.MetalGolem : CharacterSoundCodes.SummonedWolverine;
         MonsterDefinition? definition = null;
         foreach (var candidate in _catalog.All)
         {

@@ -4,6 +4,8 @@ using PristonTale.Persistence.Abstractions.Characters;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.World;
+using PristonTale.Contracts.Sessions;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Application.Services;
 
@@ -12,7 +14,6 @@ public sealed class CharacterAppService
     // Up to 6 characters per account, matching the original character slot count.
     private const int MaxCharactersPerAccount = CharacterSlots.Maximum;
     // New characters start in the starting town (Ricarten = field 3) at its spawn (resolved later).
-    private const int StartingFieldId = 3;
 
     private readonly ISessionRegistry _sessions;
     private readonly ICharacterRepository _characters;
@@ -56,15 +57,14 @@ public sealed class CharacterAppService
     }
 
     public async Task<CreateCharacterOutcome> CreateCharacterAsync(
-        string sessionToken, string name, int classId, int faceIndex, CancellationToken ct = default)
+        string sessionToken, string name, PlayerClass playerClass, int faceIndex, CancellationToken ct = default)
     {
         var session = Authenticate(sessionToken);
 
         var trimmed = name?.Trim() ?? string.Empty;
-        if (trimmed.Length is < 3 or > 16)
+        if (!CharacterNames.IsValidLength(trimmed))
             return CreateCharacterOutcome.Failed(CreateCharacterFailure.NameLength);
 
-        var playerClass = (PlayerClass)classId;
         if (!Enum.IsDefined(playerClass))
             return CreateCharacterOutcome.Failed(CreateCharacterFailure.UnknownClass);
 
@@ -85,7 +85,7 @@ public sealed class CharacterAppService
             trimmed,
             slot,
             playerClass,
-            StartingFieldId,
+            Simulation.Progression.DeathPenalty.TownField(playerClass),
             faceIndex);
 
         var created = await _characters.CreateAsync(record, ct);
@@ -122,6 +122,12 @@ public sealed class CharacterAppService
 
         foreach (var saved in equipment.Items)
         {
+            // The stored weapon pair shares the hand slots with the held one and is not shown.
+            if (saved is { Hidden: true })
+            {
+                continue;
+            }
+
             if (saved is null || !saved.Slot.HasValue || saved.Anchor != -1 || !occupiedSlots.Add(saved.Slot.Value))
             {
                 throw new InvalidDataException($"Character '{character.Name}' has invalid persisted equipment placement.");
@@ -132,7 +138,7 @@ public sealed class CharacterAppService
                 throw new InvalidDataException($"Character '{character.Name}' references unknown equipped item 0x{saved.Code:X8}.");
             }
 
-            if (definition.EquipSlot != saved.Slot)
+            if (!ItemEquipmentMetadata.Fits(definition.Kind, definition.EquipSlot, saved.Slot.Value))
             {
                 throw new InvalidDataException($"Character '{character.Name}' has an item persisted in the wrong equipment slot.");
             }
@@ -143,7 +149,7 @@ public sealed class CharacterAppService
         var inVillage = _world.TryGetFieldByCode(character.FieldId, out var field) && field.State == FieldState.Village;
         return new CharacterSummary(
             character.Name,
-            character.JobCode,
+            (PlayerClass)character.JobCode,
             character.Level,
             character.FaceIndex,
             character.Tier,

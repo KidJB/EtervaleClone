@@ -12,6 +12,10 @@ using PristonTale.Gameplay.World.Remote;
 using PristonTale.Protocol.Packets;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -28,12 +32,14 @@ internal static class RemotePlaybackTests
         yield return ("remote clock follows early packets quickly, late packets slowly and resynchronises", ClockAsync);
         yield return ("remote Walk/Run without ground motion shows Stand and clip rate follows ground speed", LocomotionAsync);
         yield return ("remote player walk rate keeps the original frame step at nominal speed", PlayerRateAsync);
+        yield return ("a remote monster killed mid-swing, mid-flinch or between samples shows its death clip", DeathAsync);
+        yield return ("a model whose death clip is on its own sub model shows that model while it dies, as the mushroom does", AlternateModelAsync);
         yield return ("target frame follows the trace, keeps it after ground clicks and closes like the original", TargetSelectionAsync);
         yield return ("target HP bar is modern by default and classic only after a full-life attack", TargetHealthBarAsync);
         yield return ("presence clock extension round-trips and stamps decoded samples", PresenceClockAsync);
     }
 
-    private static RemoteSample Sample(double time, float x, RemoteMoveState state = RemoteMoveState.Walking, float y = 0f, float facing = 0f) =>
+    private static RemoteSample Sample(double time, float x, MotionState state = MotionState.Walk, float y = 0f, float facing = 0f) =>
         new(time, new Vector3(x, y, 0f), facing, state, 10);
 
     private static Task InterpolationAsync()
@@ -84,8 +90,8 @@ internal static class RemotePlaybackTests
         var held = buffer.Sample(850);
         Assert.True(held.Kind == RemotePoseKind.Held && held.Position.X == 14f, "extrapolation stayed ahead of the last sample");
 
-        var idle = new RemoteSnapshotBuffer(Sample(0, 0, RemoteMoveState.Idle));
-        idle.Add(Sample(200, 14, RemoteMoveState.Idle), Vector3.Zero);
+        var idle = new RemoteSnapshotBuffer(Sample(0, 0, MotionState.Stand));
+        idle.Add(Sample(200, 14, MotionState.Stand), Vector3.Zero);
         Assert.True(idle.Sample(450).Position.X == 14f, "a standing sample was extrapolated");
         return Task.CompletedTask;
     }
@@ -117,12 +123,12 @@ internal static class RemotePlaybackTests
 
     private static Task StateTimelineAsync()
     {
-        var buffer = new RemoteSnapshotBuffer(Sample(0, 0, RemoteMoveState.Idle));
-        buffer.Add(Sample(1000, 0, RemoteMoveState.Attack), Vector3.Zero);
+        var buffer = new RemoteSnapshotBuffer(Sample(0, 0, MotionState.Stand));
+        buffer.Add(Sample(1000, 0, MotionState.Attack), Vector3.Zero);
         buffer.Sample(1100);
         Assert.True(!buffer.TryTakeDueState(out _), "attack state played before its sample time");
         buffer.Sample(1150);
-        Assert.True(buffer.TryTakeDueState(out var due) && due.MoveState == RemoteMoveState.Attack, "attack state never became due");
+        Assert.True(buffer.TryTakeDueState(out var due) && due.MoveState == MotionState.Attack, "attack state never became due");
         Assert.True(!buffer.TryTakeDueState(out _), "a state was delivered twice");
         return Task.CompletedTask;
     }
@@ -148,7 +154,7 @@ internal static class RemotePlaybackTests
     private static Task LocomotionAsync()
     {
         var scene = new RecordingScene();
-        var monster = new RemoteModelEntity(scene, ActorHandle.None, 1f, 0, Vector3.Zero, 0f, RemoteMoveState.Idle, 10);
+        var monster = new RemoteModelEntity(scene, ActorHandle.None, 1f, 0, Vector3.Zero, 0f, MotionState.Stand, 10);
         var now = 1000d;
         void Run(double milliseconds)
         {
@@ -159,13 +165,13 @@ internal static class RemotePlaybackTests
             }
         }
 
-        monster.SetTarget(now, Vector3.Zero, 0f, RemoteMoveState.Walking, 10);
+        monster.SetTarget(now, Vector3.Zero, 0f, MotionState.Walk, 10);
         Run(400);
-        Assert.True(monster.Motion == PristonActorMotion.Walk && scene.LastMotion == PristonActorMotion.Stand,
+        Assert.True(monster.Motion == MotionCode.Walk && scene.LastMotion == MotionCode.Stand,
             "a Walk state without ground motion was shown walking");
 
         var x = 0f;
-        void Move(int samples, float step, RemoteMoveState state)
+        void Move(int samples, float step, MotionState state)
         {
             for (var index = 0; index < samples; index++)
             {
@@ -175,30 +181,69 @@ internal static class RemotePlaybackTests
             }
         }
 
-        Move(6, 14, RemoteMoveState.Walking);
-        Assert.True(scene.LastMotion == PristonActorMotion.Walk, "ground motion did not resume the walk clip");
+        Move(6, 14, MotionState.Walk);
+        Assert.True(scene.LastMotion == MotionCode.Walk, "ground motion did not resume the walk clip");
         Assert.Near(1f, scene.LastRate, 0.02f);
-        Move(6, 7, RemoteMoveState.Walking);
+        Move(6, 7, MotionState.Walk);
         Assert.Near(0.5f, scene.LastRate, 0.02f);
-        Move(6, 28, RemoteMoveState.Running);
-        Assert.True(scene.LastMotion == PristonActorMotion.Run, "run state was not shown");
+        Move(6, 28, MotionState.Run);
+        Assert.True(scene.LastMotion == MotionCode.Run, "run state was not shown");
         Assert.Near(1f, scene.LastRate, 0.02f);
-        monster.SetTarget(now, new Vector3(x, 0, 0), 0f, RemoteMoveState.Attack, 10);
+        monster.SetTarget(now, new Vector3(x, 0, 0), 0f, MotionState.Attack, 10);
         Run(400);
-        Assert.True(scene.LastMotion == PristonActorMotion.Attack, "server attack state lost to the locomotion safeguard");
+        Assert.True(scene.LastMotion == MotionCode.Attack, "server attack state lost to the locomotion safeguard");
+        return Task.CompletedTask;
+    }
+
+    private static Task DeathAsync()
+    {
+        foreach (var (name, states, swing) in new (string, MotionState[], bool)[]
+        {
+            ("mid-swing", [MotionState.Attack, MotionState.Dead], true),
+            ("mid-skill", [MotionState.Skill, MotionState.Dead], true),
+            ("mid-flinch", [MotionState.Damage, MotionState.Dead], false),
+            ("walking", [MotionState.Walk, MotionState.Dead], false),
+            ("one frame", [MotionState.Damage, MotionState.Dead], false)
+        })
+        {
+            var scene = new RecordingScene();
+            var monster = new RemoteModelEntity(scene, ActorHandle.None, 1f, 0, Vector3.Zero, 0f, MotionState.Stand, 10);
+            var now = 1000d;
+            var step = name == "one frame" ? 0d : 50d;
+            foreach (var state in states)
+            {
+                monster.SetTarget(now, Vector3.Zero, 0f, state, state == MotionState.Dead ? 0 : 5);
+                if (swing && state != MotionState.Dead)
+                {
+                    monster.ApplyCombatEvent(new CombatEventInfo(1, 2, CombatEventKind.SwingBegin, 800f, 300f, 0, false, false) { Clip = 3 }, now);
+                }
+
+                now += step;
+            }
+
+            monster.ApplyCombatEvent(new CombatEventInfo(2, 1, CombatEventKind.Hit, 0f, 0f, 9, false, true), now);
+            for (var tick = 0; tick < 20; tick++)
+            {
+                now += 50;
+                monster.Update(0.05f, now);
+            }
+
+            Assert.True(monster.Motion == MotionCode.Dead && scene.LastMotion == MotionCode.Dead, $"death clip not shown {name}: {scene.LastMotion}");
+        }
+
         return Task.CompletedTask;
     }
 
     private static Task PlayerRateAsync()
     {
         var scene = new RecordingScene();
-        var player = new RemoteEntity(scene, new PlayerActorHandles(ActorHandle.None, ActorHandle.None), 0, Vector3.Zero, 0f, RemoteMoveState.Walking, 10);
+        var player = new RemoteEntity(scene, new PlayerActorHandles(ActorHandle.None, ActorHandle.None), 0, Vector3.Zero, 0f, MotionState.Walk, 10);
         player.SetRates(1, 1f);
         var speed = Locomotion.WalkUnitsPerSecond(1, inVillage: false);
         var now = 0d;
         for (var index = 1; index <= 8; index++)
         {
-            player.SetTarget(index * 200, new Vector3(speed * index * 0.2f, 0, 0), 0f, RemoteMoveState.Walking, 10);
+            player.SetTarget(index * 200, new Vector3(speed * index * 0.2f, 0, 0), 0f, MotionState.Walk, 10);
             for (var frame = 0; frame < 4; frame++)
             {
                 now += 50;
@@ -206,7 +251,7 @@ internal static class RemotePlaybackTests
             }
         }
 
-        Assert.True(scene.LastMotion == PristonActorMotion.Walk, "walking player was not shown walking");
+        Assert.True(scene.LastMotion == MotionCode.Walk, "walking player was not shown walking");
         Assert.Near(AnimationRate.MoveRate(Locomotion.BaseTranslation(1)), scene.LastRate, 0.01f);
         return Task.CompletedTask;
     }
@@ -262,17 +307,17 @@ internal static class RemotePlaybackTests
     private static Task TargetHealthBarAsync()
     {
         var combat = new HudCombat();
-        var appearance = new PlayerAppearanceInfo("Self", 1, 0, 0, 0, "", "", 1);
+        var appearance = new PlayerAppearanceInfo("Self", PlayerClass.Fighter, 0, 0, 0, "", "", 1);
         combat.Observe(new PresenceUpdate(1,
         [
-            new(1, RemoteEntityKind.Player, true, default, 0, RemoteMoveState.Idle, 64, 64, appearance, 0),
-            new(2, RemoteEntityKind.Monster, false, default, 0, RemoteMoveState.Idle, 50, 50, null, 1, Name: "Hopy", Level: 3),
-            new(3, RemoteEntityKind.Monster, false, default, 0, RemoteMoveState.Idle, 20, 50, null, 1),
-            new(4, RemoteEntityKind.Npc, false, default, 0, RemoteMoveState.Idle, 100, 100, null, 7)
+            new(1, EntityKind.Player, true, default, 0, MotionState.Stand, 64, 64, appearance, 0),
+            new(2, EntityKind.Monster, false, default, 0, MotionState.Stand, 50, 50, null, 1, Name: "Hopy", Level: 3),
+            new(3, EntityKind.Monster, false, default, 0, MotionState.Stand, 20, 50, null, 1),
+            new(4, EntityKind.Npc, false, new System.Numerics.Vector3(30f, 0f, 500f), 0, MotionState.Stand, 100, 100, null, 7)
         ], [], [],
         [
-            new(1, 2, RemoteCombatEventKind.SwingBegin, 800, 400, 0, false, false),
-            new(1, 3, RemoteCombatEventKind.SwingBegin, 800, 400, 0, false, false)
+            new(1, 2, CombatEventKind.SwingBegin, 800, 400, 0, false, false),
+            new(1, 3, CombatEventKind.SwingBegin, 800, 400, 0, false, false)
         ]));
         Assert.True(combat.ShowsHealthBar(2, classic: false) && combat.ShowsHealthBar(3, classic: false), "modern mode hid a monster bar");
         Assert.True(combat.ShowsHealthBar(2, classic: true), "classic mode hid the bar after a full-life attack");
@@ -313,9 +358,11 @@ internal static class RemotePlaybackTests
             "the portrait subject did not follow the roster");
         Assert.True(HudCombat.BroodIcon(MonsterBrood.Undead) == HudArt.BroodUndead && HudCombat.BroodIcon(MonsterBrood.User) is null,
             "the race icons drifted");
-        var npcs = new List<Vector3>();
-        combat.CollectNpcPositions(npcs);
-        Assert.True(npcs.Count == 1, "the minimap NPC list did not hold the NPC alone");
+        var markers = new List<HudMapMarker>();
+        combat.CollectMapMarkers(markers);
+        Assert.True(markers.Count(marker => marker.Kind == HudMapMarkerKind.Npc) == 1, "the minimap NPC list did not hold the NPC alone");
+        Assert.True(markers.Single(marker => marker.Kind == HudMapMarkerKind.Npc).Position == new Vector3(30f, 0f, -500f),
+            "the minimap NPC was not placed in render space, where the minimap places the player");
 
         return Task.CompletedTask;
     }
@@ -347,21 +394,84 @@ internal static class RemotePlaybackTests
         return Task.CompletedTask;
     }
 
+    private static Task AlternateModelAsync()
+    {
+        var root = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "assets");
+        var mushroom = Path.Combine(root, "char", "monster", "Monmushroom", "Monmushroom.inx");
+        if (!PristonTale.Assets.AssetFiles.Exists(mushroom))
+        {
+            return Task.CompletedTask;
+        }
+
+        var reader = new PristonInxReader();
+        var main = reader.Read(mushroom);
+        var alternatePath = AlternateModel.Path(root, main);
+        Assert.True(alternatePath is not null, "the mushroom's sub model was not found");
+        var alternate = reader.Read(alternatePath!);
+        Assert.True(AlternateModel.Alternates(main, alternate) && AlternateModel.Shows(main, alternate, MotionCode.Dead)
+            && !AlternateModel.Shows(main, alternate, MotionCode.Stand) && !AlternateModel.Shows(main, alternate, MotionCode.Attack),
+            "only the death plays on the mushroom's sub model");
+
+        var scene = new AlternateScene();
+        var body = new ActorHandle(1, 1);
+        var death = new ActorHandle(2, 1);
+        var monster = new RemoteModelEntity(scene, body, 1f, 0, Vector3.Zero, 0f, MotionState.Stand, 10, modelInfo: main, alternate: death,
+            alternateInfo: alternate);
+        Assert.True(monster.Actor == body && !scene.Hidden.ContainsKey(body), "a living mushroom shows its body");
+        var now = 1000d;
+        monster.SetTarget(now, Vector3.Zero, 0f, MotionState.Dead, 0);
+        for (var step = 0; step < 20; step++)
+        {
+            now += 50;
+            monster.Update(0.05f, now);
+        }
+
+        Assert.True(monster.Actor == death && scene.Hidden[body] && !scene.Hidden[death] && scene.Motions[death] == MotionCode.Dead,
+            "a dying mushroom shows its death model playing the death clip");
+        monster.Dispose();
+        Assert.True(scene.Removed.SetEquals([body, death]), "both models leave with the monster");
+        return Task.CompletedTask;
+    }
+
+    private sealed class AlternateScene : IActorScene
+    {
+        public Dictionary<ActorHandle, bool> Hidden { get; } = [];
+        public Dictionary<ActorHandle, MotionCode> Motions { get; } = [];
+        public HashSet<ActorHandle> Removed { get; } = [];
+        public ActorHandle AddActor(PristonActorInstance instance) => ActorHandle.None;
+        public void SetActorWorld(ActorHandle handle, Matrix world)
+        {
+        }
+
+        public void SetActorMotion(ActorHandle handle, MotionCode motion) => Motions[handle] = motion;
+        public void SetActorMotionIndex(ActorHandle handle, int motionIndex)
+        {
+        }
+
+        public void RestartActorMotion(ActorHandle handle, MotionCode motion) => Motions[handle] = motion;
+        public void SetActorPlaybackRate(ActorHandle handle, float rateFactor)
+        {
+        }
+
+        public void SetActorHidden(ActorHandle handle, bool hidden) => Hidden[handle] = hidden;
+        public void RemoveActor(ActorHandle handle) => Removed.Add(handle);
+    }
+
     private sealed class RecordingScene : IActorScene
     {
-        public PristonActorMotion LastMotion { get; private set; } = PristonActorMotion.Stand;
+        public MotionCode LastMotion { get; private set; } = MotionCode.Stand;
         public float LastRate { get; private set; } = 1f;
         public ActorHandle AddActor(PristonActorInstance instance) => ActorHandle.None;
         public void SetActorWorld(ActorHandle handle, Matrix world)
         {
         }
 
-        public void SetActorMotion(ActorHandle handle, PristonActorMotion motion) => LastMotion = motion;
+        public void SetActorMotion(ActorHandle handle, MotionCode motion) => LastMotion = motion;
         public void SetActorMotionIndex(ActorHandle handle, int motionIndex)
         {
         }
 
-        public void RestartActorMotion(ActorHandle handle, PristonActorMotion motion) => LastMotion = motion;
+        public void RestartActorMotion(ActorHandle handle, MotionCode motion) => LastMotion = motion;
         public void SetActorPlaybackRate(ActorHandle handle, float rateFactor) => LastRate = rateFactor;
         public void RemoveActor(ActorHandle handle)
         {

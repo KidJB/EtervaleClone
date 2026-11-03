@@ -8,6 +8,8 @@ using PristonTale.Protocol.Packets;
 using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.World.Monsters.Skills;
 using PristonTale.VfxImport;
+using PristonTale.Contracts.Skills;
+using PristonTale.Simulation.World.Npcs;
 
 namespace PristonTale.Tests;
 
@@ -20,6 +22,7 @@ internal static class MonsterPresentationTests
         yield return ("monster effect families split by level and size as the original did", FamiliesAsync);
         yield return ("monster clips start their effects at clip start and at each event frame, keyed by the clip", TriggersAsync);
         yield return ("monster auras run while the monster lives and death effects play once", AuraAsync);
+        yield return ("corpses darken after their death clip starts and a Figon's body of light fades away", CorpsesAsync);
         yield return ("monster statuses show their effect and tint on the holder until removed", StatusesAsync);
         yield return ("authored monster effects use known families and cover every family the client draws", DataAsync);
     }
@@ -99,6 +102,25 @@ internal static class MonsterPresentationTests
         return Task.CompletedTask;
     }
 
+    private static Task CorpsesAsync()
+    {
+        Assert.True(MonsterPresentation.CorpseDim(200f) == 0f && MonsterPresentation.CorpseDim(300f) == 50f / 256f
+            && MonsterPresentation.CorpseDim(500f) == 100f / 256f, "a corpse does not darken from 200 ticks to its most at 400");
+        Assert.True(MonsterPresentation.CorpseFade(0x1180, 0f) == 1f && MonsterPresentation.CorpseFade(0x1180, 64f) == 0.5f
+            && MonsterPresentation.CorpseFade(0x1180, 128f) == 0f && MonsterPresentation.CorpseFade(0x1510, 1000f) == 1f,
+            "a Figon does not fade by two alpha units a tick, or another corpse fades");
+        var scene = new Scene { Motion = Clip(0x120, 0, 30, '\0') };
+        var presentation = new MonsterPresentation(new Sink(), scene);
+        var figon = new MonsterActorView(3, new ActorHandle(3, 1), 0x1180, 50, 1f, Vector3.Zero, 0f, true);
+        for (var frame = 0; frame < 140; frame++)
+        {
+            presentation.Update([figon], 1f / 70f);
+        }
+
+        Assert.True(scene.Corpses.TryGetValue(3, out var corpse) && corpse.Fade == 0f, $"a dead Figon's body stayed: {corpse}");
+        return Task.CompletedTask;
+    }
+
     private static Task StatusesAsync()
     {
         var sink = new Sink("vfx.monster.status.poison", "vfx.monster.status.bloodyknightstun");
@@ -116,9 +138,9 @@ internal static class MonsterPresentationTests
         sink.Statuses.Apply(Status(1, 5, MonsterStatuses.IceSlow, StatusEffectOp.Remove, ControlFlags.Slow), 0);
         sink.Statuses.Apply(Status(1, 5, MonsterStatuses.Poison, StatusEffectOp.Remove), 0);
         Assert.True(scene.Tints[1] == Vector3.Zero && sink.Stopped == 1, "removed statuses kept their tint or effect");
-        Assert.True(MonsterPresentation.StatusEffect(MonsterStatuses.Stun, MonsterSounds.Chimera) is null
-            && MonsterPresentation.StatusEffect(MonsterStatuses.CurseDefence, MonsterSounds.Mystic) is null
-            && MonsterPresentation.StatusEffect(MonsterStatuses.LightningStun, MonsterSounds.CrystalLightning) == "vfx.debuff.stun", "status visual choice");
+        Assert.True(MonsterPresentation.StatusEffect(MonsterStatuses.Stun, CharacterSoundCodes.Chimera) is null
+            && MonsterPresentation.StatusEffect(MonsterStatuses.CurseDefence, CharacterSoundCodes.Mystic) is null
+            && MonsterPresentation.StatusEffect(MonsterStatuses.LightningStun, CharacterSoundCodes.CastleCrystalLightning) == "vfx.debuff.stun", "status visual choice");
         return Task.CompletedTask;
     }
 
@@ -221,5 +243,9 @@ internal static class MonsterPresentationTests
         }
 
         public void SetEntityTint(ulong entityId, Vector3 tint) => Tints[entityId] = tint;
+
+        public Dictionary<ulong, (float Fade, float Dim)> Corpses { get; } = new();
+
+        public void SetEntityCorpse(ulong entityId, float fade, float dim) => Corpses[entityId] = (fade, dim);
     }
 }

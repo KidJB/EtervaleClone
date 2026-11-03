@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Xna.Framework;
 using PristonTale.Gameplay.UI.Rendering;
 using PristonTale.Simulation.Characters;
@@ -27,8 +28,9 @@ public sealed class HudBar
     public const int LifeLength = 94;
     public const int ManaLength = 94;
     public const int StaminaLength = 76;
-    public const int ExperienceLength = 219;
+    public const int ExperienceLength = 86;
     public const int TimeLength = 50;
+    private const int MostExperienceThousandths = 99999;
 
     private static readonly int[] MenuButtonX = [648, 673, 698, 723, 748, 772];
     private OwnerState _state;
@@ -49,7 +51,8 @@ public sealed class HudBar
     public static Rectangle LifeHover => new(316, 501, 21, 93);
     public static Rectangle ManaHover => new(464, 499, 19, 96);
     public static Rectangle StaminaHover => new(301, 514, 12, 81);
-    public static Rectangle ExperienceHover => new(574, 592, 222, 7);
+    public static Rectangle ExperienceHover => new(484, 507, 9, 88);
+    public static Rectangle DayClockHover => new(366, 590, 69, 6);
 
     // Opaque parts of Menu-1 and Menu-2 that block world clicks.
     public static readonly Rectangle[] Body = [new Rectangle(296, 490, 248, 110), new Rectangle(544, 552, 256, 48)];
@@ -106,6 +109,13 @@ public sealed class HudBar
         return (float)Math.Min(1.0, (double)(state.Experience - state.LevelStart) / (state.NextLevel - state.LevelStart));
     }
 
+    // The share of the level in thousandths of a percent, truncated, with a dot whatever the system's culture.
+    public static string ExperienceText(OwnerState state)
+    {
+        var thousandths = Math.Min(MostExperienceThousandths, (int)(ExperienceFraction(state) * 100000.0));
+        return string.Create(CultureInfo.InvariantCulture, $"EXP: {thousandths / 1000}.{thousandths % 1000:000}%");
+    }
+
     public void Draw(HudPainter painter, HudLayout layout, OwnerState state, HudBarView view)
     {
         var y = layout.BottomOffset;
@@ -115,20 +125,17 @@ public sealed class HudBar
         painter.Sprite(HudArt.PotionBack, 495, 565 + y);
         if (state is not null)
         {
-            var life = Length(LifeLength, state.Hp, state.MaxHp);
-            var mana = Length(ManaLength, state.Mp, state.MaxMp);
-            var stamina = Length(StaminaLength, state.Sp, state.MaxSp);
+            var life = Length(LifeLength, state.Life, state.MaxLife);
+            var mana = Length(ManaLength, state.Mana, state.MaxMana);
+            var stamina = Length(StaminaLength, state.Stamina, state.MaxStamina);
             painter.Sprite(HudArt.Life, 319, 500 + y + LifeLength - life, GaugeSource(16, LifeLength, life));
             painter.Sprite(HudArt.Mana, 465, 500 + y + ManaLength - mana, GaugeSource(16, ManaLength, mana));
             painter.Sprite(HudArt.Stamina, 303, 518 + y + StaminaLength - stamina, GaugeSource(8, StaminaLength, stamina));
 
-            // The shipped Bar_Exp.bmp is a 221x5 horizontal strip (newer than the source's vertical 6x86 bar);
-            // it sits in the Menu-2 slot whose dark interior starts at (575,593). Column 0 is its dark border.
+            // The experience fills Menu-1's narrow slot right of the mana, under its "NL." (next level) label, from the bottom
+            // up as the other gauges.
             var experience = (int)(ExperienceLength * ExperienceFraction(state));
-            if (experience > 0)
-            {
-                painter.Sprite(HudArt.Experience, 575, 593 + y, new Rectangle(1, 0, experience, 5));
-            }
+            painter.Sprite(HudArt.Experience, 485, 508 + y + ExperienceLength - experience, GaugeSource(6, ExperienceLength, experience));
         }
 
         var (day, time) = TimeGauge(view.TimeOfDay);
@@ -169,17 +176,17 @@ public sealed class HudBar
         if (!ReferenceEquals(state, _state))
         {
             _state = state;
-            _life = $"HP : {state.Hp}/{state.MaxHp}";
-            _mana = $"MP : {state.Mp}/{state.MaxMp}";
-            _stamina = $"STM : {state.Sp}/{state.MaxSp}";
-            _experience = $"EXP: {ExperienceFraction(state) * 100:0.00}%";
+            _life = $"HP : {state.Life}/{state.MaxLife}";
+            _mana = $"MP : {state.Mana}/{state.MaxMana}";
+            _stamina = $"STM : {state.Stamina}/{state.MaxStamina}";
+            _experience = ExperienceText(state);
         }
 
         var design = new Point(pointer.X, pointer.Y - layout.BottomOffset);
         var (text, position) = LifeHover.Contains(design) ? (_life, new Point(343, 500))
             : ManaHover.Contains(design) ? (_mana, new Point(490, 498))
             : StaminaHover.Contains(design) ? (_stamina, new Point(320, 513))
-            : ExperienceHover.Contains(design) ? (_experience, new Point(572 + (224 - painter.Measure(_experience)) / 2, 571))
+            : ExperienceHover.Contains(design) ? (_experience, new Point(497, 520))
             : ("", Point.Zero);
         if (text.Length == 0)
         {

@@ -15,12 +15,15 @@ benchmarks, and the asset/GPU probes that read game data or create a Vulkan devi
 
 | Path | Responsibility |
 | --- | --- |
-| [Program.cs](../tests/PristonTale.Tests/Program.cs) | Probe/benchmark flag dispatch, case registration, `--filter`, run loop, exit code |
+| [Program.cs](../tests/PristonTale.Tests/Program.cs) | Probe/benchmark flag dispatch, case discovery, `--filter`, run loop, exit code |
 | `PristonTale.Tests.csproj` | Console exe; embeds `Fixtures/*.json`; imports `Client/MonoGameRuntime.targets` (native runtime) |
-| `Assert.cs` | `Assert.True(condition, message)`, `Assert.Near(expected, actual, tolerance)`, `Assert.ThrowsAsync` |
+| `Assert.cs` | `Assert.True`, `Assert.Near`, `Assert.Throws<T>`/`ThrowsAsync<T>` (the expected type; an `AssertionException` never counts) |
 | `Fixtures/` | Embedded tables: `class-skill-source.json` (class skills), `job-head-source.json` (416 job-head rows) |
 | `SkillFixtures.cs`, `SkillScenario.cs` | Synthetic field, players, monsters, weapons and 50 ms tick stepping for skill cases |
 | `MemoryCharacters.cs` | In-memory `ICharacterRepository` with update hooks for persistence-failure cases |
+| `RecordingLog.cs` | `IGameLog` that keeps the item transfers the world reports |
+| `ImmediateSaves.cs` | `ICharacterSaves` that stores each capture at once, so a case reads storage right after the operation that queued it |
+| `WorldPump.cs` | Ticks a `WorldServer` at 50 ms until an operation it serves completes (service and transaction cases) |
 | `WireRoundTrip.cs` | Snapshots through server `PresenceEncoder` and client `PresenceDecoder` over original packet bytes |
 | `MultiplayerServer.cs`, `MultiplayerClient.cs` | A whole server in the runner (real host, disposable SQLite, ephemeral port, synthetic world) and real TCP clients with the world each one observed |
 | `AllocationSampler.cs` | Allocation ticks by type for benchmarks (`PRESENCE_ALLOCATIONS=1`) |
@@ -35,15 +38,19 @@ Default case files by area (all `tests/PristonTale.Tests/<Name>.cs`):
 | --- | --- | --- |
 | Domain | `DomainTests`, `ProgressionAndOwnershipTests`, `ProgressionDataTests`, `AuthTests`, `OutboxTests` | Attributes, ownership, mailbox, XP, login, outbox |
 | Transactions | `ProgressionTransactionTests`, `InventoryTransactionTests`, `GroundPickupTransactionTests`, `PotionTests` | Storage-first commit, replay |
+| Yahoo | `YahooTests` | Chat words, the Space window and its stamina, queued cheers, the capsule, motion and wire |
+| Weather | `WeatherTests` (with `ChatFixture`) | The rain schedule and its draws, the fields without rain, `/weather`, the snapshot and wire; the client's easing, lightning and thunder, the rain occlusion map; the realistic sky's coverage, rainbow, moon phase and noise tiling |
 | Usable items | `SpecialItemTests` | Item rules, premium timers and formulas, use flow, pets, persistence, wire |
-| Crystals | `MonsterCrystalTests` | Crystal tables, pet summon and hunt, the shared delay, clan, mercenary, soul and town refusals |
+| Crystals | `MonsterCrystalTests` | Crystal tables, pet summon and hunt, the pet following and recalled, its own status per pet and the crystal it shows, dismissal box and wire, its end with a dismissal, its death, the owner's death or field change, pets parting from one spot, the shared delay, clan, mercenary, soul and town refusals |
 | Castle items | `CastleItemTests` | Castle-only scrolls and stones, scroll exclusions and replacement, leaving the castle, Restoration |
 | Death and restart | `DeathPenaltyTests` | Death shares, the level 85 reduction, castle exemption, field rule, towns; town and field restarts stored and applied; the Resurrection Scroll; a refused field restart; saving while dead; the restart window's timing |
 | Event items | `EventItemTests` | Foods, gift boxes, chocolates, the soccer-ball head, boosters (offline pause), skill delay, item events |
 | Puzzles | `PuzzleTests` | Lucky bag seal and reveal, board completion and exchange, sealed ground drops |
 | Equipment | `EquipmentTests`, `RangedEquipmentTests` | Catalog rules, hands, class masks, bone attachments |
 | Item rules | `ItemRulesTests` | Wearable slots, requirements, two-handed swaps, drop and shop rolls, the item stat pipeline, block, carried weight, saved rolls, item details on the wire, item reader |
-| Protocol | `BinaryProtocolTests`, `ClientTests`, `NetworkHardeningTests` | Message layouts, framing, TLS and certificate checks, presence, abuse limits |
+| Protocol | `BinaryProtocolTests`, `ClientTests`, `NetworkHardeningTests` | Message layouts, framing, TLS and certificate checks, send backlog and batches, presence, abuse limits, connection caps |
+| World tick | `WorldTickTests` | The tick's absolute timeline: late ticks caught up, stalls skipped |
+| Starter gifts | `StarterGiftTests` | A new character's gifts: order, pace, perfect copies of its class's specialization worn or kept, the class's own weapon family and off-hand, chat line, stored count |
 | Multiplayer | `MultiplayerMovementTests`, `MultiplayerCombatTests`, `MultiplayerPresenceTests`, `MultiplayerSessionTests`, `MultiplayerSocialTests`, `PresencePipelineTests` | Propagation between real clients over TCP (see Multiplayer propagation); frames, shared encoding, revisions, crowd cap, event ticks, grid, status book |
 | World data | `WorldImportTests`, `NpcPlacementMigrationTests`, `MonsterNameTests`, `NpcServiceTests` | Import and migrations on temp SQLite |
 | Rewards, spawns | `WorldRewardsTests`, `SpawnGateTests`, `SpawnScheduleTests` | Loot, XP, spawn masks, boss hours |
@@ -56,11 +63,14 @@ Default case files by area (all `tests/PristonTale.Tests/<Name>.cs`):
 | Skill mechanics | `SkillDefenseTests`, `SkillEnchantTests`, `SkillResurrectionTests`, `SkillStealthTests`, `SkillSummonTests` | Server resolution |
 | Skill client | `SkillPresentationTests`, `VfxLayerTests`, `VfxImportTests` | VFX definitions, catalog, layers, converter, authored data, cooldown and status books |
 | Quests | `QuestTests` (with `QuestFixture`), `QuestServiceTests`, `QuestHudTests` | Every quest family's steps, rank-ups and the tier; journal storage, quest messages, durable requests, kill credit, upkeep, the arena duel; quest HUD flows and layout |
+| Trades | `TradeTests` (with `ChatFixture`), `TradeHudTests` | Requests, offers, locks and their delay, the stored exchange, refusals, how a trade ends (also while it is stored), offered items changed elsewhere, both sides locking at once, rules, wire; the trade window |
+| Contacts | `ContactTests` (with `ChatFixture` and SQLite) | The lists' rules, the server's answers with presence, ignored whispers, storage, wire; the friends page |
+| Parties | `PartyTests` (with `ChatFixture`), `PartyHudTests` | Requests, answers and recommendations, the leader's commands, leaving the world, shared experience and gold, rules, wire; the party window, request box and player buttons |
 | Chat, game masters | `ChatRoutingTests`, `GameMasterCommandTests` (with `ChatFixture`), `ChatClientTests`, `GameMasterStorageTests` | Spoken range, whispers, channels, notices, shutdown; every command and the level table; window, input, flood and bubbles; `gm_level`, audit and character moves on SQLite |
-| Client | `RemotePlaybackTests`, `AttackInputTests`, `FrameTimingTests`, `ClientSettingsTests`, `FieldAudioTests` | Playback, input, settings |
-| HUD and screens | `HudInteractionTests`, `CharacterHeadTests`, `CharacterSelectTests`, `GroundLootLabelTests` | 800x600 layout, hit tests |
+| Client | `RemotePlaybackTests`, `AttackInputTests`, `FrameTimingTests`, `ClientSettingsTests`, `FieldAudioTests`, `ClientLogTests` | Playback, input, settings, the client log |
+| HUD and screens | `HudInteractionTests`, `CharacterHeadTests`, `CharacterSelectTests` | 800x600 layout, hit tests |
 | Rendering | `RenderTests`, `RenderFidelityTests`, `PhotorealTests`, `MaterialAdapterTests`, `ShadowProjectionTests`, `SkyTests` | CPU-side renderer |
-| Meshes, effects | `SkinPaletteTests`, `ModelNormalTests`, `AnimationFallbackTests`, `TransientLightTests`, `LegacyParticleTests` | Skinning, particles |
+| Meshes, effects | `SkinPaletteTests`, `ModelNormalTests`, `AnimationFallbackTests`, `TransientLightTests` | Skinning, lights |
 | Formats | `BinaryCursorTests`, `EffectLoadingTests`, `GltfExportTests` | Binary readers, shader load failure, glTF export |
 
 ## Running
@@ -84,10 +94,11 @@ git diff --check
 
 - Every test class is `internal static class <Area>Tests` in namespace `PristonTale.Tests` with
   `public static IEnumerable<(string, Func<Task>)> Cases()` that `yield return`s `("behavior sentence", MethodAsync)`.
-- `Program.cs` appends each class with `specifications.AddRange(<Area>Tests.Cases());`. A class not listed there never
-  runs.
-- Cases run sequentially in registration order. Each is awaited with a 15 s timeout (`WaitAsync`); a timeout fails the
-  case. A thrown exception of any type fails the case; the runner continues with the next one.
+- `Program.cs` discovers every class with a public static `Cases()` of that type by reflection; nothing to register.
+- Cases run sequentially, classes in full-name order and cases in their `Cases()` order. Each is awaited with a 15 s
+  timeout (`WaitAsync`). A thrown exception of any type fails the case and the runner continues with the next one; a
+  timeout fails the case and stops the run, since the case is still running and would share the process with the cases
+  after it.
 - Production assemblies expose internals to the runner through `InternalsVisibleTo` (Application, Geometry, Protocol,
   Client.Net, Engine3D, Gameplay, Server, GltfExport).
 
@@ -166,29 +177,31 @@ when reading those assets is authorized. GPU probes:
 | `--check-look <mode> <assets> <content> <output-dir>` | yes | Fails on look regressions; `mode` is `charselect`, `actor`, `opening`, `scenery` or `shade` |
 | `--profile-stream <assets> <content>` | yes | Incremental stage upload with the game's policy at a fixed 60 Hz |
 | `--profile-stream-baseline <assets> <content>` | yes | Same with an 8-step upload limit for comparison |
-| `--capture-hud <assets> <content> <output-dir> [<background.png>]` | yes | In-game HUD scenarios to PNG (scales 2 and 3, `npc-*` dialogs, `buffs-*` continuous-skill bar, `restart-*` restart window, `quest-*` quest dialog, boxes, window and timer, `skill-right-select` prints the right socket after a right click) |
+| `--capture-hud <assets> <content> <output-dir> [<background.png>]` | yes | In-game HUD scenarios to PNG (scales 2 and 3, `npc-*` dialogs and service windows (shop, warehouse, aging, mix, alchemy), `buffs-*` continuous-skill bar, `restart-*` restart window, `quest-*` quest dialog, boxes, window and timer, `help-*` help window, guide list and page, level guide notice and summary, `skill-right-select` prints the right socket after a right click) |
 | `--capture-hud-target <assets> <content> <output-dir>` | yes | Ricarten at 14:00 with remote-roster entities; target frame, bar, resolutions |
 | `--capture-chat <assets> <content> <output-dir> [<background.png>]` | yes | Chat window open, closed, unfocused, per tab, assistant split and page, shrunk beside the inventory, at 1280x720 and scale 2; speech bubbles over players, an NPC and a monster |
-| `--capture-item-hud <assets> <content> <output-dir>` | yes | Premium timer column, hover and blink, Teleport Core pages and confirmation, item tooltips (orb, package, crystal, gift box, chocolate, castle stone, lucky bag), item effects, castle items and boosters in the effects bar, the puzzle board, finished puzzle and collector question |
+| `--capture-item-hud <assets> <content> <output-dir>` | yes | Premium timer column, hover and blink, Teleport Core pages and confirmation, item tooltips (orb, package, crystal, gift box, chocolate, castle stone, lucky bag), item effects, castle items and boosters in the effects bar, the puzzle board, finished puzzle and collector question, an item carried over a free cell, another item and the weapon slot, and the count box for a carried stack set down above the window |
+| `--capture-shadows <assets> <content> <output-dir>` | yes | Two characters and Babel at Navisko's start by day (wide, close, and close without contact shadows, without shadows, and the occlusion view), beside the nearest lamp by night, a morning with the sun moving at the server clock's rate, a camera turning around them, and ten seconds of the mean brightness per frame with the sun moving (`Brightness <frame> <all> <ground>` lines, no images); Karina and Ariel where Navisko places them. At 1920x1080; consecutive frames with a change image (`-change.png`, eight times brighter) and the count of changed pixels |
 | `--capture-item-effects <assets> <content> <output-dir>` | yes | Ricarten at night: pets idle and striking, firecracker bursts, the skill-learn light, force orb glow and hit, a big head, crystal pets with their plates in the return sparkle, the soccer-ball head |
 | `--capture-login <assets> <content> <output-dir> <background.png>` | yes | Login screen edge cases (see below) |
 | `--capture-skills <assets> <content> <output-dir> [<hex,hex,...>]` | yes | Casts skills with the server timeline (see below) |
 | `--capture-sky <assets> <content> <output-dir>` | yes | One `sky-NN.png` per sky profile |
+| `--capture-weather <assets> <content> <output-dir>` | yes | Ricarten's start under each weather at 1920x1080 after two seconds: clear, overcast, light, heavy and storm rain, a lightning flash, rain at dusk and at night, close under the eaves, the clouds' shadows and a morning mist, also over the harbour toward the sunrise (`mist-harbour`: the water and the far quays must fade into the haze, without blue patches or bright silhouettes); the realistic sky toward the horizon at noon, at sunrise with and without the mist, in a broken afternoon, at sunset and dusk, under a full and a new moon, overcast, in a storm and its lightning, in a storm at night and at dawn, with a rainbow and the aurora, and the classic dome; `sky-drift`, eight frames of clouds in a strong wind with each frame's change from the last (`sky-drift-N-change.png`, and the count of pixels changed by more than 6 levels), where a wavering or flickering sky shows over the clouds' bodies (`WeatherCaptureProbe`) |
 | `--capture-npcs <assets> <content> <output.png>` | yes | NPC presentation capture |
 | `--capture-job-heads <assets> <content> <output.png>` | yes | Job-head presentation capture |
 | `--capture-equipment <assets> <content> <output-dir>` | yes | Equipment captures |
 | `--capture-ranged-equipment <assets> <content> <output-dir>` | yes | Bow and crossbow attachment captures |
-| `--capture-ground-loot <assets> <content> <output.png>` | yes | Ground drop elevation, coordinate remapping and distinct label click targets; `<output>-close.png` shows how the drops lie (weapons flat) |
+| `--capture-ground-loot <assets> <content> <output.png>` | yes | Ground drop elevation, coordinate remapping, the drop names with `A` held (one hovered) and a label click target per drop spot, and the plain and highlighted name box in the corner; `<output>-close.png` shows how the drops lie (weapons flat) |
 | `--capture-combat-effects <assets> <content> <output-dir>` | yes | Temporary lights, meteors and the return effect over time |
 | `--capture-monster-skills <assets> <content> <output-dir> [<case,case,...>]` | yes | Real monsters' attack, skill and death clips with their effects, and monster statuses on a player |
-| `--capture-potions <assets> <content> <output-dir>` | yes | Potion particle captures over time |
+| `--capture-potions <assets> <content> <output-dir>` | yes | The three potions (`ItemVfx.Potion`) over a dark floor at night at 0.15, 0.45, 0.8 and 1.2 s |
 | `--capture-vfx <assets> <content> <output-dir> [<name,name,...>]` | yes | Plays named effects of `assets/Effect/Vfx` (see below) |
 | `--verify-skill-motions <assets>` | no | Every skill rule's motions (index, length, events, class tag) against the class motion tables |
 | `--verify-monster-skills <assets>` | no | Monster skill windup and duration from real models |
 | `--verify-vfx-lifetimes <assets>` | no | Plays every effect of `Effect/Vfx` (duration up to 60 s) with a moving caster and target and lists those still alive 30 s after their duration; prints `0 of N` when none lingers |
 | `--verify-player-timing <assets>` | no | Per-class attack, damage and EAT timing against actor files |
 | `--verify-equipment <assets>` | no | Equipped attack clips against `PlayerEquipmentTiming` |
-| `--export-equipment-timings <assets> <output.cs>` | no | Writes the generated `PlayerEquipmentTiming.cs` (see Pitfalls) |
+| `--export-equipment-timings <assets> <output.json>` | no | Writes the generated `World/Motion/Data/PlayerEquipmentTiming.json` (see Pitfalls) |
 | `--verify-world-rewards <assets> <disposable.db>` | no | Real catalog checks on a copy of an imported database (see below) |
 | `--validate-binary-assets <assets>` | no | Parses every `.inx`, `.smd`, `.smb` and `.cam` under the root and lists failures |
 | `--inspect-actor <assets> <actor-path>` | no | Prints mesh, skeleton, material and bone details of one actor |
@@ -197,8 +210,9 @@ when reading those assets is authorized. GPU probes:
 `--benchmark-render` details:
 
 - `[options]` is `<seconds> <runs> <hour> <orbit>` optionally followed by `<distance>`, then `<pitch>`, then
-  `<focusX> <focusZ>`, then `<yaw>`.
-- Accepted argument counts after the flag: 5, 9, 10, 11, 13 or 14; any other count runs the suite instead.
+  `<focusX> <focusZ>`, then `<yaw>`, then `<crowd>` (walking and running actors added out to 1000 units around the focus, for the
+  crowd level of detail; `NaN` keeps a default pitch or focus).
+- Accepted argument counts after the flag: 5, 9, 10, 11, 13, 14 or 15; any other count runs the suite instead.
 - Defaults without `[options]`: 60 s, 5 runs, hour 12, no orbit. `distance`, `pitch`, `focusX`, `focusZ` and `yaw` are
   floats; yaw is in radians (0 looks toward +Z, pi/2 toward -X).
 - The settings file must be a complete, valid client settings document with `maxFps` 0 and a windowed mode.
@@ -243,7 +257,9 @@ Other probe details:
   `npc-*` scenarios, the item box with rolled values, red requirements and a specialization (`inventory-item-hover-*`),
   the carried weight and unusable-item tint (`inventory-*`), the resistance boxes (`status-*`) and the block word
   (`block-800`). Its `quest-*` scenarios show a quest dialog with its document text, the yes/no box, the Fury reward
-  list and reward view, the lit class-change button, the quest window with a description (800x600 and scale 2), the
+  list and reward view, the training box and skill window a home-town master opens, with the lit class-change button
+  and only the reached tier's skills (`quest-class-change-800`; with points left, `skill-master-800`; under a quest dialog, `skill-master-quest-800`; a skill's yes/no
+  answered with Enter, `skill-training-enter-800`), the quest window with a description (800x600 and scale 2), the
   quest timer icon with and without effect icons and the redistribution offer. It reads the Ricarten stage only for the
   authored minimap rectangle.
 - `--capture-hud-target` spawns monsters of two races, an NPC and a player through the remote entity roster and captures
@@ -277,10 +293,10 @@ Draws the static and skinned surface effects into a float target and checks agai
 
 | Mode | Fails when |
 | --- | --- |
-| `charselect` | Character-select stage, braziers, roster: > 2 % of the frame clipped to white or > 5 % with a clipped channel |
+| `charselect` | Character-select stage, braziers with their green flames (`CharSelectFlames`), roster: > 2 % of the frame clipped to white or > 5 % with a clipped channel |
 | `actor` | NPCs at noon, front and back: the two-pixel silhouette ring is more than 1.25 times the interior luminance |
 | `opening` | Login flythrough with meteors: the town in the lower third is more than 1.8 times redder than blue |
-| `scenery` | Ricarten metal on a stage quad vs an animated scenery model, noon and 17:00: luminance > 8 % apart, saturation > 0.05 apart, |
+| `scenery` | Ricarten metal on a stage quad vs an animated scenery model, noon and 20:00: luminance > 8 % apart, saturation > 0.05 apart, |
 | | or animated `Specular` debug view > 1.25 x the stage quad's |
 | `shade` | NPC on an open floor and on a dark-lit (shaded) floor at 10:00: actor shade/open ratio off the floor's by > 1.5 x |
 
@@ -300,10 +316,9 @@ this is not a readback of write-only GPU buffers or a visual comparison.
    `--filter` matches and what `PASS`/`FAIL` print; make it unique and descriptive.
 3. Write `private static Task <Name>Async()` (or `async Task`) using `Assert.True(condition, "what broke")`.
    Build data in code; reuse `SkillScenario`/`SkillFixtures` for skills, `MemoryCharacters` for persistence failures,
-   `WireRoundTrip` for presence on the wire.
-4. New class only: add `specifications.AddRange(<Area>Tests.Cases());` to `Program.cs`.
-5. Keep each case under the 15 s timeout and free of assets, GPU and fixed ports.
-6. Run the build and the suite (Running). Update this doc when you add an area file or a probe.
+   `WorldPump` to run a service call through the world's ticks, `WireRoundTrip` for presence on the wire.
+4. Keep each case under the 15 s timeout and free of assets, GPU and fixed ports.
+5. Run the build and the suite (Running). Update this doc when you add an area file or a probe.
 
 ### Add a fixture
 
@@ -334,7 +349,7 @@ this is not a readback of write-only GPU buffers or a visual comparison.
   other unknown argument stops the runner with exit code 2 instead of running the suite.
 - `--benchmark` runs after the suite (and honors `--filter`); `--benchmark-world` skips the suite.
 - `--no-build` runs the last build: rebuild after editing tests or production code.
-- `--export-equipment-timings` overwrites a generated source file; review the diff before keeping it.
+- `--export-equipment-timings` overwrites a generated data file; review the diff before keeping it.
 - `--verify-world-rewards` migrates the database it is given: pass a copy, never `data/pristontale.db`.
 - GPU probe timings with `MG_HIDDEN_WINDOW=1` are not comparable with visible-window runs.
 

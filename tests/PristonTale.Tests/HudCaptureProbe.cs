@@ -9,6 +9,7 @@ using PristonTale.Engine3D.IO;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Gameplay.Screens.Framework;
 using PristonTale.Gameplay.UI;
+using PristonTale.Gameplay.UI.Help;
 using PristonTale.Gameplay.UI.Inventory;
 using PristonTale.Gameplay.UI.Npc;
 using PristonTale.Gameplay.UI.Quests;
@@ -19,6 +20,12 @@ using PristonTale.Simulation.Combat;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.Quests;
 using PristonTale.Simulation.World.Npcs;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Skills;
+using PristonTale.Assets;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -39,12 +46,26 @@ internal sealed class HudCaptureProbe : Game
         AllocateArrow,
         ShopItem,
         WarehouseItem,
+        WarehouseSuit,
+        BagFree,
+        WarehouseCell,
         Buff,
         QuestTimer,
         ClassChange,
         QuestOk,
         RestartField,
         RestartTown
+    }
+
+    // The help window's page a scenario opens, or the level guide's notice it offers.
+    private enum ProbeHelp
+    {
+        None,
+        Window,
+        GuideList,
+        GuidePage,
+        Notice,
+        Summary
     }
 
     // Quest states a scenario sets up: the server's answer to the talk, the journal and the clicks that follow.
@@ -62,16 +83,27 @@ internal sealed class HudCaptureProbe : Game
         SkillReset
     }
 
+    // What a warehouse scenario carries once the window is open: a stored axe, or a bag potion set down on the grid.
+    private enum ProbeCarry
+    {
+        None,
+        StoredAxe,
+        RefusedPotion
+    }
+
     private const uint SkillMasterNpc = 7;
     private const uint MerchantNpc = 8;
     private const uint WarehouseNpc = 9;
     private const uint TeleporterNpc = 10;
+    private const uint MixerNpc = 11;
+    private const uint AlchemistNpc = 12;
 
     private sealed record Scenario(string Name, int Width, int Height, Keys Panel = Keys.None, Hover Hover = Hover.None, int HealthPercent = 100,
         PlayerClass Class = PlayerClass.Mechanician, bool Npc = false, bool Settings = false, bool SystemMenu = false, bool Learned = false,
         bool Training = false, bool LowHealth = false, float Hour = 13, bool ClassicTarget = false, ulong Target = 2, ulong NpcId = SkillMasterNpc,
         int ServiceButton = -1, bool SellMode = false, int ServiceCount = 2, int RightSelect = -1, bool Buffs = false, bool Block = false,
-        ProbeQuest Quest = ProbeQuest.None, bool Dead = false, bool FieldOpen = true);
+        ProbeQuest Quest = ProbeQuest.None, bool Dead = false, bool FieldOpen = true, ProbeCarry Carry = ProbeCarry.None,
+        ProbeHelp Help = ProbeHelp.None, bool TrainingEnter = false);
 
     private static readonly Scenario[] Scenarios =
     [
@@ -118,6 +150,9 @@ internal sealed class HudCaptureProbe : Game
         new("npc-unicode-800", 800, 600, Npc: true),
         new("npc-unicode-1280", 1280, 720, Npc: true),
         new("skill-training-800", 800, 600, Npc: true, Learned: true, Training: true),
+        new("skill-master-800", 800, 600, Npc: true, Learned: true),
+        new("skill-master-quest-800", 800, 600, Npc: true, Learned: true, Quest: ProbeQuest.Dialog),
+        new("skill-training-enter-800", 800, 600, Npc: true, Learned: true, Training: true, TrainingEnter: true),
         new("npc-merchant-dialog-800", 800, 600, Npc: true, NpcId: MerchantNpc),
         new("npc-teleporter-dialog-800", 800, 600, Npc: true, NpcId: TeleporterNpc),
         new("npc-teleport-destinations-800", 800, 600, Npc: true, NpcId: TeleporterNpc, ServiceButton: 1, ServiceCount: 4),
@@ -126,6 +161,15 @@ internal sealed class HudCaptureProbe : Game
         new("npc-shop-1280", 1280, 720, Npc: true, NpcId: MerchantNpc, ServiceButton: 1),
         new("npc-warehouse-800", 800, 600, Hover: Hover.WarehouseItem, Npc: true, NpcId: WarehouseNpc, ServiceButton: 1),
         new("npc-warehouse-1600x1200-scale2", 1600, 1200, Npc: true, NpcId: WarehouseNpc, ServiceButton: 1),
+        new("npc-warehouse-carry-exchange-800", 800, 600, Hover: Hover.WarehouseSuit, Npc: true, NpcId: WarehouseNpc, ServiceButton: 1,
+            Carry: ProbeCarry.StoredAxe),
+        new("npc-warehouse-carry-bag-800", 800, 600, Hover: Hover.BagFree, Npc: true, NpcId: WarehouseNpc, ServiceButton: 1, Carry: ProbeCarry.StoredAxe),
+        new("npc-warehouse-potion-refused-800", 800, 600, Hover: Hover.WarehouseCell, Npc: true, NpcId: WarehouseNpc, ServiceButton: 1,
+            Carry: ProbeCarry.RefusedPotion),
+        new("npc-aging-800", 800, 600, Npc: true, NpcId: TeleporterNpc, ServiceButton: 2, ServiceCount: 4),
+        new("npc-aging-1600x1200-scale2", 1600, 1200, Npc: true, NpcId: TeleporterNpc, ServiceButton: 2, ServiceCount: 4),
+        new("npc-mix-800", 800, 600, Npc: true, NpcId: MixerNpc, ServiceButton: 1),
+        new("npc-alchemy-800", 800, 600, Npc: true, NpcId: AlchemistNpc, ServiceButton: 1),
         new("system-menu-800", 800, 600, SystemMenu: true),
         new("settings-800", 800, 600, Hover: Hover.SettingsRow, Settings: true),
         new("settings-1600x1200-scale2", 1600, 1200, Settings: true),
@@ -139,7 +183,13 @@ internal sealed class HudCaptureProbe : Game
         new("quest-window-1600x1200-scale2", 1600, 1200, Keys.Q, Quest: ProbeQuest.WindowDescription),
         new("quest-timer-800", 800, 600, Hover: Hover.QuestTimer, Quest: ProbeQuest.Timer),
         new("quest-timer-buffs-800", 800, 600, Buffs: true, Quest: ProbeQuest.Timer),
-        new("quest-skill-reset-800", 800, 600, Quest: ProbeQuest.SkillReset)
+        new("quest-skill-reset-800", 800, 600, Quest: ProbeQuest.SkillReset),
+        new("help-window-800", 800, 600, Help: ProbeHelp.Window),
+        new("help-guide-list-800", 800, 600, Learned: true, Help: ProbeHelp.GuideList),
+        new("help-guide-page-800", 800, 600, Learned: true, Help: ProbeHelp.GuidePage),
+        new("help-guide-page-1600x1200-scale2", 1600, 1200, Learned: true, Help: ProbeHelp.GuidePage),
+        new("help-level-notice-800", 800, 600, Help: ProbeHelp.Notice),
+        new("help-level-summary-800", 800, 600, Help: ProbeHelp.Summary)
     ];
 
     private readonly string _assetRoot;
@@ -154,6 +204,10 @@ internal sealed class HudCaptureProbe : Game
     private int _scenario;
     private int _frames;
     private bool _prepared;
+    private int _preparedFrame;
+    private bool _carried;
+    // The help scenario's window page or notice is up (they wait for the guide's files).
+    private bool _helpReady;
     private readonly PresentationSettings _presentation = new();
 
     public HudCaptureProbe(string assetRoot, string contentRoot, string output, string? background)
@@ -220,7 +274,7 @@ internal sealed class HudCaptureProbe : Game
         };
 
         // Diagnostic bootstrap only: the Ricarten stage supplies the authored minimap rectangle.
-        var stage = new PristonSmdReader().ReadStage(PristonFileResolver.Resolve(Path.Combine(_assetRoot, "Field", "Ricarten", "village-2.smd")));
+        var stage = new PristonSmdReader().ReadStage(AssetFiles.Resolve(Path.Combine(_assetRoot, "Field", "Ricarten", "village-2.smd")));
         var map = stage.AuthoredMapRectangle;
         var center = new Vector3((map.Left + map.Right) / 512f, 0, -(map.Top + map.Bottom) / 512f);
         _world = new HudWorldView("village-2", false, map, center, new Vector3(0.6f, 0, -0.8f), 13, false);
@@ -232,16 +286,16 @@ internal sealed class HudCaptureProbe : Game
         }));
         _hud.Combat.Observe(new PresenceUpdate(1,
         [
-            new(1, RemoteEntityKind.Player, true, default, 0, RemoteMoveState.Idle, 64, 64,
-                new PlayerAppearanceInfo("Panzer", 1, 0, 0, 0, "", "", 1), 0),
-            new(2, RemoteEntityKind.Monster, false, default, 0, RemoteMoveState.Idle, 31, 50, null, 1, Level: 7),
-            new(3, RemoteEntityKind.Npc, false, new System.Numerics.Vector3(center.X + 300, 0, center.Z - 200), 0, RemoteMoveState.Idle, 0, 0, null, 1,
+            new(1, EntityKind.Player, true, default, 0, MotionState.Stand, 64, 64,
+                new PlayerAppearanceInfo("Panzer", PlayerClass.Fighter, 0, 0, 0, "", "", 1), 0),
+            new(2, EntityKind.Monster, false, default, 0, MotionState.Stand, 31, 50, null, 1, Level: 7),
+            new(3, EntityKind.Npc, false, new System.Numerics.Vector3(center.X + 300, 0, center.Z - 200), 0, MotionState.Stand, 0, 0, null, 1,
                 Name: "Lena")
         ], [], [],
         [
-            new(1, 2, RemoteCombatEventKind.Hit, 0, 0, 8, false, false),
-            new(2, 1, RemoteCombatEventKind.Hit, 0, 0, 3, false, false),
-            new(1, 2, RemoteCombatEventKind.Hit, 0, 0, 11, true, false)
+            new(1, 2, CombatEventKind.Hit, 0, 0, 8, false, false),
+            new(2, 1, CombatEventKind.Hit, 0, 0, 3, false, false),
+            new(1, 2, CombatEventKind.Hit, 0, 0, 11, true, false)
         ]));
         _hud.TargetId = 2;
         if (_backgroundPath is not null)
@@ -338,18 +392,40 @@ internal sealed class HudCaptureProbe : Game
                 Click(state, layout, HudQuestWindow.Row(HudQuestWindow.Origin(layout), 0).Center);
             }
 
+            _helpReady = scenario.Help == ProbeHelp.None;
             if (scenario.Training)
             {
-                Click(state, layout, HudNpcPanel.TrainingButton(layout).Center);
                 Click(state, layout, HudSkillsPanel.ClassRow(HudInventoryLayout.Origin(layout), 0).Center);
+                if (scenario.TrainingEnter)
+                {
+                    _hud.Update(state, new KeyboardState(Keys.Enter), default);
+                    _hud.Update(state, default, default);
+                }
             }
 
             _prepared = true;
+            _preparedFrame = _frames;
+            _carried = scenario.Carry == ProbeCarry.None;
         }
         else
         {
             GraphicsDevice.SetRenderTarget(_target);
-            _hud.Update(ScenarioState(scenario), default, Pointer(scenario));
+            // The windows take clicks once they have slid fully open.
+            if (!_carried && _frames - _preparedFrame > 60)
+            {
+                Carry(scenario);
+                _carried = true;
+                _preparedFrame = _frames;
+            }
+
+            if (!_helpReady && _hud.HelpWindow.Book.Subjects.Count > 0)
+            {
+                PrepareHelp(scenario);
+                _helpReady = true;
+            }
+
+            // A carry keeps the HUD clock at the frame rate, so the notice its refusal shows is still up when captured.
+            _hud.Update(ScenarioState(scenario), default, Pointer(scenario), scenario.Carry == ProbeCarry.None ? 1 : 1d / 60);
             if (scenario.Block)
             {
                 _hud.StringEffect.Show(HudArt.BlockText);
@@ -359,8 +435,9 @@ internal sealed class HudCaptureProbe : Game
 
     protected override void Draw(GameTime gameTime)
     {
-        // A dead scenario waits for the restart window to open after the death motion.
-        if (!_prepared || !_hud.IsReady || !_hud.IconsIdle || _scenario >= Scenarios.Length || Scenarios[_scenario].Dead && !_hud.Restart.Open)
+        // A dead scenario waits for the restart window to open after the death motion; a carry for its clicks to settle.
+        if (!_prepared || !_hud.IsReady || !_hud.IconsIdle || _scenario >= Scenarios.Length || Scenarios[_scenario].Dead && !_hud.Restart.Open
+            || !_carried || !_helpReady || Scenarios[_scenario].Carry != ProbeCarry.None && _frames - _preparedFrame < 10)
         {
             GraphicsDevice.SetRenderTarget(null);
             return;
@@ -393,6 +470,45 @@ internal sealed class HudCaptureProbe : Game
         _batch.Dispose();
     }
 
+    // Opens the help window on the scenario's page through its clicks, or offers the notice of the level-10 guide page.
+    private void PrepareHelp(Scenario scenario)
+    {
+        var state = ScenarioState(scenario);
+        var layout = HudLayout.Create(scenario.Width, scenario.Height);
+        if (scenario.Help is ProbeHelp.Notice or ProbeHelp.Summary)
+        {
+            _hud.LevelGuide.Offer(_hud.HelpWindow.Book.Page(10, tempskron: true)!, atOnce: scenario.Help == ProbeHelp.Summary);
+            return;
+        }
+
+        Click(state, layout, layout.Bottom(HudBar.MenuButton(HudMenuButton.System)).Center);
+        Click(state, layout, layout.Bottom(HudSystemMenu.Entry(HudSystemEntry.Help)).Center);
+        if (scenario.Help != ProbeHelp.Window)
+        {
+            Click(state, layout, HudHelpWindow.GuideLink.Center);
+        }
+
+        if (scenario.Help == ProbeHelp.GuidePage)
+        {
+            Click(state, layout, HudHelpWindow.ListRow(0).Center);
+        }
+    }
+
+    private void Carry(Scenario scenario)
+    {
+        var state = ScenarioState(scenario);
+        var layout = HudLayout.Create(scenario.Width, scenario.Height);
+        var store = HudStoreLayout.Origin(0);
+        if (scenario.Carry == ProbeCarry.StoredAxe)
+        {
+            Click(state, layout, HudStoreLayout.Cell(store, 2, 2, 3).Center);
+            return;
+        }
+
+        Click(state, layout, HudInventoryLayout.Cell(HudInventoryLayout.Origin(layout), 8).Center);
+        Click(state, layout, HudStoreLayout.Cell(store, 40).Center);
+    }
+
     private void Click(OwnerState state, HudLayout layout, Point logical)
     {
         var x = logical.X * layout.Scale;
@@ -421,12 +537,15 @@ internal sealed class HudCaptureProbe : Game
             Hover.AllocateArrow => HudStatusPanel.AllocateButton(origin, 0).Center,
             Hover.ShopItem => HudStoreLayout.Cell(HudStoreLayout.Origin(0), 0, 2, 3).Center,
             Hover.WarehouseItem => HudStoreLayout.Cell(HudStoreLayout.Origin(0), 2, 2, 3).Center,
+            Hover.WarehouseSuit => HudStoreLayout.Cell(HudStoreLayout.Origin(0), 5, 2, 3).Center,
+            Hover.BagFree => HudInventoryLayout.Cell(origin, 6, 2, 3).Center,
+            Hover.WarehouseCell => HudStoreLayout.Cell(HudStoreLayout.Origin(0), 40).Center,
             Hover.Buff => new Point(10 + 16, 26),
             Hover.QuestTimer => new Point(10 + 16, 26),
-            Hover.ClassChange => HudNpcPanel.ClassChangeButton(layout).Center,
+            Hover.ClassChange => HudSkillTreeLayout.ClassChange.Center,
             Hover.QuestOk => HudQuestDialog.OkButton.Center,
-            Hover.RestartField => HudRestartPanel.Button(layout, PristonTale.Application.World.RestartChoice.Field).Center,
-            Hover.RestartTown => HudRestartPanel.Button(layout, PristonTale.Application.World.RestartChoice.Town).Center,
+            Hover.RestartField => HudRestartPanel.Button(layout, RestartChoice.Field).Center,
+            Hover.RestartTown => HudRestartPanel.Button(layout, RestartChoice.Town).Center,
             _ => new Point(layout.Width - 200, layout.Height / 2)
         };
         return new MouseState(point.X * layout.Scale, point.Y * layout.Scale, 0,
@@ -440,7 +559,7 @@ internal sealed class HudCaptureProbe : Game
     private static PristonTale.Gameplay.Effects.StatusBook BuffBook()
     {
         var book = new PristonTale.Gameplay.Effects.StatusBook();
-        void Add(uint code, int duration, int remaining, ushort flags = 0) => book.Apply(new StatusEffectInfo(1, 1, code, PristonTale.Protocol.Packets.StatusEffectOp.Add, 1, 1, 0,
+        void Add(uint code, int duration, int remaining, ushort flags = 0) => book.Apply(new StatusEffectInfo(1, 1, code, StatusEffectOp.Add, 1, 1, 0,
             flags, duration, remaining, 0), BuffClockMs);
         Add(0x01010001, 60_000, 20_000);
         Add(MetalGolem, 360_000, 300_000);
@@ -462,11 +581,16 @@ internal sealed class HudCaptureProbe : Game
                 [Offer(NpcServiceKind.QuestGiver, 1015, false), Offer(NpcServiceKind.Warehouse, 0, true)],
                 ["Here is the key. Just take it and do not touch my things."], ""),
             TeleporterNpc => new NpcInteraction(true, id, "Clever Newter",
-                [Offer(NpcServiceKind.QuestGiver, 2201, false), Offer(NpcServiceKind.Teleporter, 1, true), Offer(NpcServiceKind.ItemAging, 0, false),
+                [Offer(NpcServiceKind.QuestGiver, 2201, false), Offer(NpcServiceKind.Teleporter, 1, true), Offer(NpcServiceKind.ItemAging, 0, true),
                     Offer(NpcServiceKind.ItemMix, 200, false)],
                 ["I have researched and studied for the prosperity of Pillai all my life. Teleporting is not free, though."], ""),
-            _ => new NpcInteraction(true, id, "스킬마스터 베르칸", [Offer(NpcServiceKind.QuestGiver, 1003, false), Offer(NpcServiceKind.SkillMaster, 4, true)],
-                ["Bem-vindo à escola de habilidades. Escolha uma habilidade para aprender ou melhorar.", "안녕하세요. 스킬을 선택하세요."], "")
+            MixerNpc => new NpcInteraction(true, id, "Mixer Rayon", [Offer(NpcServiceKind.QuestGiver, 1016, false), Offer(NpcServiceKind.ItemMix, 0, true)],
+                ["Bring me the item and the sheltoms of a formula."], ""),
+            AlchemistNpc => new NpcInteraction(true, id, "Alchemist Lisa",
+                [Offer(NpcServiceKind.QuestGiver, 1017, false), Offer(NpcServiceKind.ItemMix, Simulation.Items.Mixing.MixingWork.AlchemyMode, true)],
+                ["Sheltoms become force orbs here."], ""),
+            _ => new NpcInteraction(true, id, "Skill Master, Verkan", [Offer(NpcServiceKind.QuestGiver, 1003, false), Offer(NpcServiceKind.SkillMaster, 4, true)],
+                ["Welcome to the school of skills. Choose a skill to learn or improve.", "Choose a skill."], "")
         };
     }
 
@@ -533,7 +657,7 @@ internal sealed class HudCaptureProbe : Game
             },
             NpcServiceKind.Warehouse => new NpcServiceReply(ok)
             {
-                Warehouse = new WarehouseView(1, 125000, 37, WarehouseStorage.MaxWeight, WarehouseStorage.Columns, WarehouseStorage.Rows,
+                Warehouse = new WarehouseView(1, 125000, 37, WarehouseStorage.MaxWeight, StoreGrid.Columns, StoreGrid.Rows,
                 [
                     new(Guid.NewGuid(), ItemCodes.Parse("WA101"), "Stone Axe", ItemKind.Axe, 1, 2, -1, 2, 3, "WA101"),
                     new(Guid.NewGuid(), ItemCodes.Parse("DA102"), "Battle Suit", ItemKind.Armor, 1, 5, -1, 2, 3, "DA102"),
@@ -568,7 +692,7 @@ internal sealed class HudCaptureProbe : Game
         }
 
         return scenario.LowHealth
-            ? _owner with { Hp = 1, Mp = 0, Sp = 2 }
-            : _owner with { Hp = _owner.MaxHp * scenario.HealthPercent / 100, Experience = (_owner.LevelStart + _owner.NextLevel) / 2 };
+            ? _owner with { Life = 1, Mana = 0, Stamina = 2 }
+            : _owner with { Life = _owner.MaxLife * scenario.HealthPercent / 100, Experience = (_owner.LevelStart + _owner.NextLevel) / 2 };
     }
 }

@@ -2,8 +2,11 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using PristonTale.Client.Net.Presence;
 using PristonTale.Client.Net.WorldCatalog;
+using PristonTale.Engine3D;
 using PristonTale.Gameplay.UI.Rendering;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Combat;
 
 namespace PristonTale.Gameplay.UI.Widgets;
 
@@ -14,7 +17,7 @@ public readonly record struct HudTargetFrame(Rectangle Box, Rectangle Portrait, 
 // Target inspection box (centred at 0.92/0.1 of the screen with cw.tga, the name 16 pixels above its bottom edge, the
 // monster race icon in its top right corner and the original life bar under it). Hits are kept as history lines; the
 // original shows them as floating numbers only, so the chat window does not list them.
-public sealed class HudCombat
+public sealed partial class HudCombat
 {
     private const int StateBarWidth = 100;
     private const int StateBarSize = 92;
@@ -29,95 +32,88 @@ public sealed class HudCombat
     private sealed class Entity(EntitySpawnInfo spawn)
     {
         public EntitySpawnInfo Spawn { get; } = spawn;
-        public int Hp { get; set; } = spawn.Hp;
+        public int Life { get; set; } = spawn.Life;
         public Vector3 Position { get; set; } = new(spawn.Position.X, spawn.Position.Y, spawn.Position.Z);
         // Set when the local player starts attacking this monster at full life, as in the original.
         public bool StateBarEnabled { get; set; }
+        // Set when the local player swings at it at all: its name box over the scene then carries the life bar.
+        public bool Attacked { get; set; }
+        public string OwnerLabel { get; set; }
     }
 
     private readonly Dictionary<ulong, Entity> _entities = new();
-    private readonly (string Text, Color Color)[] _history = new (string, Color)[64];
     private WorldRenderCatalog _catalog = WorldRenderCatalog.Empty;
     private ulong _self;
     private int _levelValue = -1;
     private string _levelText = "";
     private int _percentValue = -1;
     private string _percentText = "";
-    private int _historyCount;
-    private int _historyEnd;
 
-    public int HistoryCount => _historyCount;
-    public string LatestMessage => _historyCount > 0 ? _history[(_historyEnd + 63) % 64].Text : "";
     public void SetCatalog(WorldRenderCatalog catalog) => _catalog = catalog;
 
     // What the client knows of an entity in view: its kind and a summon's owner (Unspecified when not in view).
-    public RemoteEntityKind KindOf(ulong id, out ulong ownerId)
+    public EntityKind KindOf(ulong id, out ulong ownerId)
     {
         ownerId = 0;
         if (!_entities.TryGetValue(id, out var entity))
         {
-            return RemoteEntityKind.Unspecified;
+            return EntityKind.None;
         }
 
         ownerId = entity.Spawn.OwnerId;
         return entity.Spawn.Kind;
     }
 
-    // Fills the caller's list (cleared first) so the minimap reads the NPC positions without allocating.
-    public void CollectNpcPositions(List<Vector3> positions)
+    // Fills the caller's list (cleared first) with the NPCs and the other players in view, in render space as the minimap
+    // places the player (entity positions are kept as the wire sends them), so the minimap reads them
+    // without allocating.
+    public void CollectMapMarkers(List<HudMapMarker> markers)
     {
-        positions.Clear();
+        markers.Clear();
         foreach (var entity in _entities.Values)
         {
-            if (entity.Spawn.Kind == RemoteEntityKind.Npc)
+            if (entity.Spawn.Kind == EntityKind.Npc)
             {
-                positions.Add(entity.Position);
+                markers.Add(new HudMapMarker(entity.Spawn.EntityId, WorldSpace.Mirror(entity.Position), HudMapMarkerKind.Npc));
+            }
+            else if (entity.Spawn.Kind == EntityKind.Player && !entity.Spawn.IsSelf)
+            {
+                markers.Add(new HudMapMarker(entity.Spawn.EntityId, WorldSpace.Mirror(entity.Position), HudMapMarkerKind.Player));
             }
         }
     }
+
+    // An entity's name as its name box shows it.
+    public string EntityName(ulong id) => Name(id);
 
     public void Observe(PresenceUpdate update)
     {
         foreach (var spawn in update.Spawns)
         {
-            var enabled = _entities.TryGetValue(spawn.EntityId, out var previous) && previous.StateBarEnabled;
-            _entities[spawn.EntityId] = new Entity(spawn) { StateBarEnabled = enabled };
+            var known = _entities.TryGetValue(spawn.EntityId, out var previous);
+            _entities[spawn.EntityId] = new Entity(spawn) { StateBarEnabled = known && previous.StateBarEnabled, Attacked = known && previous.Attacked };
             if (spawn.IsSelf)
             {
                 _self = spawn.EntityId;
             }
         }
 
-        foreach (var state in update.States)
+        for (var index = 0; index < update.States.Count; index++)
         {
+            var state = update.States[index];
             if (_entities.TryGetValue(state.EntityId, out var entity))
             {
-                entity.Hp = state.Hp;
+                entity.Life = state.Life;
                 entity.Position = new Vector3(state.Position.X, state.Position.Y, state.Position.Z);
             }
         }
 
         foreach (var combat in update.Events)
         {
-            if (combat.Kind == RemoteCombatEventKind.SwingBegin && combat.AttackerId == _self && _self != 0)
+            if (combat.Kind == CombatEventKind.SwingBegin && combat.AttackerId == _self && _self != 0)
             {
                 NoteAttack(combat.TargetId);
             }
-
-            if (combat.Kind != RemoteCombatEventKind.Hit || combat.AttackerId != _self && combat.TargetId != _self)
-            {
-                continue;
-            }
-
-            var prefix = combat.Critical ? "Critical! " : "";
-            var outgoing = combat.AttackerId == _self;
-            var text = outgoing ? $"{prefix}{Name(combat.TargetId)}: -{combat.Damage} HP" : $"{prefix}You received {combat.Damage} damage";
-            if (combat.Killed)
-            {
-                text += " (defeated)";
-            }
-
-            Add(text, outgoing ? Color.White : MonsterColor);
         }
 
         foreach (var id in update.Removed)
@@ -126,18 +122,16 @@ public sealed class HudCombat
         }
     }
 
-    public void Add(string text, Color color)
-    {
-        _history[_historyEnd] = (text, color);
-        _historyEnd = (_historyEnd + 1) % _history.Length;
-        _historyCount = Math.Min(_historyCount + 1, _history.Length);
-    }
-
     // As in the original, only an attack that finds the monster at full life enables the classic bar.
     public void NoteAttack(ulong target)
     {
-        if (_entities.TryGetValue(target, out var entity) && entity.Spawn.Kind == RemoteEntityKind.Monster && entity.Spawn.MaxHp > 0
-            && entity.Hp == entity.Spawn.MaxHp)
+        if (_entities.TryGetValue(target, out var attacked) && attacked.Spawn.Kind == EntityKind.Monster)
+        {
+            attacked.Attacked = true;
+        }
+
+        if (_entities.TryGetValue(target, out var entity) && entity.Spawn.Kind == EntityKind.Monster && entity.Spawn.MaxLife > 0
+            && entity.Life == entity.Spawn.MaxLife)
         {
             entity.StateBarEnabled = true;
         }
@@ -179,7 +173,7 @@ public sealed class HudCombat
     public bool ShowsHealthBar(ulong target, bool classic)
     {
         // NPCs show only their name, as in the original: they cannot be fought, so a life bar would mislead.
-        if (!_entities.TryGetValue(target, out var entity) || entity.Spawn.MaxHp <= 0 || entity.Spawn.Kind == RemoteEntityKind.Npc)
+        if (!_entities.TryGetValue(target, out var entity) || entity.Spawn.MaxLife <= 0 || entity.Spawn.Kind == EntityKind.Npc)
         {
             return false;
         }
@@ -211,8 +205,8 @@ public sealed class HudCombat
 
         var (y, z) = entity.Spawn.Kind switch
         {
-            RemoteEntityKind.Monster when _catalog.GetMonster(entity.Spawn.TemplateId) is { } monster => (monster.PortraitOffsetY, monster.PortraitOffsetZ),
-            RemoteEntityKind.Npc when _catalog.GetNpc(entity.Spawn.TemplateId) is { } npc => (npc.PortraitOffsetY, npc.PortraitOffsetZ),
+            EntityKind.Monster when _catalog.GetMonster(entity.Spawn.TemplateId) is { } monster => (monster.PortraitOffsetY, monster.PortraitOffsetZ),
+            EntityKind.Npc when _catalog.GetNpc(entity.Spawn.TemplateId) is { } npc => (npc.PortraitOffsetY, npc.PortraitOffsetZ),
             _ => (0, 0)
         };
         subject = new HudPortraitSubject(target, y, z);
@@ -232,7 +226,9 @@ public sealed class HudCombat
 
     // Modern mode (default) always shows the bar with the level and life percentage under it; classic mode draws only
     // what the original shows: the name, the race icon and the life bar once StateBarEnabled.
-    public void DrawTarget(HudPainter painter, HudLayout layout, ulong target, bool classicHealthBar = false, Texture2D portrait = null)
+    // playerButtons: the trade, party and friend buttons take the life bar's place under the frame (HudPlayerButtons).
+    public void DrawTarget(HudPainter painter, HudLayout layout, ulong target, bool classicHealthBar = false, Texture2D portrait = null,
+        bool playerButtons = false)
     {
         if (target == 0 || !_entities.TryGetValue(target, out var entity))
         {
@@ -246,34 +242,34 @@ public sealed class HudCombat
         painter.ColorBox(frame.Portrait, 60, 68, 74, 255);
         painter.Stretch(HudArt.TargetBox, box);
         painter.Image(portrait, frame.Portrait);
-        if (entity.Spawn.Kind == RemoteEntityKind.Monster && BroodIcon(_catalog.GetMonster(entity.Spawn.TemplateId)?.Brood ?? MonsterBrood.Normal) is { } icon)
+        if (entity.Spawn.Kind == EntityKind.Monster && BroodIcon(_catalog.GetMonster(entity.Spawn.TemplateId)?.Brood ?? MonsterBrood.Normal) is { } icon)
         {
             painter.Stretch(icon, frame.Brood);
         }
 
         var color = entity.Spawn.Kind switch
         {
-            RemoteEntityKind.Monster => MonsterColor,
-            RemoteEntityKind.Npc => NpcColor,
+            EntityKind.Monster => MonsterColor,
+            EntityKind.Npc => NpcColor,
             _ => Color.White
         };
         // The original centres the name on the frame without clipping it; it only has to stay on screen.
         var centerX = box.X + (box.Width >> 1);
         var room = Math.Max(box.Width - 8, 2 * Math.Min(centerX, layout.Width - centerX) - 8);
         painter.TextCentered(painter.Fit(Name(target), room), centerX - room / 2, centerX + room / 2, frame.NameY, color, true, NameShadow);
-        if (!ShowsHealthBar(target, classicHealthBar))
+        if (playerButtons || !ShowsHealthBar(target, classicHealthBar))
         {
             return;
         }
 
         var bar = frame.HealthBar;
-        DrawHealthBar(painter, bar, entity.Hp, entity.Spawn.MaxHp);
+        DrawHealthBar(painter, bar, entity.Life, entity.Spawn.MaxLife);
         if (classicHealthBar)
         {
             return;
         }
 
-        var percent = PercentText(HealthPercent(entity.Hp, entity.Spawn.MaxHp));
+        var percent = PercentText(HealthPercent(entity.Life, entity.Spawn.MaxLife));
         painter.Text(LevelText(Level(entity)), bar.X, frame.StatsY, LevelColor);
         painter.Text(percent, bar.Right - painter.Measure(percent), frame.StatsY, Color.White);
     }
@@ -281,7 +277,8 @@ public sealed class HudCombat
     private static void DrawHealthBar(HudPainter painter, Rectangle bar, int life, int maximum)
     {
         painter.Stretch(HudArt.EnergyBack, bar, new Rectangle(0, 0, StateBarWidth, 15));
-        if (life > 0)
+        // A maximum of 0 (a spawn without one) draws the empty bar.
+        if (life > 0 && maximum > 0)
         {
             var percent = (int)((long)Math.Min(life, maximum) * StateBarSize / maximum);
             painter.Stretch(HudArt.EnergyFill, new Rectangle(bar.X, bar.Y, (percent + 3) * bar.Width / StateBarWidth, bar.Height),
@@ -314,6 +311,9 @@ public sealed class HudCombat
         return _percentText;
     }
 
+    // A player's name while it is in view; null otherwise.
+    public string PlayerName(ulong id) => _entities.TryGetValue(id, out var entity) && entity.Spawn.Player is { } player ? player.Name : null;
+
     private string Name(ulong id)
     {
         if (!_entities.TryGetValue(id, out var entity))
@@ -331,7 +331,7 @@ public sealed class HudCombat
             return entity.Spawn.Name;
         }
 
-        return entity.Spawn.Kind == RemoteEntityKind.Npc
+        return entity.Spawn.Kind == EntityKind.Npc
             ? _catalog.GetNpc(entity.Spawn.TemplateId)?.Name ?? "NPC"
             : _catalog.GetMonster(entity.Spawn.TemplateId)?.Name ?? "Monster";
     }

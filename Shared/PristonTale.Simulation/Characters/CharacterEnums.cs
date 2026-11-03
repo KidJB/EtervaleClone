@@ -1,19 +1,5 @@
 namespace PristonTale.Simulation.Characters;
 
-public enum PlayerClass
-{
-    Fighter = 1,
-    Mechanician = 2,
-    Archer = 3,
-    Pikeman = 4,
-    Atalanta = 5,
-    Knight = 6,
-    Magician = 7,
-    Priestess = 8,
-    Assassin = 9,
-    Shaman = 10
-}
-
 public enum CharacterBrood
 {
     Tempskron = 1,
@@ -36,17 +22,6 @@ public enum JobBitCode : uint
     Shaman = 0x00100000
 }
 
-public enum CharacterMotionName
-{
-    Stand,
-    Walk,
-    Run,
-    Attack,
-    Damage,
-    Dead,
-    Skill
-}
-
 // Persisted equipment slot order of the classic save layout: no helmet slot, and Sheltom kept separate.
 public enum EquipmentSlot
 {
@@ -60,4 +35,9 @@ public enum EquipmentSlot
     RingLeft,
     RingRight,
     Sheltom
+}
+
+public static class EquipmentSlots
+{
+    public const int Count = (int)EquipmentSlot.Sheltom + 1;
 }

@@ -1,11 +1,10 @@
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-using PristonTale.Application.Services;
-using PristonTale.Effects;
+using PristonTale.Effects.Vfx;
 using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.Rendering;
+using PristonTale.Gameplay.Audio;
 using PristonTale.Gameplay.Effects;
 using PristonTale.Gameplay.Screens.Framework;
 using PristonTale.Gameplay.Screens.Gameplay;
@@ -13,6 +12,8 @@ using PristonTale.Gameplay.Screens.Opening;
 using PristonTale.Gameplay.UI;
 using PristonTale.Gameplay.World;
 using PristonTale.Simulation.Characters;
+using PristonTale.Contracts.Sessions;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Gameplay.Screens.CharacterSelect;
 
@@ -33,19 +34,18 @@ public sealed class CharacterSelectScreen : GameScreen
     private CharacterSelectScene _scene;
     private CharacterSelectPortrait _portrait;
 
-    private EffectsEngine _effects;
+    private VfxSystem _vfx;
+    private VfxRenderer _vfxRenderer;
+    private CharSelectFlames _flames;
 
-    private static readonly Vector3[] BrazierPositions =
+    // Where the green flames burn (CharSelectEffects).
+    public static readonly Vector3[] BrazierPositions =
     [
         new(-70f, 55f, 156f), new(-77f, 60f, 143f), new(-81f, 65f, 143f),
         new(70f, 56f, 155f),  new(75f, 60f, 152f),  new(81f, 66f, 142f),
     ];
 
-    private const string FlameFrameDir = "image";
-    private static readonly string[] FlameFrameNames =
-        ["flame1.bmp", "flame2.bmp", "flame3.bmp", "flame4.bmp", "flame5.bmp", "flame6.bmp", "flame7.bmp", "flame8.bmp"];
-
-    private SoundEffectInstance _bgmInstance;
+    private LoginAudio _audio;
     private MouseState _lastMouse;
     private KeyboardState _lastKeyboard;
     private double _lastClickSeconds = -1d;
@@ -110,45 +110,46 @@ public sealed class CharacterSelectScreen : GameScreen
         _portrait = new CharacterSelectPortrait(Context.GraphicsDevice);
         _view = new CharacterSelectView(Context.SpriteBatch, Context.Font, _assets, _cameraCtl);
         InitEffects();
-        StartBgm();
+        _audio = LoginAudio.CharacterSelect(Context.Audio);
         BeginLoadRoster();
     }
 
     private void InitEffects()
     {
-        _effects = new EffectsEngine(Context.GraphicsDevice, Context.Content);
-
-        var beam = CharSelectEffects.BuildGreenBeam(_assets.LoadFlipbook(FlameFrameDir, FlameFrameNames));
-        if (beam == null)
+        var library = Context.Effects?.Vfx.Library;
+        if (library is null)
         {
             return;
         }
 
-        _effects.Catalog.Register(beam);
-        foreach (var pos in BrazierPositions)
+        library.Register(CharSelectEffects.GreenBeamDefinition());
+        if (!library.TryGet(CharSelectEffects.GreenBeam, out var beam))
         {
-            _effects.Spawn(beam, pos);
+            return;
         }
+
+        _vfx = new VfxSystem(VfxNoAnchors.Instance, new TransientLightServices(_renderer.TransientLights), library);
+        _vfxRenderer = new VfxRenderer(Context.GraphicsDevice, Context.Content);
+        _flames = new CharSelectFlames(_vfx, beam, BrazierPositions);
     }
 
     public override void Update(GameTime gameTime)
     {
         _elapsedSeconds = gameTime.TotalGameTime.TotalSeconds;
         var dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
-        if (_bgmInstance is not null)
-        {
-            _bgmInstance.Volume = Context.Audio?.MusicEnabled == false ? 0f : 0.6f;
-        }
+        _audio.Update(dt);
 
         _cameraCtl.Update(Context.GraphicsDevice, (int)_state, dt);
 
         _scene.UpdateRun(dt);
 
         _renderer.Update(gameTime);
-        _effects?.Update(gameTime);
+        _flames?.Update(dt);
 
         var mouse = Mouse.GetState();
         var keyboard = Keyboard.GetState();
+        // Drained every frame, so keys typed before the name box opens never reach it.
+        var typed = Context.TypedText.Drain();
 
         if (_busy != Busy.None)
         {
@@ -169,7 +170,7 @@ public sealed class CharacterSelectScreen : GameScreen
                     break;
                 case State.FaceSelect:
                 case State.Name:
-                    UpdateFaceSelect(mouse, keyboard, gameTime.ElapsedGameTime.TotalSeconds);
+                    UpdateFaceSelect(mouse, typed, gameTime.ElapsedGameTime.TotalSeconds);
                     break;
             }
         }
@@ -318,6 +319,7 @@ public sealed class CharacterSelectScreen : GameScreen
             var now = _elapsedSeconds;
             var isDouble = _lastClickIndex == _hoveredIndex && (now - _lastClickSeconds) < 0.35d;
             _selectedIndex = _hoveredIndex;
+            _audio.Play(LoginCue.PickCharacter);
             if (isDouble)
             {
                 BeginEnterWorld();
@@ -348,6 +350,7 @@ public sealed class CharacterSelectScreen : GameScreen
         {
             if (hasChars)
             {
+                _audio.Play(LoginCue.Button);
                 if (_selectedIndex >= 0)
                 {
                     BeginEnterWorld();
@@ -361,12 +364,14 @@ public sealed class CharacterSelectScreen : GameScreen
         }
         if (InButton(cursor, _assets.BtExit, CharSelectLayout.TwoButtonQuitX(viewport), y, CharSelectLayout.ButtonKind.Exit))
         {
+            _audio.Play(LoginCue.Button);
             Context.RequestScreen(new OpeningScreen(Context));
             return true;
         }
         if (_selectedIndex >= 0 &&
             InButton(cursor, _assets.BtDelete, CharSelectLayout.TwoButtonDeleteX, y, CharSelectLayout.ButtonKind.Delete))
         {
+            _audio.Play(LoginCue.Button);
             BeginDelete();
             return true;
         }
@@ -380,6 +385,7 @@ public sealed class CharacterSelectScreen : GameScreen
             return;
         }
 
+        _audio.Play(LoginCue.GameStart);
         _enteringSummary = _scene.RosterSummary(_selectedIndex);
         var name = _enteringSummary.Name;
         _errorMessage = string.Empty;
@@ -400,7 +406,7 @@ public sealed class CharacterSelectScreen : GameScreen
             var outcome = _enterTask.Result;
             var s = _enteringSummary;
             var entered = new EnteredCharacter(
-                (PlayerClass)s.ClassId, s.Name ?? string.Empty, s.Level, s.FaceIndex,
+                s.Class, s.Name ?? string.Empty, s.Level, s.FaceIndex,
                 outcome.FieldId, outcome.SpawnX, outcome.SpawnZ, s.Tier, s.HairIndex);
             _enterTask = null;
             Context.RequestScreen(new GameplayScreen(Context, entered));
@@ -440,6 +446,7 @@ public sealed class CharacterSelectScreen : GameScreen
         _deleteTask = null;
         if (ok)
         {
+            _audio.Play(LoginCue.Delete);
             BeginLoadRoster();
         }
         else
@@ -452,6 +459,7 @@ public sealed class CharacterSelectScreen : GameScreen
 
     private void EnterRaceSelect()
     {
+        _audio.Play(LoginCue.NewCharacter);
         ClearJobActors();
         _state = State.RaceSelect;
         _errorMessage = string.Empty;
@@ -496,6 +504,7 @@ public sealed class CharacterSelectScreen : GameScreen
 
     private void ChooseBrood(CharacterBrood brood)
     {
+        _audio.Play(LoginCue.NewCharacter);
         _chosenBrood = brood;
         _errorMessage = string.Empty;
         ResetBackendCall();
@@ -554,6 +563,7 @@ public sealed class CharacterSelectScreen : GameScreen
             var now = _elapsedSeconds;
             var isDouble = _lastClickIndex == _jobHovered && (now - _lastClickSeconds) < 0.35d;
             _jobSelected = _jobHovered;
+            _audio.Play(LoginCue.PickCharacter);
             if (isDouble)
             {
                 EnterFaceSelect();
@@ -587,9 +597,9 @@ public sealed class CharacterSelectScreen : GameScreen
 
     private void ReturnChosenJobToLineup() => _scene.ReturnToLineup(_jobSelected);
 
-    private void UpdateFaceSelect(MouseState mouse, KeyboardState keyboard, double dtSeconds)
+    private void UpdateFaceSelect(MouseState mouse, ReadOnlySpan<char> typed, double dtSeconds)
     {
-        _nameField.Update(keyboard, _lastKeyboard, dtSeconds);
+        _nameField.Update(typed, dtSeconds);
         _faceHovered = -1;
         for (var index = 0; index < CharSelectLayout.FacesPerJob; index++)
         {
@@ -632,18 +642,21 @@ public sealed class CharacterSelectScreen : GameScreen
 
         if (InButton(cursor, _assets.BtSelect, CharSelectLayout.ThreeButtonOkX(viewport), y, CharSelectLayout.ButtonKind.Select))
         {
+            _audio.Play(LoginCue.Button);
             OnCreateOk();
             return true;
         }
 
         if (InButton(cursor, _assets.BtBack, CharSelectLayout.ThreeButtonBackX(viewport), y, CharSelectLayout.ButtonKind.Back))
         {
+            _audio.Play(LoginCue.Back);
             StepBack();
             return true;
         }
 
         if (InButton(cursor, _assets.BtExit, CharSelectLayout.ThreeButtonQuitX(viewport), y, CharSelectLayout.ButtonKind.Exit))
         {
+            _audio.Play(LoginCue.Button);
             Context.RequestScreen(new OpeningScreen(Context));
             return true;
         }
@@ -714,11 +727,11 @@ public sealed class CharacterSelectScreen : GameScreen
             _errorMessage = "Enter a name.";
             return;
         }
-        var classId = (int)_scene.JobClass(_jobSelected);
+        _audio.Play(LoginCue.GameStart);
         _errorMessage = string.Empty;
         _busy = Busy.Creating;
         ResetBackendCall();
-        _createTask = Context.Backend.CreateCharacterAsync(name, classId, _faceIndex, _backendCts.Token);
+        _createTask = Context.Backend.CreateCharacterAsync(name, _scene.JobClass(_jobSelected), _faceIndex, _backendCts.Token);
     }
 
     private void PollCreate()
@@ -761,7 +774,11 @@ public sealed class CharacterSelectScreen : GameScreen
         _renderer.Draw(_cameraCtl.Camera);
 
         // Effects retain scene depth; the 2D view must remain last.
-        _effects?.Draw(_cameraCtl.View, _cameraCtl.Projection, _cameraCtl.Position);
+        if (_vfx is not null)
+        {
+            _vfxRenderer.Draw(_vfx, _cameraCtl.View, _cameraCtl.Projection, _cameraCtl.Position, _renderer.SceneLinearDepth);
+        }
+
         _renderer.ComposeScene();
 
         _view.Draw(viewport, viewModel);
@@ -782,6 +799,7 @@ public sealed class CharacterSelectScreen : GameScreen
     {
         _viewModel.StateIndex = (int)_state;
         _viewModel.ErrorMessage = _errorMessage;
+        _viewModel.ServerName = Context.Backend.ServerName;
         _viewModel.ElapsedSeconds = _elapsedSeconds;
         _viewModel.RosterHasChars = _scene.RosterCount > 0;
         _viewModel.HasSelectedRoster = _selectedIndex >= 0;
@@ -831,26 +849,12 @@ public sealed class CharacterSelectScreen : GameScreen
         _backendCts = new CancellationTokenSource();
     }
 
-    private void StartBgm()
-    {
-        if (Context.Audio?.CharacterSelectMusic is not { } music)
-        {
-            return;
-        }
-
-        _bgmInstance = music.CreateInstance();
-        _bgmInstance.IsLooped = true;
-        _bgmInstance.Volume = Context.Audio.MusicEnabled ? 0.6f : 0f;
-        _bgmInstance.Play();
-    }
-
     public override void Dispose()
     {
         _backendCts?.Cancel();
         _backendCts?.Dispose();
-        _bgmInstance?.Stop();
-        _bgmInstance?.Dispose();
-        _effects?.Dispose();
+        _audio?.Dispose();
+        _vfxRenderer?.Dispose();
         _portrait?.Dispose();
         _assets?.Dispose();
         _renderer?.Dispose();

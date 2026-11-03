@@ -7,6 +7,9 @@ using PristonTale.Gameplay.UI.Widgets;
 using PristonTale.Protocol.Packets;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Skills;
+using PristonTale.Contracts.Skills;
+using PristonTale.Assets;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -134,7 +137,7 @@ internal static class SkillPresentationTests
 
             foreach (var sound in new[] { rule.CastSound, rule.ImpactSound, rule.CompanionSound, rule.ShieldModel }.Concat(rule.ImpactSounds).Where(static sound => sound != SkillRule.Silent))
             {
-                if (sound.Length > 0 && !PristonFileResolver.Exists(Path.Combine(root, sound)))
+                if (sound.Length > 0 && !AssetFiles.Exists(Path.Combine(root, sound)))
                 {
                     problems.Add($"{rule.Name} sound {sound} is missing");
                 }
@@ -154,7 +157,7 @@ internal static class SkillPresentationTests
             foreach (var texture in VfxCatalog.Textures(definition))
             {
                 if (texture.Length > 0 && !texture.StartsWith(VfxBuiltinTextures.Prefix, StringComparison.Ordinal)
-                    && !PristonFileResolver.Exists(Path.Combine(root, texture)))
+                    && !AssetFiles.Exists(Path.Combine(root, texture)))
                 {
                     problems.Add($"{definition.Name} texture {texture} is missing");
                 }
@@ -162,12 +165,12 @@ internal static class SkillPresentationTests
 
             foreach (var part in definition.Parts)
             {
-                if (part.Animation.Length > 0 && !PristonFileResolver.Exists(Path.Combine(root, "Effect", "AnimationData", part.Animation)))
+                if (part.Animation.Length > 0 && !AssetFiles.Exists(Path.Combine(root, "Effect", "AnimationData", part.Animation)))
                 {
                     problems.Add($"{definition.Name} animation {part.Animation} is missing");
                 }
 
-                if (part.Model.Length > 0 && !PristonFileResolver.Exists(Path.Combine(root, part.Model)))
+                if (part.Model.Length > 0 && !AssetFiles.Exists(Path.Combine(root, part.Model)))
                 {
                     problems.Add($"{definition.Name} model {part.Model} is missing");
                 }
@@ -183,7 +186,7 @@ internal static class SkillPresentationTests
 
             foreach (var sound in definition.Sounds.SelectMany(static sound => sound.AllPaths))
             {
-                if (!PristonFileResolver.Exists(Path.Combine(root, sound)))
+                if (!AssetFiles.Exists(Path.Combine(root, sound)))
                 {
                     problems.Add($"{definition.Name} sound {sound} is missing");
                 }
@@ -191,7 +194,7 @@ internal static class SkillPresentationTests
 
             foreach (var component in definition.Components.Where(static component => component.Kind == VfxComponentKind.Model))
             {
-                if (!PristonFileResolver.Exists(Path.Combine(root, component.Model)))
+                if (!AssetFiles.Exists(Path.Combine(root, component.Model)))
                 {
                     problems.Add($"{definition.Name} model {component.Model} is missing");
                 }
@@ -220,7 +223,7 @@ internal static class SkillPresentationTests
         });
         var anchors = new Anchors();
         var system = new VfxSystem(anchors);
-        var instance = system.Spawn(burst, new VfxSpawn(0, 0, Vector3.Zero, 0f))!;
+        var instance = system.Spawn(burst, new VfxSpawn(0, 0, Vector3.Zero, 0f)).Instance!;
         system.Update(0.01f);
         Assert.True(system.ParticleCount == 10, $"burst emitted {system.ParticleCount}");
         for (var frame = 0; frame < 120; frame++)
@@ -229,7 +232,7 @@ internal static class SkillPresentationTests
         }
 
         Assert.True(system.Instances.Count == 0 && !instance.Alive, "finished effect stayed alive");
-        var moving = system.Spawn(stream, new VfxSpawn(0, 0, Vector3.Zero, 0f))!;
+        var moving = system.Spawn(stream, new VfxSpawn(0, 0, Vector3.Zero, 0f)).Instance!;
         moving.Travel(Vector3.Zero, new Vector3(300, 0, 0), 0.5f);
         var peak = 0;
         for (var frame = 0; frame < 30; frame++)
@@ -265,7 +268,7 @@ internal static class SkillPresentationTests
     private static Task BooksAsync()
     {
         var cooldowns = new SkillCooldownBook();
-        cooldowns.Apply(new SkillCastResultInfo(1, 0x08010002, SkillCastStatus.Accepted, 1, 10000, 10000, 0, 0), 1000);
+        cooldowns.Apply(new SkillCastResultInfo(1, 0x08010002, SkillCastVerdict.Accepted, 1, 10000, 10000, 0, 0), 1000);
         Assert.True(!cooldowns.Ready(0x08010002, 5000) && Math.Abs(cooldowns.Fraction(0x08010002, 6000) - 0.5f) < 0.001f, "cooldown sweep");
         cooldowns.Apply(new SkillCooldownSnapshot(0, []), 6000);
         Assert.True(cooldowns.Ready(0x08010002, 6000), "snapshot without the skill did not clear it");

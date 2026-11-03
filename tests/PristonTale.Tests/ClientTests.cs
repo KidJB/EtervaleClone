@@ -11,6 +11,10 @@ using PristonTale.Gameplay.World.Remote;
 using PristonTale.Protocol.Binary;
 using PristonTale.Protocol.Packets;
 using PristonTale.Simulation.Characters;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -19,6 +23,7 @@ internal static class ClientTests
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
         yield return ("original presence packets retain combat events, skill motion and field identity", PresenceAsync);
+        yield return ("movement reports go out on change, at 5 Hz moving and 1 Hz standing, never twice within 50 ms", MovementPacingAsync);
         yield return ("crowded presence keeps position updates inside the per-receiver budget without starving walkers", CrowdBudgetAsync);
         yield return ("remote rates and explicit swing events replace per-frame restarts", RemoteMotionAsync);
         yield return ("NPC duplicate Stand clips preserve exact INX indices and weighted selection", NpcStandMotionsAsync);
@@ -28,21 +33,45 @@ internal static class ClientTests
         yield return ("cursor rays originate at the camera and reject an enclosing NPC pick volume", CursorPickingAsync);
     }
 
+    private static Task MovementPacingAsync()
+    {
+        var pacer = new PristonTale.Gameplay.World.MovementReportPacer();
+        pacer.SetField(3);
+        Assert.True(pacer.TryTake(false, false, 0, 3), "the first report did not go out");
+        Assert.True(!pacer.TryTake(true, false, 0, 3), "a change inside the 50 ms gap went out at once");
+        pacer.Advance(0.05f);
+        Assert.True(pacer.TryTake(true, false, 0, 3), "the change did not go out once the gap passed");
+        pacer.Advance(0.1f);
+        Assert.True(!pacer.TryTake(true, false, 0, 3), "an unchanged walk reported before 200 ms");
+        pacer.Advance(0.11f);
+        Assert.True(pacer.TryTake(true, false, 0, 3), "an unchanged walk did not report at 200 ms");
+        pacer.Advance(0.06f);
+        pacer.Request();
+        Assert.True(pacer.TryTake(true, false, 0, 3), "a requested report did not go out after the gap");
+        pacer.Advance(0.06f);
+        Assert.True(pacer.TryTake(false, false, 0, 3), "a stop did not report");
+        pacer.Advance(0.9f);
+        Assert.True(!pacer.TryTake(false, false, 0, 3), "a standing player reported before a second");
+        pacer.Advance(0.11f);
+        Assert.True(pacer.TryTake(false, false, 0, 3), "a standing player did not report after a second");
+        return Task.CompletedTask;
+    }
+
     private static Task PresenceAsync()
     {
         var origin = new System.Numerics.Vector3(120, 35, -400);
-        var impact = new CombatEventView(9, 1, CombatEventKindView.MonsterSkillImpact,
+        var impact = new CombatEventView(9, 1, CombatEventKind.MonsterSkillImpact,
             sourceSoundCode: 0x18E0, position: origin, facing: 1.2f);
-        var entity = new EntityView(2, EntityKindView.Monster, false, origin, 1.2f, MoveStateView.Skill,
+        var entity = new EntityView(2, EntityKind.Monster, false, origin, 1.2f, MotionState.Skill,
             10, 45, 60, default, templateId: 1);
-        var self = new EntityView(1, EntityKindView.Player, false, origin, 0f, MoveStateView.Idle, 1, 100, 100,
-            new PlayerAppearanceView("Self", 2, 0, 0, 0, "", ""));
+        var self = new EntityView(1, EntityKind.Player, false, origin, 0f, MotionState.Stand, 1, 100, 100,
+            new PlayerAppearanceView("Self", PlayerClass.Mechanician, 0, 0, 0, "", ""));
         var snapshot = new WorldSnapshot(8, [self, entity], [impact], 3);
         var update = new WireRoundTrip(1).PushMerged(snapshot);
-        Assert.True(update.FieldId == 3 && update.Spawns.Single(spawn => spawn.EntityId == 2).MoveState == RemoteMoveState.Skill,
+        Assert.True(update.FieldId == 3 && update.Spawns.Single(spawn => spawn.EntityId == 2).MoveState == MotionState.Skill,
             "TCP presence dropped field or skill motion");
         Assert.True(update.Spawns.Single(spawn => spawn.EntityId == 1).IsSelf, "own avatar was not marked as self");
-        Assert.True(update.Events.Single().Position == origin && update.Events.Single().Kind == RemoteCombatEventKind.MonsterSkillImpact,
+        Assert.True(update.Events.Single().Position == origin && update.Events.Single().Kind == CombatEventKind.MonsterSkillImpact,
             "TCP presence dropped skill impact data");
         Assert.True(update.Spawns.All(spawn => spawn.ServerTimeMs == 8 * 50), "presence samples lost the server tick stamp");
         return Task.CompletedTask;
@@ -50,9 +79,12 @@ internal static class ClientTests
 
     private static Task CrowdBudgetAsync()
     {
-        EntityView Walker(int id, float offset) => new((uint)id, EntityKindView.Player, false, new System.Numerics.Vector3(id + offset, 0, id % 20 * 10f), 0f,
-            MoveStateView.Walking, 1, 100, 100, new PlayerAppearanceView("W" + id, 2, 0, 0, 0, "", ""));
-        // The largest crowd a receiver shows at once: the receiver and MaxVisible others.
+        // The largest crowd a receiver shows at once: the receiver, MaxVisiblePlayers other players and monsters to MaxVisible.
+        EntityView Walker(int id, float offset) => id <= Server.Net.PresenceEncoder.MaxVisiblePlayers + 1
+            ? new((uint)id, EntityKind.Player, false, new System.Numerics.Vector3(id + offset, 0, id % 20 * 10f), 0f, MotionState.Walk, 1, 100, 100,
+                new PlayerAppearanceView("W" + id, PlayerClass.Mechanician, 0, 0, 0, "", ""))
+            : new((uint)id, EntityKind.Monster, false, new System.Numerics.Vector3(id + offset, 0, id % 20 * 10f), 0f, MotionState.Walk, 1, 100, 100,
+                default, templateId: 5);
         var crowd = Server.Net.PresenceEncoder.MaxVisible + 1;
         var wire = new WireRoundTrip(1);
         var spawned = wire.PushMerged(new WorldSnapshot(1, Enumerable.Range(1, crowd).Select(id => Walker(id, 0)).ToArray(), fieldId: 3));
@@ -81,7 +113,7 @@ internal static class ClientTests
             0,
             Vector3.Zero,
             0,
-            RemoteMoveState.Attack,
+            MotionState.Attack,
             100);
         var now = 1000d;
         void Settle()
@@ -93,7 +125,7 @@ internal static class ClientTests
             }
         }
 
-        var swing = new CombatEventInfo(2, 1, RemoteCombatEventKind.SwingBegin, 800, 400, 0, false, false);
+        var swing = new CombatEventInfo(2, 1, CombatEventKind.SwingBegin, 800, 400, 0, false, false);
         remote.SetRates(5, 1.75f);
         remote.ApplyCombatEvent(swing, now);
         Settle();
@@ -110,18 +142,18 @@ internal static class ClientTests
         remote.ApplyCombatEvent(swing, now);
         Settle();
         Assert.True(scene.Restarts == 2, "second swing event was lost");
-        remote.SetTarget(now, Vector3.Zero, 0, RemoteMoveState.Skill, 100);
-        var cast = new CombatEventInfo(2, 1, RemoteCombatEventKind.SwingBegin, 1980, 957, 0, false, false);
+        remote.SetTarget(now, Vector3.Zero, 0, MotionState.Skill, 100);
+        var cast = new CombatEventInfo(2, 1, CombatEventKind.SwingBegin, 1980, 957, 0, false, false);
         remote.ApplyCombatEvent(cast, now);
         Settle();
-        Assert.True(scene.Restarts == 3 && remote.Motion == PristonActorMotion.Skill, "skill entry restarted basic attack");
+        Assert.True(scene.Restarts == 3 && remote.Motion == MotionCode.Skill, "skill entry restarted basic attack");
         remote.ApplyCombatEvent(cast, now);
         Settle();
-        Assert.True(scene.Restarts == 4 && remote.Motion == PristonActorMotion.Skill, "repeated skill did not restart its own motion");
-        remote.SetTarget(now, Vector3.Zero, 0, RemoteMoveState.Walking, 100);
+        Assert.True(scene.Restarts == 4 && remote.Motion == MotionCode.Skill, "repeated skill did not restart its own motion");
+        remote.SetTarget(now, Vector3.Zero, 0, MotionState.Walk, 100);
         Settle();
         Settle();
-        Assert.True(remote.ShownMotion == PristonActorMotion.Stand, "Walk without ground motion was shown walking");
+        Assert.True(remote.ShownMotion == MotionCode.Stand, "Walk without ground motion was shown walking");
         Assert.Near(1f, scene.LastRate);
         return Task.CompletedTask;
     }
@@ -131,15 +163,15 @@ internal static class ClientTests
         var motions = Enumerable.Range(0, 13)
             .Select(static _ => Motion(0, 0, 0))
             .ToArray();
-        motions[10] = Motion((uint)PristonActorMotion.Walk, 11, 41);
-        motions[11] = Motion((uint)PristonActorMotion.Stand, 50, 90);
-        motions[12] = Motion((uint)PristonActorMotion.Stand, 100, 160);
+        motions[10] = Motion((uint)MotionCode.Walk, 11, 41);
+        motions[11] = Motion((uint)MotionCode.Stand, 50, 90);
+        motions[12] = Motion((uint)MotionCode.Stand, 100, 160);
         var warehouseInfo = ModelInfo("TN-010.inx", motions);
         var cycle = new NpcStandMotionCycle(warehouseInfo, 91);
         var selected = new HashSet<int>();
         for (var index = 0; index < 32; index++)
         {
-            var update = cycle.Update(2f, PristonActorMotion.Stand);
+            var update = cycle.Update(2f, MotionCode.Stand);
             Assert.True(update.MotionChanged, "completed NPC Stand cycle did not select another concrete clip");
             Assert.True(update.MotionIndex is 11 or 12, "NPC idle selected Walk or an empty reserved INX slot");
             selected.Add(update.MotionIndex);
@@ -154,7 +186,7 @@ internal static class ClientTests
             NpcMotionRates = weightedRates,
             NpcMotionSelection = Enumerable.Repeat(12, PristonFormatConstants.MotionRateSelectionCount).ToArray()
         };
-        var weighted = new NpcStandMotionCycle(weightedInfo, 17).Update(0f, PristonActorMotion.Stand);
+        var weighted = new NpcStandMotionCycle(weightedInfo, 17).Update(0f, MotionCode.Stand);
         Assert.True(weighted.MotionIndex == 12, "expanded Win32 NPC motion-rate table was ignored");
 
         var scene = new FakeScene();
@@ -165,9 +197,9 @@ internal static class ClientTests
             0,
             Vector3.Zero,
             0f,
-            RemoteMoveState.Idle,
+            MotionState.Stand,
             1,
-            RemoteEntityKind.Npc,
+            EntityKind.Npc,
             modelInfo: warehouseInfo,
             entityId: 91);
         npc.Update(0f, 0);
@@ -193,7 +225,7 @@ internal static class ClientTests
         var manager = new RemoteEntityManager(scene, composer, composer, new CharacterClassRegistry(), ".");
         var appearance = new PlayerAppearanceInfo(
             "remote",
-            1,
+            PlayerClass.Fighter,
             0,
             0,
             0,
@@ -202,11 +234,11 @@ internal static class ClientTests
             1);
         var spawn = new EntitySpawnInfo(
             2,
-            RemoteEntityKind.Player,
+            EntityKind.Player,
             false,
             System.Numerics.Vector3.Zero,
             0,
-            RemoteMoveState.Idle,
+            MotionState.Stand,
             100,
             100,
             appearance,
@@ -223,7 +255,7 @@ internal static class ClientTests
     private static Task ServerHeightAsync()
     {
         // A monster under a bridge: the server keeps it on the lower floor and the client must not lift it.
-        var remote = new RemoteModelEntity(new FakeScene(), ActorHandle.None, 1, 0, new Vector3(0, 7, 0), 0, RemoteMoveState.Idle, 1);
+        var remote = new RemoteModelEntity(new FakeScene(), ActorHandle.None, 1, 0, new Vector3(0, 7, 0), 0, MotionState.Stand, 1);
         var now = 0d;
         for (var frame = 0; frame < 4; frame++)
         {
@@ -232,7 +264,7 @@ internal static class ClientTests
         }
 
         Assert.True(remote.DrawnPosition.Y == 7, "spawn height was replaced");
-        remote.SetTarget(now, new Vector3(0.5f, -40, 0), 0, RemoteMoveState.Idle, 1);
+        remote.SetTarget(now, new Vector3(0.5f, -40, 0), 0, MotionState.Stand, 1);
         for (var frame = 0; frame < 8; frame++)
         {
             now += 50;
@@ -247,14 +279,14 @@ internal static class ClientTests
     {
         var composer = new PendingComposer();
         var manager = new RemoteEntityManager(new FakeScene(), composer, composer, new CharacterClassRegistry(), ".");
-        var appearance = new PlayerAppearanceInfo("Remote", 1, 0, 0, 0, "", "", 1);
+        var appearance = new PlayerAppearanceInfo("Remote", PlayerClass.Fighter, 0, 0, 0, "", "", 1);
         var origin = new System.Numerics.Vector3(0, 7, 0);
         manager.Apply(new PresenceUpdate(1,
         [
-            new(1, RemoteEntityKind.Player, true, origin, 0, RemoteMoveState.Idle, 100, 100, appearance, 0),
-            new(2, RemoteEntityKind.Monster, false, origin + new System.Numerics.Vector3(40, 0, 0), 0, RemoteMoveState.Idle, 10, 10, null, 1),
-            new(3, RemoteEntityKind.Npc, false, origin + new System.Numerics.Vector3(0, 0, 40), 0, RemoteMoveState.Idle, 1, 1, null, 2),
-            new(4, RemoteEntityKind.Player, false, origin + new System.Numerics.Vector3(-25, 0, 0), 0, RemoteMoveState.Idle, 100, 100, appearance, 0)
+            new(1, EntityKind.Player, true, origin, 0, MotionState.Stand, 100, 100, appearance, 0),
+            new(2, EntityKind.Monster, false, origin + new System.Numerics.Vector3(40, 0, 0), 0, MotionState.Stand, 10, 10, null, 1),
+            new(3, EntityKind.Npc, false, origin + new System.Numerics.Vector3(0, 0, 40), 0, MotionState.Stand, 1, 1, null, 2),
+            new(4, EntityKind.Player, false, origin + new System.Numerics.Vector3(-25, 0, 0), 0, MotionState.Stand, 100, 100, appearance, 0)
         ], [], [], []));
         var neighbours = new List<PristonTale.Simulation.Physics.EntityNeighbour>();
         manager.CollectNeighbours(1, neighbours);
@@ -306,13 +338,13 @@ internal static class ClientTests
         public int Composed { get; private set; }
         public Task PrepareAsync(string root, CharacterVisualSet visuals, int face) => Ready.Task;
         public Task PrepareAsync(string root, string model) => Ready.Task;
-        public PlayerActorHandles Compose(string root, CharacterVisualSet visuals, int face, Matrix world, PristonActorMotion motion)
+        public PlayerActorHandles Compose(string root, CharacterVisualSet visuals, int face, Matrix world, MotionCode motion)
         {
             Composed++;
             return new PlayerActorHandles(ActorHandle.None, ActorHandle.None);
         }
 
-        public ComposedModelActor Compose(string root, string model, Matrix world, PristonActorMotion motion)
+        public ComposedModelActor Compose(string root, string model, Matrix world, MotionCode motion)
         {
             Composed++;
             return new ComposedModelActor(ActorHandle.None, null);
@@ -329,13 +361,13 @@ internal static class ClientTests
         public void SetActorWorld(ActorHandle handle, Matrix world)
         {
         }
-        public void SetActorMotion(ActorHandle handle, PristonActorMotion motion) => Commands++;
+        public void SetActorMotion(ActorHandle handle, MotionCode motion) => Commands++;
         public void SetActorMotionIndex(ActorHandle handle, int motionIndex)
         {
             ExactMotionIndices.Add(motionIndex);
             Commands++;
         }
-        public void RestartActorMotion(ActorHandle handle, PristonActorMotion motion)
+        public void RestartActorMotion(ActorHandle handle, MotionCode motion)
         {
             Restarts++;
             Commands++;

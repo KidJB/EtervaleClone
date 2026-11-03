@@ -14,6 +14,9 @@ using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Loot;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Simulation.World.Npcs;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -26,11 +29,11 @@ internal static class SpecialItemTests
         yield return ("premium formulas return life, mana, costs, experience, drops and weight like the originals", FormulasAsync);
         yield return ("a drop-bonus item adds one main drop roll at its chance", DropBonusAsync);
         yield return ("premium timers persist with their real-clock expiry and expired ones are dropped on entry", PersistenceAsync);
-        yield return ("an EXP potion is consumed, stored before the timer starts, replays once and boosts kill experience", ExperiencePotionAsync);
+        yield return ("an EXP potion is consumed, starts its timer at the commit and is stored, replays once and boosts kill experience", ExperiencePotionAsync);
         yield return ("a Teleport Core checks the level, moves the player to the field and is consumed only then", TeleportCoreAsync);
         yield return ("stones reset stats and skills, hair tints refuse the same hair, skill masters train the tier", ProgressionItemsAsync);
         yield return ("scrolls and force orbs start item effects; Eternal Life guards and Fatal Edge excludes Avert", ScrollsAndOrbsAsync);
-        yield return ("a firecracker publishes its effect to the field and the mobile shop sells without an NPC", FirecrackerAndShopAsync);
+        yield return ("a firecracker publishes its effect to the field and cheers, and the mobile shop sells without an NPC", FirecrackerAndShopAsync);
         yield return ("item use, result, premium timer and item effect messages round-trip", WireAsync);
         yield return ("vampiric items heal per attack and helper pets and the Phoenix strike the owner's target", PetsAndLeechAsync);
         yield return ("presence carries premium timers, item effects and the pets of a player's descriptor", PresenceAsync);
@@ -139,7 +142,7 @@ internal static class SpecialItemTests
             "offline time did not count or the expired timer survived");
         var empty = new CharacterClassRegistry().CreatePlayer(PlayerClass.Fighter, "Empty");
         SavedPremium.Restore(empty, JsonText.EmptyObject, 0);
-        Assert.True(empty.Premium.Timers.Count == 0, "legacy empty premium column");
+        Assert.True(empty.Premium.Timers.Count == 0, "blank premium column");
     }
 
     private static async Task ExperiencePotionAsync()
@@ -147,24 +150,15 @@ internal static class SpecialItemTests
         var harness = await Harness.CreateAsync(20, "BI113");
         var item = harness.Item("BI113")!;
         var command = new ItemUseCommand(Guid.NewGuid(), harness.Session.Character!.InventoryRevision, item.InstanceId);
-        var writing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var storage = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        harness.Repository.BeforeUpdate = _ =>
-        {
-            writing.TrySetResult();
-            return storage.Task;
-        };
         var pending = harness.Use(command);
-        await harness.AdvanceAsync(writing.Task);
-        Assert.True(!harness.Session.Character.Premium.IsActive(PremiumEffectKind.ExperienceUp) && harness.Session.Character.Inventory[0] is not null,
-            "the timer started before storage");
-        storage.SetResult(true);
+        harness.World.Tick(0.05f, 0);
+        Assert.True(!pending.IsCompleted && !harness.Session.Character.Premium.IsActive(PremiumEffectKind.ExperienceUp)
+            && harness.Session.Character.Inventory[0] is not null, "the timer started before the use committed");
         await harness.AdvanceAsync(pending);
         var reply = await pending;
         Assert.True(reply.Outcome.Ok && harness.Session.Character.Inventory[0] is null, "use did not consume the potion");
         Assert.True(harness.Session.Character.Premium.ValueOf(PremiumEffectKind.ExperienceUp) == 30, "EXP timer missing");
         Assert.True(harness.Repository.Record.Premium.Value.Contains("ExperienceUp", StringComparison.Ordinal), "timer was not stored");
-        harness.Repository.BeforeUpdate = null;
         var writes = harness.Repository.UpdateCount;
         var replay = harness.Use(command);
         await harness.AdvanceAsync(replay);
@@ -266,11 +260,12 @@ internal static class SpecialItemTests
         harness.Tick(2);
         Assert.True(harness.ItemEffects().Any(effect => effect.Effect == ItemEffectKind.Firecracker && effect.EntityId == harness.Player.EntityId),
             "firecracker effect was not published");
+        Assert.True(harness.Player.MoveState == MotionState.Yahoo, $"the firecracker did not cheer: {harness.Player.MoveState}");
 
         var shop = harness.Use(new ItemUseCommand(Guid.NewGuid(), character.InventoryRevision, harness.Id("BI142")));
         await harness.AdvanceAsync(shop);
         Assert.True((await shop).Outcome.Ok && harness.Session.MobileShopOpen, "mobile shop did not open");
-        var npc = new NpcAppService(harness.Sessions, harness.Repository, new NoWarehouses(), harness.World, harness.Holder);
+        var npc = new NpcAppService(harness.Sessions, new ImmediateSaves(harness.Repository), new NoWarehouses(), harness.World, harness.Holder);
         var money = character.Money;
         var sell = npc.RequestAsync(harness.Session.SessionToken, new NpcServiceCommand(Guid.NewGuid(), 0, NpcServiceKind.Shop, NpcServiceAction.Sell,
             character.InventoryRevision, 0, 0, harness.Id("PL101"), -1, 1, 0));
@@ -336,8 +331,8 @@ internal static class SpecialItemTests
         var character = new CharacterClassRegistry().CreatePlayer(PlayerClass.Fighter, "Owner");
         character.Premium.Start(PremiumEffectKind.ExperienceUp, 30, 3600, 1000);
         var owner = OwnerState.Capture(character, null, 1600);
-        var appearance = new PlayerAppearanceView("Owner", 1, 0, 0, 0, "", "") { HelperPet = 2, Phoenix = true, BigHead = 1 };
-        var self = new EntityView(1, EntityKindView.Player, true, new Vector3(256, 0, 512), 0f, MoveStateView.Idle, 10, 100, 100, appearance);
+        var appearance = new PlayerAppearanceView("Owner", PlayerClass.Fighter, 0, 0, 0, "", "") { HelperPet = 2, Phoenix = true, BigHead = 1 };
+        var self = new EntityView(1, EntityKind.Player, true, new Vector3(256, 0, 512), 0f, MotionState.Stand, 10, 100, 100, appearance);
         var snapshot = new WorldSnapshot(4, [self], fieldId: 3, owner: owner)
         {
             ItemEffects = [new ItemEffectView(1, ItemCodes.Parse("BI123"), ItemEffectKind.Firecracker, new Vector3(256, 0, 512), 1234)]
@@ -424,14 +419,14 @@ internal static class SpecialItemTests
             var world = new WorldServer(holder, catalog, clock);
             var sessions = new SessionRegistry();
             var session = sessions.Create(1, "owner");
-            var service = new SessionAppService(sessions, classes, repository, catalog, world, holder, clock);
+            var service = new SessionAppService(sessions, classes, repository, new ImmediateSaves(repository), catalog, world, holder, clock);
             Assert.True((await service.EnterWorldAsync(session.SessionToken, starter.Name)).Ok && session.TryBeginPlay(), "entry failed");
             var outbound = Channel.CreateUnbounded<WorldSnapshot>();
             var player = WorldPlayerFactory.Create(session);
             var harness = new Harness
             {
                 World = world,
-                Service = new ItemUseAppService(sessions, repository, world),
+                Service = new ItemUseAppService(sessions, new ImmediateSaves(repository), world),
                 Sessions = sessions,
                 Session = session,
                 Player = player,
@@ -463,13 +458,7 @@ internal static class SpecialItemTests
 
         public async Task AdvanceAsync(Task task)
         {
-            for (var index = 0; !task.IsCompleted && index < 1000; index++)
-            {
-                World.Tick(0.05f, ++_tick);
-                await Task.Delay(1);
-            }
-
-            await task.WaitAsync(TimeSpan.FromSeconds(1));
+            await WorldPump.RunAsync(World, task, () => ++_tick);
             Drain();
         }
 

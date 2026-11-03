@@ -3,33 +3,31 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Dapper;
 using PristonTale.Persistence.Abstractions;
-using PristonTale.Persistence.Abstractions.Characters;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.World;
 using PristonTale.WorldImport.Parsers;
+using PristonTale.Assets;
 
 namespace PristonTale.WorldImport;
 
-// Orchestrates the idempotent world-data import. Reads the original CP949 config files, resolves
-// cross-references (drop/shop item codes → item_templates; spawn monster/NPC names → FK rows), and writes
-// the baseline tables in dependency order:
-// item_templates → monsters(+drops) → npcs(+shop) → fields(+spawn children).
-//
-// Idempotency contract: parents upsert by their natural PK via INSERT … ON CONFLICT … DO UPDATE
-// (valid on Postgres and SQLite ≥ 3.35); variadic children are delete-then-reinsert per parent, so
-// a 2nd run produces zero net row changes. The whole import runs in one transaction.
+// Orchestrates the idempotent world-data import. Reads the original CP949 config files, resolves cross-references (drop
+// and shop item codes to items; monster identities and NPC files to their registry ids, IdentityRegistry), and writes
+// the catalog in dependency order: items, monsters, NPCs, fields (the Importer.* partials), then motion timing and the
+// source preservation tables. The catalog is replaced whole in one transaction, so a second run gives the same rows.
 //
 // The production IWorldDataRepository is read-only by design, so the WRITE SQL lives here
 // (mirroring DapperCharacterRepository's explicit-column, provider-agnostic style).
 //
 // Item DWORDs use the original category and ordinal bits of the binary item code, shared with runtime catalog mapping.
-public sealed class Importer
+public sealed partial class Importer
 {
     private readonly IDbConnectionFactory _connections;
     private readonly string _root;
     private readonly string? _assetRoot;
     private readonly List<EntityVariant> _entityVariants = [];
+    private IdentityRegistry _monsterIds = null!;
+    private IdentityRegistry _npcIds = null!;
 
     // assetRoot: game assets root (the directory containing assets/…-relative INX paths) for the motion-timing
     // pass. Null = skip the pass (the motion tables stay empty; the world host keeps its fallback timing constants).
@@ -40,17 +38,14 @@ public sealed class Importer
         _assetRoot = assetRoot;
     }
 
-    public static long ItemCodeMask(string code) => ItemCodes.TryParse(code, out var value) ? value : 0;
-
     public async Task<ImportReport> RunAsync(CancellationToken ct = default)
     {
         var report = new ImportReport();
         _entityVariants.Clear();
         _unknownKeys.Clear();
-        _npcNamesByFile.Clear();
-        _fieldCodeByBase.Clear();
+        _monsterIds = IdentityRegistry.Monsters();
+        _npcIds = IdentityRegistry.Npcs();
 
-        // ---- 1. Parse all sources -------------------------------------------------------------------
         var items = ParseItems(report);
         var invalidKeys = items
             .Where(static item => !ItemCodes.TryParse(item.Code, out _))
@@ -59,46 +54,60 @@ public sealed class Importer
             .ToArray();
         if (invalidKeys.Length > 0)
         {
-            report.Warnings.Add($"Item keys that are not two letters, a letter or digit and two digits are retained with mask 0 and excluded from runtime: {string.Join(", ", invalidKeys)}.");
+            report.Warnings.Add($"Item keys that are not two letters, a letter or digit and two digits are kept and left out of the runtime catalog: {string.Join(", ", invalidKeys)}.");
         }
+
         var monsters = ParseMonsters(report);
         var npcs = ParseNpcs(report);
         ReportUnknownKeys(report);
         var fields = ParseFields(report);
+        TakePlacements(npcs, fields, report);
 
-        // Code/name resolution sets (the PKs that exist after parse). Parents win by natural PK; on dup
-        // names we keep the FIRST (and warn) so FK targets are stable. The item-code map is keyed
-        // case-insensitively (.inf drops / .npc shops reference codes in lower-case, e.g. "pm104", but the
-        // item PK is stored in the .txt's casing, e.g. "PM104") — resolve to the canonical stored casing
-        // so the FK matches.
+        // Drops and shops name items in any case ("pm104"); references resolve to the code as its file spells it.
         var itemCodes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var it in items)
-            itemCodes[it.Code] = it.Code;
+        foreach (var item in items)
+        {
+            itemCodes[item.Code] = item.Code;
+        }
 
-        var monsterNames = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var m in monsters)
-            monsterNames.Add(m.Name);
-
-        var npcNames = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var n in npcs)
-            npcNames.Add(n.Name);
+        var monsterIds = monsters.ToDictionary(static m => m.Name, m => _monsterIds.Resolve(m.Name, m.DisplayName), StringComparer.Ordinal);
+        var npcIds = npcs.ToDictionary(static n => n.File, n => _npcIds.Resolve(n.File, n.DisplayName), StringComparer.OrdinalIgnoreCase);
+        ReportUnregistered(_monsterIds, report);
+        ReportUnregistered(_npcIds, report);
 
         await using var conn = await _connections.OpenAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
 
-        await conn.ExecuteAsync(new CommandDefinition("DELETE FROM world_import_unresolved_refs", transaction: tx, cancellationToken: ct));
+        await ClearCatalogAsync(conn, tx, ct);
         var footprints = ItemFootprints.Measure(_assetRoot, items.Select(static item => item.Code), report);
-        await WriteItemsAsync(conn, tx, items, _questVariants, _namedUniques, footprints, report, ct);
-        await WriteItemSetsAsync(conn, tx, items, report, ct);
-        await WriteMonstersAsync(conn, tx, monsters, itemCodes, report, ct);
-        await WriteNpcsAsync(conn, tx, npcs, itemCodes, report, ct);
-        await WriteFieldsAsync(conn, tx, fields, monsterNames, npcNames, report, ct);
-        await WriteMotionTimingAsync(conn, tx, monsters, npcs, report, ct);
+        await WriteItemsAsync(conn, tx, items, footprints, report, ct);
+        await WriteMonstersAsync(conn, tx, monsters, monsterIds, itemCodes, report, ct);
+        await WriteNpcsAsync(conn, tx, npcs, npcIds, itemCodes, report, ct);
+        await WriteFieldsAsync(conn, tx, fields, monsterIds, npcIds, report, ct);
+        await WriteMotionTimingAsync(conn, tx, monsters, npcs, monsterIds, npcIds, report, ct);
         await WriteSourceFilesAsync(conn, tx, report, ct);
         await WriteEntityVariantsAsync(conn, tx, report, ct);
 
         await tx.CommitAsync(ct);
         return report;
+    }
+
+    // The catalog tables, children first; every import writes them whole.
+    private static readonly string[] CatalogTables =
+    [
+        "field_npcs", "field_boss_hours", "field_bosses", "field_monster_spawns", "field_spawn_points", "fields",
+        "npc_shop_items", "npc_services", "npc_dialog_lines", "npc_texts", "npcs",
+        "monster_bonus_drops", "monster_drop_line_items", "monster_drop_lines", "monster_texts", "monsters",
+        "item_texts", "item_spec_bonuses", "item_spec_random_classes", "item_definitions", "items", "item_sets",
+        "world_import_unresolved_refs"
+    ];
+
+    private static async Task ClearCatalogAsync(DbConnection conn, DbTransaction tx, CancellationToken ct)
+    {
+        foreach (var table in CatalogTables)
+        {
+            await conn.ExecuteAsync(new CommandDefinition($"DELETE FROM {table}", transaction: tx, cancellationToken: ct));
+        }
     }
 
     private async Task WriteEntityVariantsAsync(
@@ -116,10 +125,26 @@ public sealed class Importer
                 INSERT INTO world_entity_variants (source_path, kind, identity_key, is_catalog_entry, data_json)
                 VALUES (@SourcePath, @Kind, @IdentityKey, @IsCatalogEntry, @DataJson)
                 """,
-                variant,
+                new { variant.SourcePath, variant.Kind, IdentityKey = IdentityKeyOf(variant), variant.IsCatalogEntry, variant.DataJson },
                 tx,
                 cancellationToken: ct));
             report.EntityVariants++;
+        }
+    }
+
+    // A monster or NPC definition is listed under its English key; an item under its code; an unkeyed file under none.
+    private string IdentityKeyOf(EntityVariant variant) => variant.Kind switch
+    {
+        "monster" => _monsterIds.TryGet(variant.Identity, out var monster) ? monster.Key : "",
+        "npc" => _npcIds.TryGet(variant.Identity, out var npc) ? npc.Key : "",
+        _ => variant.Identity
+    };
+
+    private static void ReportUnregistered(IdentityRegistry registry, ImportReport report)
+    {
+        foreach (var entry in registry.Added)
+        {
+            report.Warnings.Add($"Identities/{registry.FileName} lacks '{entry.Key}': imported as id {entry.Id}; add {IdentityRegistry.Line(entry)}");
         }
     }
 
@@ -132,10 +157,11 @@ public sealed class Importer
         return new EntityVariant(relativePath, kind, identity, selected, JsonSerializer.Serialize(value, VariantJson));
     }
 
+    // Identity: the item code, the monster's authored identity or the NPC's file (IdentityKeyOf gives its key).
     private sealed record EntityVariant(
         string SourcePath,
         string Kind,
-        string IdentityKey,
+        string Identity,
         bool IsCatalogEntry,
         string DataJson);
 
@@ -245,6 +271,8 @@ public sealed class Importer
         DbTransaction tx,
         IReadOnlyList<ParsedMonster> monsters,
         IReadOnlyList<ParsedNpc> npcs,
+        IReadOnlyDictionary<string, IdentityRegistry.Entry> monsterIds,
+        IReadOnlyDictionary<string, IdentityRegistry.Entry> npcIds,
         ImportReport report, CancellationToken ct)
     {
         if (_assetRoot is null)
@@ -260,7 +288,7 @@ public sealed class Importer
             if (!extractor.TryExtract(m.Model, out var failure))
             {
                 report.MotionUnresolvedModels++;
-                report.Warnings.Add($"motion: {m.Name}: {failure}");
+                report.Warnings.Add($"motion: {monsterIds[m.Name].Key}: {failure}");
             }
         }
 
@@ -269,7 +297,7 @@ public sealed class Importer
             if (!extractor.TryExtract(npc.Model, out var failure))
             {
                 report.MotionUnresolvedModels++;
-                report.Warnings.Add($"motion: NPC {npc.Name}: {failure}");
+                report.Warnings.Add($"motion: NPC {npcIds[npc.File].Key}: {failure}");
             }
         }
 
@@ -388,35 +416,42 @@ public sealed class Importer
             result.Add(item);
         }
 
-        // The quest variant of a code (unique marker 2) is kept beside the regular definition under "<code>#Q".
+        // The quest version of a code (unique marker 2): the first file in path order.
         _questVariants.Clear();
-        foreach (var group in parsed.Where(static entry => entry.Item.Code.Length > 0 && entry.Item.UniqueItem == QuestUnique)
+        foreach (var group in parsed.Where(static entry => entry.Item.Code.Length > 0 && entry.Item.UniqueItem == ItemDefinition.QuestUnique)
                      .GroupBy(static entry => entry.Item.Code, StringComparer.OrdinalIgnoreCase))
         {
             _questVariants.Add(group.OrderBy(static entry => entry.Path, StringComparer.Ordinal).First().Item);
         }
 
-        // Named uniques (unique marker 1) of a code that lost the selection: "<code>#U<n>", one per distinct name in path order.
+        // Named uniques (unique marker 1) of a code that lost the selection: one per distinct name, the first in path order,
+        // numbered by the registry.
         _namedUniques.Clear();
-        foreach (var group in parsed.Where(entry => entry.Item.Code.Length > 0 && entry.Item.UniqueItem == NamedUnique
+        var uniques = NamedUniqueRegistry.Load();
+        foreach (var entry in parsed.Where(entry => entry.Item.Code.Length > 0 && entry.Item.UniqueItem == NamedUnique
                          && !string.Equals(winners[entry.Item.Code].Path, entry.Path, StringComparison.Ordinal))
-                     .GroupBy(static entry => entry.Item.Code, StringComparer.OrdinalIgnoreCase))
+                     .OrderBy(static entry => entry.Path, StringComparer.Ordinal)
+                     .DistinctBy(static entry => (entry.Item.Code.ToUpperInvariant(), entry.Item.Name)))
         {
-            var variant = 0;
-            foreach (var entry in group.OrderBy(static entry => entry.Path, StringComparer.Ordinal).DistinctBy(static entry => entry.Item.Name))
-            {
-                _namedUniques.Add((++variant, entry.Item));
-            }
+            _namedUniques.Add((uniques.Resolve(entry.Item.Code, entry.Item.Name), entry.Item));
+        }
+
+        foreach (var added in uniques.Added)
+        {
+            report.Warnings.Add($"Identities/{NamedUniqueRegistry.FileName} lacks {added.Code} '{added.Name}': imported as number {added.Number}; add {IdentityRegistry.Line(added)}");
+        }
+
+        foreach (var unmet in uniques.Unmet)
+        {
+            report.Warnings.Add($"Identities/{NamedUniqueRegistry.FileName} lists {unmet.Code} '{unmet.Name}', which no file defines as a named unique; saved copies of it no longer load");
         }
 
         return result;
     }
 
+    // The authored *유니크 value of a named unique.
     private const long NamedUnique = 1;
-    private const string NamedUniqueSuffix = "#U";
     private readonly List<(int Variant, ParsedItem Item)> _namedUniques = [];
-    private const long QuestUnique = 2;
-    private const string QuestVariantSuffix = "#Q";
     private readonly List<ParsedItem> _questVariants = [];
 
     // Keys no rule reads, by source kind: how many files carry each and the first one.
@@ -462,34 +497,32 @@ public sealed class Importer
             }
             if (!selected)
             {
-                report.Warnings.Add($"monster variant '{m.Name}' ({Path.GetFileName(path)}) — retained outside the catalog");
+                report.Warnings.Add($"monster variant '{m.DisplayName}' ({Path.GetFileName(path)}) — retained outside the catalog");
                 continue;
             }
             if (string.IsNullOrWhiteSpace(m.DisplayName))
             {
-                report.Warnings.Add($"monster '{Path.GetFileName(path)}' has no *Name; using its original identity");
+                report.Warnings.Add($"monster {Path.GetFileName(path)} has no English name; its key is shown");
             }
             result.Add(m);
         }
         return result;
     }
 
-    private readonly Dictionary<string, string> _npcNamesByFile = new(StringComparer.OrdinalIgnoreCase);
-
-    // Several files may share an identity name. The catalog keeps the first file a field places, else the first file
-    // read, so a placed NPC keeps its own model, dialog and services; the other files remain variants.
+    // Every NPC definition file is an NPC, as the original opens each placement from its own file.
     private IReadOnlyList<ParsedNpc> ParseNpcs(ImportReport report)
     {
         var parser = new NpcParser();
-        var parsed = new List<(string Path, ParsedNpc Npc)>();
+        var npcs = new List<ParsedNpc>();
         foreach (var path in EnumerateFiles("NPC", "*.npc"))
         {
             report.NpcFilesParsed++;
             try
             {
                 var npc = parser.Parse(path);
-                parsed.Add((path, npc));
+                npcs.Add(npc);
                 NoteUnknownKeys("npc", path, npc.UnknownKeys);
+                _entityVariants.Add(CreateVariant(path, "npc", npc.File, true, npc));
             }
             catch (Exception ex)
             {
@@ -497,636 +530,103 @@ public sealed class Importer
             }
         }
 
-        var placed = PlacedNpcFiles();
-        var chosen = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (path, npc) in parsed.OrderBy(entry => placed.Contains(Path.GetFileName(entry.Path)) ? 0 : 1))
+        foreach (var npc in NpcParser.ShareNames(npcs))
         {
-            if (!string.IsNullOrWhiteSpace(npc.Name))
-            {
-                chosen.TryAdd(npc.Name, path);
-            }
+            report.Warnings.Add($"npc {npc.File} has no English name in any definition; its key is shown");
         }
 
-        var result = new List<ParsedNpc>();
-        foreach (var (path, n) in parsed)
+        foreach (var npc in npcs.Where(static npc => npc.UntranslatedDialog.Count > 0))
         {
-            var selected = !string.IsNullOrWhiteSpace(n.Name) && chosen[n.Name] == path;
-            _entityVariants.Add(CreateVariant(path, "npc", n.Name, selected, n));
-
-            if (string.IsNullOrWhiteSpace(n.Name))
-            {
-                report.Warnings.Add($"npc {Path.GetFileName(path)} has no *이름 — retained as an unkeyed variant");
-                continue;
-            }
-
-            _npcNamesByFile[Path.GetFileName(path)] = n.Name;
-            if (!selected)
-            {
-                report.Warnings.Add($"npc variant '{n.Name}' ({Path.GetFileName(path)}) — retained outside the catalog");
-                continue;
-            }
-
-            result.Add(n);
+            report.Warnings.Add($"npc {npc.File}: {npc.UntranslatedDialog.Distinct(StringComparer.Ordinal).Count()} *대화 line(s) without an English translation (EnglishNames.Dialog) are not shown");
         }
 
-        // Definitions sharing a name are one catalog entry; when the selected file has no localized name, players see
-        // the first variant's that has one.
-        foreach (var n in result)
-        {
-            if (n.DisplayName.Length == 0)
-            {
-                n.DisplayName = parsed.Select(entry => entry.Npc).FirstOrDefault(variant => variant.Name == n.Name && variant.DisplayName.Length > 0)?.DisplayName ?? "";
-            }
-
-            if (n.DisplayName.Length == 0)
-            {
-                report.Warnings.Add($"npc '{n.Name}' has no localized name in any definition; the original identity is shown");
-            }
-        }
-
-        return result;
+        return npcs;
     }
 
-    private HashSet<string> PlacedNpcFiles()
+    // A file sets the class and size it lacks from its placement; placements of one file that disagree on a value it
+    // lacks give the first in stage and record order.
+    private static void TakePlacements(IReadOnlyList<ParsedNpc> npcs, IReadOnlyList<ParsedField> fields, ImportReport report)
     {
-        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var def in new WorldCatalog().AllFields)
+        var placements = fields.SelectMany(static field => field.FixedNpcs).ToLookup(static placement => placement.SourceFile, StringComparer.OrdinalIgnoreCase);
+        foreach (var npc in npcs)
         {
-            var aseBase = AseBaseOf(def.StageSmd);
-            var spcPath = aseBase.Length == 0 ? null : FindFieldFile(aseBase, "spc");
-            if (spcPath is null)
+            var placed = placements[npc.File].ToList();
+            if (placed.Count == 0)
             {
                 continue;
             }
 
-            foreach (var source in SpcReader.Sources(spcPath))
+            var first = placed[0];
+            if ((npc.Class is null && placed.Any(placement => placement.Class != first.Class))
+                || (npc.SizeLevel is null && placed.Any(placement => placement.SizeLevel != first.SizeLevel)))
             {
-                files.Add(Path.GetFileName(source.Replace('\\', '/')));
+                report.Warnings.Add($"npc {npc.File}: its placements give different classes or sizes it lacks; the first is used");
             }
-        }
 
-        return files;
+            NpcParser.TakePlacement(npc, first.Class, first.SizeLevel);
+        }
     }
 
+    // Every stage with spawn files: the world catalog's fields (their stage is the stem of the stage model), then the
+    // stages no field uses, kept without a field code.
     private IReadOnlyList<ParsedField> ParseFields(ImportReport report)
     {
-        // Build FieldCode + ASE-base join keys from the authoritative Simulation WorldCatalog (D-fields).
-        var catalog = new WorldCatalog();
+        var codes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var def in new WorldCatalog().AllFields)
+        {
+            var stage = AseBaseOf(def.StageSmd);
+            if (stage.Length > 0 && !codes.TryAdd(stage, def.FieldCode))
+            {
+                report.Warnings.Add($"fields {codes[stage]} and {def.FieldCode} share the stage {stage}; the spawn data goes to the first");
+            }
+        }
+
+        var stages = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var dir = ResolveDir("Field");
+        if (dir is not null)
+        {
+            foreach (var file in Directory.EnumerateFiles(dir, "*", CaseInsensitive))
+            {
+                if (Path.GetExtension(file).ToLowerInvariant() is ".spm" or ".spp" or ".spc")
+                {
+                    stages.Add(StageOf(file));
+                }
+            }
+        }
+
         var spm = new SpmParser();
         var spp = new SppReader();
-        var spc = new SpcReader(source => _npcNamesByFile.GetValueOrDefault(Path.GetFileName(source.Replace('\\', '/'))));
+        var spc = new SpcReader();
         var result = new List<ParsedField>();
-
-        foreach (var def in catalog.AllFields)
+        foreach (var stage in stages)
         {
-            var aseBase = AseBaseOf(def.StageSmd);
-            if (aseBase.Length == 0)
-                continue;
-            var field = new ParsedField { AseBase = aseBase };
+            var field = new ParsedField { AseBase = stage, FieldCode = codes.TryGetValue(stage, out var code) ? code : null };
+            if (FindFieldFile(stage, "spm") is { } spmPath)
+            {
+                spm.Parse(spmPath, field);
+            }
 
-            var spmPath = FindFieldFile(aseBase, "spm");
-            var sppPath = FindFieldFile(aseBase, "spp");
-            var spcPath = FindFieldFile(aseBase, "spc");
+            if (FindFieldFile(stage, "spp") is { } sppPath)
+            {
+                spp.Read(sppPath, field);
+            }
 
-            if (spmPath is not null) spm.Parse(spmPath, field);
-            if (sppPath is not null) spp.Read(sppPath, field);
-            if (spcPath is not null) spc.Read(spcPath, field);
+            if (FindFieldFile(stage, "spc") is { } spcPath)
+            {
+                spc.Read(spcPath, field);
+            }
 
-            // Only persist fields that actually have spawn data (the schema anchors spawn data only).
-            if (spmPath is null && sppPath is null && spcPath is null)
-                continue;
-
-            // Stash the field code on the DTO via a tuple list — attached at write time.
             result.Add(field);
-            _fieldCodeByBase[aseBase] = def.FieldCode;
         }
+
         return result;
     }
 
-    private readonly Dictionary<string, int> _fieldCodeByBase = new(StringComparer.OrdinalIgnoreCase);
-
-    // ---- Writes (idempotent) ------------------------------------------------------------------------
-
-    // One row per item set: the pieces worn for the bonus (the most any of its items asks) and the bonus its files state.
-    private static async Task WriteItemSetsAsync(DbConnection conn, DbTransaction tx, IReadOnlyList<ParsedItem> items, ImportReport report,
-        CancellationToken ct)
+    // The stage of a spawn file: "<stage>.<ext>" or "<stage>.ase.<ext>".
+    private static string StageOf(string file)
     {
-        await conn.ExecuteAsync(new CommandDefinition("DELETE FROM item_sets", transaction: tx, cancellationToken: ct));
-        foreach (var set in items.Where(static item => item.SetCode != 0).GroupBy(static item => item.SetCode).OrderBy(static set => set.Key))
-        {
-            var texts = set.Select(static item => item.SetBonus).Where(static text => text.Length > 0).Distinct(StringComparer.Ordinal).ToList();
-            var text = texts.FirstOrDefault() ?? "";
-            if (texts.Count > 1)
-            {
-                report.Warnings.Add($"item set {set.Key}: its items state different bonuses ({string.Join(" | ", texts)}); the first is used");
-            }
-
-            if (!SetBonusParser.TryParse(text, out var bonus))
-            {
-                report.Warnings.Add($"item set {set.Key}: bonus '{text}' not understood; the set gives nothing");
-            }
-
-            await conn.ExecuteAsync(new CommandDefinition(
-                """
-                INSERT INTO item_sets (set_code, pieces, life, absorb, block, life_regen, mana_regen, stamina_regen, description)
-                VALUES (@SetCode, @Pieces, @Life, @Absorb, @Block, @LifeRegen, @ManaRegen, @StaminaRegen, @Description)
-                """,
-                new
-                {
-                    SetCode = set.Key, Pieces = set.Max(static item => item.SetPieces), bonus.Life, bonus.Absorb, bonus.Block, bonus.LifeRegen,
-                    bonus.ManaRegen, bonus.StaminaRegen, Description = text,
-                }, tx, cancellationToken: ct));
-        }
-    }
-
-    private static async Task WriteItemsAsync(
-        DbConnection conn, DbTransaction tx, IReadOnlyList<ParsedItem> items, IReadOnlyList<ParsedItem> questVariants,
-        IReadOnlyList<(int Variant, ParsedItem Item)> namedUniques, IReadOnlyDictionary<string, (int Width, int Height)> footprints,
-        ImportReport report, CancellationToken ct)
-    {
-        var rows = items.Select(static it => (Key: it.Code, Item: it))
-            .Concat(questVariants.Select(static it => (Key: it.Code + QuestVariantSuffix, Item: it)))
-            .Concat(namedUniques.Select(static unique => (Key: unique.Item.Code + NamedUniqueSuffix + unique.Variant, unique.Item)))
-            .ToList();
-        const string upsert = """
-            INSERT INTO item_templates (
-                code, item_code_mask, name, kind, durability_min, durability_max, weight, price,
-                damage_min_low, damage_min_high, damage_max_low, damage_max_high,
-                attack_rating_min, attack_rating_max, critical_hit, defence_min, defence_max,
-                block_min, block_max, absorb_min, absorb_max, speed_min, speed_max,
-                mana_regen_min, mana_regen_max, life_regen_min, life_regen_max, stamina_regen_min, stamina_regen_max,
-                add_mana_min, add_mana_max, add_life_min, add_life_max, add_stamina_min, add_stamina_max,
-                req_level, req_strength, req_spirit, req_talent, req_dexterity, req_health,
-                restore_stamina_min, restore_stamina_max, restore_mana_min, restore_mana_max, restore_life_min, restore_life_max,
-                shooting_range, attack_speed, job_mask, unique_item,
-                res_bionic_min, res_bionic_max, res_earth_min, res_earth_max, res_fire_min, res_fire_max,
-                res_ice_min, res_ice_max, res_lighting_min, res_lighting_max, res_poison_min, res_poison_max,
-                res_water_min, res_water_max, res_wind_min, res_wind_max,
-                max_stack, potion_space, magic_mastery, grid_width, grid_height, glow_r, glow_g, glow_b, glow_a, glow_blink,
-                glow_scale, display_effect, daily_drop_limit, set_code, set_pieces)
-            VALUES (
-                @Code, @Mask, @Name, @Kind, @DurMin, @DurMax, @Weight, @Price,
-                @DmgMinLow, @DmgMinHigh, @DmgMaxLow, @DmgMaxHigh,
-                @ArMin, @ArMax, @Crit, @DefMin, @DefMax,
-                @BlockMin, @BlockMax, @AbsorbMin, @AbsorbMax, @SpeedMin, @SpeedMax,
-                @ManaRegMin, @ManaRegMax, @LifeRegMin, @LifeRegMax, @StaRegMin, @StaRegMax,
-                @AddManaMin, @AddManaMax, @AddLifeMin, @AddLifeMax, @AddStaMin, @AddStaMax,
-                @ReqLevel, @ReqStr, @ReqSpi, @ReqTal, @ReqDex, @ReqHea,
-                @ResStaMin, @ResStaMax, @ResManaMin, @ResManaMax, @ResLifeMin, @ResLifeMax,
-                @ShootRange, @AtkSpeed, @JobMask, @Unique,
-                @RB0min, @RB0max, @RB1min, @RB1max, @RB2min, @RB2max, @RB3min, @RB3max,
-                @RB4min, @RB4max, @RB5min, @RB5max, @RB6min, @RB6max, @RB7min, @RB7max,
-                @MaxStack, @PotionSpace, @MagicMastery, @GridWidth, @GridHeight, @GlowR, @GlowG, @GlowB, @GlowA, @GlowBlink,
-                @GlowScale, @DisplayEffect, @DailyDropLimit, @SetCode, @SetPieces)
-            ON CONFLICT (code) DO UPDATE SET
-                item_code_mask=excluded.item_code_mask, name=excluded.name, kind=excluded.kind,
-                durability_min=excluded.durability_min, durability_max=excluded.durability_max,
-                weight=excluded.weight, price=excluded.price,
-                damage_min_low=excluded.damage_min_low, damage_min_high=excluded.damage_min_high,
-                damage_max_low=excluded.damage_max_low, damage_max_high=excluded.damage_max_high,
-                attack_rating_min=excluded.attack_rating_min, attack_rating_max=excluded.attack_rating_max,
-                critical_hit=excluded.critical_hit, defence_min=excluded.defence_min, defence_max=excluded.defence_max,
-                block_min=excluded.block_min, block_max=excluded.block_max,
-                absorb_min=excluded.absorb_min, absorb_max=excluded.absorb_max,
-                speed_min=excluded.speed_min, speed_max=excluded.speed_max,
-                mana_regen_min=excluded.mana_regen_min, mana_regen_max=excluded.mana_regen_max,
-                life_regen_min=excluded.life_regen_min, life_regen_max=excluded.life_regen_max,
-                stamina_regen_min=excluded.stamina_regen_min, stamina_regen_max=excluded.stamina_regen_max,
-                add_mana_min=excluded.add_mana_min, add_mana_max=excluded.add_mana_max,
-                add_life_min=excluded.add_life_min, add_life_max=excluded.add_life_max,
-                add_stamina_min=excluded.add_stamina_min, add_stamina_max=excluded.add_stamina_max,
-                req_level=excluded.req_level, req_strength=excluded.req_strength, req_spirit=excluded.req_spirit,
-                req_talent=excluded.req_talent, req_dexterity=excluded.req_dexterity, req_health=excluded.req_health,
-                restore_stamina_min=excluded.restore_stamina_min, restore_stamina_max=excluded.restore_stamina_max,
-                restore_mana_min=excluded.restore_mana_min, restore_mana_max=excluded.restore_mana_max,
-                restore_life_min=excluded.restore_life_min, restore_life_max=excluded.restore_life_max,
-                shooting_range=excluded.shooting_range, attack_speed=excluded.attack_speed,
-                job_mask=excluded.job_mask, unique_item=excluded.unique_item,
-                res_bionic_min=excluded.res_bionic_min, res_bionic_max=excluded.res_bionic_max,
-                res_earth_min=excluded.res_earth_min, res_earth_max=excluded.res_earth_max,
-                res_fire_min=excluded.res_fire_min, res_fire_max=excluded.res_fire_max,
-                res_ice_min=excluded.res_ice_min, res_ice_max=excluded.res_ice_max,
-                res_lighting_min=excluded.res_lighting_min, res_lighting_max=excluded.res_lighting_max,
-                res_poison_min=excluded.res_poison_min, res_poison_max=excluded.res_poison_max,
-                res_water_min=excluded.res_water_min, res_water_max=excluded.res_water_max,
-                res_wind_min=excluded.res_wind_min, res_wind_max=excluded.res_wind_max,
-                max_stack=excluded.max_stack, potion_space=excluded.potion_space,
-                magic_mastery=excluded.magic_mastery, grid_width=excluded.grid_width, grid_height=excluded.grid_height,
-                glow_r=excluded.glow_r, glow_g=excluded.glow_g, glow_b=excluded.glow_b, glow_a=excluded.glow_a,
-                glow_blink=excluded.glow_blink, glow_scale=excluded.glow_scale, display_effect=excluded.display_effect,
-                daily_drop_limit=excluded.daily_drop_limit, set_code=excluded.set_code, set_pieces=excluded.set_pieces;
-            """;
-
-        foreach (var (key, it) in rows)
-        {
-            await conn.ExecuteAsync(new CommandDefinition(upsert, new
-            {
-                Code = key, Mask = ItemCodeMask(it.Code), it.Name, Kind = (int)it.Kind,
-                DurMin = it.DurabilityMin, DurMax = it.DurabilityMax, it.Weight, it.Price,
-                DmgMinLow = it.DamageMinLow, DmgMinHigh = it.DamageMinHigh,
-                DmgMaxLow = it.DamageMaxLow, DmgMaxHigh = it.DamageMaxHigh,
-                ArMin = it.AttackRatingMin, ArMax = it.AttackRatingMax, Crit = it.CriticalHit,
-                DefMin = it.DefenceMin, DefMax = it.DefenceMax,
-                it.BlockMin, it.BlockMax, it.AbsorbMin, it.AbsorbMax, it.SpeedMin, it.SpeedMax,
-                ManaRegMin = it.ManaRegenMin, ManaRegMax = it.ManaRegenMax,
-                LifeRegMin = it.LifeRegenMin, LifeRegMax = it.LifeRegenMax,
-                StaRegMin = it.StaminaRegenMin, StaRegMax = it.StaminaRegenMax,
-                AddManaMin = it.AddManaMin, AddManaMax = it.AddManaMax,
-                AddLifeMin = it.AddLifeMin, AddLifeMax = it.AddLifeMax,
-                AddStaMin = it.AddStaminaMin, AddStaMax = it.AddStaminaMax,
-                ReqLevel = it.ReqLevel, ReqStr = it.ReqStrength, ReqSpi = it.ReqSpirit,
-                ReqTal = it.ReqTalent, ReqDex = it.ReqDexterity, ReqHea = it.ReqHealth,
-                ResStaMin = it.RestoreStaminaMin, ResStaMax = it.RestoreStaminaMax,
-                ResManaMin = it.RestoreManaMin, ResManaMax = it.RestoreManaMax,
-                ResLifeMin = it.RestoreLifeMin, ResLifeMax = it.RestoreLifeMax,
-                ShootRange = it.ShootingRange, AtkSpeed = it.AttackSpeed,
-                JobMask = it.JobMask, Unique = it.UniqueItem,
-                RB0min = it.ResMin[0], RB0max = it.ResMax[0], RB1min = it.ResMin[1], RB1max = it.ResMax[1],
-                RB2min = it.ResMin[2], RB2max = it.ResMax[2], RB3min = it.ResMin[3], RB3max = it.ResMax[3],
-                RB4min = it.ResMin[4], RB4max = it.ResMax[4], RB5min = it.ResMin[5], RB5max = it.ResMax[5],
-                RB6min = it.ResMin[6], RB6max = it.ResMax[6], RB7min = it.ResMin[7], RB7max = it.ResMax[7],
-                it.MaxStack, it.PotionSpace, it.MagicMastery,
-                GridWidth = footprints.TryGetValue(it.Code, out var footprint) ? footprint.Width : 1,
-                GridHeight = footprints.TryGetValue(it.Code, out footprint) ? footprint.Height : 1,
-                GlowR = it.UniqueColor[0], GlowG = it.UniqueColor[1], GlowB = it.UniqueColor[2], GlowA = it.UniqueColor[3],
-                GlowBlink = it.UniqueBlink, GlowScale = it.UniqueScale, it.DisplayEffect, it.DailyDropLimit, it.SetCode, it.SetPieces,
-            }, tx, cancellationToken: ct));
-            report.ItemRows++;
-        }
-
-        // Children: delete-reload per item.
-        foreach (var (key, it) in rows)
-        {
-            await conn.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM item_template_special WHERE item_code = @Code", new { Code = key }, tx, cancellationToken: ct));
-            await conn.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM item_template_job_random WHERE item_code = @Code", new { Code = key }, tx, cancellationToken: ct));
-
-            foreach (var (bonusCode, v0, v1) in it.Specials)
-            {
-                await conn.ExecuteAsync(new CommandDefinition(
-                    "INSERT INTO item_template_special (item_code, bonus_code, value0, value1) VALUES (@Code,@B,@V0,@V1)",
-                    new { Code = key, B = bonusCode, V0 = v0, V1 = v1 }, tx, cancellationToken: ct));
-                report.ItemSpecialRows++;
-            }
-            var ord = 0;
-            foreach (var bit in it.JobRandom)
-            {
-                await conn.ExecuteAsync(new CommandDefinition(
-                    "INSERT INTO item_template_job_random (item_code, ordinal, job_bit_code) VALUES (@Code,@O,@J)",
-                    new { Code = key, O = ord++, J = bit }, tx, cancellationToken: ct));
-                report.ItemJobRandomRows++;
-            }
-        }
-    }
-
-    private static async Task WriteMonstersAsync(
-        DbConnection conn, DbTransaction tx, IReadOnlyList<ParsedMonster> monsters,
-        IReadOnlyDictionary<string, string> itemCodes, ImportReport report, CancellationToken ct)
-    {
-        const string upsert = """
-            INSERT INTO monsters (
-                name, model, level, attack_min, attack_max, attack_speed, attack_range, accuracy,
-                defence, absorb_pct, block_pct, hp, sight, skill_damage_min, skill_damage_max,
-                skill_distance, skill_range, skill_rating_pct, skill_curse_code, move_speed, move_range,
-                iq, group_min, group_max, exp, active_hour, nature, brood, class,
-                res_bionic, res_earth, res_fire, res_ice, res_lighting, res_poison, res_water, res_wind,
-                stun_pct, display_name, sound_code, model_scale, portrait_offset_y, portrait_offset_z,
-                quest_code, event_item, potion_count, potion_percent, hostile, size_level, res_magic, move_type,
-                special_attack_pct, gold_min, gold_max, gold_pct, event_model, event_code, event_info)
-            VALUES (
-                @Name, @Model, @Level, @AtkMin, @AtkMax, @AtkSpeed, @AtkRange, @Accuracy,
-                @Defence, @Absorb, @Block, @Hp, @Sight, @SkDmgMin, @SkDmgMax,
-                @SkDist, @SkRange, @SkRating, @SkCurse, @MoveSpeed, @MoveRange,
-                @Iq, @GroupMin, @GroupMax, @Exp, @ActiveHour, @Nature, @Brood, @Class,
-                @R0, @R1, @R2, @R3, @R4, @R5, @R6, @R7,
-                @StunPct, @DisplayName, @SoundCode, @ModelScale, @PortraitOffsetY, @PortraitOffsetZ,
-                @QuestCode, @EventItem, @PotionCount, @PotionPercent, @Hostile, @SizeLevel, @MagicResistance, @MoveType,
-                @SpecialAttackPct, @GoldMin, @GoldMax, @GoldPct, @EventModel, @EventCode, @EventInfo)
-            ON CONFLICT (name) DO UPDATE SET
-                model=excluded.model, level=excluded.level, attack_min=excluded.attack_min, attack_max=excluded.attack_max,
-                attack_speed=excluded.attack_speed, attack_range=excluded.attack_range, accuracy=excluded.accuracy,
-                defence=excluded.defence, absorb_pct=excluded.absorb_pct, block_pct=excluded.block_pct, hp=excluded.hp,
-                sight=excluded.sight, skill_damage_min=excluded.skill_damage_min, skill_damage_max=excluded.skill_damage_max,
-                skill_distance=excluded.skill_distance, skill_range=excluded.skill_range,
-                skill_rating_pct=excluded.skill_rating_pct, skill_curse_code=excluded.skill_curse_code,
-                move_speed=excluded.move_speed, move_range=excluded.move_range, iq=excluded.iq,
-                group_min=excluded.group_min, group_max=excluded.group_max, exp=excluded.exp,
-                active_hour=excluded.active_hour, nature=excluded.nature, brood=excluded.brood, class=excluded.class,
-                res_bionic=excluded.res_bionic, res_earth=excluded.res_earth, res_fire=excluded.res_fire,
-                res_ice=excluded.res_ice, res_lighting=excluded.res_lighting, res_poison=excluded.res_poison,
-                res_water=excluded.res_water, res_wind=excluded.res_wind, stun_pct=excluded.stun_pct,
-                display_name=excluded.display_name, sound_code=excluded.sound_code,
-                model_scale=excluded.model_scale, portrait_offset_y=excluded.portrait_offset_y,
-                portrait_offset_z=excluded.portrait_offset_z, quest_code=excluded.quest_code, event_item=excluded.event_item,
-                potion_count=excluded.potion_count, potion_percent=excluded.potion_percent, hostile=excluded.hostile,
-                size_level=excluded.size_level, res_magic=excluded.res_magic, move_type=excluded.move_type,
-                special_attack_pct=excluded.special_attack_pct, gold_min=excluded.gold_min, gold_max=excluded.gold_max,
-                gold_pct=excluded.gold_pct, event_model=excluded.event_model, event_code=excluded.event_code,
-                event_info=excluded.event_info;
-            """;
-
-        foreach (var m in monsters)
-        {
-            await conn.ExecuteAsync(new CommandDefinition(upsert, new
-            {
-                m.Name, m.Model, m.Level, AtkMin = m.AttackMin, AtkMax = m.AttackMax,
-                AtkSpeed = m.AttackSpeed, AtkRange = m.AttackRange, m.Accuracy,
-                m.Defence, Absorb = m.AbsorbPct, Block = m.BlockPct, m.Hp, m.Sight,
-                SkDmgMin = m.SkillDamageMin, SkDmgMax = m.SkillDamageMax,
-                SkDist = m.SkillDistance, SkRange = m.SkillRange, SkRating = m.SkillRatingPct, SkCurse = m.SkillCurseCode,
-                MoveSpeed = m.MoveSpeed, MoveRange = m.MoveRange, m.Iq,
-                GroupMin = m.GroupMin, GroupMax = m.GroupMax, m.Exp, m.ActiveHour,
-                Nature = m.Nature, Brood = m.Brood, Class = m.Class,
-                R0 = m.Resistances[0], R1 = m.Resistances[1], R2 = m.Resistances[2], R3 = m.Resistances[3],
-                R4 = m.Resistances[4], R5 = m.Resistances[5], R6 = m.Resistances[6], R7 = m.Resistances[7],
-                m.StunPct, m.DisplayName, m.SoundCode, m.ModelScale, m.PortraitOffsetY, m.PortraitOffsetZ,
-                m.QuestCode, EventItem = itemCodes.TryGetValue(m.EventItem, out var eventItem) ? eventItem : m.EventItem, m.PotionCount, m.PotionPercent,
-                m.Hostile, m.SizeLevel, m.MagicResistance, m.MoveType, m.SpecialAttackPct, m.GoldMin, m.GoldMax, m.GoldPct,
-                m.EventModel, m.EventCode, m.EventInfo,
-            }, tx, cancellationToken: ct));
-            report.MonsterRows++;
-        }
-
-        foreach (var m in monsters)
-        {
-            await conn.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM monster_drop_items WHERE monster_name = @Name", new { m.Name }, tx, cancellationToken: ct));
-            await conn.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM monster_drops_plus WHERE monster_name = @Name", new { m.Name }, tx, cancellationToken: ct));
-            await conn.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM monster_drops WHERE monster_name = @Name", new { m.Name }, tx, cancellationToken: ct));
-
-            if (m.AllPlayersSee || m.MaxItemsPerKill != 0 || m.DropItems.Count > 0 || m.DropsPlus.Count > 0)
-            {
-                await conn.ExecuteAsync(new CommandDefinition(
-                    "INSERT INTO monster_drops (monster_name, max_items_per_kill, all_players_see) VALUES (@Name,@Max,@All)",
-                    new { m.Name, Max = m.MaxItemsPerKill, All = m.AllPlayersSee }, tx, cancellationToken: ct));
-                report.MonsterDropConfigRows++;
-            }
-
-            foreach (var d in m.DropItems)
-            {
-                string? itemCode = d.ItemCode;
-                if (itemCode is not null)
-                {
-                    if (itemCodes.TryGetValue(itemCode, out var canon))
-                    {
-                        itemCode = canon;
-                        report.DropItemCodesResolved++;
-                    }
-                    else
-                    {
-                        await RecordUnresolvedAsync(
-                            conn, tx, "monster_drop", m.Name, itemCode,
-                            new { Kind = d.Kind, d.Weight, d.GoldMin, d.GoldMax }, report, ct);
-                        report.DropItemCodesDangling++;
-                        itemCode = null;
-                    }
-                }
-                await conn.ExecuteAsync(new CommandDefinition(
-                    "INSERT INTO monster_drop_items (monster_name, kind, weight, item_code, gold_min, gold_max) " +
-                    "VALUES (@Name,@Kind,@Weight,@Code,@GMin,@GMax)",
-                    new { m.Name, Kind = (int)d.Kind, d.Weight, Code = itemCode, GMin = d.GoldMin, GMax = d.GoldMax },
-                    tx, cancellationToken: ct));
-                report.MonsterDropItemRows++;
-            }
-
-            foreach (var p in m.DropsPlus)
-            {
-                string? itemCode = p.ItemCode;
-                if (itemCode is not null)
-                {
-                    if (itemCodes.TryGetValue(itemCode, out var canon))
-                    {
-                        itemCode = canon;
-                        report.DropItemCodesResolved++;
-                    }
-                    else
-                    {
-                        await RecordUnresolvedAsync(
-                            conn, tx, "monster_bonus_drop", m.Name, itemCode,
-                            new { p.Weight }, report, ct);
-                        report.DropItemCodesDangling++;
-                        itemCode = null;
-                    }
-                }
-                await conn.ExecuteAsync(new CommandDefinition(
-                    "INSERT INTO monster_drops_plus (monster_name, weight, item_code) VALUES (@Name,@Weight,@Code)",
-                    new { m.Name, p.Weight, Code = itemCode }, tx, cancellationToken: ct));
-                report.MonsterDropPlusRows++;
-            }
-        }
-    }
-
-    private static async Task WriteNpcsAsync(
-        DbConnection conn, DbTransaction tx, IReadOnlyList<ParsedNpc> npcs,
-        IReadOnlyDictionary<string, string> itemCodes, ImportReport report, CancellationToken ct)
-    {
-        const string upsert = """
-            INSERT INTO npcs (
-                name, model, linked_file, svc_warehouse, svc_shop, svc_skill_master, svc_job_change,
-                svc_teleport, svc_item_mix, svc_item_aging, svc_smelting, svc_manufacture, svc_mixture_reset,
-                svc_clan, svc_bless_castle, svc_quest, svc_event_booth, svc_collect_money, svc_give_money,
-                job_change_code, teleport_code, quest_code, quest_param, dialog, sound_code, move_range, model_scale,
-                display_name, portrait_offset_y, portrait_offset_z, hostile, level, size_level, appear_slot, appear_cycle)
-            VALUES (
-                @Name, @Model, @Linked, @Warehouse, @Shop, @SkillMaster, @JobChange,
-                @Teleport, @ItemMix, @ItemAging, @Smelting, @Manufacture, @MixtureReset,
-                @Clan, @BlessCastle, @Quest, @EventBooth, @CollectMoney, @GiveMoney,
-                @JobChangeCode, @TeleportCode, @QuestCode, @QuestParam, @Dialog, @SoundCode, @MoveRange, @ModelScale,
-                @DisplayName, @PortraitOffsetY, @PortraitOffsetZ, @Hostile, @Level, @SizeLevel, @AppearSlot, @AppearCycle)
-            ON CONFLICT (name) DO UPDATE SET
-                model=excluded.model, linked_file=excluded.linked_file,
-                svc_warehouse=excluded.svc_warehouse, svc_shop=excluded.svc_shop,
-                svc_skill_master=excluded.svc_skill_master, svc_job_change=excluded.svc_job_change,
-                svc_teleport=excluded.svc_teleport, svc_item_mix=excluded.svc_item_mix,
-                svc_item_aging=excluded.svc_item_aging, svc_smelting=excluded.svc_smelting,
-                svc_manufacture=excluded.svc_manufacture, svc_mixture_reset=excluded.svc_mixture_reset,
-                svc_clan=excluded.svc_clan, svc_bless_castle=excluded.svc_bless_castle,
-                svc_quest=excluded.svc_quest, svc_event_booth=excluded.svc_event_booth,
-                svc_collect_money=excluded.svc_collect_money, svc_give_money=excluded.svc_give_money,
-                job_change_code=excluded.job_change_code, teleport_code=excluded.teleport_code,
-                quest_code=excluded.quest_code, quest_param=excluded.quest_param, dialog=excluded.dialog,
-                sound_code=excluded.sound_code, move_range=excluded.move_range,
-                model_scale=excluded.model_scale, display_name=excluded.display_name,
-                portrait_offset_y=excluded.portrait_offset_y, portrait_offset_z=excluded.portrait_offset_z,
-                hostile=excluded.hostile, level=excluded.level, size_level=excluded.size_level,
-                appear_slot=excluded.appear_slot, appear_cycle=excluded.appear_cycle;
-            """;
-
-        foreach (var n in npcs)
-        {
-            // Bind dialog as JsonText so the registered per-provider Dapper handler emits jsonb on Postgres
-            // (NpgsqlDbType.Jsonb) and TEXT on SQLite — a plain string param sends text and PG rejects it
-            // against the jsonb column ("column dialog is of type jsonb but expression is of type text").
-            var dialogJson = new JsonText(System.Text.Json.JsonSerializer.Serialize(n.Dialog));
-            await conn.ExecuteAsync(new CommandDefinition(upsert, new
-            {
-                n.Name, n.Model, Linked = n.LinkedFile,
-                Warehouse = n.SvcWarehouse, Shop = n.SvcShop, SkillMaster = n.SvcSkillMaster,
-                JobChange = n.SvcJobChange, Teleport = n.SvcTeleport, ItemMix = n.SvcItemMix,
-                ItemAging = n.SvcItemAging, Smelting = n.SvcSmelting, Manufacture = n.SvcManufacture,
-                MixtureReset = n.SvcMixtureReset, Clan = n.SvcClan, BlessCastle = n.SvcBlessCastle,
-                Quest = n.SvcQuest, EventBooth = n.SvcEventBooth, CollectMoney = n.SvcCollectMoney,
-                GiveMoney = n.SvcGiveMoney,
-                JobChangeCode = n.JobChangeCode, TeleportCode = n.TeleportCode,
-                n.MoveRange, n.ModelScale,
-                QuestCode = n.QuestCode, QuestParam = n.QuestParam, Dialog = dialogJson, n.SoundCode,
-                n.DisplayName, n.PortraitOffsetY, n.PortraitOffsetZ, n.Hostile, n.Level, n.SizeLevel, n.AppearSlot, n.AppearCycle,
-            }, tx, cancellationToken: ct));
-            report.NpcRows++;
-            if (n.Dialog.Count > 0)
-            {
-                report.NpcDialogRows++;
-            }
-        }
-
-        foreach (var n in npcs)
-        {
-            await conn.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM npc_services WHERE npc_name = @Name", new { n.Name }, tx, cancellationToken: ct));
-            for (var ordinal = 0; ordinal < n.Services.Count; ordinal++)
-            {
-                var service = n.Services[ordinal];
-                await conn.ExecuteAsync(new CommandDefinition(
-                    "INSERT INTO npc_services (npc_name, ordinal, kind, value, value2, text) VALUES (@Name,@Ordinal,@Kind,@Value,@Value2,@Text)",
-                    new { n.Name, Ordinal = ordinal, Kind = (int)service.Kind, service.Value, service.Value2, service.Text },
-                    tx, cancellationToken: ct));
-                report.NpcServiceRows++;
-            }
-        }
-
-        foreach (var n in npcs)
-        {
-            await conn.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM npc_shop_stock WHERE npc_name = @Name", new { n.Name }, tx, cancellationToken: ct));
-            foreach (var (tab, ordinal, code) in n.Shop)
-            {
-                if (!itemCodes.TryGetValue(code, out var canon))
-                {
-                    report.ShopItemCodesDangling++;
-                    await RecordUnresolvedAsync(
-                        conn, tx, "npc_shop", n.Name, code,
-                        new { Tab = tab, Ordinal = ordinal }, report, ct);
-                    continue;
-                }
-                report.ShopItemCodesResolved++;
-                await conn.ExecuteAsync(new CommandDefinition(
-                    "INSERT INTO npc_shop_stock (npc_name, tab, ordinal, item_code) VALUES (@Name,@Tab,@Ord,@Code)",
-                    new { n.Name, Tab = tab, Ord = ordinal, Code = canon }, tx, cancellationToken: ct));
-                report.NpcShopRows++;
-            }
-        }
-    }
-
-    private async Task WriteFieldsAsync(
-        DbConnection conn, DbTransaction tx, IReadOnlyList<ParsedField> fields,
-        HashSet<string> monsterNames, HashSet<string> npcNames, ImportReport report, CancellationToken ct)
-    {
-        const string upsert = """
-            INSERT INTO fields (field_code, ase_base, max_concurrent_monsters, max_per_spawn_point,
-                spawn_interval, per_point_cooldown_ms)
-            VALUES (@Code, @Base, @MaxConc, @MaxPer, @Interval, @Cooldown)
-            ON CONFLICT (field_code) DO UPDATE SET
-                ase_base=excluded.ase_base, max_concurrent_monsters=excluded.max_concurrent_monsters,
-                max_per_spawn_point=excluded.max_per_spawn_point, spawn_interval=excluded.spawn_interval,
-                per_point_cooldown_ms=excluded.per_point_cooldown_ms;
-            """;
-
-        foreach (var f in fields)
-        {
-            var code = _fieldCodeByBase[f.AseBase];
-            await conn.ExecuteAsync(new CommandDefinition(upsert, new
-            {
-                Code = code, Base = f.AseBase, MaxConc = f.MaxConcurrentMonsters,
-                MaxPer = f.MaxPerSpawnPoint, Interval = f.SpawnInterval, Cooldown = f.PerPointCooldownMs,
-            }, tx, cancellationToken: ct));
-            report.FieldRows++;
-
-            // Children: delete-reload per field.
-            await conn.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM field_fixed_npcs WHERE field_code = @Code", new { Code = code }, tx, cancellationToken: ct));
-            await conn.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM field_boss_spawns WHERE field_code = @Code", new { Code = code }, tx, cancellationToken: ct));
-            await conn.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM field_monster_spawns WHERE field_code = @Code", new { Code = code }, tx, cancellationToken: ct));
-            await conn.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM field_spawn_points WHERE field_code = @Code", new { Code = code }, tx, cancellationToken: ct));
-
-            foreach (var (index, state, x, z) in f.SpawnPoints)
-            {
-                await conn.ExecuteAsync(new CommandDefinition(
-                    "INSERT INTO field_spawn_points (field_code, point_index, state, x, z) VALUES (@Code,@Idx,@State,@X,@Z)",
-                    new { Code = code, Idx = index, State = state, X = x, Z = z }, tx, cancellationToken: ct));
-                report.SpawnPointRows++;
-            }
-
-            foreach (var (monster, weight) in f.MonsterSpawns)
-            {
-                if (!monsterNames.Contains(monster))
-                {
-                    report.SpawnMonsterRefsDangling++;
-                    report.Warnings.Add($"field '{f.AseBase}' spawn references unknown monster '{monster}'");
-                    await RecordUnresolvedAsync(
-                        conn, tx, "field_monster_spawn", f.AseBase, monster,
-                        new { f.AseBase, Weight = weight }, report, ct);
-                    continue;
-                }
-                report.SpawnMonsterRefsResolved++;
-                await conn.ExecuteAsync(new CommandDefinition(
-                    "INSERT INTO field_monster_spawns (field_code, monster_name, weight) VALUES (@Code,@Mon,@W)",
-                    new { Code = code, Mon = monster, W = weight }, tx, cancellationToken: ct));
-                report.MonsterSpawnRows++;
-            }
-
-            foreach (var boss in f.Bosses)
-            {
-                if (!monsterNames.Contains(boss.MasterName))
-                {
-                    report.BossMonsterRefsDangling++;
-                    report.Warnings.Add($"field '{f.AseBase}' boss references unknown master '{boss.MasterName}'");
-                    await RecordUnresolvedAsync(
-                        conn, tx, "field_boss", f.AseBase, boss.MasterName,
-                        new { f.AseBase, boss.SlaveName, boss.SlaveCount, boss.Hours }, report, ct);
-                    continue;
-                }
-                report.BossMonsterRefsResolved++;
-                string? escort = boss.SlaveName;
-                if (escort is not null && !monsterNames.Contains(escort))
-                {
-                    await RecordUnresolvedAsync(
-                        conn, tx, "field_boss_escort", f.AseBase, escort,
-                        new { f.AseBase, boss.MasterName, boss.SlaveCount, boss.Hours }, report, ct);
-                    escort = null;
-                }
-                var hoursCsv = string.Join(',', boss.Hours);
-                await conn.ExecuteAsync(new CommandDefinition(
-                    "INSERT INTO field_boss_spawns (field_code, boss_monster_name, escort_monster_name, escort_count, spawn_hours) " +
-                    "VALUES (@Code,@Boss,@Escort,@Count,@Hours)",
-                    new { Code = code, Boss = boss.MasterName, Escort = escort, Count = boss.SlaveCount, Hours = hoursCsv },
-                    tx, cancellationToken: ct));
-                report.BossSpawnRows++;
-            }
-
-            foreach (var placement in f.FixedNpcs)
-            {
-                var npcName = placement.NpcName;
-                if (!npcNames.Contains(npcName))
-                {
-                    report.FixedNpcRefsDangling++;
-                    await RecordUnresolvedAsync(
-                        conn, tx, "field_fixed_npc", f.AseBase, npcName,
-                        new { f.AseBase, placement.X, placement.Z, placement.Angle, placement.Y }, report, ct);
-                    continue;
-                }
-                report.FixedNpcRefsResolved++;
-                await conn.ExecuteAsync(new CommandDefinition(
-                    "INSERT INTO field_fixed_npcs (field_code, npc_name, x, z, angle, y) VALUES (@Code,@Npc,@X,@Z,@A,@Y)",
-                    new { Code = code, Npc = npcName, X = placement.X, Z = placement.Z, A = placement.Angle, Y = placement.Y }, tx, cancellationToken: ct));
-                report.FixedNpcRows++;
-            }
-        }
+        var stage = Path.GetFileNameWithoutExtension(file);
+        return stage.EndsWith(".ase", StringComparison.OrdinalIgnoreCase) ? stage[..^4] : stage;
     }
 
     // ---- File helpers -------------------------------------------------------------------------------
@@ -1165,11 +665,7 @@ public sealed class Importer
             return null;
         foreach (var f in Directory.EnumerateFiles(dir, "*." + ext, CaseInsensitive))
         {
-            var fileBase = Path.GetFileNameWithoutExtension(f); // strips .spm/.spp/.spc
-            // strip a trailing ".ase" if present (the files are "<base>.ase.<ext>").
-            if (fileBase.EndsWith(".ase", StringComparison.OrdinalIgnoreCase))
-                fileBase = fileBase[..^4];
-            if (string.Equals(fileBase, aseBase, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(StageOf(f), aseBase, StringComparison.OrdinalIgnoreCase))
                 return f;
         }
         return null;

@@ -2,13 +2,15 @@ using System.Numerics;
 using PristonTale.Simulation.Combat;
 using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.Skills;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Skills;
 
 namespace PristonTale.Application.World;
 
 // Support skills: buffs on the caster, on one ally or on every ally around the caster, group heals, effects that end
-// with the weapon, and the short buffs a channelled field keeps renewing on the allies around its holder. There is no
-// party system yet, so an ally is any other living player of the field within the skill's ally radius. A buff that
-// starts a familiar or ends the caster's summon goes through here as well.
+// with the weapon, and the short buffs a channelled field keeps renewing on the allies around its holder. An ally is any
+// other living player of the field within the skill's ally radius, or only a member of the caster's party when the rule
+// says so (SkillAllyRule.Party). A buff that starts a familiar or ends the caster's summon goes through here as well.
 internal sealed partial class FieldSkills
 {
     private readonly List<WorldPlayer> _allies = new();
@@ -129,7 +131,7 @@ internal sealed partial class FieldSkills
         var reach = radius * (float)radius;
         foreach (var player in _host.Players)
         {
-            if (ReferenceEquals(player, caster) || player.IsDead || player.EntityId == caster.EntityId
+            if (ReferenceEquals(player, caster) || player.IsDead || player.EntityId == caster.EntityId || allies.Party && !caster.SharesPartyWith(player)
                 || MathF.Abs(player.Position.Y - caster.Position.Y) > allies.Height || SupportBlocked(player, rule))
             {
                 continue;
@@ -172,14 +174,14 @@ internal sealed partial class FieldSkills
         var totals = target.Character.Effects.Totals;
         var percent = totals.Percent(StatKind.HealingTaken) + totals.Flat(StatKind.HealingTaken);
         amount = Math.Max(0, amount + amount * percent / 100);
-        var before = target.Hp;
+        var before = target.Life;
         target.Heal(amount);
-        _host.EmitCombatEvent(new CombatEventView(caster.EntityId, target.EntityId, CombatEventKindView.Heal, damage: target.Hp - before));
+        _host.EmitCombatEvent(new CombatEventView(caster.EntityId, target.EntityId, CombatEventKind.Heal, damage: target.Life - before));
     }
 
     private void EmitAllyImpact(WorldPlayer caster, WorldPlayer ally, SkillRule rule, int rank)
     {
-        _skillEvents.Add(new SkillEventView(caster.EntityId, ally.EntityId, rule.Code, SkillEventPhaseView.Impact, rank, SkillEventFlagsView.Ally, 0f, 0f,
+        _skillEvents.Add(new SkillEventView(caster.EntityId, ally.EntityId, rule.Code, SkillEventPhase.Impact, rank, SkillEventFlags.Ally, 0f, 0f,
             ally.Position, caster.Facing, 1, 0f));
     }
 

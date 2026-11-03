@@ -26,6 +26,22 @@ public sealed partial class FieldInstance
         set => _combat.EventRates = value;
     }
 
+    internal int ExperienceMultiplier
+    {
+        get => _combat.ExperienceMultiplier;
+        set => _combat.ExperienceMultiplier = value;
+    }
+
+    internal int ExperienceEventPercent
+    {
+        get => _combat.ExperienceEventPercent;
+        set => _combat.ExperienceEventPercent = value;
+    }
+
+    internal Simulation.Items.Aging.AgingSettings Aging { get; set; } = Simulation.Items.Aging.AgingSettings.Default;
+
+    internal Simulation.Items.Mixing.MixingSettings Mixing { get; set; } = Simulation.Items.Mixing.MixingSettings.Default;
+
     internal DailyDropLedger? DropLedger
     {
         get => _combat.DropLedger;
@@ -40,7 +56,8 @@ public sealed partial class FieldInstance
 
     public bool TryFindMonsterKey(string key, [MaybeNullWhen(false)] out MonsterDefinition definition) => _catalog.TryFindKey(key, out definition);
 
-    // Calls a crystal's monster for its user: a pet beside him, or a soul stone's hostile monster where he stands.
+    // Calls a crystal's monster for its user: a pet beside the user, or a soul stone's hostile monster where the user
+    // stands.
     public Vector3? CallCrystalMonster(WorldPlayer owner, string crystalKey, string monsterKey)
     {
         if (!MonsterCrystals.TryGet(crystalKey, out var crystal) || !_catalog.TryFindKey(monsterKey, out var definition))
@@ -50,7 +67,7 @@ public sealed partial class FieldInstance
 
         if (crystal.Kind != CrystalKind.SoulStone)
         {
-            return _skills.CallCrystalPet(owner, definition);
+            return _skills.CallCrystalPet(owner, crystal, definition);
         }
 
         var monster = new MonsterInstance(_ids.NextMonsterId(), definition, Terrain.PlaceOnFloor(owner.Position), owner.Facing, spawnPointIndex: -1);
@@ -58,6 +75,15 @@ public sealed partial class FieldInstance
         _soulMonsters[monster.EntityId] = NowMs + MonsterCrystals.SoulLifetimeSeconds * 1000L;
         return monster.Position;
     }
+
+    public bool HasCrystalPetSlot(WorldPlayer owner) => _skills.HasCrystalPetSlot(owner);
+
+    // The owner dismisses the pet of one status (the code its icon shows); false when the owner keeps no such pet here.
+    public bool DismissCrystalPets(WorldPlayer owner, uint statusCode) =>
+        _players.TryGetValue(owner.EntityId, out var present) && ReferenceEquals(present, owner) && _skills.DismissCrystalPets(owner, statusCode);
+
+    // A player arriving from another field left its crystal pets there; their statuses end here.
+    public void ArriveWithoutCrystalPets(WorldPlayer player) => _skills.EndCrystalPetStatuses(player);
 
     // Soul monsters fall when their four minutes pass.
     private void ExpireSoulMonsters()
@@ -107,7 +133,7 @@ public sealed partial class FieldInstance
     // Castle items end when their holder leaves the castle field.
     private void LeaveCastleItems(WorldPlayer player)
     {
-        if (FieldId != CastleItems.CastleFieldId)
+        if (FieldId != FieldCodes.Castle)
         {
             return;
         }

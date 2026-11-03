@@ -5,9 +5,11 @@
 //    SV_Target1 for the temporal anti-aliasing: the screen motion (uv now minus uv in the previous frame), the previous
 //    and the current view depth; without that target bound the write is discarded;
 //  - Sky (static only): the sky dome layers, display-referred colour with the layer opacity, blended into the 8-bit
-//    sky target with their legacy blend modes (Passes/SkyComposite.fx brings the result into the scene);
+//    sky target with their original blend modes (Passes/SkyComposite.fx brings the result into the scene);
 //  - ShadowCaster / ShadowCasterMasked: the sun's cascades, the light's projected z into the R32F atlas;
-//  - ShadowClear (static only): clears one cascade's tile of the atlas.
+//  - ShadowClear (static only): clears one cascade's tile of the atlas;
+//  - Outline / OutlineMasked (skinned only): the hover outline, the actor redrawn flat in one colour, shifted on screen
+//    and pushed back in depth so only a rim shows around the lit actor (PristonRenderer.DrawOutlines).
 #include "../Core/Common.hlsli"
 #include "../Core/Color.hlsli"
 #include "../Core/Frame.hlsli"
@@ -33,6 +35,7 @@ cbuffer SurfaceVertexConstants : register(b0)
     float4x4 PreviousViewProjection;  // the previous frame's unjittered view-projection
     float4 MotionParams;              // xy this frame's jitter in clip units, z previous animation time, w 1 = motion on
     float4 ActorParams;               // skinned: x wobble amplitude, y wobble phase (radians), z 1 = the layer is an overlay on uv0
+    float4 OutlineParams;             // skinned outline: xy screen shift in clip units per w; z -M43 times the push, w the push in world units
 #ifdef SKINNED
     SKINNING_CONSTANTS
 #else
@@ -46,11 +49,30 @@ cbuffer SurfacePixelConstants : register(b0)
     FOG_CONSTANTS
     LIGHTING_CONSTANTS
     MATERIAL_CONSTANTS
+    float4 OutlineColor;              // skinned outline: display-referred colour, a its strength
+    float4 CloudShadowParams;         // x one over the shadow's extent (world), yz its centre, w strength (0: none)
 };
 
 MATERIAL_RESOURCES
 LIGHTING_RESOURCES(2, 4, 5, 6, 7, 8, 9)
 FOG_RESOURCES(3)
+// The clouds' shadow (Passes/Atmosphere.fx CloudShadow): their transmittance toward the sun around the camera.
+Texture2D<float4> CloudShadowMap : register(t10);
+SamplerState CloudShadowSampler : register(s10) = sampler_state
+{
+    Texture = (CloudShadowMap); MinFilter = Linear; MagFilter = Linear; MipFilter = Point; AddressU = Clamp; AddressV = Clamp;
+};
+
+float CloudShadowAt(float3 world)
+{
+    if (CloudShadowParams.w <= 0.0)
+    {
+        return 1.0;
+    }
+
+    float2 uv = (world.xz - CloudShadowParams.yz) * CloudShadowParams.x + 0.5;
+    return lerp(1.0, CloudShadowMap.SampleLevel(CloudShadowSampler, uv, 0).r, CloudShadowParams.w);
+}
 
 #include "../Atmosphere/Fog.hlsli"
 #include "../Lighting/Shading.hlsli"
@@ -110,7 +132,7 @@ struct CasterOut
     float Alpha : TEXCOORD2;
 };
 
-// The legacy reflection sphere map: the eye vector reflected about the normal, both in camera space, so the highlight
+// The original reflection sphere map: the eye vector reflected about the normal, both in camera space, so the highlight
 // follows the camera.
 float2 ReflexUv(float3 worldPosition, float3 worldNormal)
 {
@@ -249,7 +271,7 @@ float4 ShadeSurface(VSOut i, bool masked)
     }
 
     float a = SpecularAntiAliasedAlpha(s.Normal, max(s.Roughness * s.Roughness, 0.002));
-    // Emission: the legacy display-referred colour at its authored level by day (EmissionScale >= 1 / Exposure), a
+    // Emission: the original display-referred colour at its authored level by day (EmissionScale >= 1 / Exposure), a
     // brighter light source at night.
     float emission = (MaterialBlink > 0.5 ? BlinkPulse : 1.0) * EmissionScale;
     // Characters and monsters are not light sources: their self-illuminated parts show the texture at its display level
@@ -281,7 +303,11 @@ float4 ShadeSurface(VSOut i, bool masked)
         // A translucent surface lit from behind looks up its shadow on the sun's side.
         bool transmits = Translucency > 0.0 && back > nl;
         float3 shadowNormal = transmits ? -s.Normal : s.Normal;
-        float shadow = SunShadow(i.WorldPosition, shadowNormal, max(nl, transmits ? back : 0.0), i.ViewDepth, i.Position.xy) * occlusion.y;
+        // Actors take no contact shadows: the march across their own thin bodies left dark patches that changed with the
+        // view and the pose.
+        bool actor = ActorReceiver > 0.5;
+        float shadow = SunShadow(i.WorldPosition, shadowNormal, max(nl, transmits ? back : 0.0), i.ViewDepth, i.Position.xy,
+            actor ? ActorShadowBias : 0.0, actor ? 1.0 : occlusion.y) * CloudShadowAt(i.WorldPosition);
         AddDirectLight(SunDirection, SunColor * shadow, s.Normal, v, s.Albedo, s.F0, s.Metallic, a, lighting.Diffuse, lighting.Specular);
         // Transmission through leaves: diffuse through the blade, stronger looking toward the sun (forward scattering).
         float forward = pow(saturate(dot(-v, SunDirection)), 4.0);
@@ -290,7 +316,7 @@ float4 ShadeSurface(VSOut i, bool masked)
         // The authored light (vertex colour) is the art's sky visibility: it occludes the sky's reflections too.
         float visibility = occlusion.x * saturate(Luminance(i.Color.rgb));
         AddAmbient(s.Normal, v, s.Albedo, s.F0, s.Metallic, s.Roughness, occlusion.x, visibility, lighting);
-        // The legacy shine (a sphere-mapped reflection texture on armour and weapons) reflects the sky and a quarter of
+        // The original shine (a sphere-mapped reflection texture on armour and weapons) reflects the sky and a quarter of
         // the sun, occluded and shadowed like the surface itself: it does not glow in the shade.
         float3 environment = lerp(GroundAmbient, SkyAmbient, 0.75) * visibility + SunColor * (0.25 * shadow);
         lighting.Specular += s.Reflection * environment;
@@ -299,7 +325,7 @@ float4 ShadeSurface(VSOut i, bool masked)
     }
 
     radiance += RimColor * (rim / Exposure);
-    // Gameplay tints add (or take away) light in the legacy display units, like the original colour adjustment.
+    // Gameplay tints add (or take away) light in the original display units, like the original colour adjustment.
     radiance = max(radiance + s.Albedo * (ActorTint.rgb / Exposure), 0.0);
     [branch]
     if (DebugView > 0.5)
@@ -407,6 +433,37 @@ PrepassOut PS_PrepassMasked(VSOut i)
     return Prepass(i, true);
 }
 
+#ifdef SKINNED
+VSOut VS_Outline(VSIn i)
+{
+    VSOut o = VS_Surface(i);
+    o.Position.xy += OutlineParams.xy * o.Position.w;
+    // The view depth pushed back by OutlineParams.w world units, keeping w: z = -M33 w + M43 becomes -M33 w + M43 w / (w + push).
+    o.Position.z += OutlineParams.z / (o.Position.w + OutlineParams.w);
+    return o;
+}
+
+float4 Outline(VSOut i, bool masked)
+{
+    if (masked)
+    {
+        AlphaTest(SampleBaseColor(i.Uv.xy, i.Color).a);
+    }
+
+    return float4(SrgbToLinear(OutlineColor.rgb) * (OutlineColor.a / Exposure), 1.0);
+}
+
+float4 PS_Outline(VSOut i) : SV_Target0
+{
+    return Outline(i, false);
+}
+
+float4 PS_OutlineMasked(VSOut i) : SV_Target0
+{
+    return Outline(i, true);
+}
+#endif
+
 // Clears a cascade's tile of the shadow atlas: far depth and the far value, drawn over the tile's viewport with the
 // full-screen triangle (Post/PristonFullscreenTriangle), so the other cascades keep their contents.
 struct ClearIn
@@ -428,6 +485,10 @@ technique Opaque { pass P0 { VertexShader = compile vs_6_0 VS_Surface(); PixelSh
 technique Masked { pass P0 { VertexShader = compile vs_6_0 VS_Surface(); PixelShader = compile ps_6_0 PS_Masked(); } }
 technique Prepass { pass P0 { VertexShader = compile vs_6_0 VS_Surface(); PixelShader = compile ps_6_0 PS_Prepass(); } }
 technique PrepassMasked { pass P0 { VertexShader = compile vs_6_0 VS_Surface(); PixelShader = compile ps_6_0 PS_PrepassMasked(); } }
+#ifdef SKINNED
+technique Outline { pass P0 { VertexShader = compile vs_6_0 VS_Outline(); PixelShader = compile ps_6_0 PS_Outline(); } }
+technique OutlineMasked { pass P0 { VertexShader = compile vs_6_0 VS_Outline(); PixelShader = compile ps_6_0 PS_OutlineMasked(); } }
+#endif
 #ifndef SKINNED
 technique ShadowClear { pass P0 { VertexShader = compile vs_6_0 VS_ShadowClear(); PixelShader = compile ps_6_0 PS_ShadowClear(); } }
 technique Sky { pass P0 { VertexShader = compile vs_6_0 VS_Surface(); PixelShader = compile ps_6_0 PS_Sky(); } }

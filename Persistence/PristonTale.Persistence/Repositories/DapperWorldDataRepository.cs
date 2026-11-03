@@ -4,30 +4,52 @@ using PristonTale.Persistence.Abstractions.WorldData;
 
 namespace PristonTale.Persistence.Repositories;
 
+// The runtime reads the catalog in English (CatalogLanguages.English); a name is null when the entity has no English
+// text (WorldDataFactory shows its code or key).
 public sealed class DapperWorldDataRepository(IDbConnectionFactory connectionFactory) : IWorldDataRepository
 {
+    private static readonly object English = new { Language = CatalogLanguages.English };
+
     public async Task<IReadOnlyList<ItemTemplateRecord>> GetAllItemTemplatesAsync(CancellationToken ct = default)
     {
         await using var connection = await connectionFactory.OpenAsync(ct);
-
         var items = (await connection.QueryAsync<ItemTemplateRecord>(new CommandDefinition(
-            "SELECT * FROM item_templates", cancellationToken: ct))).ToList();
+            """
+            SELECT
+                d.id, i.code, d.variant, d.variant_ordinal, t.name, i.kind, i.grid_width, i.grid_height,
+                d.unique_item, d.spec_class, d.durability_min, d.durability_max, d.weight, d.price,
+                d.damage_min_low, d.damage_min_high, d.damage_max_low, d.damage_max_high, d.attack_rating_min, d.attack_rating_max,
+                d.critical, d.defence_min, d.defence_max, d.block_min, d.block_max, d.absorb_min, d.absorb_max,
+                d.move_speed_min, d.move_speed_max, d.life_regen_min, d.life_regen_max, d.mana_regen_min, d.mana_regen_max,
+                d.stamina_regen_min, d.stamina_regen_max, d.add_life_min, d.add_life_max, d.add_mana_min, d.add_mana_max,
+                d.add_stamina_min, d.add_stamina_max, d.req_level, d.req_strength, d.req_spirit, d.req_talent, d.req_agility,
+                d.req_health, d.restore_life_min, d.restore_life_max, d.restore_mana_min, d.restore_mana_max,
+                d.restore_stamina_min, d.restore_stamina_max, d.shooting_range, d.attack_speed,
+                d.res_bionic_min, d.res_bionic_max, d.res_earth_min, d.res_earth_max, d.res_fire_min, d.res_fire_max,
+                d.res_ice_min, d.res_ice_max, d.res_lightning_min, d.res_lightning_max, d.res_poison_min, d.res_poison_max,
+                d.res_water_min, d.res_water_max, d.res_wind_min, d.res_wind_max, d.max_stack, d.potion_space,
+                d.magic_mastery_min, d.magic_mastery_max, d.glow_r, d.glow_g, d.glow_b, d.glow_a, d.glow_blink, d.glow_scale,
+                d.display_effect, d.daily_drop_limit, d.set_code, d.set_pieces
+            FROM item_definitions d
+            JOIN items i ON i.code = d.item_code
+            LEFT JOIN item_texts t ON t.definition_id = d.id AND t.language = @Language
+            ORDER BY i.code, d.variant, d.variant_ordinal
+            """, English, cancellationToken: ct))).ToList();
         if (items.Count == 0)
             return items;
 
-        var specials = (await connection.QueryAsync<ItemTemplateSpecialRecord>(new CommandDefinition(
-                "SELECT id, item_code, bonus_code, value0, value1 FROM item_template_special", cancellationToken: ct)))
-            .ToLookup(static s => s.ItemCode);
-        var jobRandom = (await connection.QueryAsync<ItemTemplateJobRandomRecord>(new CommandDefinition(
-                "SELECT id, item_code, ordinal, job_bit_code FROM item_template_job_random ORDER BY ordinal",
-                cancellationToken: ct)))
-            .ToLookup(static j => j.ItemCode);
+        var bonuses = (await connection.QueryAsync<ItemSpecBonusRecord>(new CommandDefinition(
+                "SELECT definition_id, bonus, min_value, max_value FROM item_spec_bonuses ORDER BY definition_id, bonus", cancellationToken: ct)))
+            .ToLookup(static bonus => bonus.DefinitionId);
+        var classes = (await connection.QueryAsync<ItemSpecClassRecord>(new CommandDefinition(
+                "SELECT definition_id, ordinal, class FROM item_spec_random_classes ORDER BY definition_id, ordinal", cancellationToken: ct)))
+            .ToLookup(static spec => spec.DefinitionId);
 
         return items
             .Select(i => i with
             {
-                Specials = specials[i.Code].ToList(),
-                JobRandom = jobRandom[i.Code].ToList(),
+                SpecBonuses = bonuses[i.Id].ToList(),
+                RandomSpecClasses = classes[i.Id].Select(static spec => spec.Class).ToList(),
             })
             .ToList();
     }
@@ -36,109 +58,117 @@ public sealed class DapperWorldDataRepository(IDbConnectionFactory connectionFac
     {
         await using var connection = await connectionFactory.OpenAsync(ct);
         return (await connection.QueryAsync<ItemSetRecord>(new CommandDefinition(
-            "SELECT set_code, pieces, life, absorb, block, life_regen, mana_regen, stamina_regen, description FROM item_sets ORDER BY set_code",
+            "SELECT set_code, pieces, life, absorb, block, life_regen, mana_regen, stamina_regen FROM item_sets ORDER BY set_code",
             cancellationToken: ct))).ToList();
     }
 
     public async Task<IReadOnlyList<MonsterRecord>> GetAllMonstersAsync(CancellationToken ct = default)
     {
         await using var connection = await connectionFactory.OpenAsync(ct);
-
-        // Runtime monster IDs derive from this deterministic order.
         var monsters = (await connection.QueryAsync<MonsterRecord>(new CommandDefinition(
-            "SELECT * FROM monsters ORDER BY name", cancellationToken: ct))).ToList();
+            """
+            SELECT
+                m.id, m.key, t.name, m.model, m.level, m.hp, m.attack_min, m.attack_max, m.attack_speed,
+                m.attack_range, m.accuracy, m.defence, m.absorb_pct, m.block_pct, m.stun_pct, m.sight, m.skill_damage_min,
+                m.skill_damage_max, m.skill_distance, m.skill_range, m.skill_rating_pct, m.skill_curse_code, m.move_speed,
+                m.move_range, m.iq, m.group_min, m.group_max, m.exp, m.active_hour, m.nature, m.brood, m.class, m.hostile,
+                m.res_bionic, m.res_earth, m.res_fire, m.res_ice, m.res_lightning, m.res_poison, m.res_water, m.res_wind,
+                m.res_magic, m.size_level, m.sound_code, m.model_scale, m.portrait_offset_y, m.portrait_offset_z, m.quest_code,
+                m.event_item, m.potion_count, m.potion_percent, m.move_type, m.special_attack_pct, m.gold_min, m.gold_max,
+                m.gold_pct, m.event_model, m.event_code, m.event_info, m.max_drops_per_kill, m.drops_seen_by_all
+            FROM monsters m
+            LEFT JOIN monster_texts t ON t.monster_id = m.id AND t.language = @Language
+            ORDER BY m.id
+            """, English, cancellationToken: ct))).ToList();
         if (monsters.Count == 0)
             return monsters;
 
-        var config = (await connection.QueryAsync<MonsterDropConfigRecord>(new CommandDefinition(
-                "SELECT monster_name, max_items_per_kill, all_players_see FROM monster_drops", cancellationToken: ct)))
-            .ToDictionary(static c => c.MonsterName);
-        var dropItems = (await connection.QueryAsync<MonsterDropItemRecord>(new CommandDefinition(
-                "SELECT id, monster_name, kind, weight, item_code, gold_min, gold_max FROM monster_drop_items",
-                cancellationToken: ct)))
-            .ToLookup(static d => d.MonsterName);
-        var dropsPlus = (await connection.QueryAsync<MonsterDropPlusRecord>(new CommandDefinition(
-                "SELECT id, monster_name, weight, item_code FROM monster_drops_plus", cancellationToken: ct)))
-            .ToLookup(static d => d.MonsterName);
+        var lineItems = (await connection.QueryAsync<MonsterDropLineItemRecord>(new CommandDefinition(
+                "SELECT monster_id, line, ordinal, item_code FROM monster_drop_line_items ORDER BY monster_id, line, ordinal", cancellationToken: ct)))
+            .ToLookup(static item => (item.MonsterId, item.Line));
+        var lines = (await connection.QueryAsync<MonsterDropLineRecord>(new CommandDefinition(
+                "SELECT monster_id, line, weight, kind, gold_min, gold_max FROM monster_drop_lines ORDER BY monster_id, line", cancellationToken: ct)))
+            .Select(line => line with { Items = lineItems[(line.MonsterId, line.Line)].Select(static item => item.ItemCode).ToList() })
+            .ToLookup(static line => line.MonsterId);
+        var bonus = (await connection.QueryAsync<MonsterBonusDropRecord>(new CommandDefinition(
+                "SELECT monster_id, ordinal, chance, item_code FROM monster_bonus_drops ORDER BY monster_id, ordinal", cancellationToken: ct)))
+            .ToLookup(static drop => drop.MonsterId);
 
         return monsters
-            .Select(m => m with
-            {
-                DropConfig = config.GetValueOrDefault(m.Name),
-                DropItems = dropItems[m.Name].ToList(),
-                DropsPlus = dropsPlus[m.Name].ToList(),
-            })
+            .Select(m => m with { DropLines = lines[m.Id].ToList(), BonusDrops = bonus[m.Id].ToList() })
             .ToList();
     }
 
     public async Task<IReadOnlyList<NpcRecord>> GetAllNpcsAsync(CancellationToken ct = default)
     {
         await using var connection = await connectionFactory.OpenAsync(ct);
-
-        // Runtime NPC IDs derive from this deterministic order.
         var npcs = (await connection.QueryAsync<NpcRecord>(new CommandDefinition(
             """
-            SELECT name, model, linked_file, svc_warehouse, svc_shop, svc_skill_master, svc_job_change,
-                   svc_teleport, svc_item_mix, svc_item_aging, svc_smelting, svc_manufacture, svc_mixture_reset,
-                   svc_clan, svc_bless_castle, svc_quest, svc_event_booth, svc_collect_money, svc_give_money,
-                   job_change_code, teleport_code, quest_code, quest_param, dialog, sound_code, move_range,
-                   model_scale, display_name, portrait_offset_y, portrait_offset_z, hostile, level, size_level, appear_slot, appear_cycle
-            FROM npcs ORDER BY name
-            """, cancellationToken: ct))).ToList();
+            SELECT n.id, n.key, t.name, n.model, n.level, n.hostile, n.size_level, n.move_range,
+                   n.model_scale, n.sound_code, n.portrait_offset_y, n.portrait_offset_z, n.appear_slot, n.appear_cycle
+            FROM npcs n
+            LEFT JOIN npc_texts t ON t.npc_id = n.id AND t.language = @Language
+            ORDER BY n.id
+            """, English, cancellationToken: ct))).ToList();
         if (npcs.Count == 0)
             return npcs;
 
-        var stock = (await connection.QueryAsync<NpcShopStockRecord>(new CommandDefinition(
-                "SELECT id, npc_name, tab, ordinal, item_code FROM npc_shop_stock ORDER BY tab, ordinal",
-                cancellationToken: ct)))
-            .ToLookup(static s => s.NpcName);
+        var stock = (await connection.QueryAsync<NpcShopItemRecord>(new CommandDefinition(
+                "SELECT npc_id, tab, ordinal, item_code FROM npc_shop_items ORDER BY npc_id, tab, ordinal", cancellationToken: ct)))
+            .ToLookup(static s => s.NpcId);
         var services = (await connection.QueryAsync<NpcServiceRecord>(new CommandDefinition(
-                "SELECT id, npc_name, ordinal, kind, value, value2, text FROM npc_services ORDER BY npc_name, ordinal",
-                cancellationToken: ct)))
-            .ToLookup(static s => s.NpcName);
+                "SELECT npc_id, ordinal, kind, value, value2, text FROM npc_services ORDER BY npc_id, ordinal", cancellationToken: ct)))
+            .ToLookup(static s => s.NpcId);
+        var dialog = (await connection.QueryAsync<NpcDialogLineRecord>(new CommandDefinition(
+                "SELECT npc_id, ordinal, text FROM npc_dialog_lines WHERE language = @Language ORDER BY npc_id, ordinal", English, cancellationToken: ct)))
+            .ToLookup(static line => line.NpcId);
 
         return npcs
-            .Select(n => n with { ShopStock = stock[n.Name].ToList(), Services = services[n.Name].ToList() })
+            .Select(n => n with
+            {
+                ShopItems = stock[n.Id].ToList(),
+                Services = services[n.Id].ToList(),
+                Dialog = dialog[n.Id].Select(static line => line.Text).ToList(),
+            })
             .ToList();
     }
 
     public async Task<IReadOnlyList<FieldSpawnRecord>> GetAllFieldSpawnsAsync(CancellationToken ct = default)
     {
         await using var connection = await connectionFactory.OpenAsync(ct);
-
         var fields = (await connection.QueryAsync<FieldSpawnRecord>(new CommandDefinition(
             """
-            SELECT field_code, ase_base, max_concurrent_monsters, max_per_spawn_point,
-                   spawn_interval, per_point_cooldown_ms
-            FROM fields
+            SELECT stage, field_code, max_concurrent_monsters, max_per_spawn_point, spawn_interval, per_point_cooldown_ms
+            FROM fields WHERE field_code IS NOT NULL ORDER BY field_code
             """, cancellationToken: ct))).ToList();
         if (fields.Count == 0)
             return fields;
 
         var points = (await connection.QueryAsync<FieldSpawnPointRecord>(new CommandDefinition(
-                "SELECT id, field_code, point_index, state, x, z FROM field_spawn_points ORDER BY point_index",
-                cancellationToken: ct)))
-            .ToLookup(static p => p.FieldCode);
+                "SELECT stage, point_index, active, x, z FROM field_spawn_points ORDER BY stage, point_index", cancellationToken: ct)))
+            .ToLookup(static p => p.Stage);
         var spawns = (await connection.QueryAsync<FieldMonsterSpawnRecord>(new CommandDefinition(
-                "SELECT id, field_code, monster_name, weight FROM field_monster_spawns", cancellationToken: ct)))
-            .ToLookup(static s => s.FieldCode);
-        var bosses = (await connection.QueryAsync<FieldBossSpawnRecord>(new CommandDefinition(
-                """
-                SELECT id, field_code, boss_monster_name, escort_monster_name, escort_count, spawn_hours
-                FROM field_boss_spawns
-                """, cancellationToken: ct)))
-            .ToLookup(static b => b.FieldCode);
-        var fixedNpcs = (await connection.QueryAsync<FieldFixedNpcRecord>(new CommandDefinition(
-                "SELECT id, field_code, npc_name, x, z, angle, y FROM field_fixed_npcs", cancellationToken: ct)))
-            .ToLookup(static n => n.FieldCode);
+                "SELECT stage, ordinal, monster_id, weight FROM field_monster_spawns ORDER BY stage, ordinal", cancellationToken: ct)))
+            .ToLookup(static s => s.Stage);
+        var hours = (await connection.QueryAsync<FieldBossHourRecord>(new CommandDefinition(
+                "SELECT stage, boss_ordinal, hour FROM field_boss_hours ORDER BY stage, boss_ordinal, hour", cancellationToken: ct)))
+            .ToLookup(static h => (h.Stage, h.BossOrdinal));
+        var bosses = (await connection.QueryAsync<FieldBossRecord>(new CommandDefinition(
+                "SELECT stage, ordinal, monster_id, escort_monster_id, escort_count FROM field_bosses ORDER BY stage, ordinal", cancellationToken: ct)))
+            .Select(b => b with { Hours = hours[(b.Stage, b.Ordinal)].Select(static h => h.Hour).ToList() })
+            .ToLookup(static b => b.Stage);
+        var npcs = (await connection.QueryAsync<FieldNpcRecord>(new CommandDefinition(
+                "SELECT stage, record_index, npc_id, x, y, z, angle FROM field_npcs ORDER BY stage, record_index",
+                cancellationToken: ct)))
+            .ToLookup(static n => n.Stage);
 
         return fields
             .Select(f => f with
             {
-                SpawnPoints = points[f.FieldCode].ToList(),
-                MonsterSpawns = spawns[f.FieldCode].ToList(),
-                BossSpawns = bosses[f.FieldCode].ToList(),
-                FixedNpcs = fixedNpcs[f.FieldCode].ToList(),
+                SpawnPoints = points[f.Stage].ToList(),
+                MonsterSpawns = spawns[f.Stage].ToList(),
+                Bosses = bosses[f.Stage].ToList(),
+                Npcs = npcs[f.Stage].ToList(),
             })
             .ToList();
     }

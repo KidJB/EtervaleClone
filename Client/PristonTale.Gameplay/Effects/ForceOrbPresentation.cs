@@ -1,11 +1,11 @@
 using Microsoft.Xna.Framework;
 using PristonTale.Client.Net.Presence;
-using PristonTale.Effects;
-using PristonTale.Effects.Effects;
 using PristonTale.Effects.Vfx;
 using PristonTale.Engine3D.Rendering.Lighting;
 using PristonTale.Protocol.Packets;
 using PristonTale.Simulation.Items.Usable;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Skills;
 
 namespace PristonTale.Gameplay.Effects;
 
@@ -14,17 +14,15 @@ namespace PristonTale.Gameplay.Effects;
 public sealed class ForceOrbPresentation
 {
     private readonly SkillPresentation _skills;
-    private readonly EffectsEngine _engine;
+    private readonly IScriptEffects _scripts;
     private readonly PristonTransientLights _lights;
-    private readonly EffectDefinition _hit;
     private readonly Dictionary<ulong, Glow> _active = new();
 
-    public ForceOrbPresentation(SkillPresentation skills, LegacyEffectLibrary library, string assetRoot, EffectsEngine engine, PristonTransientLights lights)
+    public ForceOrbPresentation(SkillPresentation skills, IScriptEffects scripts, PristonTransientLights lights)
     {
         _skills = skills;
-        _engine = engine;
+        _scripts = scripts;
         _lights = lights;
-        _hit = library?.ParticleScript(assetRoot, "ShellTomWeaponHit");
     }
 
     public int ActiveCount => _active.Count;
@@ -51,14 +49,10 @@ public sealed class ForceOrbPresentation
 
         foreach (var hit in update.Events)
         {
-            if (hit.Kind == RemoteCombatEventKind.Hit && _active.ContainsKey(hit.AttackerId) && position(hit.TargetId) is { } target)
+            if (hit.Kind == CombatEventKind.Hit && _active.ContainsKey(hit.AttackerId) && position(hit.TargetId) is { } target)
             {
                 var at = target + Vector3.Up * 22f;
-                if (_hit is not null && _engine.Instances.Count < 128)
-                {
-                    _engine.Spawn(_hit, at);
-                }
-
+                _scripts?.Spawn("ShellTomWeaponHit", at, Matrix.Identity);
                 _lights?.Add(at, new Color(255, 255, 255), 250, 1);
             }
         }
@@ -77,7 +71,7 @@ public sealed class ForceOrbPresentation
 
             if (glow.RenewMs <= nowMs && position(entity) is { } at && _skills is not null)
             {
-                glow.Instance?.Stop();
+                glow.Instance.Stop();
                 glow.Instance = _skills.Spawn(ItemVfx.OrbGlow(glow.Index), entity, entity, at);
                 glow.RenewMs = nowMs + (ItemVfx.GlowSeconds - 1f) * 1000d;
             }
@@ -88,7 +82,7 @@ public sealed class ForceOrbPresentation
     {
         if (_active.Remove(entity, out var glow))
         {
-            glow.Instance?.Stop();
+            glow.Instance.Stop();
         }
     }
 
@@ -97,6 +91,6 @@ public sealed class ForceOrbPresentation
         public int Index { get; } = index;
         public double EndMs { get; } = endMs;
         public double RenewMs { get; set; }
-        public VfxInstance Instance { get; set; }
+        public VfxHandle Instance { get; set; }
     }
 }

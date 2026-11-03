@@ -1,5 +1,6 @@
 using PristonTale.Client.Net.Presence;
 using PristonTale.Client.Net.WorldCatalog;
+using PristonTale.Engine3D;
 using PristonTale.Engine3D.Diagnostics;
 using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.Rendering;
@@ -7,6 +8,10 @@ using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Physics;
 using XnaVector3 = Microsoft.Xna.Framework.Vector3;
 using NumVector3 = System.Numerics.Vector3;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Gameplay.World.Remote;
 
@@ -58,10 +63,10 @@ public sealed partial class RemoteEntityManager
 
     public ulong SelfEntityId => _selfEntityId;
 
-    public event Action<int, PristonActorMotion, XnaVector3> NpcMotionStarted;
+    public event Action<int, MotionCode, XnaVector3> NpcMotionStarted;
 
     // Another player entered a motion: its class code, the motion and where it stands.
-    public event Action<int, PristonActorMotion, XnaVector3> PlayerMotionStarted;
+    public event Action<PlayerClass, MotionCode, XnaVector3> PlayerMotionStarted;
 
     public int PendingMonsterCount => _pendingModels.Count;
 
@@ -96,7 +101,12 @@ public sealed partial class RemoteEntityManager
         }
     }
 
-    public void Apply(PresenceUpdate update)
+    public void Apply(PresenceUpdate update) => Apply(update, mirror: false);
+
+    // An update as the server sends it: positions and facings in its space, mirrored into the world's as they are read.
+    public void ApplyServer(PresenceUpdate update) => Apply(update, mirror: true);
+
+    private void Apply(PresenceUpdate update, bool mirror)
     {
         if (update.ServerTimeMs is { } serverTime)
         {
@@ -104,8 +114,9 @@ public sealed partial class RemoteEntityManager
         }
 
         var eventTime = _clock.Stamp(update.ServerTimeMs);
-        foreach (var spawn in update.Spawns)
+        foreach (var received in update.Spawns)
         {
+            var spawn = mirror ? received with { Position = WorldSpace.Mirror(received.Position), Facing = WorldSpace.MirrorFacing(received.Facing) } : received;
             _collisionRoster.Spawn(spawn);
             ApplySpawn(spawn);
             if (_entities.TryGetValue(spawn.EntityId, out var entity))
@@ -114,15 +125,21 @@ public sealed partial class RemoteEntityManager
             }
         }
 
-        foreach (var state in update.States)
+        for (var index = 0; index < update.States.Count; index++)
         {
-            _collisionRoster.Update(state);
-            ApplyState(state);
+            var state = update.States[index];
+            if (mirror)
+            {
+                state = state with { Position = WorldSpace.Mirror(state.Position), Facing = WorldSpace.MirrorFacing(state.Facing) };
+            }
+
+            _collisionRoster.Update(in state);
+            ApplyState(in state);
         }
 
         foreach (var combatEvent in update.Events)
         {
-            var entityId = combatEvent.Kind == RemoteCombatEventKind.SwingBegin ? combatEvent.AttackerId : combatEvent.TargetId;
+            var entityId = combatEvent.Kind == CombatEventKind.SwingBegin ? combatEvent.AttackerId : combatEvent.TargetId;
             if (entityId == _selfEntityId)
             {
                 _onSelfCombatEvent?.Invoke(combatEvent);
@@ -140,9 +157,29 @@ public sealed partial class RemoteEntityManager
     }
 
     private readonly Dictionary<ulong, PlayerAppearanceInfo> _playerAppearances = new();
+    private readonly Dictionary<ulong, string> _shopSigns = new();
+
+    // No sign, for views without a world; never written.
+    public static readonly Dictionary<ulong, string> NoShopSigns = new();
+
+    // The signs of the players selling from a personal shop, the local player's included, as their bubbles read them.
+    // Read only: a dictionary rather than its interface so the HUD walks it every frame without allocating.
+    public Dictionary<ulong, string> ShopSigns => _shopSigns;
 
     private void ApplySpawn(EntitySpawnInfo spawn, bool publish = false)
     {
+        if (spawn.Player is { ShopSign: var sign })
+        {
+            if (sign.Length > 0)
+            {
+                _shopSigns[spawn.EntityId] = $"{spawn.Player.Name}: {sign}";
+            }
+            else
+            {
+                _shopSigns.Remove(spawn.EntityId);
+            }
+        }
+
         if (spawn.IsSelf)
         {
             _selfEntityId = spawn.EntityId;
@@ -150,9 +187,15 @@ public sealed partial class RemoteEntityManager
             return;
         }
 
+        // A new sign alone changes no model.
         if (_entities.ContainsKey(spawn.EntityId) && !publish
-            && (spawn.Player is null || (_playerAppearances.TryGetValue(spawn.EntityId, out var known) && known == spawn.Player)))
+            && (spawn.Player is null || (_playerAppearances.TryGetValue(spawn.EntityId, out var known) && known with { ShopSign = spawn.Player.ShopSign } == spawn.Player)))
         {
+            if (spawn.Player is not null)
+            {
+                _playerAppearances[spawn.EntityId] = spawn.Player;
+            }
+
             if (_preparingActors.Remove(spawn.EntityId, out var superseded))
             {
                 _ = ObservePreparationAsync(superseded.Preparation);
@@ -162,12 +205,12 @@ public sealed partial class RemoteEntityManager
         }
 
         Task preparation = null;
-        if (spawn.Kind == RemoteEntityKind.Player && spawn.Player is not null && TryResolveVisuals(spawn.Player.JobCode, out var visuals))
+        if (spawn.Kind == EntityKind.Player && spawn.Player is not null && TryResolveVisuals(spawn.Player.Class, out var visuals))
         {
             visuals = ResolvePlayerHead(visuals, spawn.Player);
             preparation = _playerComposer.PrepareAsync(_assetRoot, visuals, spawn.Player.FaceIndex);
         }
-        else if (spawn.Kind is RemoteEntityKind.Monster or RemoteEntityKind.Npc)
+        else if (spawn.Kind is EntityKind.Monster or EntityKind.Npc)
         {
             var info = ModelInfo(spawn);
             if (info is not null && !string.IsNullOrEmpty(info.ModelInxPath))
@@ -189,11 +232,11 @@ public sealed partial class RemoteEntityManager
 
         switch (spawn.Kind)
         {
-            case RemoteEntityKind.Player:
+            case EntityKind.Player:
                 ApplyPlayerSpawn(spawn);
                 break;
-            case RemoteEntityKind.Monster:
-            case RemoteEntityKind.Npc:
+            case EntityKind.Monster:
+            case EntityKind.Npc:
                 ApplyModelSpawn(spawn);
                 break;
         }
@@ -207,9 +250,9 @@ public sealed partial class RemoteEntityManager
             return;
         }
 
-        if (!TryResolveVisuals(spawn.Player.JobCode, out var visuals))
+        if (!TryResolveVisuals(spawn.Player.Class, out var visuals))
         {
-            _log.Warn($"[Remote] spawn {spawn.EntityId}: unknown JobCode {spawn.Player.JobCode}; skipped.");
+            _log.Warn($"[Remote] spawn {spawn.EntityId}: unknown class {spawn.Player.Class}; skipped.");
             return;
         }
 
@@ -227,7 +270,7 @@ public sealed partial class RemoteEntityManager
 
         var world = Microsoft.Xna.Framework.Matrix.CreateRotationY(seedFacing)
                     * Microsoft.Xna.Framework.Matrix.CreateTranslation(position);
-        var motion = RemoteEntityBase.ToActorMotion(spawn.MoveState);
+        var motion = MotionCodes.Of(spawn.MoveState);
         visuals = ResolvePlayerHead(visuals, spawn.Player);
         var handles = new PlayerActorHandles(ActorHandle.None, ActorHandle.None);
         try
@@ -259,20 +302,20 @@ public sealed partial class RemoteEntityManager
             position,
             seedFacing,
             spawn.MoveState,
-            spawn.Hp)
+            spawn.Life)
         {
             InVillage = spawn.Player.InVillage,
             EntityId = spawn.EntityId
         };
         replacement.MotionStarted += OnMotionStarted;
         replacement.SetRates(spawn.MoveSpeed, spawn.AttackRate);
-        replacement.SetTarget(sampleTime, ToXna(spawn.Position), spawn.Facing, spawn.MoveState, spawn.Hp);
+        replacement.SetTarget(sampleTime, ToXna(spawn.Position), spawn.Facing, spawn.MoveState, spawn.Life);
         _entities[spawn.EntityId] = replacement;
     }
 
     private ModelRenderInfo ModelInfo(EntitySpawnInfo spawn)
     {
-        if (spawn.Kind == RemoteEntityKind.Monster)
+        if (spawn.Kind == EntityKind.Monster)
         {
             return _catalog.GetMonster(spawn.TemplateId);
         }
@@ -294,12 +337,11 @@ public sealed partial class RemoteEntityManager
         if (spawn.OwnerId != 0)
         {
             _summonOwners[spawn.EntityId] = spawn.OwnerId;
-            TrackSummonPlate(spawn, info.Name);
         }
 
         var scale = spawn.ModelScale > 0f ? spawn.ModelScale : info.ModelScale;
         var world = Microsoft.Xna.Framework.Matrix.CreateScale(scale) * Microsoft.Xna.Framework.Matrix.CreateRotationY(spawn.Facing) * Microsoft.Xna.Framework.Matrix.CreateTranslation(position);
-        var motion = RemoteEntityBase.ToActorMotion(spawn.MoveState);
+        var motion = MotionCodes.Of(spawn.MoveState);
         var composed = _monsterComposer.Compose(_assetRoot, info.ModelInxPath, world, motion);
         var monster = new RemoteModelEntity(
             _scene,
@@ -309,11 +351,13 @@ public sealed partial class RemoteEntityManager
             position,
             spawn.Facing,
             spawn.MoveState,
-            spawn.Hp,
+            spawn.Life,
             spawn.Kind,
-            spawn.Kind == RemoteEntityKind.Npc ? ((NpcRenderInfo)info).SoundCode : ((MonsterRenderInfo)info).SoundCode,
+            spawn.Kind == EntityKind.Npc ? ((NpcRenderInfo)info).SoundCode : ((MonsterRenderInfo)info).SoundCode,
             composed.Info,
-            spawn.EntityId)
+            spawn.EntityId,
+            composed.Alternate,
+            composed.AlternateInfo)
         {
             Level = info is MonsterRenderInfo monsterInfo ? monsterInfo.Level : 0,
             MonsterClass = info is MonsterRenderInfo classInfo ? classInfo.Class : 0,
@@ -324,7 +368,7 @@ public sealed partial class RemoteEntityManager
         _entities[spawn.EntityId] = monster;
     }
 
-    private void ApplyState(EntityStateInfo state)
+    private void ApplyState(in EntityStateInfo state)
     {
         if (state.EntityId == _selfEntityId && _selfEntityId != 0)
         {
@@ -335,8 +379,7 @@ public sealed partial class RemoteEntityManager
         if (_entities.TryGetValue(state.EntityId, out var entity))
         {
             entity.SetRates(state.MoveSpeed, state.AttackRate);
-            entity.SetTarget(_clock.Stamp(state.ServerTimeMs), ToXna(state.Position), state.Facing, state.MoveState, state.Hp);
-            UpdateSummonPlate(state.EntityId, state.Hp);
+            entity.SetTarget(_clock.Stamp(state.ServerTimeMs), ToXna(state.Position), state.Facing, state.MoveState, state.Life);
             if (!_preparingActors.ContainsKey(state.EntityId))
             {
                 return;
@@ -350,7 +393,7 @@ public sealed partial class RemoteEntityManager
                 Position = state.Position,
                 Facing = state.Facing,
                 MoveState = state.MoveState,
-                Hp = state.Hp,
+                Life = state.Life,
                 MoveSpeed = state.MoveSpeed,
                 AttackRate = state.AttackRate,
                 ServerTimeMs = state.ServerTimeMs
@@ -366,7 +409,7 @@ public sealed partial class RemoteEntityManager
                 Position = state.Position,
                 Facing = state.Facing,
                 MoveState = state.MoveState,
-                Hp = state.Hp,
+                Life = state.Life,
                 MoveSpeed = state.MoveSpeed,
                 AttackRate = state.AttackRate,
                 ServerTimeMs = state.ServerTimeMs
@@ -385,7 +428,7 @@ public sealed partial class RemoteEntityManager
         into.Clear();
         foreach (var (id, entity) in _entities)
         {
-            if (entity is RemoteModelEntity { Kind: RemoteEntityKind.Monster } monster && monster.Actor.IsValid)
+            if (entity is RemoteModelEntity { Kind: EntityKind.Monster } monster && monster.Actor.IsValid)
             {
                 into.Add(new PristonTale.Gameplay.Effects.MonsterActorView(id, monster.Actor, monster.SoundCode, monster.Level, monster.Scale,
                     monster.DrawnPosition, monster.RenderFacing, monster.IsDead, monster.MonsterClass == HammerClass));
@@ -406,8 +449,8 @@ public sealed partial class RemoteEntityManager
     private void ApplyRemoved(ulong entityId)
     {
         _summonOwners.Remove(entityId);
-        _summonPlates.Remove(entityId);
         _playerAppearances.Remove(entityId);
+        _shopSigns.Remove(entityId);
         _collisionRoster.Remove(entityId);
         _pendingModels.Remove(entityId);
         if (_preparingActors.Remove(entityId, out var pending))
@@ -424,31 +467,31 @@ public sealed partial class RemoteEntityManager
         entity.Dispose();
     }
 
-    private void OnMotionStarted(RemoteEntityBase entity, PristonActorMotion motion)
+    private void OnMotionStarted(RemoteEntityBase entity, MotionCode motion)
     {
-        if (entity.Kind == RemoteEntityKind.Npc && entity.SoundCode != 0)
+        if (entity.Kind == EntityKind.Npc && entity.SoundCode != 0)
         {
             NpcMotionStarted?.Invoke(entity.SoundCode, motion, entity.DrawnPosition);
         }
-        else if (entity.Kind == RemoteEntityKind.Player && _playerAppearances.TryGetValue(entity.EntityId, out var appearance))
+        else if (entity.Kind == EntityKind.Player && _playerAppearances.TryGetValue(entity.EntityId, out var appearance))
         {
-            PlayerMotionStarted?.Invoke(appearance.JobCode, motion, entity.DrawnPosition);
+            PlayerMotionStarted?.Invoke(appearance.Class, motion, entity.DrawnPosition);
         }
     }
 
     // The class, equipped weapon and drawn position of another player, for its swing sounds.
-    public bool TryGetPlayerAudio(ulong entityId, out int classCode, out string weaponKey, out XnaVector3 position)
+    public bool TryGetPlayerAudio(ulong entityId, out PlayerClass playerClass, out string weaponKey, out XnaVector3 position)
     {
-        if (_entities.TryGetValue(entityId, out var entity) && entity.Kind == RemoteEntityKind.Player
+        if (_entities.TryGetValue(entityId, out var entity) && entity.Kind == EntityKind.Player
             && _playerAppearances.TryGetValue(entityId, out var appearance))
         {
-            classCode = appearance.JobCode;
+            playerClass = appearance.Class;
             weaponKey = appearance.WeaponKey ?? "";
             position = entity.DrawnPosition;
             return true;
         }
 
-        classCode = 0;
+        playerClass = default;
         weaponKey = "";
         position = default;
         return false;
@@ -498,18 +541,18 @@ public sealed partial class RemoteEntityManager
     private const float PlayerPickRadius = 40f;
     private const float NpcPickRadius = 40f;
 
-    private static float PickRadius(RemoteEntityKind kind) => kind switch
+    private static float PickRadius(EntityKind kind) => kind switch
     {
-        RemoteEntityKind.Monster => MonsterPickRadius,
-        RemoteEntityKind.Player => PlayerPickRadius,
-        RemoteEntityKind.Npc => NpcPickRadius,
+        EntityKind.Monster => MonsterPickRadius,
+        EntityKind.Player => PlayerPickRadius,
+        EntityKind.Npc => NpcPickRadius,
         _ => 0f,
     };
 
-    public bool TryPick(Microsoft.Xna.Framework.Ray ray, ulong selfId, out ulong entityId, out RemoteEntityKind kind)
+    public bool TryPick(Microsoft.Xna.Framework.Ray ray, ulong selfId, out ulong entityId, out EntityKind kind)
     {
         entityId = 0;
-        kind = RemoteEntityKind.Unspecified;
+        kind = EntityKind.None;
         var bestDistance = float.MaxValue;
         foreach (var (id, entity) in _entities)
         {
@@ -655,6 +698,8 @@ public sealed partial class RemoteEntityManager
         return handle.IsValid;
     }
 
+    public float AttackRateOf(ulong entityId) => _entities.TryGetValue(entityId, out var entity) ? entity.AttackRate : 1f;
+
     public bool PlaySkillMotion(ulong entityId, int motionIndex, float rate, bool attackClip)
     {
         if (!_entities.TryGetValue(entityId, out var entity) || entity.IsDead)
@@ -668,7 +713,7 @@ public sealed partial class RemoteEntityManager
 
     public bool TryGetNpcAudioSource(ulong entityId, out int soundCode, out XnaVector3 position)
     {
-        if (_entities.TryGetValue(entityId, out var entity) && entity.Kind == RemoteEntityKind.Npc)
+        if (_entities.TryGetValue(entityId, out var entity) && entity.Kind == EntityKind.Npc)
         {
             soundCode = entity.SoundCode;
             position = entity.DrawnPosition;
@@ -704,8 +749,8 @@ public sealed partial class RemoteEntityManager
         }
 
         _entities.Clear();
-        _summonPlates.Clear();
         _playerAppearances.Clear();
+        _shopSigns.Clear();
         _collisionRoster.Clear();
         _pendingModels.Clear();
         foreach (var pending in _preparingActors.Values)
@@ -733,17 +778,17 @@ public sealed partial class RemoteEntityManager
     private CharacterVisualSet ResolvePlayerHead(CharacterVisualSet defaults, PlayerAppearanceInfo appearance)
     {
         var head = CharacterHead.ApplyBigHead(
-            CharacterHead.Apply(defaults, (PlayerClass)appearance.JobCode, appearance.Tier, appearance.FaceIndex, appearance.HairIndex),
-            (PlayerClass)appearance.JobCode, appearance.BigHead);
-        uint jobMask = _classRegistry.Get((PlayerClass)appearance.JobCode).Definition.MotionJobMask;
+            CharacterHead.Apply(defaults, appearance.Class, appearance.Tier, appearance.FaceIndex, appearance.HairIndex),
+            appearance.Class, appearance.BigHead);
+        uint jobMask = _classRegistry.Get(appearance.Class).Definition.MotionJobMask;
         return EquipmentVisuals.Apply(head, appearance.ArmorKey, appearance.WeaponKey, appearance.OffHandKey, appearance.InVillage, jobMask);
     }
 
-    private bool TryResolveVisuals(int jobCode, out CharacterVisualSet visuals)
+    private bool TryResolveVisuals(PlayerClass playerClass, out CharacterVisualSet visuals)
     {
-        if (System.Enum.IsDefined(typeof(PlayerClass), jobCode))
+        if (System.Enum.IsDefined(playerClass))
         {
-            visuals = _classRegistry.Get((PlayerClass)jobCode).Definition.DefaultVisuals;
+            visuals = _classRegistry.Get(playerClass).Definition.DefaultVisuals;
             return true;
         }
         visuals = null;

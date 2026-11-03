@@ -1,3 +1,4 @@
+using PristonTale.Contracts.Units;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using PristonTale.Application.World;
@@ -7,14 +8,17 @@ using PristonTale.Protocol.Transport;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Quests;
 using PristonTale.Simulation.World.Loot;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
 
 namespace PristonTale.Server.Net;
 
 // Turns one subscriber's share of a field snapshot into presence messages. It keeps the original's view ranges and
 // distance-weighted detail, but queries the field grid instead of scanning every slot, sends an entity only when it
-// changed (a full entry for spawns and discrete changes, a motion entry for movement), and lets the near ring update
-// faster than the far ring.
-internal sealed partial class PresenceEncoder
+// changed and only what changed (a spawn names it under a handle of this receiver's and carries every value; a later
+// entry carries the values that changed and its position as a change from the last one sent), pushes its description
+// ahead of its spawn, and lets the near ring update faster than the far ring.
+internal sealed partial class PresenceEncoder : IEventHandleWriter
 {
     // Squared view ranges in world units: connect 0x120000, high detail 0x48000, ground items 0xC8000.
     public static readonly float ViewRadius = MathF.Sqrt(0x120000);
@@ -29,7 +33,7 @@ internal sealed partial class PresenceEncoder
     // Like the original per-receiver user limit, a crowd cannot exceed a per-receiver movement budget (about 40 KiB/s at 20 Hz).
     // Spawns and discrete changes always go out; position-only updates are ranked by how overdue they are.
     private const int MovementBudgetBytes = 2048;
-    private const uint TickIntervalMs = 1000 / WorldServer.TickHz;
+    private const ushort TickIntervalMs = 1000 / WorldServer.TickHz;
 
     private readonly ulong _self;
     private readonly WorldDataHolder _data;
@@ -37,17 +41,28 @@ internal sealed partial class PresenceEncoder
     private readonly Dictionary<ulong, Known> _known = new();
     private readonly Dictionary<Guid, GroundDropView> _drops = new();
     private readonly List<int> _candidates = new();
-    // The entities a receiver may show at once; the nearest win in a denser crowd.
+    // The entities a receiver may show at once, players at most MaxVisiblePlayers of them: the nearest win in a denser
+    // crowd, players first, and monsters and NPCs fill the rest. A client draws a crowd of players at a cost a crowd of
+    // monsters does not have.
     public const int MaxVisible = 256;
-    private readonly VisibleSet _visible = new(MaxVisible);
+    public const int MaxVisiblePlayers = 100;
+    private readonly VisibleSet _visiblePlayers = new();
+    private readonly VisibleSet _visible = new();
     private readonly List<int> _related = new();
     private readonly HashSet<int> _essential = new();
     private readonly Func<int, bool> _isShown;
-    private readonly MotionCandidates _pending = new(MovementBudgetBytes / PresenceWire.MotionEntrySize(0));
+    private readonly MotionCandidates _pending = new(MovementBudgetBytes / PresenceWire.MinEntrySize);
+    // Handles of removed entities. An entity is found removed only after every spawn of its encode, and its removal goes
+    // out before the next encode, so the client never reads a spawn under a handle before the removal that freed it.
+    private readonly Stack<uint> _freeHandles = new();
+    private uint _nextHandle;
+    // The description revision this receiver last got for each shared template, as its client keeps them.
+    private readonly Dictionary<uint, byte> _sentTemplates = new();
     private readonly HashSet<Guid> _visibleDrops = new();
     private readonly List<Guid> _goneDrops = new();
     private readonly List<ulong> _removed = new();
-    // Entities this receiver started seeing in the snapshot being encoded; their running statuses follow.
+    // Entities this receiver started seeing in the snapshot being encoded (every entity shown when its events were lost);
+    // their running statuses follow.
     private readonly List<ulong> _spawned = new();
     private readonly List<CombatEventEntry> _events = new();
     private readonly List<SkillEventEntry> _skillEvents = new();
@@ -65,12 +80,29 @@ internal sealed partial class PresenceEncoder
     private OwnerState? _owner;
     private long _inventoryRevision = -1;
     private long _skillsRevision = -1;
-    private uint _groupCounter;
+    private long _agingRevision = -1;
     private uint _clockTick;
     private bool _clockPending;
     private uint _pass;
     private SharedPresenceWire? _wire;
     private Simulation.Progression.RestartOffer? _restartOffer;
+    private PartyView? _party;
+    // The weather last sent; null until the first snapshot sends it.
+    private WeatherState? _weather;
+
+    // The boss pass last sent and the field it was for; no field until the first snapshot sends one.
+    private Simulation.World.Spawning.BossCountdown? _boss;
+    private int _bossField = -1;
+
+    // The world's boss list last sent.
+    private BossList? _bossList;
+
+    // The boss spot list last sent and the field it was for.
+    private BossSpotView[]? _bossSpots;
+    private int _bossSpotsField = -1;
+    private PartyRequest? _partyRequest;
+    private TradeView? _trade;
+    private TradeRequest? _tradeRequest;
     private PresenceFrame? _heldFrame;
     private EntityView[] _describeViews = [];
     private EntityGrid? _describeGrid;
@@ -83,11 +115,11 @@ internal sealed partial class PresenceEncoder
         _isShown = index => _known.ContainsKey(_entities[index].EntityId);
     }
 
-    public EntityKindView? KindOf(ulong serial)
+    public EntityKind? KindOf(ulong entityId)
     {
         lock (_gate)
         {
-            return _known.TryGetValue(serial, out var known) ? known.Kind : null;
+            return _known.TryGetValue(entityId, out var known) ? known.Kind : null;
         }
     }
 
@@ -113,46 +145,30 @@ internal sealed partial class PresenceEncoder
         }
     }
 
-    // The description of an entity from the last encoded snapshot (its frame stays pinned until the next one); null when
-    // the serial is not in this subscriber's view.
-    public EntityDescriptionPacket? Describe(ulong serial)
-    {
-        EntityView view;
-        byte revision;
-        lock (_gate)
-        {
-            if (_describeGrid is null || !_known.TryGetValue(serial, out var known) || !_describeGrid.TryGetIndex(serial, out var index))
-            {
-                return null;
-            }
-
-            view = _describeViews[index];
-            revision = known.Revision;
-        }
-
-        return DescriptionPacket(view, revision, _data.Current);
-    }
-
-    // Writes the description into destination and returns its length, 0 when the serial is not in view. Every receiver
-    // asking about an entity of the same frame gets the same bytes, so they are encoded once per frame.
-    public int WriteDescription(ulong serial, Span<byte> destination)
+    // Answers DescribeEntity with the entity's description from the last encoded snapshot (its frame stays pinned until
+    // the next one); false when the entityId is not in this subscriber's view. It is sent under the encoder's lock, so it
+    // reaches the client in the order of the encodes that note which template descriptions the client holds. Every
+    // receiver asking about an entity of the same frame gets the same bytes, encoded once per frame.
+    public bool SendRequestedDescription(ulong entityId, IPacketSink connection)
     {
         lock (_gate)
         {
-            if (_describeGrid is null || !_known.TryGetValue(serial, out var known) || !_describeGrid.TryGetIndex(serial, out var index))
+            if (_describeGrid is null || !_known.TryGetValue(entityId, out var known) || !_describeGrid.TryGetIndex(entityId, out var index))
             {
-                return 0;
+                return false;
             }
 
             ref readonly var view = ref _describeViews[index];
             if (_heldFrame is { } frame && view.Revision != 0 && ReferenceEquals(frame.Views, _describeViews))
             {
-                var shared = frame.Attachment(SharedPresenceWire.Create).Description(index, view, _data.Current);
-                shared.CopyTo(destination);
-                return shared.Length;
+                NoteTemplate(view, view.Revision);
+                connection.Send(frame.Attachment(SharedPresenceWire.Create).Description(index, view, _data.Current));
+                return true;
             }
 
-            return DescriptionPacket(view, known.Revision, _data.Current).Write(destination);
+            NoteTemplate(view, known.Revision);
+            connection.Send(_scratch.AsSpan(0, DescriptionPacket(view, known.Revision, _data.Current).Write(_scratch)));
+            return true;
         }
     }
 
@@ -240,28 +256,38 @@ internal sealed partial class PresenceEncoder
 
         _clockTick = tick;
         _clockPending = true;
-        // Entries every receiver of this frame shares are encoded once by whichever encoder needs them first.
+        // Descriptions every receiver of this frame shares are encoded once by whichever encoder needs them first.
         _wire = snapshot.Frame is { } frame && ReferenceEquals(frame.Views, snapshot.Entities)
             ? frame.Attachment(SharedPresenceWire.Create)
             : null;
         _entities = snapshot.Entities;
         _pass++;
-        var group = new PresenceEntriesWriter(_group, ++_groupCounter);
+        var group = new PresenceEntriesWriter(_group, tick, TickIntervalMs);
         _removed.Clear();
         _spawned.Clear();
         WriteEntity(ref group, connection, selfIndex, tick, field, near: true);
 
         _candidates.Clear();
         _pending.Clear();
+        _visiblePlayers.Clear();
         _visible.Clear();
         _essential.Clear();
-        // Entities a receiver must not lose in a crowd: NPCs, its attack target, whoever targets it and its summons.
+        // Entities a receiver must not lose in a crowd: NPCs, its attack target, whoever targets it, its summons and its
+        // party.
         _related.Clear();
         _related.AddRange(grid.Npcs);
         grid.Related(_self, _related);
         if (self.AttackTargetId != 0 && grid.TryGetIndex(self.AttackTargetId, out var targetIndex))
         {
             _related.Add(targetIndex);
+        }
+
+        foreach (var member in snapshot.Party?.Members ?? [])
+        {
+            if (grid.TryGetIndex(member.EntityId, out var memberIndex))
+            {
+                _related.Add(memberIndex);
+            }
         }
 
         foreach (var index in _related)
@@ -281,25 +307,15 @@ internal sealed partial class PresenceEncoder
             }
         }
 
-        _visible.Trim(_isShown);
-        foreach (var (index, _) in _visible.Entries)
-        {
-            ref readonly var view = ref snapshot.Entities[index];
-            var distanceSq = PlanarDistanceSq(view.Position, self.Position);
-            var near = distanceSq <= NearRadius * NearRadius;
-            if (WriteEntity(ref group, connection, index, tick, field, near) is { } age)
-            {
-                // Overdue ratio: the wanted interval grows with distance, and every waiting entity keeps gaining
-                // priority, so a crowd is served round-robin like the classic server's rotating send cursor.
-                var wanted = NearIntervalTicks + MathF.Sqrt(distanceSq) / 50f;
-                _pending.Add(index, age / wanted, near);
-            }
-        }
+        _visiblePlayers.Trim(MaxVisiblePlayers, _isShown);
+        _visible.Trim(MaxVisible - _visiblePlayers.Count, _isShown);
+        WriteVisible(ref group, connection, _visiblePlayers, snapshot, self.Position, tick, field);
+        WriteVisible(ref group, connection, _visible, snapshot, self.Position, tick, field);
 
         var budget = MovementBudgetBytes;
         foreach (var (index, _, near) in _pending.Ordered())
         {
-            var size = PresenceWire.MotionEntrySize(_entities[index].EntityId);
+            var size = MotionSize(index);
             if (budget < size)
             {
                 break;
@@ -309,23 +325,31 @@ internal sealed partial class PresenceEncoder
             WriteMotion(ref group, connection, index, tick);
         }
 
-        foreach (var (serial, known) in _known)
+        foreach (var (entityId, known) in _known)
         {
             if (known.Pass != _pass)
             {
-                _removed.Add(serial);
+                _removed.Add(entityId);
+                _freeHandles.Push(known.Handle);
             }
         }
 
-        foreach (var serial in _removed)
+        foreach (var entityId in _removed)
         {
-            _known.Remove(serial);
+            _known.Remove(entityId);
         }
 
         FlushGroup(ref group, connection);
         _wire = null;
         _entities = [];
         SendRemovals(connection);
+        if (snapshot.EventsLost)
+        {
+            // The statuses that started on entities already shown were among the events lost.
+            _spawned.Clear();
+            _spawned.AddRange(_known.Keys);
+        }
+
         var routed = RouteEvents(snapshot);
         SendEvents(combat, connection, routed ? _routedCombat : null);
         SendSkillEvents(skills, connection, routed ? _routedSkills : null);
@@ -336,9 +360,82 @@ internal sealed partial class PresenceEncoder
         SendPremium(snapshot.Owner, connection);
         SendCooldowns(snapshot, connection);
         SendRestartOffer(snapshot.Restart, connection);
+        SendWeather(snapshot.Weather, connection);
+        SendBossTime(snapshot, connection);
+        SendBossSpots(snapshot, connection);
+        SendBossList(snapshot, connection);
+        SendParty(snapshot, connection);
+        SendTrade(snapshot, connection);
         if (snapshot.Quest is not null)
         {
             SendQuest(snapshot.Quest, connection);
+        }
+    }
+
+    // The party's members whenever they change (none once the receiver leaves it), and each new request to join one.
+    private void SendParty(in WorldSnapshot snapshot, IPacketSink connection)
+    {
+        if (!ReferenceEquals(snapshot.Party, _party))
+        {
+            _party = snapshot.Party;
+            var members = _party?.Members ?? [];
+            var wire = new PartyMemberWire[members.Count];
+            for (var index = 0; index < wire.Length; index++)
+            {
+                var member = members[index];
+                wire[index] = new PartyMemberWire(member.EntityId, member.Name, member.Level, member.Life, member.MaxLife, member.X, member.Z);
+            }
+
+            connection.Send(_scratch.AsSpan(0, new PartyMembersPacket(wire).Write(_scratch)));
+        }
+
+        if (snapshot.PartyRequest is { } request && !ReferenceEquals(request, _partyRequest))
+        {
+            _partyRequest = request;
+            connection.Send(_scratch.AsSpan(0, new PartyRequestPacket(request.FromId, request.FromName, request.Recommendation ? request.JoinerName : "").Write(_scratch)));
+        }
+    }
+
+    // The trade window whenever it changes (an empty one once it ends): the partner items' values first, then the window;
+    // and each new request to trade.
+    private void SendTrade(in WorldSnapshot snapshot, IPacketSink connection)
+    {
+        if (!ReferenceEquals(snapshot.Trade, _trade))
+        {
+            _trade = snapshot.Trade;
+            if (_trade is { } view)
+            {
+                var details = new ItemDetailEntry[view.PartnerItems.Count];
+                var items = new StoreItemEntry[details.Length];
+                for (var index = 0; index < details.Length; index++)
+                {
+                    var item = view.PartnerItems[index];
+                    details[index] = ItemWireMapping.Detail(item);
+                    items[index] = new StoreItemEntry(item.InstanceId, item.Code, (byte)item.Kind, item.Count, item.Anchor, (short)item.Width,
+                        (short)item.Height, item.Name);
+                }
+
+                var own = new TradeEntryWire[view.Own.Entries.Count];
+                for (var index = 0; index < own.Length; index++)
+                {
+                    own[index] = new TradeEntryWire(view.Own.Entries[index].ItemId, view.Own.Entries[index].Cell);
+                }
+
+                var flags = (byte)((view.OwnLocked ? TradeStatePacket.OwnLocked : 0) | (view.PartnerLocked ? TradeStatePacket.PartnerLocked : 0));
+                connection.Send(_scratch.AsSpan(0, new TradeDetailsPacket(details).Write(_scratch)));
+                connection.Send(_scratch.AsSpan(0, new TradeStatePacket(view.PartnerId, view.PartnerName, flags, view.Own.Money, view.PartnerMoney, own, items)
+                    .Write(_scratch)));
+            }
+            else
+            {
+                connection.Send(_scratch.AsSpan(0, new TradeStatePacket(0, "", 0, 0, 0, [], []).Write(_scratch)));
+            }
+        }
+
+        if (snapshot.TradeRequest is { } request && !ReferenceEquals(request, _tradeRequest))
+        {
+            _tradeRequest = request;
+            connection.Send(_scratch.AsSpan(0, new TradeAskedPacket(request.FromId, request.FromName).Write(_scratch)));
         }
     }
 
@@ -373,6 +470,79 @@ internal sealed partial class PresenceEncoder
         SendOwner(snapshot.Owner, connection);
         SendPremium(snapshot.Owner, connection);
         SendCooldowns(snapshot, connection);
+        SendWeather(snapshot.Weather, connection);
+        SendBossTime(snapshot, connection);
+        SendBossSpots(snapshot, connection);
+        SendBossList(snapshot, connection);
+    }
+
+    // The world rebuilds the list only when a pass in it has come, so a new list is a change; the seconds are measured at
+    // sending, so a list built earlier still counts right for a receiver that joins later.
+    private void SendBossList(in WorldSnapshot snapshot, IPacketSink connection)
+    {
+        if (ReferenceEquals(snapshot.BossList, _bossList) || snapshot.BossList.Entries.Length == 0 && _bossList is null)
+        {
+            return;
+        }
+
+        _bossList = snapshot.BossList;
+        var entries = snapshot.BossList.Entries;
+        var wire = new BossListWireEntry[Math.Min(entries.Length, BossListPacket.MaxBosses)];
+        for (var index = 0; index < wire.Length; index++)
+        {
+            var entry = entries[index];
+            var seconds = (uint)Math.Clamp(Math.Ceiling((entry.Slot - snapshot.LocalNow).TotalSeconds), 0, uint.MaxValue);
+            wire[index] = new BossListWireEntry(entry.BossName, entry.FieldName, seconds, entry.Exact);
+        }
+
+        connection.Send(_scratch.AsSpan(0, new BossListPacket(wire).Write(_scratch)));
+    }
+
+    // The list is rebuilt only when a boss comes alive or goes, so a new array is a change.
+    private void SendBossSpots(in WorldSnapshot snapshot, IPacketSink connection)
+    {
+        var field = snapshot.FieldId ?? 0;
+        if (field == _bossSpotsField && ReferenceEquals(snapshot.BossSpots, _bossSpots))
+        {
+            return;
+        }
+
+        _bossSpotsField = field;
+        _bossSpots = snapshot.BossSpots;
+        var count = Math.Min(snapshot.BossSpots.Length, BossSpotsPacket.MaxSpots);
+        var entries = new BossSpotEntry[count];
+        for (var index = 0; index < count; index++)
+        {
+            var spot = snapshot.BossSpots[index];
+            entries[index] = new BossSpotEntry(spot.BossName, GameUnits.ToFixed(spot.X), GameUnits.ToFixed(spot.Z), spot.Alive);
+        }
+
+        connection.Send(_scratch.AsSpan(0, new BossSpotsPacket(entries).Write(_scratch)));
+    }
+
+    // Once per pass: the client counts down by itself, so a pass is sent again only when it changes (or the field does).
+    private void SendBossTime(in WorldSnapshot snapshot, IPacketSink connection)
+    {
+        var field = snapshot.FieldId ?? 0;
+        var boss = snapshot.NextBoss;
+        if (field == _bossField && boss?.Slot == _boss?.Slot && boss?.BossName == _boss?.BossName && boss?.Exact == _boss?.Exact)
+        {
+            return;
+        }
+
+        _bossField = field;
+        _boss = boss;
+        var packet = boss is { } next ? new BossTimePacket(next.BossName, (uint)next.SecondsLeft, next.Exact) : new BossTimePacket("", 0, false);
+        connection.Send(_scratch.AsSpan(0, packet.Write(_scratch)));
+    }
+
+    private void SendWeather(WeatherState weather, IPacketSink connection)
+    {
+        if (weather != _weather)
+        {
+            _weather = weather;
+            connection.Send(_scratch.AsSpan(0, new WeatherPacket(weather).Write(_scratch)));
+        }
     }
 
     // In a crowd denser than the visible cap, only the neighbourhood that holds the nearest MaxVisible entities (and the
@@ -396,6 +566,24 @@ internal sealed partial class PresenceEncoder
         return ForgetRadius;
     }
 
+    private void WriteVisible(ref PresenceEntriesWriter group, IPacketSink connection, VisibleSet visible, in WorldSnapshot snapshot, Vector3 center,
+        uint tick, int field)
+    {
+        foreach (var (index, _) in visible.Entries)
+        {
+            ref readonly var view = ref snapshot.Entities[index];
+            var distanceSq = PlanarDistanceSq(view.Position, center);
+            var near = distanceSq <= NearRadius * NearRadius;
+            if (WriteEntity(ref group, connection, index, tick, field, near) is { } age)
+            {
+                // Overdue ratio: the wanted interval grows with distance, and every waiting entity keeps gaining
+                // priority, so a crowd is served round-robin like the classic server's rotating send cursor.
+                var wanted = NearIntervalTicks + MathF.Sqrt(distanceSq) / 50f;
+                _pending.Add(index, age / wanted, near);
+            }
+        }
+    }
+
     private void ConsiderVisible(in WorldSnapshot snapshot, int field, int index, Vector3 center, bool essential)
     {
         ref readonly var view = ref snapshot.Entities[index];
@@ -410,12 +598,12 @@ internal sealed partial class PresenceEncoder
             return;
         }
 
-        _visible.Add(index, distanceSq, essential);
+        (view.Kind == EntityKind.Player ? _visiblePlayers : _visible).Add(index, distanceSq, essential);
     }
 
     // The duel arena is solo: a player sees only the opponent and helper of its own duel.
     private bool HiddenInArena(int field, in EntityView view) =>
-        field == QuestArena.FieldCode && view.Kind != EntityKindView.Npc && (view.Kind == EntityKindView.Player || view.DuelPlayerId != _self);
+        field == QuestArena.FieldCode && view.Kind != EntityKind.Npc && (view.Kind == EntityKind.Player || view.DuelPlayerId != _self);
 
     private void SendSized(IPacketSink connection, Func<Span<byte>, int> write, int capacity)
     {
@@ -436,21 +624,21 @@ internal sealed partial class PresenceEncoder
         if (!exists)
         {
             var descriptor = view.Revision == 0 ? DescriptorHash(view) : 0;
-            known = new Known(view, view.Revision == 0 ? (byte)1 : view.Revision, tick, descriptor, _pass);
+            known = new Known(view, view.Revision == 0 ? (byte)1 : view.Revision, descriptor, _pass, TakeHandle());
             _spawned.Add(view.EntityId);
-            AppendFull(ref group, connection, index, field, known.Revision);
+            SendDescription(index, known.Revision, connection);
+            AppendEntry(ref group, connection, ref known, view, field, tick, PresenceFields.All, spawn: true);
             return null;
         }
 
         known.Pass = _pass;
-        var discrete = known.MoveState != view.MoveState || known.Hp != view.Hp || known.AttackTargetId != view.AttackTargetId
-            || known.AttackSequence != view.AttackSequence;
+        var fields = known.Changed(view, field);
         if (view.Revision != 0)
         {
             if (view.Revision != known.Revision)
             {
                 known.Revision = view.Revision;
-                discrete = true;
+                fields |= PresenceFields.Revision;
             }
         }
         else
@@ -461,14 +649,18 @@ internal sealed partial class PresenceEncoder
             {
                 known.Descriptor = descriptor;
                 known.Revision = (byte)(known.Revision == byte.MaxValue ? 1 : known.Revision + 1);
-                discrete = true;
+                fields |= PresenceFields.Revision;
             }
         }
 
-        if (discrete)
+        if ((fields & PresenceFields.Revision) != 0)
         {
-            known.Sent(view, tick);
-            AppendFull(ref group, connection, index, field, known.Revision);
+            SendDescription(index, known.Revision, connection);
+        }
+
+        if (fields != PresenceFields.None || known.MoveState != view.MoveState)
+        {
+            AppendEntry(ref group, connection, ref known, view, field, tick, fields, spawn: false);
             return null;
         }
 
@@ -492,42 +684,70 @@ internal sealed partial class PresenceEncoder
     {
         ref readonly var view = ref _entities[index];
         ref var known = ref CollectionsMarshal.GetValueRefOrNullRef(_known, view.EntityId);
-        known.Sent(view, tick);
-        EnsureSpace(ref group, connection, PresenceWire.MaxMotionEntrySize);
-        var entry = group.Reserve(PresenceWire.MaxMotionEntrySize);
-        int size;
-        if (_wire is { } wire && view.Revision != 0)
-        {
-            var shared = wire.Motion(index, view);
-            shared.CopyTo(entry);
-            size = shared.Length;
-        }
-        else
-        {
-            size = WireMapping.WriteMotion(entry, view);
-        }
-
-        group.Commit(size);
+        AppendEntry(ref group, connection, ref known, view, known.FieldCode, tick, PresenceFields.None, spawn: false);
     }
 
-    private void AppendFull(ref PresenceEntriesWriter group, IPacketSink connection, int index, int field, byte revision)
+    // The size of the position-only entry an entity would get now.
+    private int MotionSize(int index)
     {
         ref readonly var view = ref _entities[index];
-        EnsureSpace(ref group, connection, PresenceWire.MaxFullEntrySize);
-        var entry = group.Reserve(PresenceWire.MaxFullEntrySize);
-        int size;
-        if (_wire is { } wire && view.Revision != 0)
+        ref var known = ref CollectionsMarshal.GetValueRefOrNullRef(_known, view.EntityId);
+        var (sent, _, absolute) = Placement(view, known, spawn: false);
+        return PresenceWire.MotionSize(known.Handle, sent, absolute);
+    }
+
+    // The position an entry sends (whole, or as the change from the last one sent when that is smaller), and the point
+    // the client then holds.
+    private static (PresencePoint Sent, PresencePoint Point, bool Absolute) Placement(in EntityView view, in Known known, bool spawn)
+    {
+        var point = PresencePoint.From(view.Position);
+        var change = point - known.Point;
+        var absolute = spawn || PresenceWire.PrefersAbsolute(change);
+        return (absolute ? point : change, point, absolute);
+    }
+
+    private void AppendEntry(ref PresenceEntriesWriter group, IPacketSink connection, ref Known known, in EntityView view, int field, uint tick,
+        PresenceFields fields, bool spawn)
+    {
+        var (sent, point, absolute) = Placement(view, known, spawn);
+        var entry = new PresenceEntry(known.Handle, view.MoveState, sent, PresenceEntry.ToFacing(view.Facing), absolute,
+            spawn ? view.EntityId : 0, fields, view.Life, view.MaxLife, view.AttackTargetId, view.AttackSequence, known.Revision,
+            WireMapping.SharedTemplate(view), field);
+        EnsureSpace(ref group, connection, PresenceWire.MaxEntrySize);
+        group.Commit(PresenceWire.Write(group.Reserve(PresenceWire.MaxEntrySize), entry));
+        known.Sent(view, tick, field, point);
+    }
+
+    private uint TakeHandle() => _freeHandles.TryPop(out var handle) ? handle : _nextHandle++;
+
+    // Pushes the entity's description ahead of the entry that introduces it or its revision, unless it is a shared
+    // template's description the client already holds.
+    private void SendDescription(int index, byte revision, IPacketSink connection)
+    {
+        ref readonly var view = ref _entities[index];
+        var template = WireMapping.SharedTemplate(view);
+        if (template != 0 && _sentTemplates.TryGetValue(template, out var held) && held == revision)
         {
-            var shared = wire.Full(index, view, field);
-            shared.CopyTo(entry);
-            size = shared.Length;
-        }
-        else
-        {
-            size = WireMapping.WriteFull(entry, view, field, revision);
+            return;
         }
 
-        group.Commit(size);
+        NoteTemplate(view, revision);
+        if (_wire is { } wire && view.Revision != 0)
+        {
+            connection.Send(wire.Description(index, view, _data.Current));
+            return;
+        }
+
+        connection.Send(_scratch.AsSpan(0, DescriptionPacket(view, revision, _data.Current).Write(_scratch)));
+    }
+
+    // The client keeps the last description of each shared template it was sent.
+    private void NoteTemplate(in EntityView view, byte revision)
+    {
+        if (WireMapping.SharedTemplate(view) is var template and not 0)
+        {
+            _sentTemplates[template] = revision;
+        }
     }
 
     private void EnsureSpace(ref PresenceEntriesWriter group, IPacketSink connection, int size)
@@ -545,7 +765,8 @@ internal sealed partial class PresenceEncoder
             return;
         }
 
-        SendClock(connection);
+        // The message carries this tick's clock.
+        _clockPending = false;
         connection.Send(group.Finish());
         group.Reset();
     }
@@ -553,9 +774,11 @@ internal sealed partial class PresenceEncoder
     private void ForgetAll(IPacketSink connection)
     {
         _removed.Clear();
-        _removed.AddRange(_known.Keys.Where(serial => serial != _self));
+        _removed.AddRange(_known.Keys.Where(entityId => entityId != _self));
         _known.Clear();
         SendRemovals(connection);
+        _freeHandles.Clear();
+        _nextHandle = 0;
         _goneDrops.Clear();
         _goneDrops.AddRange(_drops.Keys);
         _drops.Clear();
@@ -564,9 +787,9 @@ internal sealed partial class PresenceEncoder
 
     private void SendRemovals(IPacketSink connection)
     {
-        for (var offset = 0; offset < _removed.Count; offset += RemoveObjectList.MaxSerials)
+        for (var offset = 0; offset < _removed.Count; offset += RemoveObjectList.MaxEntityIds)
         {
-            var count = Math.Min(RemoveObjectList.MaxSerials, _removed.Count - offset);
+            var count = Math.Min(RemoveObjectList.MaxEntityIds, _removed.Count - offset);
             var span = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_removed).Slice(offset, count);
             connection.Send(_scratch.AsSpan(0, RemoveObjectList.Write(_scratch, span)));
         }
@@ -588,11 +811,11 @@ internal sealed partial class PresenceEncoder
 
         _routes.Clear();
         routes.Collect(_self, _routes);
-        foreach (var serial in _known.Keys)
+        foreach (var entityId in _known.Keys)
         {
-            if (serial != _self)
+            if (entityId != _self)
             {
-                routes.Collect(serial, _routes);
+                routes.Collect(entityId, _routes);
             }
         }
 
@@ -660,11 +883,19 @@ internal sealed partial class PresenceEncoder
         }
 
         var events = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_events);
-        for (var offset = 0; offset < events.Length; offset += CombatEventList.MaxEvents)
+        while (!events.IsEmpty)
         {
-            var batch = events.Slice(offset, Math.Min(CombatEventList.MaxEvents, events.Length - offset));
-            connection.Send(_scratch.AsSpan(0, CombatEventList.Write(_scratch, batch)));
+            connection.Send(_scratch.AsSpan(0, CombatEventList.Write(_scratch, events, this, out var written)));
+            events = events[written..];
         }
+    }
+
+    // Events name the entities this receiver knows by their presence handles (called under the gate, while encoding).
+    bool IEventHandleWriter.TryGetHandle(ulong entityId, out uint handle)
+    {
+        var known = _known.TryGetValue(entityId, out var entry);
+        handle = known ? entry.Handle : 0;
+        return known;
     }
 
     private bool Relevant(ulong first, ulong second) =>
@@ -698,10 +929,10 @@ internal sealed partial class PresenceEncoder
 
         SendClock(connection);
         var events = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_skillEvents);
-        for (var offset = 0; offset < events.Length; offset += SkillEventList.MaxEvents)
+        while (!events.IsEmpty)
         {
-            var batch = events.Slice(offset, Math.Min(SkillEventList.MaxEvents, events.Length - offset));
-            connection.Send(_scratch.AsSpan(0, SkillEventList.Write(_scratch, batch)));
+            connection.Send(_scratch.AsSpan(0, SkillEventList.Write(_scratch, events, this, out var written)));
+            events = events[written..];
         }
     }
 
@@ -745,10 +976,10 @@ internal sealed partial class PresenceEncoder
 
         SendClock(connection);
         var entries = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_statusEvents);
-        for (var offset = 0; offset < entries.Length; offset += StatusEffectList.MaxEntries)
+        while (!entries.IsEmpty)
         {
-            var batch = entries.Slice(offset, Math.Min(StatusEffectList.MaxEntries, entries.Length - offset));
-            connection.Send(_scratch.AsSpan(0, StatusEffectList.Write(_scratch, batch)));
+            connection.Send(_scratch.AsSpan(0, StatusEffectList.Write(_scratch, entries, this, out var written)));
+            entries = entries[written..];
         }
     }
 
@@ -862,6 +1093,14 @@ internal sealed partial class PresenceEncoder
             }
         }
 
+        if (owner.AgingRevision != _agingRevision)
+        {
+            _agingRevision = owner.AgingRevision;
+            var entries = owner.Aging.Take(AgingProgressPacket.MaxEntries)
+                .Select(static view => new AgingProgressEntry(view.InstanceId, view.Count, view.Goal)).ToArray();
+            connection.Send(_scratch.AsSpan(0, new AgingProgressPacket(entries).Write(_scratch)));
+        }
+
         if (owner.SkillsRevision != _skillsRevision)
         {
             _skillsRevision = owner.SkillsRevision;
@@ -870,7 +1109,8 @@ internal sealed partial class PresenceEncoder
         }
     }
 
-    // Precedes the first presence entry of each tick so the client can place samples and events on the server timeline.
+    // Places the events of a tick on the server timeline when no entries message of that tick carried its clock (the
+    // tick had no entries for this receiver, or it is an earlier tick of a reader that fell behind).
     private void SendClock(IPacketSink connection)
     {
         if (!_clockPending)
@@ -886,9 +1126,10 @@ internal sealed partial class PresenceEncoder
     private static int DescriptorHash(in EntityView view)
     {
         var appearance = view.Appearance;
-        return HashCode.Combine(view.MaxHp, view.Level, view.TemplateId, view.MoveSpeed, view.AttackRate,
+        return HashCode.Combine(view.MaxLife, view.Level, view.TemplateId, view.MoveSpeed, view.AttackRate,
             HashCode.Combine(appearance.WeaponKey, appearance.ArmorKey, appearance.OffHandKey, appearance.InVillage, appearance.Tier, appearance.HairIndex,
-                HashCode.Combine(appearance.HelperPet, appearance.Phoenix, appearance.BigHead, appearance.WeaponGlow, appearance.OffHandGlow)), view.OwnerId,
+                HashCode.Combine(appearance.HelperPet, appearance.Phoenix, appearance.BigHead, appearance.WeaponGlow, appearance.OffHandGlow, appearance.ShopSign)),
+            view.OwnerId,
             view.ModelScale);
     }
 
@@ -904,33 +1145,49 @@ internal sealed partial class PresenceEncoder
     private struct Known
     {
         public Vector3 Position;
+        public PresencePoint Point;
         public float Facing;
-        public int Hp;
+        public int Life;
+        public int MaxLife;
         public ulong AttackTargetId;
         public ulong AttackSequence;
+        public uint Template;
+        public int FieldCode;
         public uint LastSentTick;
         public uint Pass;
+        public uint Handle;
         public int Descriptor;
-        public MoveStateView MoveState;
-        public EntityKindView Kind;
+        public MotionState MoveState;
+        public EntityKind Kind;
         public byte Revision;
 
-        public Known(in EntityView view, byte revision, uint tick, int descriptor, uint pass)
+        public Known(in EntityView view, byte revision, int descriptor, uint pass, uint handle)
         {
             Kind = view.Kind;
             Revision = revision;
             Descriptor = descriptor;
             Pass = pass;
-            Sent(view, tick);
+            Handle = handle;
         }
 
-        public void Sent(in EntityView view, uint tick)
+        // The values of the entry (other than the description revision) that differ from what was last sent.
+        public readonly PresenceFields Changed(in EntityView view, int field) =>
+            (Life != view.Life ? PresenceFields.Life : 0) | (MaxLife != view.MaxLife ? PresenceFields.MaxLife : 0)
+            | (AttackTargetId != view.AttackTargetId ? PresenceFields.Target : 0)
+            | (AttackSequence != view.AttackSequence ? PresenceFields.AttackSequence : 0)
+            | (Template != WireMapping.SharedTemplate(view) ? PresenceFields.Template : 0) | (FieldCode != field ? PresenceFields.FieldCode : 0);
+
+        public void Sent(in EntityView view, uint tick, int field, PresencePoint point)
         {
             Position = view.Position;
+            Point = point;
             Facing = view.Facing;
-            Hp = view.Hp;
+            Life = view.Life;
+            MaxLife = view.MaxLife;
             AttackTargetId = view.AttackTargetId;
             AttackSequence = view.AttackSequence;
+            Template = WireMapping.SharedTemplate(view);
+            FieldCode = field;
             MoveState = view.MoveState;
             LastSentTick = tick;
         }

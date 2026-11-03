@@ -22,7 +22,7 @@ quest data the importer reads, and the client's quest dialog, quest window, clas
 | [QuestJournal.cs](../Shared/PristonTale.Simulation/Quests/QuestJournal.cs) | `ActiveQuest` (the single running quest), `QuestTimerKind`, `QuestJournal` (logs, finished history, applied operations, revision, commit merge) |
 | [QuestRequests.cs](../Shared/PristonTale.Simulation/Quests/QuestRequests.cs) | `QuestAction`, `QuestStatus`, `QuestFollowup`, `QuestNoticeKind`, `QuestCommand`, `QuestPrompt`, `QuestTravel`, `QuestArenaDuel`, `QuestOutcome` |
 | [QuestContext.cs](../Shared/PristonTale.Simulation/Quests/QuestContext.cs) | `QuestNpc` (what a clicked NPC does for quests), `IQuestItemSource`, `QuestContext` (one request against one character) |
-| [QuestEngine.cs](../Shared/PristonTale.Simulation/Quests/QuestEngine.cs) | Dispatch of `Talk`, `Proceed`, `Accept`, `ChangeClass`, `ChooseReward`, `ResetSkills` to the families |
+| [QuestEngine.cs](../Shared/PristonTale.Simulation/Quests/QuestEngine.cs) | Dispatch of `Talk`, `Proceed`, `Accept`, `ChangeClass`, `ChooseReward`, `ResetSkills`, `DeclineSkillReset` to the families |
 | `Shared/PristonTale.Simulation/Quests/LevelQuests.cs` | Level 30, 55 (two branches), 70, 80, 85 and 90 milestone hunts |
 | `Shared/PristonTale.Simulation/Quests/LevelBonusQuests.cs` | Level 80 and level 90 bonus chains (extra stat points per level) |
 | `Shared/PristonTale.Simulation/Quests/ElementaryQuests.cs` | The seven beginner quests (A..G) up to level 39 |
@@ -35,12 +35,12 @@ quest data the importer reads, and the client's quest dialog, quest window, clas
 | `Shared/PristonTale.Simulation/Quests/QuestDrops.cs` | `QuestDropSource`, `PendingQuestDrop`, which drops a player receives, the quest upkeep, `QuestTick` (kills, deaths, timers) |
 | `Shared/PristonTale.Simulation/Quests/QuestRewards.cs` | Lasting rewards and `QuestEffects` (permanent system effects synced in `PlayerCharacter.Recompute`) |
 | `Shared/PristonTale.Simulation/Quests/QuestArena.cs`, `World/Fields/QuestArenaField.cs` | Arena field 32, entry and duel spots, opponent scaling, potions, helpers, blink |
-| `Shared/PristonTale.Simulation/Quests/QuestItems.cs`, `QuestMonsters.cs`, `QuestClasses.cs`, `QuestInventory.cs` | Item and monster codes, class facts (tribe, home town, quest weapon, ring), pack helpers and `QuestGrant` |
+| `Shared/PristonTale.Simulation/Quests/QuestItems.cs`, `QuestMonsters.cs`, `QuestClasses.cs`, `QuestInventory.cs` | Item and monster codes, class facts (tribe, home town; the quest weapon, hunt and ring come from the class's `ClassProfile`), pack helpers and `QuestGrant` |
 | `Shared/PristonTale.Simulation/Quests/QuestSteps.cs`, `QuestTexts.cs`, `QuestBoard.cs`, `QuestView.cs` | Dialog helpers and the one-quest rule, English texts, quest window lines, the journal view sent to the owner |
 | [QuestTransactions.cs](../Shared/PristonTale.Application/World/QuestTransactions.cs) | Prepare a request or an upkeep on the tick against a candidate copy; follow-up validation; travel destination |
 | `Shared/PristonTale.Application/World/WorldServer.Quests.cs`, `PreparedQuestOperation.cs` | Prepare and commit on the tick, upkeep requests channel, travel, opening the duel |
 | `Shared/PristonTale.Application/World/FieldInstance.Quests.cs`, `PlayerQuestState.cs` | Kill credit and quest drops, deaths, timers, the periodic upkeep check, duels; per-player quest state and the snapshot `QuestUpdate` |
-| [QuestAppService.cs](../Shared/PristonTale.Application/Services/QuestAppService.cs) | Requests and upkeep off the tick: save gate, prepare, store, commit |
+| [QuestAppService.cs](../Shared/PristonTale.Application/Services/QuestAppService.cs) | Requests and upkeep off the tick: save gate, prepare, commit, then the save queue |
 | `Shared/PristonTale.Protocol/Packets/QuestPackets.cs` | `QuestRequestPacket`, `QuestResultPacket`, `QuestJournalPacket`, `QuestNoticesPacket` |
 | `Server/PristonTale.Server/Net/QuestWireMapping.cs`, `ClientSession.cs` (`RequestQuestAsync`), `PresenceEncoder.cs` | Wire edge; journal and notices from the snapshot; the arena's solo view |
 | `Server/PristonTale.Server/World/QuestUpkeepService.cs` | Hosted service running the quest upkeep the tick asks for |
@@ -64,7 +64,9 @@ quest data the importer reads, and the client's quest dialog, quest window, clas
   (`QuestItems.IsQuestDrop`) are taken out of the kill's loot and queued as `PendingQuestDrop`s for the credited
   player. The main drop table gives quest items only to first-tier characters (and the vamp to the second tier); bonus
   drops and the monster's event item pass. A drop is stored only while a running quest wants it, one copy at a time
-  (`QuestDrops.Accepts`). The royal amulet event item drops 21 times in 100 and only below the final tier.
+  (`QuestDrops.Accepts`). The royal amulet event item drops 21 times in 100 and only below the final tier. Granted
+  items reach the character through `PlayerCharacter.TryReceive`, so quest items land in the special item box
+  (`QuestItemBox`); quests count and remove them there and on both bag pages.
 - Dialogs name a document; the client shows `image/Sinimage/Quest/<document>.sin`. `QuestFollowup` says what OK does:
   close, send `Proceed`, open the yes/no box whose yes sends `Accept`, list rewards (`ChooseReward`), or show a reward
   whose arrows browse the list before `Accept` claims the browsed one.
@@ -97,8 +99,8 @@ quest data the importer reads, and the client's quest dialog, quest window, clas
 
 ### Rank-ups and the class tier
 
-The class tier (0..3) advances only in `RankUpRules.RankUp`. The skill master's class-change button
-(`QuestAction.ChangeClass`) opens the next rank-up quest when the master is in the class's home town, its class-change
+The class tier (0..3) advances only in `RankUpRules.RankUp`. The class-change button of the training box a home-town
+skill master opens with the skill window (`QuestAction.ChangeClass`), opens the next rank-up quest when the master is in the class's home town, its class-change
 group is 1 (first rank-up only) or 2 and above (all three), the level is reached (20, 40, 60) and every skill the
 current tier opened has a rank.
 
@@ -113,7 +115,9 @@ current tier opened has a rank.
    adds 1-2 damage, attack rating (mana regeneration for staves) and 4 life. Grown, it earns the rank-up and the class
    ring. Both are bound (no sale, no warehouse) and vanish five days after the weapon was made; the master then ends the
    quest and +15 life applies for good. Levelling more than two levels past the weapon without finishing slows it for
-   the session.
+   the session. While it grows, its item box names the stage's hunt under the name, set off by blank lines and in teal,
+   with the kills made and needed ("Bargon:12/30", "Forbidden Land's Monster:5/50": `RankUpByQuestWeapon.HuntLine`,
+   from the journal's stage and kills left).
 4. Third rank-up (`RankUpByMasterTrial`): two hunts of 4,900 seconds of play time each (50 kills below level 80, 30
    from 80; prey by level bracket); a lost hunt goes back a step. Then the royal amulet from the bracket's named
    monster, then a duel in the arena with the skill master (Tempskron side) or the magic master (Morion side). The master yields
@@ -121,6 +125,8 @@ current tier opened has a rank.
    duel goes back to the amulet step.
 
 After each rank-up the master offers one free redistribution of the learned skill ranks (`QuestAction.ResetSkills`).
+The original asks once: No (or Escape) sends `DeclineSkillReset`, which ends the saved offer, so it does not open
+again at the next login.
 
 ## Server authority
 
@@ -137,7 +143,7 @@ After each rank-up the master offers one free redistribution of the learned skil
   kills counted while a request was being stored (`QuestJournal.AdoptCommitted`).
 - Item changes the tick cannot make (quest drops, weapon growth and expiry, leftovers of finished steps) set
   `UpkeepDue`; the field signals `WorldServer.QuestUpkeepRequests`, and `QuestUpkeepService` runs
-  `QuestAppService.RunUpkeepAsync` (prepare, store, commit; drops go back to the player when storage fails).
+  `QuestAppService.RunUpkeepAsync` (prepare and commit, then the save queue; a busy save gate defers it).
 - Each snapshot carries the owner's `QuestUpdate`: the journal view when the revision moved, quest notices and a dialog
   the world opened. `WorldOutbox` keeps notices in order (at most 256) and the newest view and dialog.
 
@@ -155,7 +161,8 @@ arena. Fury falls once its potions are gone; a master yields.
 
 Messages are in [protocol.md](protocol.md#quests). The journal is the `characters.quests` JSON column
 ([persistence.md](persistence.md)); quest weapons and rings are saved with their unique marker and restore as the
-quest variant, which the importer stores in `item_templates` under `<code>#Q` ([world-import.md](world-import.md)).
+quest variant, which the importer stores as the code's quest definition (`item_definitions.variant` 2,
+[world-import.md](world-import.md)).
 
 ## Client
 
@@ -164,13 +171,15 @@ quest variant, which the importer stores in `item_templates` under `<code>#Q` ([
 - The quest dialog takes the NPC help box (50,45, 9x10 tiles): the quest title, the document text (Windows-1252,
   reflowed to the box: blank lines and list marks start paragraphs, column lines and rules keep their own line), OK,
   reward buttons or reward arrows. The yes/no box replaces it for confirmations.
-- The skill master box's class-change button lights when the talk offered a rank-up and sends `ChangeClass`.
-- The quest window (`Q` or the bottom bar's quest button) is the party window's quest page at x = 539 of the 800-wide
-  frame (right anchored), y = 155: five titles per page, page arrows, running/finished tabs, close; a title opens its
+- The training box's class-change button (at (240, 380) of the screen) lights when the talk offered a rank-up and
+  sends `ChangeClass`; it shows gray while the tier's skills are learned but the level or a running quest holds it back.
+- The quest window (`Q` or the bottom bar's quest button) is the party window's quest page at (539, 155) of the 800x600
+  frame (right and bottom anchored, so it keeps its place over the bottom bar on a larger screen): five titles per page, page arrows, running/finished tabs, close; a title opens its
   description (`image/party/party_DATA/<file>`) on the panel to the left.
 - A running hunt shows the quest timer icon (`QuestTimer.tga`) after the effect icons, with a gauge for a timed hunt;
   its tooltip shows the quest, the kills and the time left. Chat notices go to the chat's assistant tab, events and
-  messages to the notice strip, the fanfare plays `drink2.wav`. A rank-up's redistribution offer is a yes/no box.
+  messages to the notice strip, the fanfare plays `drink2.wav`. A rank-up's redistribution offer is a yes/no box; Enter answers
+  Yes, as the original's box takes it.
 
 ## How to
 

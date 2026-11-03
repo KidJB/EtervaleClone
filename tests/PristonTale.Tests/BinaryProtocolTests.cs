@@ -9,6 +9,8 @@ using System.Security.Cryptography.X509Certificates;
 using PristonTale.Protocol.Binary;
 using PristonTale.Protocol.Packets;
 using PristonTale.Protocol.Transport;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -17,10 +19,61 @@ internal static class BinaryProtocolTests
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
         yield return ("frame header handles partial reads and rejects invalid lengths", HeaderAsync);
+        yield return ("malformed UTF-8 text and overlong or out-of-range variable-length integers are refused", MalformedAsync);
         yield return ("hello, login, character list and commands and heartbeats round-trip with UTF-8 text", AccountAsync);
         yield return ("movement reports, attack requests and field warps round-trip with 64-bit targets and sequences", PlayerActionsAsync);
         yield return ("world entry, join and leave messages round-trip with 64-bit ids and UTF-8 names", WorldEntryAsync);
         yield return ("TLS connections deliver frames in order, coalesce sends and check the server certificate", ConnectionAsync);
+        yield return ("a connection counts its backlog until the stream takes it, and a batch of sends leaves in one write", BacklogAsync);
+        yield return ("a connection whose backlog stops draining closes as stalled", StallAsync);
+    }
+
+    private static Task MalformedAsync()
+    {
+        var buffer = new byte[64];
+        var writer = new PacketWriter(buffer, EtervaleOpcodes.ChatSay);
+        writer.UInt16(3);
+        writer.Bytes([0xC3, 0x28, 0x41]);
+        var packet = buffer.AsSpan(0, writer.Finish()).ToArray();
+        Assert.True(Refused(() =>
+        {
+            var reader = new PacketReader(packet, packet.Length);
+            Utf8Text.Read(ref reader, 64, "Chat line");
+        }), "a malformed UTF-8 sequence was accepted");
+
+        var written = new PacketWriter(buffer, EtervaleOpcodes.ChatSay);
+        Utf8Text.Write(ref written, "Olá, mundo", 64);
+        var text = buffer.AsSpan(0, written.Finish()).ToArray();
+        var back = new PacketReader(text, text.Length);
+        Assert.True(Utf8Text.Read(ref back, 64, "Chat line") == "Olá, mundo", "UTF-8 text did not round-trip");
+
+        foreach (var bad in new byte[][] { [0x80, 0x00], [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x02] })
+        {
+            Assert.True(Refused(() =>
+            {
+                var offset = 0;
+                VarInt.Read(bad, ref offset);
+            }), $"variable-length integer {Convert.ToHexString(bad)} was accepted");
+        }
+
+        var maximum = new byte[10];
+        var length = VarInt.Write(maximum, ulong.MaxValue);
+        var at = 0;
+        Assert.True(length == 10 && VarInt.Read(maximum, ref at) == ulong.MaxValue, "the largest value did not round-trip");
+        return Task.CompletedTask;
+    }
+
+    private static bool Refused(Action read)
+    {
+        try
+        {
+            read();
+            return false;
+        }
+        catch (InvalidDataException)
+        {
+            return true;
+        }
     }
 
     private static Task HeaderAsync()
@@ -47,17 +100,17 @@ internal static class BinaryProtocolTests
         Assert.True(LoginResultPacket.Read(buffer.AsSpan(0, new LoginResultPacket(LoginStatus.Busy).Write(buffer))).Status == LoginStatus.Busy,
             "login result lost its status");
 
-        var entry = new CharacterListEntry("Álvaro", 6, 42, 1, 2, 1, 0x01010300, 0x02010100, 0, true);
+        var entry = new CharacterListEntry("Álvaro", PlayerClass.Knight, 42, 1, 2, 1, 0x01010300, 0x02010100, 0, true);
         var list = new CharacterListPacket([entry, entry with { Name = "Beta", InVillage = false }]);
         var read = CharacterListPacket.Read(buffer.AsSpan(0, list.Write(buffer)));
         Assert.True(read.Characters.SequenceEqual(list.Characters), "character list round trip changed fields");
         Assert.True(CharacterListPacket.Read(buffer.AsSpan(0, new CharacterListPacket([]).Write(buffer))).Characters.Count == 0, "an empty list did not read back");
 
-        var create = new CharacterCommandPacket(CharacterAction.Create, 3, 2, "Nova");
+        var create = new CharacterCommandPacket(CharacterAction.Create, PlayerClass.Archer, 2, "Nova");
         Assert.True(CharacterCommandPacket.Read(buffer.AsSpan(0, create.Write(buffer))) == create, "character command round trip changed fields");
         var length = create.Write(buffer);
         buffer[10] = 9;
-        Assert.ThrowsAsync(() => Task.Run(() => CharacterCommandPacket.Read(buffer.AsSpan(0, length).ToArray()))).Wait();
+        Assert.Throws<InvalidDataException>(() => CharacterCommandPacket.Read(buffer.AsSpan(0, length).ToArray()), "a malformed CharacterCommandPacket was read");
         var result = new CharacterResultPacket(CharacterAction.Create, false, 4, "Nova");
         Assert.True(CharacterResultPacket.Read(buffer.AsSpan(0, result.Write(buffer))) == result, "character result round trip changed fields");
         var beat = new HeartbeatPacket(uint.MaxValue, long.MaxValue);
@@ -68,19 +121,19 @@ internal static class BinaryProtocolTests
     private static Task PlayerActionsAsync()
     {
         var buffer = new byte[FrameCodec.MaxFrameSize];
-        var report = new MovementReportPacket(PresenceMotion.Run, 3, new System.Numerics.Vector3(1024.5f, -12.25f, -999_999f), MathF.PI / 2,
+        var report = new MovementReportPacket(MotionState.Run, 3, new System.Numerics.Vector3(1024.5f, -12.25f, -999_999f), MathF.PI / 2,
             0x1_0000_0002UL);
         Assert.True(report.Write(buffer) == MovementReportPacket.Size, "movement report size changed");
         var read = MovementReportPacket.Read(buffer.AsSpan(0, MovementReportPacket.Size));
         Assert.True(read with { Facing = report.Facing } == report && MathF.Abs(read.Facing - report.Facing) < 1e-4f && read.Moving,
             $"movement report read back as {read}");
-        buffer[10] = PresenceMotion.Attack;
-        Assert.ThrowsAsync(() => Task.Run(() => MovementReportPacket.Read(buffer.AsSpan(0, MovementReportPacket.Size).ToArray()))).Wait();
+        buffer[10] = (byte)MotionState.Attack;
+        Assert.Throws<InvalidDataException>(() => MovementReportPacket.Read(buffer.AsSpan(0, MovementReportPacket.Size).ToArray()), "a malformed MovementReportPacket was read");
 
         var attack = new AttackRequestPacket(0x1_0000_0003UL, true, ulong.MaxValue - 1);
         Assert.True(AttackRequestPacket.Read(buffer.AsSpan(0, attack.Write(buffer))) == attack, "attack request round trip changed fields");
         buffer[10] = 2;
-        Assert.ThrowsAsync(() => Task.Run(() => AttackRequestPacket.Read(buffer.AsSpan(0, AttackRequestPacket.Size).ToArray()))).Wait();
+        Assert.Throws<InvalidDataException>(() => AttackRequestPacket.Read(buffer.AsSpan(0, AttackRequestPacket.Size).ToArray()), "a malformed AttackRequestPacket was read");
 
         var warp = new FieldWarpPacket(21, 512.5f, 300.75f, -256.25f, true);
         Assert.True(FieldWarpPacket.Read(buffer.AsSpan(0, warp.Write(buffer))) == warp, "field warp round trip changed fields");
@@ -186,5 +239,83 @@ internal static class BinaryProtocolTests
 
         async Task<FrameConnection> AcceptAsync() =>
             await TlsTransport.AcceptAsync(await listener.AcceptAsync(timeout.Token), context, TlsTransport.DefaultHandshakeTimeout, timeout.Token);
+    }
+
+    private static async Task BacklogAsync()
+    {
+        using var socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
+        var stream = new GatedStream();
+        await using var connection = new FrameConnection(socket, stream);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var run = connection.RunAsync(_ => ValueTask.CompletedTask, timeout.Token);
+        var buffer = new byte[HeartbeatPacket.Size];
+        new HeartbeatPacket(1, 0).Write(buffer);
+        using (connection.Batch())
+        {
+            connection.Send(buffer);
+            connection.Send(buffer);
+            await Task.Delay(50);
+            Assert.True(stream.Writes.IsEmpty, "a send inside a batch woke the writer");
+        }
+
+        await stream.Started.Task.WaitAsync(timeout.Token);
+        connection.Send(buffer);
+        Assert.True(connection.WaitForBacklogAsync(3 * HeartbeatPacket.Size, Timeout.InfiniteTimeSpan).IsCompleted, "the backlog counted bytes never sent");
+        var drained = connection.WaitForBacklogAsync(HeartbeatPacket.Size, Timeout.InfiniteTimeSpan);
+        Assert.True(!drained.IsCompleted, "the bytes on their way to the stream were not counted");
+        stream.Open();
+        await drained.WaitAsync(timeout.Token);
+        Assert.True(stream.Writes.First() == 2 * HeartbeatPacket.Size, "the batch did not leave in one write");
+        connection.Close("test done");
+        await run;
+    }
+
+    private static async Task StallAsync()
+    {
+        using var socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
+        await using var connection = new FrameConnection(socket, new GatedStream());
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var run = connection.RunAsync(_ => ValueTask.CompletedTask, timeout.Token);
+        var buffer = new byte[HeartbeatPacket.Size];
+        new HeartbeatPacket(1, 0).Write(buffer);
+        connection.Send(buffer);
+        await connection.WaitForBacklogAsync(0, TimeSpan.FromMilliseconds(100)).WaitAsync(timeout.Token);
+        Assert.True(connection is { IsClosed: true, CloseReason: "send stalled" }, $"a peer that stopped reading kept its connection: {connection.CloseReason}");
+        await run;
+    }
+
+    // A stream whose writes wait until it is opened, recording each write's length.
+    private sealed class GatedStream : Stream
+    {
+        private readonly TaskCompletionSource _open = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public System.Collections.Concurrent.ConcurrentQueue<int> Writes { get; } = new();
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void Open() => _open.TrySetResult();
+
+        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            Writes.Enqueue(buffer.Length);
+            Started.TrySetResult();
+            await _open.Task.WaitAsync(cancellationToken);
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return 0;
+        }
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

@@ -13,6 +13,9 @@ using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World.Npcs;
 using PristonTale.WorldImport;
 using PristonTale.WorldImport.Parsers;
+using PristonTale.Contracts.Motion;
+using PristonTale.Assets;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -22,10 +25,12 @@ internal static class ItemRulesTests
     {
         yield return ("every wearable family equips in its own slot, aged copies included", WearableSlotsAsync);
         yield return ("every item key has its own code, so new item families need no registration", CodesAsync);
+        yield return ("an item's kind follows its key the same way for the importer and the runtime", KindsAsync);
         yield return ("unmet requirements refuse equipping and a worn item that stops meeting them adds nothing", RequirementsAsync);
         yield return ("a two-handed weapon sends the off-hand item to the bag and an off-hand item sends a held two-handed weapon there", TwoHandedAsync);
         yield return ("drops roll every value inside its authored range and specialize four times in ten", DropRollsAsync);
         yield return ("the shop sells the lowest form and keeps a fixed specialization with the middle requirement shift", ShopFormAsync);
+        yield return ("magic mastery rolls whole points inside its authored range: the shop form takes the low end, the best copy the top", MagicMasteryAsync);
         yield return ("worn items feed absorb, critical, block, speed, regeneration, pools, resistances and specialization bonuses", DerivedStatsAsync);
         yield return ("worn block ratings block monster blows, monsters never block, and the cap needs a shield", BlockAsync);
         yield return ("carried weight slows movement, stops running and refuses pickups, purchases, withdrawals and unequipping", WeightAsync);
@@ -33,14 +38,32 @@ internal static class ItemRulesTests
         yield return ("item copies keep their values through saves and older saves take the shop form with their specialization", PersistenceAsync);
         yield return ("item details and the equipment status reach the owner over the wire", WireAsync);
         yield return ("the item reader keeps the known specialization classes and every special bonus", ImportAsync);
+        yield return ("potions stack in the bag, so a shop sells them by the count onto one stack and buys back part of it", PotionStacksAsync);
     }
 
-    private static ItemTemplateRecord Record(string code) => new(
-        code, ItemCodes.Parse(code), code, (int)ItemKind.Misc, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    private static ItemTemplateRecord Record(string code) => ItemRecords.Blank(code);
 
     private static ItemDefinition Def(string code, Func<ItemTemplateRecord, ItemTemplateRecord>? change = null) =>
         WorldDataFactory.ToItemDefinition(change is null ? Record(code) : change(Record(code)));
+
+    private static Task PotionStacksAsync()
+    {
+        var potion = Def("PL101", record => record with { Kind = (int)ItemKind.Potion, Price = 25, Weight = 1 });
+        Assert.True(potion.MaxStack == PotionDefinition.StackSize && Def("WA101").MaxStack == 1, "potions stack to their stack size; other items keep the authored one");
+
+        var character = Fighter();
+        character.TryChangeMoney(1000 - character.Money);
+        Assert.True(NpcShopRules.TryBuy(character, potion, 30, -1, out var cost) == NpcServiceStatus.Ok && cost == 750, "thirty potions were bought");
+        Assert.True(NpcShopRules.TryBuy(character, potion, 9, -1, out _) == NpcServiceStatus.Ok, "nine more were bought");
+        var stacks = character.Inventory.Items().Where(item => item.Definition == potion).ToArray();
+        Assert.True(stacks is [{ Count: 39 }] && character.Money == 25, $"the potions share one stack: {string.Join(",", stacks.Select(item => item.Count))}");
+
+        var stack = stacks[0];
+        Assert.True(NpcShopRules.TrySell(character, stack.InstanceId, 40, 1_000_000, out _) == NpcServiceStatus.Rejected, "more units than the stack holds sell");
+        Assert.True(NpcShopRules.TrySell(character, stack.InstanceId, 10, 1_000_000, out var proceeds) == NpcServiceStatus.Ok && proceeds == 50
+            && character.Inventory.Items().Single(item => item.Definition == potion).Count == 29 && character.Money == 75, "ten of the potions were sold");
+        return Task.CompletedTask;
+    }
 
     private static PlayerCharacter Fighter(int level = 50) => new CharacterClassRegistry().CreatePlayer(PlayerClass.Fighter, "Items", level);
 
@@ -91,6 +114,18 @@ internal static class ItemRulesTests
     }
 
     // Every key of two letters, a letter or digit and two digits has its own code, whatever its family, and formats back.
+    private static Task KindsAsync()
+    {
+        foreach (var (key, kind) in new[] { ("OM101", ItemKind.Orb), ("WV101", ItemKind.Vambrace), ("WS101", ItemKind.Bow), ("WS201", ItemKind.Sword),
+            ("OA201", ItemKind.Bracelet), ("DA401", ItemKind.Armor), ("OS105", ItemKind.Sheltom), ("PL101", ItemKind.Potion), ("FO101", ItemKind.ForceOrb),
+            ("QT101", ItemKind.Quest), ("MA101", ItemKind.Material), ("GP101", ItemKind.Misc), ("WR101", ItemKind.Misc) })
+        {
+            Assert.True(ItemKinds.Classify(key) == kind, $"{key} is {ItemKinds.Classify(key)}, not {kind}");
+        }
+
+        return Task.CompletedTask;
+    }
+
     private static Task CodesAsync()
     {
         var codes = new HashSet<uint>();
@@ -151,9 +186,9 @@ internal static class ItemRulesTests
         {
             DurabilityMin = 60, DurabilityMax = 80, DamageMinLow = 10, DamageMinHigh = 14, DamageMaxLow = 20, DamageMaxHigh = 26,
             AttackRatingMin = 30, AttackRatingMax = 40, BlockMin = 1.5f, BlockMax = 3.25f, AbsorbMin = 0.4f, AbsorbMax = 1.2f,
-            ResFireMin = 2, ResFireMax = 9, Price = 1000, ReqStrength = 100, ReqSpirit = 40, ReqDexterity = 80, JobMask = (long)JobBitCode.Fighter,
-            Specials = [new ItemTemplateSpecialRecord(0, "WA110", 1, 3, 7), new ItemTemplateSpecialRecord(0, "WA110", 10, 2, 4)],
-            JobRandom = [new ItemTemplateJobRandomRecord(0, "WA110", 0, (long)JobBitCode.Knight), new ItemTemplateJobRandomRecord(0, "WA110", 1, (long)JobBitCode.Pikeman)]
+            ResFireMin = 2, ResFireMax = 9, Price = 1000, ReqStrength = 100, ReqSpirit = 40, ReqAgility = 80, SpecClass = (long)JobBitCode.Fighter,
+            SpecBonuses = [new ItemSpecBonusRecord(0, (short)ItemSpecBonusKind.Defence, 3, 7), new ItemSpecBonusRecord(0, (short)ItemSpecBonusKind.LevelAttackRating, 2, 4)],
+            RandomSpecClasses = [(long)JobBitCode.Knight, (long)JobBitCode.Pikeman]
         });
         var rng = new SeededSimRng(7);
         var specialized = 0;
@@ -199,7 +234,7 @@ internal static class ItemRulesTests
         var definition = Def("DA110", record => record with
         {
             DurabilityMin = 40, DurabilityMax = 60, DefenceMin = 30, DefenceMax = 50, AbsorbMin = 1.1f, AbsorbMax = 2.0f, Price = 500,
-            ReqStrength = 100, ReqDexterity = 40, JobMask = (long)JobBitCode.Archer, Specials = [new ItemTemplateSpecialRecord(0, "DA110", 1, 4, 9)]
+            ReqStrength = 100, ReqAgility = 40, SpecClass = (long)JobBitCode.Archer, SpecBonuses = [new ItemSpecBonusRecord(0, (short)ItemSpecBonusKind.Defence, 4, 9)]
         });
         var item = new ItemInstance(definition);
         Assert.True(item.DurabilityMax == 40 && item.DurabilityCurrent == 40 && item.Roll.Defence == 30 && MathF.Abs(item.Roll.Absorb - 1.1f) < 0.0001f,
@@ -209,21 +244,42 @@ internal static class ItemRulesTests
         return Task.CompletedTask;
     }
 
+    private static Task MagicMasteryAsync()
+    {
+        var definition = Def("WM101", static record => record with { MagicMasteryMin = 15f, MagicMasteryMax = 19f });
+        Assert.True(new ItemInstance(definition).MagicMastery == 15f && ItemRoller.CreatePerfect(definition, 1, 0).MagicMastery == 19f,
+            "the shop form or the best copy does not take its end of the range");
+        var rng = new SeededSimRng(5);
+        var seen = new HashSet<float>();
+        for (var index = 0; index < 400; index++)
+        {
+            var mastery = ItemRoller.Create(definition, 1, rng).MagicMastery;
+            Assert.True(mastery is >= 15f and <= 19f && mastery == MathF.Round(mastery), $"magic mastery rolled {mastery}");
+            seen.Add(mastery);
+        }
+
+        Assert.True(seen.Count == 5, "a whole point of the range was never rolled");
+        var fixedMastery = Def("WM102", static record => record with { MagicMasteryMin = 8f });
+        Assert.True(ItemRoller.Create(fixedMastery, 1, rng).MagicMastery == 8f, "a single authored value did not stay fixed");
+        return Task.CompletedTask;
+    }
+
     private static Task DerivedStatsAsync()
     {
         var character = Fighter(10);
         var bare = character.Derived;
         var bareLife = character.MaxLife;
         var armor = new ItemInstance(Def("DA102", record => record with { AbsorbMin = 1.0f, DefenceMin = 20 }));
-        var boots = new ItemInstance(Def("DB103", record => record with { AbsorbMin = 0.5f, SpeedMin = 1.5f }));
+        var boots = new ItemInstance(Def("DB103", record => record with { AbsorbMin = 0.5f, MoveSpeedMin = 1.5f }));
         var shield = new ItemInstance(Def("DS101", record => record with { BlockMin = 10.5f }));
-        var axe = new ItemInstance(Def("WA101", record => record with { CriticalHit = 30, DamageMinLow = 5, DamageMinHigh = 6, DamageMaxLow = 9, DamageMaxHigh = 10 }));
-        var amulet = new ItemInstance(Def("OA101", record => record with { CriticalHit = 30, AddManaMin = 12 }));
+        var axe = new ItemInstance(Def("WA101", record => record with { Critical = 30, DamageMinLow = 5, DamageMinHigh = 6, DamageMaxLow = 9, DamageMaxHigh = 10, MagicMasteryMin = 3f }));
+        var amulet = new ItemInstance(Def("OA101", record => record with { Critical = 30, AddManaMin = 12 }));
         var ring = new ItemInstance(Def("OR101", record => record with { ResFireMin = 10, AddLifeMin = 20, LifeRegenMin = 1.2f, AddStaminaMin = 7 }));
         axe.Roll = axe.Roll with
         {
             SpecJob = (uint)JobBitCode.Fighter,
-            Spec = ItemSpecBonus.None with { LevelLife = 2, LevelAttackRating = 1, LevelDamage = 5, Block = 2f, ManaRegen = 0.8f }
+            Spec = ItemSpecBonus.None with { LevelLife = 2, LevelAttackRating = 1, LevelDamage = 5, Block = 2f, ManaRegen = 0.8f },
+            MagicMasteryBonus = 2f
         };
         foreach (var (item, slot) in new[] { (armor, EquipmentSlot.Armor), (boots, EquipmentSlot.Boots), (shield, EquipmentSlot.OffHand),
             (axe, EquipmentSlot.Weapon), (amulet, EquipmentSlot.Amulet), (ring, EquipmentSlot.RingLeft) })
@@ -244,6 +300,7 @@ internal static class ItemRulesTests
         Assert.Near(0.4f, derived.ManaRegen, 0.001f);
         Assert.True(derived.MaxStamina == bare.MaxStamina + 7 && derived.MaxMana == bare.MaxMana + 12, "added pools are missing");
         Assert.True(derived.MoveSpeed >= bare.MoveSpeed + 1, "boot speed does not raise the move speed");
+        Assert.Near(5f, derived.MagicMastery, 0.001f);
         var weapon = WeaponDamage.Compute(character);
         var attributes = character.Attributes;
         var expectedMax = 4 + 9 * (attributes.Strength + 130) / 130 + (attributes.Talent + attributes.Agility) / 40 + 10 / 6 + 10 / 5;
@@ -319,7 +376,7 @@ internal static class ItemRulesTests
 
         var player = new WorldPlayer(1, new Vector3(100, 0, 100), character, false, default);
         Assert.True(player.ReportMovement(new Vector3(102, 0, 100), 0f, true, true, 0, 1000) == MovementVerdict.Accepted
-            && player.MoveState == MoveStateView.Walking, "an overweight character ran");
+            && player.MoveState == MotionState.Walk, "an overweight character ran");
         return Task.CompletedTask;
     }
 
@@ -343,7 +400,8 @@ internal static class ItemRulesTests
         var classes = new CharacterClassRegistry();
         var record = CharacterRecordFactory.NewStarter(classes, 1, "Rolls", 0, PlayerClass.Fighter, 3) with { Id = 1 };
         var character = classes.CreatePlayer(PlayerClass.Fighter, record.Name);
-        var definition = Def("WA110", item => item with { DamageMinLow = 10, DamageMinHigh = 14, DamageMaxLow = 20, DamageMaxHigh = 26, JobMask = (long)JobBitCode.Fighter });
+        var definition = Def("WA110", item => item with { DamageMinLow = 10, DamageMinHigh = 14, DamageMaxLow = 20, DamageMaxHigh = 26, SpecClass = (long)JobBitCode.Fighter,
+            MagicMasteryMin = 5f, MagicMasteryMax = 9f });
         var catalog = new ItemCatalog([definition]);
         ItemInstance rolled;
         var rng = new SeededSimRng(11);
@@ -351,7 +409,7 @@ internal static class ItemRulesTests
         {
             rolled = ItemRoller.Create(definition, 1, rng);
         }
-        while (rolled.Roll.SpecJob == 0);
+        while (rolled.Roll.SpecJob == 0 || rolled.Roll.MagicMasteryBonus == 0);
 
         Assert.True(character.Inventory.TryPlace(rolled, 0), "the rolled copy did not fit");
         var encoded = CharacterRecordFactory.Capture(record, character, 3, Vector3.Zero).Encode();
@@ -359,14 +417,14 @@ internal static class ItemRulesTests
         CharacterStateCodec.Restore(restored, encoded, catalog);
         Assert.True(restored.Inventory[0].Roll == rolled.Roll && restored.Inventory[0].DurabilityMax == rolled.DurabilityMax, "the copy's values were not saved");
 
-        var legacy = encoded with
+        var older = encoded with
         {
             Inventory = new JsonText(
                 $"{{\"Version\":1,\"Items\":[{{\"InstanceId\":\"{Guid.NewGuid()}\",\"Code\":{definition.Code},\"Count\":1,\"Anchor\":0,\"Slot\":null," +
                 "\"UpgradeLevel\":2,\"DurabilityCurrent\":0,\"DurabilityMax\":0,\"JobSpecMask\":2}]}")
         };
         var old = classes.CreatePlayer(PlayerClass.Fighter, record.Name);
-        CharacterStateCodec.Restore(old, legacy, catalog);
+        CharacterStateCodec.Restore(old, older, catalog);
         var copy = old.Inventory[0];
         Assert.True(copy.Roll.DamageMin == 10 && copy.Roll.SpecJob == (uint)JobBitCode.Fighter && copy.UpgradeLevel == 2, "an older save did not take the shop form");
         return Task.CompletedTask;
@@ -432,12 +490,12 @@ internal static class ItemRulesTests
         {
             var parsed = new ItemTxtParser().Parse(path);
             Assert.True(parsed.JobRandom.SequenceEqual([(long)JobBitCode.Assassin, (long)JobBitCode.Fighter]), "unknown classes were stored or known ones lost");
-            Assert.True(parsed.JobMask == (long)JobBitCode.Knight, "the fixed specialization did not keep the last known class");
+            Assert.True(parsed.JobMask == (long)JobBitCode.Atalanta, "the fixed specialization did not keep the last class, or the misspelled Atalanter was not Atalanta");
             var record = Record("WD120") with
             {
-                JobMask = parsed.JobMask,
-                Specials = parsed.Specials.Select(special => new ItemTemplateSpecialRecord(0, "WD120", special.Code, special.V0, special.V1)).ToList(),
-                JobRandom = parsed.JobRandom.Select((job, index) => new ItemTemplateJobRandomRecord(0, "WD120", index, job)).ToList()
+                SpecClass = parsed.JobMask,
+                SpecBonuses = parsed.Specials.Select(static special => new ItemSpecBonusRecord(0, (short)special.Bonus, special.Min, special.Max)).ToList(),
+                RandomSpecClasses = parsed.JobRandom
             };
             var template = WorldDataFactory.ToItemTemplate(record);
             Assert.True(template.Spec.LevelDamage == 6 && template.Spec.LevelAttackRating == new ItemRange(1, 3) && template.Spec.Critical == 4

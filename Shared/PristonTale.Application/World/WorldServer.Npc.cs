@@ -1,4 +1,6 @@
 using PristonTale.Application.Sessions;
+using PristonTale.Simulation.PersonalShops;
+using PristonTale.Simulation.Trades;
 using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Npcs;
 
@@ -22,12 +24,20 @@ public sealed partial class WorldServer
 
             var definition = npc.Definition;
             var offers = definition.Services
-                .Select(service => new NpcServiceOffer(service.Kind, service.Value, NpcServiceAvailability.IsAvailable(service)))
+                .Select(service => new NpcServiceOffer(service.Kind, service.Value, NpcServiceAvailability.IsAvailable(service), PricePercent(service)))
                 .ToArray();
             string[] line = definition.Dialog.Count == 0 ? [] : [definition.Dialog[_dialogRandom.Next(definition.Dialog.Count)]];
             return new NpcInteraction(true, npc.EntityId, definition.Label, offers, line, "");
         });
     }
+
+    private int PricePercent(NpcService service) => service.Kind switch
+    {
+        NpcServiceKind.ItemAging => _options.Aging.PricePercent,
+        NpcServiceKind.ItemMix when service.Value == Simulation.Items.Mixing.MixingWork.AlchemyMode => _options.Mixing.AlchemyPricePercent,
+        NpcServiceKind.ItemMix => _options.Mixing.PricePercent,
+        _ => 100
+    };
 
     public Task<NpcServiceOutcome> CheckNpcServiceAsync(PlayerSession session, NpcServiceCommand command)
     {
@@ -51,6 +61,15 @@ public sealed partial class WorldServer
                 return null;
             }
 
+            // A trade's offered items and gold change only through its exchange.
+            if (connection.Player.Shop is not null || connection.Player.Trade is not null)
+            {
+                var revision = connection.Player.Character.InventoryRevision;
+                var message = connection.Player.Shop is not null ? PersonalShopMessages.Of(PersonalShopStatus.Selling) : TradeMessages.Trading;
+                return new PreparedNpcOperation(connection.Player.Character, null, null, new NpcServiceReply(NpcServiceOutcome.Failed(NpcServiceStatus.Rejected,
+                    message, revision)));
+            }
+
             return NpcServiceTransactions.Prepare(session, connection.Player, field, command, _worldData.Current.Items, _catalog);
         });
     }
@@ -63,7 +82,21 @@ public sealed partial class WorldServer
             if (!ReferenceEquals(session.Character, operation.Original) || operation.Candidate is null
                 || !operation.Original.CanChangeMoney(operation.MoneyDelta))
             {
-                throw new InvalidOperationException("Character ownership changed during NPC service commit.");
+                throw new CommitInvariantException("Character ownership changed during NPC service commit.");
+            }
+
+            // A warehouse change moves items and gold between the character and its account's warehouse.
+            if (operation.Warehouse is not null
+                && Transfer(Persistence.Abstractions.GameLogs.ItemTransferKind.WarehouseDeposit, Guid.NewGuid(), session.FieldId) is { } deposit
+                && Transfer(Persistence.Abstractions.GameLogs.ItemTransferKind.WarehouseWithdrawal, Guid.NewGuid(), session.FieldId) is { } withdrawal)
+            {
+                var self = CharacterIdOf(session);
+                deposit.Left(operation.Original, operation.Candidate, self, null, session.AccountId);
+                deposit.Gold(self, null, -operation.MoneyDelta, session.AccountId);
+                withdrawal.Arrived(operation.Original, operation.Candidate, null, self, session.AccountId);
+                withdrawal.Gold(null, self, operation.MoneyDelta, session.AccountId);
+                Log(deposit);
+                Log(withdrawal);
             }
 
             operation.Original.CommitInventoryOperation(operation.Candidate);
@@ -85,7 +118,7 @@ public sealed partial class WorldServer
 
     private void Arrive(PlayerSession session, TeleportArrival arrival)
     {
-        if (!_connections.TryGetValue(session.EntityId, out var connection) || !ReferenceEquals(connection.Session, session)
+        if (!TryGetOwnConnection(session, out var connection)
             || !_catalog.TryGetFieldByCode(arrival.FieldCode, out var destination))
         {
             session.FieldId = arrival.FieldCode;
@@ -93,34 +126,9 @@ public sealed partial class WorldServer
             return;
         }
 
-        var player = connection.Player;
-        var target = GetField(arrival.FieldCode);
-        if (connection.FieldId != arrival.FieldCode)
-        {
-            TransferPlayer(player, _fields[connection.FieldId], target);
-        }
-
-        var position = target.Terrain.PlaceOnFloor(arrival.Position);
+        var position = GetField(arrival.FieldCode).Terrain.PlaceOnFloor(arrival.Position);
         var inVillage = destination.State == FieldState.Village;
-        player.EnterField(position, inVillage);
-        _membershipChanged = true;
-        _connections[player.EntityId] = connection with
-        {
-            FieldId = arrival.FieldCode
-        };
-        UpdatePlacement(session, arrival.FieldCode, position, inVillage);
-    }
-
-    private bool TryGetPlaying(PlayerSession session, out Connection connection)
-    {
-        if (session.IsPlaying && session.Character is not null && _connections.TryGetValue(session.EntityId, out var found)
-            && ReferenceEquals(found.Session, session))
-        {
-            connection = found;
-            return true;
-        }
-
-        connection = null!;
-        return false;
+        Relocate(connection, arrival.FieldCode, position, inVillage);
+        connection.Player.EnterField(position, inVillage);
     }
 }

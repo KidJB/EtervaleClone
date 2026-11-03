@@ -12,8 +12,8 @@ How the code works is documented in [docs/](docs/README.md).
 ## Requirements
 
 - .NET 10 SDK.
-- [Game data archive](https://drive.google.com/file/d/1kSwD86QY0MUoj3Z203lLICOZT5CwDZpG/view?usp=sharing).
-  Download and extract it at the repository root. Place authored configuration in `assets/GameServer/`.
+- [Game data archive](https://drive.google.com/file/d/1-OGiA510imErGpGq1pFDSCwmP6AKfxB3/view?usp=sharing),
+  **published 2026-10-28 at 15:49 (UTC-03:00)**.
 - For the client: a GPU and driver with Vulkan 1.1 or later. The client uses MonoGame's Native platform on Vulkan
   through the fork in [monogame/](monogame/README.md); shaders compile with DXC on every platform (no Wine).
 - The client's native runtime, built once per machine (see Build): on Windows, Visual Studio 2022 or 2026 with the
@@ -23,7 +23,7 @@ How the code works is documented in [docs/](docs/README.md).
 
 The game assets and authored world data are excluded from Git. `assets/` contains models, textures, audio, HUD
 resources and INX animation data; `assets/GameServer/` contains the authored item, monster, NPC and field configuration
-read by the importer. The MonoGame content build needs `assets/Hud/Fonts/PristonUiSans-Regular.otf`.
+read by the importer. The MonoGame content build needs `assets/Hud/Fonts/DejaVuSans.ttf` (`tools/ui/build_font.py`, see docs/tools.md).
 
 Expected layout:
 
@@ -131,10 +131,11 @@ pass `--Assets:AllowMissingTerrain=true` to run fields without terrain checks.
 
 Configuration:
 
-- Server settings (`Server/PristonTale.Server/appsettings.json`, environment variables such as
-  `World__ExperienceMultiplier`, or command-line `--World:ExperienceMultiplier=1`): [docs/server.md](docs/server.md).
-- Client settings (`client-settings.json` under the local application data folder, `%LOCALAPPDATA%\PristonTale` on
-  Windows): [docs/client-settings.md](docs/client-settings.md).
+- Server host settings (`Server/PristonTale.Server/appsettings.json`, environment variables such as `Network__Port`,
+  or command-line `--Network:Port=10010`) and the game settings in the `server_settings` table, read again every few
+  minutes: [docs/server.md](docs/server.md).
+- Client settings (`client-settings.json` beside the client executable, created with every key on the first start):
+  [docs/client-settings.md](docs/client-settings.md).
 
 ### PostgreSQL
 

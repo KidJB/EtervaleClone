@@ -2,6 +2,8 @@ using System.Buffers.Binary;
 using System.Text;
 using Microsoft.Xna.Framework;
 using PristonTale.Engine3D.IO;
+using PristonTale.Contracts.Units;
+using PristonTale.Assets;
 
 namespace PristonTale.Engine3D.Formats;
 
@@ -69,7 +71,7 @@ public sealed class PristonSmdReader
 
     private static PristonStage ParseStage(string path)
     {
-        var data = PristonFileResolver.ReadAllBytes(path);
+        var data = AssetFiles.ReadAllBytes(path);
         var cursor = new BinaryCursor(data);
         var header = ReadHeader(cursor);
         if (!IsStageHeader(header.Kind))
@@ -139,7 +141,7 @@ public sealed class PristonSmdReader
 
     private static PristonModel ParseModel(string path)
     {
-        var data = PristonFileResolver.ReadAllBytes(path);
+        var data = AssetFiles.ReadAllBytes(path);
         var cursor = new BinaryCursor(data);
         var header = ReadHeader(cursor);
         var stageSignatureWithModelLayout = IsStageHeader(header.Kind) && header.ObjectCount > 0 && LooksLikeModelLayout(data, header, requireObjectHead: true);
@@ -226,7 +228,7 @@ public sealed class PristonSmdReader
         var headerName = DecodeFixedString(headerBytes);
         if (string.Equals(headerName, PristonFormatConstants.ModelHeader, StringComparison.Ordinal))
         {
-            return PristonSmdHeaderKind.LegacyModel;
+            return PristonSmdHeaderKind.Version62Model;
         }
 
         if (string.Equals(headerName, PristonFormatConstants.StageHeader, StringComparison.Ordinal))
@@ -255,7 +257,7 @@ public sealed class PristonSmdReader
 
     private static bool IsModelHeader(PristonSmdHeaderKind kind)
     {
-        return kind is PristonSmdHeaderKind.LegacyModel or PristonSmdHeaderKind.BinaryModel;
+        return kind is PristonSmdHeaderKind.Version62Model or PristonSmdHeaderKind.BinaryModel;
     }
 
     private static bool IsStageHeader(PristonSmdHeaderKind kind)
@@ -391,9 +393,9 @@ public sealed class PristonSmdReader
         var vertexColorCount = cursor.Int32();
         var contrast = cursor.Int32();
         var brightness = cursor.Int32();
-        var lightX = cursor.Int32() / PristonFormatConstants.FixedScale;
-        var lightY = cursor.Int32() / PristonFormatConstants.FixedScale;
-        var lightZ = cursor.Int32() / PristonFormatConstants.FixedScale;
+        var lightX = cursor.Int32() / GameUnits.FixedScale;
+        var lightY = cursor.Int32() / GameUnits.FixedScale;
+        var lightZ = cursor.Int32() / GameUnits.FixedScale;
         var areaBufferPointer32 = cursor.UInt32();
         var declaredAreaElementCount = cursor.Int32();
         var mapLeft = cursor.Int32();
@@ -646,9 +648,9 @@ public sealed class PristonSmdReader
         var start = cursor.Position;
         var sum = cursor.UInt32();
         var renderVertexPointer32 = cursor.UInt32();
-        var x = cursor.Int32() / PristonFormatConstants.FixedScale;
-        var y = cursor.Int32() / PristonFormatConstants.FixedScale;
-        var z = cursor.Int32() / PristonFormatConstants.FixedScale;
+        var x = cursor.Int32() / GameUnits.FixedScale;
+        var y = cursor.Int32() / GameUnits.FixedScale;
+        var z = cursor.Int32() / GameUnits.FixedScale;
         var blue = cursor.Int16();
         var green = cursor.Int16();
         var red = cursor.Int16();
@@ -665,10 +667,10 @@ public sealed class PristonSmdReader
     {
         var start = cursor.Position;
         var type = cursor.Int32();
-        var x = cursor.Int32() / PristonFormatConstants.FixedScale;
-        var y = cursor.Int32() / PristonFormatConstants.FixedScale;
-        var z = cursor.Int32() / PristonFormatConstants.FixedScale;
-        var range = cursor.Int32() / PristonFormatConstants.FixedScale;
+        var x = cursor.Int32() / GameUnits.FixedScale;
+        var y = cursor.Int32() / GameUnits.FixedScale;
+        var z = cursor.Int32() / GameUnits.FixedScale;
+        var range = cursor.Int32() / GameUnits.FixedScale;
         var red = cursor.Int16();
         var green = cursor.Int16();
         var blue = cursor.Int16();
@@ -799,7 +801,7 @@ public sealed class PristonSmdReader
         var vertices = new List<PristonModelVertex>(vertexCount);
         for (var index = 0; index < vertexCount; index++)
         {
-            vertices.Add(ReadModelVertex(cursor));
+            vertices.Add(ReadModelVertex(cursor, (head & ObjHeadTypeNewNormal) != 0));
         }
 
         var faces = new List<PristonModelFace>(faceCount);
@@ -860,9 +862,9 @@ public sealed class PristonSmdReader
         }
 
         var basePosition = ToMonoGameModelPosition(
-            basePositionFixed.X / PristonFormatConstants.FixedScale,
-            basePositionFixed.Y / PristonFormatConstants.FixedScale,
-            basePositionFixed.Z / PristonFormatConstants.FixedScale);
+            basePositionFixed.X / GameUnits.FixedScale,
+            basePositionFixed.Y / GameUnits.FixedScale,
+            basePositionFixed.Z / GameUnits.FixedScale);
         return new PristonModelObject(
             nodeName,
             parentName,
@@ -917,14 +919,27 @@ public sealed class PristonSmdReader
         };
     }
 
-    private static PristonModelVertex ReadModelVertex(BinaryCursor cursor)
+    // With ObjHeadTypeNewNormal in the object's head the normal field holds the normal's end point (position + normal),
+    // in the position's fixed-point units.
+    private static PristonModelVertex ReadModelVertex(BinaryCursor cursor, bool normalEndpoints)
     {
         var start = cursor.Position;
-        var rawX = cursor.Int32() / PristonFormatConstants.FixedScale;
-        var rawY = cursor.Int32() / PristonFormatConstants.FixedScale;
-        var rawZ = cursor.Int32() / PristonFormatConstants.FixedScale;
-        var position = ToMonoGameModelPosition(rawX, rawY, rawZ);
-        var normal = ToMonoGameModelPosition(cursor.Int32(), cursor.Int32(), cursor.Int32());
+        var fixedX = cursor.Int32();
+        var fixedY = cursor.Int32();
+        var fixedZ = cursor.Int32();
+        var position = ToMonoGameModelPosition(fixedX / GameUnits.FixedScale, fixedY / GameUnits.FixedScale,
+            fixedZ / GameUnits.FixedScale);
+        var normalX = (long)cursor.Int32();
+        var normalY = (long)cursor.Int32();
+        var normalZ = (long)cursor.Int32();
+        if (normalEndpoints)
+        {
+            normalX -= fixedX;
+            normalY -= fixedY;
+            normalZ -= fixedZ;
+        }
+
+        var normal = ToMonoGameModelPosition(normalX, normalY, normalZ);
         if (normal.LengthSquared() > 0.0001f)
         {
             normal.Normalize();
@@ -1194,14 +1209,14 @@ public sealed class PristonSmdReader
     private static Vector3 ToMonoGameModelScale(Int3 scaleFixed)
     {
         return new Vector3(
-            scaleFixed.X / PristonFormatConstants.FixedScale,
-            scaleFixed.Z / PristonFormatConstants.FixedScale,
-            scaleFixed.Y / PristonFormatConstants.FixedScale);
+            scaleFixed.X / GameUnits.FixedScale,
+            scaleFixed.Z / GameUnits.FixedScale,
+            scaleFixed.Y / GameUnits.FixedScale);
     }
 
     private static Vector3 ToMonoGameStagePosition(float x, float y, float z)
     {
-        return new Vector3(x, y, -z);
+        return WorldSpace.Mirror(new Vector3(x, y, z));
     }
 
     private static Vector3 ToMonoGameModelPosition(float x, float y, float z)

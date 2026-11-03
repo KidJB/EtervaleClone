@@ -13,11 +13,12 @@ internal static class PhotorealTests
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
         yield return ("graphics settings validate post options and presets set every rendering option", PresetsAsync);
-        yield return ("the sun is low and warm at 18:00 and the moon lights the night", DaylightAsync);
+        yield return ("the sun keeps the game's hours, low and warm before the evening glow, and the moon lights the night", DaylightAsync);
         yield return ("incident exposure shows a white surface under the metered light at the day key", ExposureAsync);
         yield return ("temporal jitter is centred and the projection moves by whole clip offsets", JitterAsync);
+        yield return ("scene depth is reversed: the near plane is 1, the far plane 0, and both planes are recoverable", ReversedDepthAsync);
         yield return ("colour grade cube files parse and interpolate trilinearly", CubeLutAsync);
-        yield return ("shadow cascades keep their size as the camera turns and snap to whole texels", CascadesAsync);
+        yield return ("shadow cascades keep their size as the camera turns", CascadesAsync);
         yield return ("lamp shadow rows stay with their lamps and refresh in turn", LampRowsAsync);
         yield return ("the split-sum BRDF table conserves energy and reflects fully at grazing smooth angles", BrdfAsync);
     }
@@ -62,8 +63,11 @@ internal static class PhotorealTests
 
     private static Task DaylightAsync()
     {
-        var elevation18 = MathHelper.ToDegrees(MathF.Asin(PristonDayNightCycleProbe.TowardSun(18f).Y));
-        Assert.True(elevation18 is > 6f and < 14f, $"the 18:00 sun stands at {elevation18:F1} degrees");
+        // The sun keeps the game's hours: low before the evening glow, below the horizon from the night's start to dawn.
+        var lowElevation = MathHelper.ToDegrees(MathF.Asin(PristonDayNightCycleProbe.TowardSun(21.5f).Y));
+        Assert.True(lowElevation is > 6f and < 14f, $"the 21:30 sun stands at {lowElevation:F1} degrees");
+        Assert.True(PristonDayNightCycleProbe.TowardSun(23f).Y < -0.2f && PristonDayNightCycleProbe.TowardSun(3.9f).Y < 0f
+            && PristonDayNightCycleProbe.TowardSun(4.25f).Y > 0f, "the sun is up in the game's night or down after its dawn");
         Assert.True(PristonDayNightCycleProbe.TowardSun(12f).Y > 0.85f, "the noon sun is not high");
         Assert.True(PristonDayNightCycleProbe.TowardSun(0f).Y < -0.5f, "the midnight sun is not below the horizon");
         var noon = PristonPhotometry.SunIlluminance(MathHelper.ToRadians(60f));
@@ -72,9 +76,9 @@ internal static class PhotorealTests
             $"sun illuminance noon {noon}, low {low}");
         Assert.True(PristonPhotometry.SkyIlluminance(MathHelper.ToRadians(-10f)) < 5f && PristonPhotometry.SkyIlluminance(MathHelper.ToRadians(45f)) > 10000f,
             "sky light does not fade through twilight");
-        var night = PristonDayNightCycleProbe.State(22f);
-        var dusk = PristonDayNightCycleProbe.State(18f);
-        Assert.True(night.LampFactor == 1f && dusk.LampFactor == 0f, "lamps are not off in the 18:00 sun and on at night");
+        var night = PristonDayNightCycleProbe.State(23.5f);
+        var dusk = PristonDayNightCycleProbe.State(21.5f);
+        Assert.True(night.LampFactor == 1f && dusk.LampFactor == 0f, "lamps are not off in the 21:30 sun and on at night");
         Assert.True(night.SunDirection.Y < 0f && night.HorizontalIlluminance is > 0.5f and < 20f, $"night light {night.HorizontalIlluminance} lux");
         Assert.True(dusk.SunIlluminance.X > dusk.SunIlluminance.Z * 2.5f, "the low sun is not warm");
         // Moonlight is sunlight off a grey surface: a blue moon gives every surface a blue sheen its diffuse colour lacks.
@@ -132,6 +136,39 @@ internal static class PhotorealTests
         return Task.CompletedTask;
     }
 
+    private static Task ReversedDepthAsync()
+    {
+        const float near = 1f;
+        const float far = 20000f;
+        var projection = PristonDepth.Perspective(1f, 16f / 9f, near, far);
+        float Depth(float distance, Matrix matrix)
+        {
+            var clip = Vector4.Transform(new Vector4(0f, 0f, -distance, 1f), matrix);
+            return clip.Z / clip.W;
+        }
+
+        Assert.Near(1f, Depth(near, projection), 1e-6f);
+        Assert.Near(0f, Depth(far, projection), 1e-6f);
+        Assert.True(Depth(200f, projection) > Depth(201f, projection), "nearer is not greater");
+        Assert.Near(near, PristonDepth.NearPlane(projection), 1e-3f);
+        Assert.Near(far, PristonDepth.FarPlane(projection), 1f);
+
+        // x, y and w match the ordinary projection, so screen positions and everything built on them are unchanged.
+        var ordinary = Matrix.CreatePerspectiveFieldOfView(1f, 16f / 9f, near, far);
+        var point = new Vector4(3f, -2f, -50f, 1f);
+        var reversed = Vector4.Transform(point, projection);
+        var expected = Vector4.Transform(point, ordinary);
+        Assert.Near(expected.X / expected.W, reversed.X / reversed.W, 1e-6f);
+        Assert.Near(expected.Y / expected.W, reversed.Y / reversed.W, 1e-6f);
+
+        // The sky's projection never clips at distance and stays inside the depth range.
+        var sky = PristonDepth.InfiniteFar(projection);
+        var distant = Depth(1.0e7f, sky);
+        Assert.True(distant > 0f && distant < 1e-6f, $"the infinite-far sky depth is {distant}");
+        Assert.Near(1f, Depth(near, sky), 1e-6f);
+        return Task.CompletedTask;
+    }
+
     private static Task CascadesAsync()
     {
         var cascades = new PristonShadowCascades();
@@ -149,10 +186,6 @@ internal static class PhotorealTests
         var texel = cascades.TexelWorldSizes[1];
         cascades.Fit(1, Matrix.CreateLookAt(eye, eye + new Vector3(-0.3f, -0.9f, 0.8f), Vector3.Up), projection, light);
         Assert.Near(texel, cascades.TexelWorldSizes[1], 1e-4f);
-        // The world origin lands on a whole texel of the tile.
-        var origin = Vector4.Transform(Vector4.UnitW, cascades.ViewProjections[1]);
-        var texelX = (origin.X * 0.5f + 0.5f) * cascades.TileSize;
-        Assert.True(MathF.Abs(texelX - MathF.Round(texelX)) < 0.01f, $"cascade origin at texel {texelX}");
         return Task.CompletedTask;
     }
 
@@ -173,6 +206,13 @@ internal static class PhotorealTests
         var second = shadows.Assign(moved, 0);
         Assert.True(shadows.Rows[0] == rowOfSecond && shadows.Rows[2] == -1, "a lamp that stayed lost its row");
         Assert.True((second & (1 << shadows.Rows[1])) != 0, "a new lamp was not drawn at once");
+
+        var occupied = true;
+        var steady = shadows.Assign(moved, 0, (_, _) => occupied);
+        Assert.True(steady == 0b11 && shadows.Assign(moved, 0, (_, _) => occupied) == 0b11, "lamps with actors were not redrawn every frame");
+        occupied = false;
+        Assert.True(shadows.Assign(moved, 0, (_, _) => occupied) == 0b11 && shadows.Assign(moved, 0, (_, _) => occupied) == 0,
+            "an emptied lamp was not cleared once and then left alone");
         return Task.CompletedTask;
     }
 

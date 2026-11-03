@@ -1,11 +1,12 @@
 using PristonTale.Application.Sessions;
 using PristonTale.Persistence.Abstractions.Characters;
 using PristonTale.Simulation.Characters;
+using PristonTale.Simulation.Items;
 using PristonTale.Simulation.World.Npcs;
 
 namespace PristonTale.Application.World;
 
-// The shop a used mobile shop item opens anywhere: no NPC (serial 0) and no stock, so it buys and repairs only, at the
+// The shop a used mobile shop item opens anywhere: no NPC (entityId 0) and no stock, so it buys and repairs only, at the
 // prices of a shop NPC. It stays open until the player closes it.
 internal static class MobileShopTransactions
 {
@@ -39,26 +40,23 @@ internal static class MobileShopTransactions
                 return Final(original, NpcServiceOutcome.Failed(NpcServiceStatus.Rejected, "this shop only buys and repairs", original.InventoryRevision));
         }
 
-        foreach (var applied in original.ServiceOperations)
+        if (original.ServiceOperations.Find(command.OperationId) is { } applied)
         {
-            if (applied.Command.OperationId == command.OperationId)
-            {
-                return applied.Command == command
-                    ? new PreparedNpcOperation(original, null, null,
-                        new NpcServiceReply(Done(original, "already committed")) { Quotes = NpcServiceTransactions.Quotes(original) })
-                    : Final(original, NpcServiceOutcome.Failed(NpcServiceStatus.Conflict, "operation identity conflict", original.InventoryRevision));
-            }
+            return applied.Command == command
+                ? new PreparedNpcOperation(original, null, null,
+                    new NpcServiceReply(Done(original, "already committed")) { Quotes = NpcServiceTransactions.Quotes(original) })
+                : Final(original, NpcServiceOutcome.Failed(NpcServiceStatus.Conflict, "operation identity conflict", original.InventoryRevision));
         }
 
         if (command.OperationId == Guid.Empty || command.ExpectedRevision != original.InventoryRevision)
         {
-            return Final(original, NpcServiceOutcome.Failed(NpcServiceStatus.Stale, "stale inventory revision", original.InventoryRevision));
+            return Final(original, NpcServiceOutcome.Failed(NpcServiceStatus.Stale, ItemRuleMessages.StaleInventory, original.InventoryRevision));
         }
 
         var candidate = original.CloneForInventoryOperation();
         var status = command.Action switch
         {
-            NpcServiceAction.Sell => NpcShopRules.TrySell(candidate, command.ItemId, MoneyLimits.CarryLimit(candidate.Level, candidate.Tier), out _),
+            NpcServiceAction.Sell => NpcShopRules.TrySell(candidate, command.ItemId, command.Count, MoneyLimits.CarryLimit(candidate.Level, candidate.Tier), out _),
             NpcServiceAction.Repair => NpcShopRules.TryRepair(candidate, command.ItemId, out _),
             _ => NpcShopRules.TryRepairAll(candidate, out _)
         };
@@ -70,7 +68,7 @@ internal static class MobileShopTransactions
 
         candidate.RecordServiceOperation(command);
         var snapshot = CharacterRecordFactory.Capture(session.Loaded!, candidate, field.FieldId, player.Position);
-        var reply = new NpcServiceReply(Done(candidate, "committed")) { Quotes = NpcServiceTransactions.Quotes(candidate) };
+        var reply = new NpcServiceReply(Done(candidate, "")) { Quotes = NpcServiceTransactions.Quotes(candidate) };
         return new PreparedNpcOperation(original, candidate, snapshot, reply, candidate.Money - original.Money);
     }
 

@@ -8,6 +8,9 @@ using PristonTale.Gameplay.Effects;
 using PristonTale.Gameplay.World.Remote;
 using PristonTale.Simulation.Skills;
 using NumVector3 = System.Numerics.Vector3;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Skills;
 
 namespace PristonTale.Gameplay.World;
 
@@ -62,7 +65,7 @@ public sealed partial class GameScene : ISkillSceneHost
         _skillFx.CastResolved += OnCastResolved;
         CreateMonsterPresentation();
         CreateCombatSounds();
-        _looks = new ActorLookPresenter(new RendererActorScene(_renderer), _actorLoader, _assetRoot ?? "");
+        _looks = new ActorLookPresenter(_actorScene, _actorLoader, _assetRoot ?? "");
     }
 
     void ISkillSceneHost.ApplyLook(ulong entityId, in EntityLook look)
@@ -74,7 +77,7 @@ public sealed partial class GameScene : ISkillSceneHost
 
         if (entityId == _remote.SelfEntityId)
         {
-            var handles = _equipmentPresentation?.Handles ?? new PlayerActorHandles(_playerBodyActor, _playerHeadActor);
+            var handles = _equipmentPresentation?.Handles ?? PlayerActors;
             _looks.Apply(entityId, handles, _equipmentPresentation?.HoldsShield == true, look);
             return;
         }
@@ -104,7 +107,7 @@ public sealed partial class GameScene : ISkillSceneHost
         {
             var village = _activeField?.Definition.State == Simulation.World.FieldState.Village;
             _wings.Wear(_skillFx, _remote.SelfEntityId, _equipmentPresentation.ArmorKey, !village && !_playerController.IsDead, _playerBody.Position,
-                MathF.Atan2(_playerForward.X, _playerForward.Z));
+                PlayerYaw);
         }
 
         _remote.ForEachWearer(_wearRemote ??= WearRemote);
@@ -163,14 +166,14 @@ public sealed partial class GameScene : ISkillSceneHost
             _castLockUntilMs = 0d;
             SkillNotice?.Invoke(result.Status switch
             {
-                Protocol.Packets.SkillCastStatus.Cooldown => "The skill is not ready yet.",
-                Protocol.Packets.SkillCastStatus.NotEnoughMana => "Not enough mana.",
-                Protocol.Packets.SkillCastStatus.NotEnoughStamina => "Not enough stamina.",
-                Protocol.Packets.SkillCastStatus.OutOfRange => "The target is out of range.",
-                Protocol.Packets.SkillCastStatus.WeaponNotAllowed => "This skill needs another weapon.",
-                Protocol.Packets.SkillCastStatus.InVillage => "Skills cannot be used in town.",
-                Protocol.Packets.SkillCastStatus.AlreadyActive => "That effect is still active.",
-                Protocol.Packets.SkillCastStatus.InvalidTarget => "There is no valid target for this skill.",
+                SkillCastVerdict.Cooldown => "The skill is not ready yet.",
+                SkillCastVerdict.NotEnoughMana => "Not enough mana.",
+                SkillCastVerdict.NotEnoughStamina => "Not enough stamina.",
+                SkillCastVerdict.OutOfRange => "The target is out of range.",
+                SkillCastVerdict.WeaponNotAllowed => "This skill needs another weapon.",
+                SkillCastVerdict.InVillage => "Skills cannot be used in town.",
+                SkillCastVerdict.AlreadyActive => "That effect is still active.",
+                SkillCastVerdict.InvalidTarget => "There is no valid target for this skill.",
                 _ => "The skill cannot be used now."
             });
         }
@@ -186,7 +189,7 @@ public sealed partial class GameScene : ISkillSceneHost
         }
 
         ulong target = 0;
-        var kind = RemoteEntityKind.Monster;
+        var kind = EntityKind.Monster;
         if (TryCursorRay(mouse, out var ray) && _remote.TryPick(ray, _remote.SelfEntityId, out var picked, out var pickedKind))
         {
             target = picked;
@@ -199,7 +202,7 @@ public sealed partial class GameScene : ISkillSceneHost
             case SkillTarget.None:
                 return RequestCast(code, rule, 0, null);
             case SkillTarget.Enemy:
-                if (target == 0 || kind != RemoteEntityKind.Monster)
+                if (target == 0 || kind != EntityKind.Monster)
                 {
                     return false;
                 }
@@ -207,7 +210,7 @@ public sealed partial class GameScene : ISkillSceneHost
                 _targetSelection.Trace(target);
                 return RequestCast(code, rule, target, null);
             case SkillTarget.Ally:
-                return RequestCast(code, rule, target != 0 && kind == RemoteEntityKind.Player ? target : 0, null);
+                return RequestCast(code, rule, target != 0 && kind == EntityKind.Player ? target : 0, null);
             default:
                 return false;
         }
@@ -229,9 +232,9 @@ public sealed partial class GameScene : ISkillSceneHost
             return true;
         }
 
-        if (Owner is { } owner && (owner.Mp < skill.ManaForRank(rank) || owner.Sp < skill.StaminaForRank(rank)))
+        if (Owner is { } owner && (owner.Mana < skill.ManaForRank(rank) || owner.Stamina < skill.StaminaForRank(rank)))
         {
-            SkillNotice?.Invoke(owner.Mp < skill.ManaForRank(rank) ? "Not enough mana." : "Not enough stamina.");
+            SkillNotice?.Invoke(owner.Mana < skill.ManaForRank(rank) ? "Not enough mana." : "Not enough stamina.");
             return true;
         }
 
@@ -268,13 +271,7 @@ public sealed partial class GameScene : ISkillSceneHost
         if (offset.Length() <= MathF.Max(range - RangeMargin, 10f))
         {
             _hasMoveTarget = false;
-            if (offset.LengthSquared() > 1e-4f)
-            {
-                var facing = Vector2.Normalize(offset);
-                _playerForward = new Vector3(facing.X, 0f, facing.Y);
-                ApplyPlayerWorld();
-            }
-
+            FaceToward(planar);
             Send(pending, pending.TargetId);
             return;
         }
@@ -282,7 +279,7 @@ public sealed partial class GameScene : ISkillSceneHost
         // The approach runs every frame: only a new destination (or a target that moved away from it) is reported.
         if (!_hasMoveTarget || Vector2.DistanceSquared(_moveTarget, planar) > ApproachReportDistance * ApproachReportDistance)
         {
-            _reportDue = true;
+            _reports.Request();
         }
 
         _moveTarget = planar;
@@ -297,10 +294,12 @@ public sealed partial class GameScene : ISkillSceneHost
             return;
         }
 
+        // Before the lock, which keeps StopPredictedMovement from standing: a refused cast never starts a clip that would
+        // end the walk.
+        StopPredictedMovement();
         _castLockUntilMs = _skillClockMs + CastAnswerTimeoutMs;
         _hasMoveTarget = false;
-        StopPredictedMovement();
-        _reportDue = true;
+        _reports.Request();
         var planar = _playerBody.PlanarPosition;
         // Transport is PT-global (x, z); presentation uses (x, -z).
         var point = new NumVector3(planar.X, _playerBody.Height, -planar.Y);
@@ -340,7 +339,7 @@ public sealed partial class GameScene : ISkillSceneHost
         _chargeSkill = 0;
         if (SelfCasting && _playChannel is not null)
         {
-            SendUpstream(_playChannel.SendSkillCommandAsync(++_castSequence, code, Protocol.Packets.SkillCastFlags.Release, _presenceCts.Token),
+            SendUpstream(_playChannel.SendSkillCommandAsync(++_castSequence, code, SkillCastCommand.Release, _presenceCts.Token),
                 "skill release");
         }
     }
@@ -355,9 +354,21 @@ public sealed partial class GameScene : ISkillSceneHost
 
         var aggressive = !_summonAggressive.GetValueOrDefault(skillCode, rule.Summon.Aggressive);
         _summonAggressive[skillCode] = aggressive;
-        var command = aggressive ? Protocol.Packets.SkillCastFlags.SummonAggressive : Protocol.Packets.SkillCastFlags.SummonPassive;
+        var command = aggressive ? SkillCastCommand.SummonAggressive : SkillCastCommand.SummonPassive;
         SendUpstream(_playChannel.SendSkillCommandAsync(++_castSequence, skillCode, command, _presenceCts.Token), "summon mode");
         SkillNotice?.Invoke(aggressive ? $"{rule.Name}: attacks any enemy nearby." : $"{rule.Name}: attacks only your target.");
+    }
+
+    // A confirmed right click on a crystal pet's icon dismisses the pet of that status.
+    public void DismissCrystalPets(uint statusCode)
+    {
+        if (_playChannel is null)
+        {
+            return;
+        }
+
+        SendUpstream(_playChannel.SendDismissCrystalPetsAsync(statusCode, _presenceCts.Token), "crystal pet dismissal");
+        SkillNotice?.Invoke("Pet has been dismissed");
     }
 
     // True when the summon skill's monster picks its own enemies, false when it fights only the owner's target; null
@@ -400,22 +411,7 @@ public sealed partial class GameScene : ISkillSceneHost
         return null;
     }
 
-    bool PristonTale.Effects.Vfx.IVfxAnchors.TryGetPosition(ulong entityId, out Vector3 position)
-    {
-        if (_remote is not null && entityId == _remote.SelfEntityId && _playerBody is not null)
-        {
-            position = _playerBody.Position;
-            return true;
-        }
-
-        if (_remote is not null && _remote.TryGetDrawnPosition(entityId, out position))
-        {
-            return true;
-        }
-
-        position = default;
-        return false;
-    }
+    bool PristonTale.Effects.Vfx.IVfxAnchors.TryGetPosition(ulong entityId, out Vector3 position) => TryGetDrawnPosition(entityId, out position);
 
     bool PristonTale.Effects.Vfx.IVfxAnchors.TryGetBone(ulong entityId, string bone, out Vector3 position)
     {
@@ -463,11 +459,12 @@ public sealed partial class GameScene : ISkillSceneHost
             return;
         }
 
-        _renderer.SeekActorMotion(_playerBodyActor, framesFromStart);
-        _renderer.SeekActorMotion(_playerHeadActor, framesFromStart);
-        _renderer.SetActorPlaybackRate(_playerBodyActor, rate);
-        _renderer.SetActorPlaybackRate(_playerHeadActor, rate);
+        PlayerActors.SeekMotion(_actorScene, framesFromStart);
+        PlayerActors.SetPlaybackRate(_actorScene, rate);
     }
+
+    float ISkillSceneHost.AttackRateOf(ulong entityId) =>
+        entityId == _remote?.SelfEntityId ? PlayerRateFor(MotionCode.Attack) : _remote?.AttackRateOf(entityId) ?? 1f;
 
     void ISkillSceneHost.PlaySkillMotion(ulong entityId, SkillMotionPlan plan, float durationMs, float rate, int loop)
     {
@@ -491,19 +488,25 @@ public sealed partial class GameScene : ISkillSceneHost
         _hasMoveTarget = false;
         if (plan.Motion == SkillMotion.Skill)
         {
-            _ = _playerController.Retrigger(PristonActorMotion.Skill);
+            _ = _playerController.Retrigger(MotionCode.Skill);
             var clip = _renderer.ResolveSkillMotion(_playerBodyActor, plan.MotionIndex);
-            _renderer.SetActorMotionIndex(_playerBodyActor, clip);
-            _renderer.SetActorMotionIndex(_playerHeadActor, clip);
-            _renderer.SetActorPlaybackRate(_playerBodyActor, rate);
-            _renderer.SetActorPlaybackRate(_playerHeadActor, rate);
+            PlayerActors.SetMotionIndex(_actorScene, clip);
+            PlayerActors.SetPlaybackRate(_actorScene, rate);
             return;
         }
 
-        ApplyPlayerCommand(_playerController.Retrigger(PristonActorMotion.Attack));
-        var attackRate = PlayerRateFor(PristonActorMotion.Attack) * rate;
-        _renderer.SetActorPlaybackRate(_playerBodyActor, attackRate);
-        _renderer.SetActorPlaybackRate(_playerHeadActor, attackRate);
+        ApplyPlayerCommand(_playerController.Retrigger(MotionCode.Attack));
+        PlayerActors.SetPlaybackRate(_actorScene, PlayerRateFor(MotionCode.Attack) * rate);
+    }
+
+    // The skill clip returns to stand by itself; the controller follows when the cast lock ends, or a cast with no walk
+    // after it would keep the motions-from-0x100 rules (no floor following, no falls) until the next step.
+    private void EndSkillMotion()
+    {
+        if (_playerController.Current == MotionCode.Skill && !SelfCasting)
+        {
+            ApplyPlayerCommand(_playerController.ApplyAuthoritative(MotionCode.Stand));
+        }
     }
 
     private readonly record struct PendingCast(uint Code, SkillRule Rule, int Rank, ulong TargetId);

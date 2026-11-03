@@ -48,11 +48,11 @@ public static class UsableItemEffects
                 ResetAttributes(character, rule.Argument);
                 break;
             case UsableItemAction.ResetSkills:
-                ResetSkills(character);
+                character.ResetLearnedSkills();
                 break;
             case UsableItemAction.ResetAttributesAndSkills:
                 ResetAttributes(character, 0);
-                ResetSkills(character);
+                character.ResetLearnedSkills();
                 break;
             case UsableItemAction.SkillMastery:
                 foreach (var skill in MasterySkills(character, rule.Argument).ToArray())
@@ -64,7 +64,7 @@ public static class UsableItemEffects
             case UsableItemAction.AgingMastery:
                 if (AgingTarget(character, rule.Argument) is { } item)
                 {
-                    item.UpgradeLevel++;
+                    Aging.AgingRules.Count(item, item.Maturity.Goal);
                     character.TouchInventory();
                 }
 
@@ -135,28 +135,6 @@ public static class UsableItemEffects
     }
 
     // Every learned rank returns its point: the final tier's skills (window 12..15) to the final-tier points.
-    private static void ResetSkills(PlayerCharacter character)
-    {
-        var skills = character.Class.Skills;
-        int points = 0;
-        int elite = 0;
-        for (var index = 0; index < skills.Count; index++)
-        {
-            var rank = character.Skills.RankOf(skills[index].Code);
-            if (index >= 12)
-            {
-                elite += rank;
-            }
-            else
-            {
-                points += rank;
-            }
-        }
-
-        character.RestoreProgress(character.Experience, character.Money, character.StatPoints, character.Tier, character.SkillPoints + points,
-            character.EliteSkillPoints + elite);
-        character.Skills.Clear();
-    }
 
     // The learned skills of a class tier (1..3: window 0..3, 4..7, 8..11) that are not fully trained.
     private static IEnumerable<Skill> MasterySkills(PlayerCharacter character, int tier)
@@ -172,7 +150,8 @@ public static class UsableItemEffects
         }
     }
 
-    // The aged item an Aging Master finishes: 0 weapon, 1 shield or orb, 2 armor or robe, 3 armlet, 4 gloves, 5 boots.
+    // The aging an Aging Master finishes on the worn item: 0 weapon, 1 shield or orb, 2 armor or robe, 3 armlet, 4 gloves,
+    // 5 boots. Only an item whose aging is under way matures.
     private static ItemInstance AgingTarget(PlayerCharacter character, int group)
     {
         var slot = group switch
@@ -185,7 +164,7 @@ public static class UsableItemEffects
             _ => EquipmentSlot.Boots
         };
         var item = character.GetEquipped(slot);
-        if (item is null || item.UpgradeLevel <= 0)
+        if (item?.Maturity is not { Goal: > 0 })
         {
             return null;
         }

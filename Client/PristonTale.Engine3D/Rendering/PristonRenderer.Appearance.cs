@@ -1,5 +1,8 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using PristonTale.Engine3D.Formats;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Units;
 
 namespace PristonTale.Engine3D.Rendering;
 
@@ -27,6 +30,9 @@ internal sealed class ActorShade
 
     public Vector3 Tint;
     public float Opacity = 1f;
+    // A corpse's look over the appearance: Fade multiplies its opacity, Dim takes light away (in the Tint's units).
+    public float Fade = 1f;
+    public float Dim;
     public bool Wobble;
     public bool CastsShadow = true;
     public Texture2D Overlay;
@@ -34,9 +40,13 @@ internal sealed class ActorShade
     public float Scale = 1f;
     public bool EchoHidden;
 
-    public bool Hidden => Opacity <= 0.004f || EchoHidden;
+    public float ShownOpacity => Opacity * Fade;
 
-    public bool Translucent => Opacity < 0.999f;
+    public Vector3 ShownTint => Tint - new Vector3(Dim);
+
+    public bool Hidden => ShownOpacity <= 0.004f || EchoHidden;
+
+    public bool Translucent => ShownOpacity < 0.999f;
 
     public bool Shadowed => CastsShadow && !Hidden && !Translucent;
 }
@@ -64,6 +74,19 @@ public sealed partial class PristonRenderer
         shade.Scale = appearance.Scale > 0f ? appearance.Scale : 1f;
     }
 
+    // A corpse's darkening and fading, kept apart from the appearance gameplay paints each frame.
+    public void SetActorCorpse(ActorHandle handle, float fade, float dim)
+    {
+        if (!TryResolveActor(handle, out var runtime))
+        {
+            return;
+        }
+
+        var shade = ShadeOf(runtime);
+        shade.Fade = Math.Clamp(fade, 0f, 1f);
+        shade.Dim = Math.Max(dim, 0f);
+    }
+
     // A copy of an actor that plays its clip lagFrames behind (an afterimage) or, for an attached item, the same item
     // attached to parent (an afterimage's body) or to the item's own parent (a second, enlarged weapon). Echoes cast
     // no shadow; remove them with RemoveActor.
@@ -85,15 +108,16 @@ public sealed partial class PristonRenderer
         {
             echo.Parent = parent.IsValid ? parent : original.Parent;
             echo.ParentBone = original.ParentBone;
+            echo.CheerBone = original.CheerBone;
             if (TryResolveActor(echo.Parent, out var owner))
             {
-                echo.World = owner.SampleSkeleton()[echo.ParentBone] * owner.World;
+                echo.World = AttachedWorld(echo, owner);
             }
         }
         else
         {
             echo.EchoSource = source;
-            echo.EchoLagTicks = MathF.Max(0f, lagFrames) * 160f;
+            echo.EchoLagTicks = MathF.Max(0f, lagFrames) * GameUnits.FrameTicks;
             echo.Follow(original);
         }
 
@@ -139,12 +163,14 @@ public sealed partial class PristonRenderer
         }
     }
 
-    // An attached actor's world: its parent's bone, grown by its appearance's scale about the bone.
+    // An attached actor's world: its parent's bone (the cheer bone while the parent plays Yahoo) in the pose of the
+    // parent's palette, grown by its appearance's scale about the bone.
     private static Matrix AttachedWorld(ActorRuntime actor, ActorRuntime parent)
     {
-        var bone = parent.SampleSkeleton()[actor.ParentBone] * parent.World;
+        var index = actor.CheerBone >= 0 && parent.Motion?.State == (uint)MotionCode.Yahoo ? actor.CheerBone : actor.ParentBone;
+        var bone = parent.ShownPose()[index] * parent.World;
         return actor.Shade is { Scale: not 1f } shade ? Matrix.CreateScale(shade.Scale) * bone : bone;
     }
 
-    private float WobblePhase => _renderTime % 4096u / 4096f * MathHelper.TwoPi;
+    private float WobblePhase => _renderTime % GameUnits.AngleTurn * GameUnits.RadiansPerAngle;
 }

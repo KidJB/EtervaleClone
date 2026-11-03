@@ -60,19 +60,23 @@ public sealed record EquipmentTotals
             totals.AttackRating += roll.AttackRating;
             totals.DamageMin += roll.DamageMin;
             totals.DamageMax += roll.DamageMax;
-            totals.Critical += item.Definition.Critical;
+            totals.Critical += item.Critical;
             totals.Defence += roll.Defence;
             totals.Absorb += Tenth(ItemAbsorbCorrection.Rated(item));
             totals.AbsorbItems += roll.Absorb != 0 ? 1 : 0;
             totals.Block += roll.Block;
             totals.MoveSpeed += roll.MoveSpeed;
-            totals.AttackSpeed += item.Definition.BaseStats.AttackSpeed;
+            totals.AttackSpeed += item.Definition.BaseStats.AttackSpeed + roll.AttackSpeedBonus;
             totals.ShootingRange += item.Definition.ShootingRange;
             totals.LifeRegen += roll.LifeRegen;
             totals.ManaRegen += roll.ManaRegen;
             totals.StaminaRegen += roll.StaminaRegen;
             // The last worn item with a magic mastery sets it; the specialization bonuses add to that.
-            totals.MagicMastery = item.Definition.MagicMastery;
+            if (item.MagicMastery != 0)
+            {
+                totals.MagicMastery = item.MagicMastery;
+            }
+
             totals.AddLife += roll.AddLife;
             totals.AddMana += roll.AddMana;
             totals.AddStamina += roll.AddStamina;

@@ -1,4 +1,7 @@
 using PristonTale.Engine3D.IO;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Units;
+using PristonTale.Assets;
 
 namespace PristonTale.Engine3D.Formats;
 
@@ -22,7 +25,7 @@ public sealed class PristonActorLoader
         var motionInfo = ResolveMotionInfo(assetRoot, info);
         var motionPath = ResolveMotionPath(assetRoot, motionInfo.MotionFile);
         var skeleton = _smdReader.ReadModel(motionPath);
-        var mesh = _smdReader.ReadModel(meshPath);
+        var mesh = PristonPhysiqueRepair.Repair(_smdReader.ReadModel(meshPath), skeleton);
         // Shared armor meshes require the INX high-LOD filter; models without groups render all objects.
         var renderObjectNames = SelectRenderObjectNames(info);
         return new PristonActor(motionInfo, mesh, skeleton, renderObjectNames);
@@ -30,23 +33,23 @@ public sealed class PristonActorLoader
 
     public PristonActor LoadSkinned(string meshSmdPath, string skeletonSmbPath)
     {
-        var mesh = _smdReader.ReadModel(meshSmdPath);
         var skeleton = _smdReader.ReadModel(skeletonSmbPath);
+        var mesh = PristonPhysiqueRepair.Repair(_smdReader.ReadModel(meshSmdPath), skeleton);
         return new PristonActor(CreateSyntheticIdleInfo(skeleton.LastFrame), mesh, skeleton, []);
     }
 
     public PristonActor LoadRigid(string smdPath)
     {
         var mesh = _smdReader.ReadModel(smdPath);
-        return new PristonActor(CreateSyntheticIdleInfo(160), mesh, mesh, []);
+        return new PristonActor(CreateSyntheticIdleInfo(GameUnits.FrameTicks), mesh, mesh, []);
     }
 
     // Synthetic opening actors need a non-empty Stand motion spanning the full skeleton clip.
     private static PristonModelInfo CreateSyntheticIdleInfo(int skeletonLastFrameTicks)
     {
-        var endFrame = (uint)Math.Max(1, skeletonLastFrameTicks / 160);
+        var endFrame = (uint)Math.Max(1, skeletonLastFrameTicks / GameUnits.FrameTicks);
         var idle = new PristonMotionInfo(
-            State: (uint)PristonActorMotion.Stand,
+            State: (uint)MotionCode.Stand,
             StartFrame: 0,
             EndFrame: endFrame,
             EventFrames: [],
@@ -137,7 +140,7 @@ public sealed class PristonActorLoader
             throw new InvalidDataException("Empty Priston actor source path.");
 
         var changed = Path.ChangeExtension(sourcePath, extension);
-        var resolved = PristonFileResolver.Resolve(Path.Combine(assetRoot, changed));
+        var resolved = AssetFiles.Resolve(Path.Combine(assetRoot, changed));
         if (File.Exists(resolved))
             return resolved;
 
@@ -151,7 +154,7 @@ public sealed class PristonActorLoader
             return false;
 
         var changed = Path.ChangeExtension(sourcePath, extension);
-        var resolved = PristonFileResolver.Resolve(Path.Combine(assetRoot, changed));
+        var resolved = AssetFiles.Resolve(Path.Combine(assetRoot, changed));
         if (!File.Exists(resolved))
             return false;
 

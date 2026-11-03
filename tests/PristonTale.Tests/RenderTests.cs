@@ -13,7 +13,10 @@ internal static class RenderTests
         yield return ("unused material catalogs do not enter streaming texture preparation", MaterialUsageAsync);
         yield return ("off-camera geometry remains eligible to cast shadows", ShadowAsync);
         yield return ("static mesh preparation computes topology and normals without a GPU", MeshAsync);
+        yield return ("stage normals are smoothed across materials and faces sharing a position, not across a wall", StageNormalsAsync);
+        yield return ("a stage face that is never drawn does not bend the drawn ground's normals", HiddenStageNormalsAsync);
         yield return ("CPU image decoding handles invalid data without GPU resources", DecodeAsync);
+        yield return ("UI bitmaps of 32 bits keep their coverage and skip the black key; zeroed coverage stays opaque", BmpCoverageAsync);
         yield return ("PNG export cache separates opacity variants and basename collisions", ExportAsync);
     }
 
@@ -93,6 +96,44 @@ internal static class RenderTests
         return Task.CompletedTask;
     }
 
+    private static Task StageNormalsAsync()
+    {
+        // Two ground faces in different materials meeting on a 20-degree ridge, with their own vertices at the shared
+        // positions, and a wall standing on the far edge of the second.
+        Vector3[] positions =
+        [
+            new(0, 0, 0), new(100, 0, 0), new(0, 0, 100),
+            new(100, 0, 0), new(100, 0, 100), new(0, 0, 100), new(200, 36, 50),
+            new(100, 0, 0), new(100, 100, 0), new(100, 0, 100)
+        ];
+        PristonStageFace[] faces =
+        [
+            new(0, 2, 1, 0, -1),
+            new(3, 5, 6, 1, -1),
+            new(7, 9, 8, 2, -1)
+        ];
+        var normals = PristonStageNormals.Compute(faces, positions);
+        var ground = normals[0];
+        var shared = normals[2];
+        Assert.True(ground.Y > 0.99f && shared.Y > 0.9f && shared.X < -0.01f, $"the ridge corner was not smoothed toward the second face: {shared}");
+        Assert.True(Vector3.Distance(normals[2], normals[3]) < 1e-4f, "the same position in two materials kept different normals");
+        Assert.True(MathF.Abs(normals[6].Y) < 1e-4f && MathF.Abs(normals[6].X) > 0.99f, $"the wall took the ground's normal: {normals[6]}");
+        return Task.CompletedTask;
+    }
+
+    private static Task HiddenStageNormalsAsync()
+    {
+        // A flat ground face and, on its far edge, a collision-only ramp rising 30 degrees.
+        Vector3[] positions = [new(0, 0, 0), new(100, 0, 0), new(0, 0, 100), new(100, 0, 100), new(200, 57.7f, 0), new(200, 57.7f, 100)];
+        PristonStageFace[] faces = [new(0, 2, 1, 0, -1), new(1, 3, 4, 1, -1), new(4, 3, 5, 1, -1)];
+        var all = PristonStageNormals.Compute(faces, positions);
+        var drawn = PristonStageNormals.Compute(faces, positions, static face => face.MaterialIndex == 0);
+        Assert.True(all[2].Y < 0.999f, $"the fixture's ramp does not bend the ground when drawn: {all[2]}");
+        Assert.True(drawn[2].Y > 0.9999f, $"a hidden ramp bent the ground's corner: {drawn[2]}");
+        Assert.True(drawn[3] == Vector3.Zero, "a face that is not drawn received a normal");
+        return Task.CompletedTask;
+    }
+
     private static Task MeshAsync()
     {
         var a = new PristonCornerVertex(Vector3.Zero, Color.White, Vector2.Zero, Vector2.One, Vector2.Zero);
@@ -107,6 +148,45 @@ internal static class RenderTests
         var otherLayerUv = a with { Uv1 = Vector2.Zero };
         Assert.True(builder.PrepareStaticMesh([a, b, c, otherLayerUv, b, c]).Vertices.Length == 4, "corners with different stage UVs were welded");
         return Task.CompletedTask;
+    }
+
+    private static Task BmpCoverageAsync()
+    {
+        var covered = Bmp32((0, 0, 0, 255), (4, 4, 4, 0), (90, 60, 30, 128));
+        var world = PristonImageDecoder.Decode(covered, ".bmp");
+        Assert.True(!world.HasSourceAlpha && world.Pixels.All(static pixel => pixel.A == 255), "a world bitmap took coverage");
+        var ui = PristonImageDecoder.Decode(covered, ".bmp", bmpCoverage: true);
+        Assert.True(ui.HasSourceAlpha && ui.Pixels[1].A == 0 && ui.Pixels[2].A == 128, "the coverage was not read");
+        PristonUiPixels.Prepare(ui, PristonUiColorKey.Black);
+        Assert.True(ui.Pixels[0] == new Color(0, 0, 0, 255) && ui.Pixels[1].A == 0, "the black key replaced the coverage");
+
+        var zeroed = PristonImageDecoder.Decode(Bmp32((0, 0, 0, 0), (50, 50, 50, 0), (1, 2, 3, 0)), ".bmp", bmpCoverage: true);
+        PristonUiPixels.Prepare(zeroed, PristonUiColorKey.Black);
+        Assert.True(!zeroed.HasSourceAlpha && zeroed.Pixels[0].A == 0 && zeroed.Pixels[1].A == 255, "zeroed coverage did not fall back to the key");
+        return Task.CompletedTask;
+    }
+
+    private static byte[] Bmp32(params (byte R, byte G, byte B, byte A)[] row)
+    {
+        var bytes = new byte[54 + row.Length * 4];
+        bytes[0] = (byte)'B';
+        bytes[1] = (byte)'M';
+        BitConverter.GetBytes(bytes.Length).CopyTo(bytes, 2);
+        BitConverter.GetBytes(54).CopyTo(bytes, 10);
+        BitConverter.GetBytes(40).CopyTo(bytes, 14);
+        BitConverter.GetBytes(row.Length).CopyTo(bytes, 18);
+        BitConverter.GetBytes(1).CopyTo(bytes, 22);
+        BitConverter.GetBytes((short)1).CopyTo(bytes, 26);
+        BitConverter.GetBytes((short)32).CopyTo(bytes, 28);
+        for (var x = 0; x < row.Length; x++)
+        {
+            bytes[54 + x * 4] = row[x].B;
+            bytes[55 + x * 4] = row[x].G;
+            bytes[56 + x * 4] = row[x].R;
+            bytes[57 + x * 4] = row[x].A;
+        }
+
+        return bytes;
     }
 
     private static Task DecodeAsync()

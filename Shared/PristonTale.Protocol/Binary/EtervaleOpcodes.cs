@@ -17,10 +17,15 @@ public static class EtervaleOpcodes
     public const uint ShopQuotes = 0x45540134;
     public const uint Warehouse = 0x45540135;
     public const uint TeleportList = 0x45540136;
+    public const uint ItemWork = 0x45540137;
     public const uint CombatEvents = 0x45540140;
     public const uint RemoveObjects = 0x45540150;
     public const uint LeaveWorld = 0x45540160;
     public const uint PresenceClock = 0x45540170;
+    public const uint Weather = 0x45540180;
+    public const uint BossTime = 0x45540181;
+    public const uint BossSpots = 0x45540182;
+    public const uint BossList = 0x45540183;
 
     public const uint SkillCast = 0x45540200;
     public const uint SkillCastResult = 0x45540201;
@@ -30,14 +35,39 @@ public static class EtervaleOpcodes
 
     public const uint ItemDetails = 0x45540300;
     public const uint OwnerItemStatus = 0x45540301;
+    public const uint AgingProgress = 0x45540302;
     public const uint ItemUseCommand = 0x45540400;
     public const uint ItemUseResult = 0x45540401;
     public const uint PremiumTimers = 0x45540402;
     public const uint ItemEffects = 0x45540403;
+    public const uint DismissCrystalPets = 0x45540404;
     public const uint QuestRequest = 0x45540500;
     public const uint QuestResult = 0x45540501;
     public const uint QuestJournal = 0x45540502;
     public const uint QuestNotices = 0x45540503;
+    public const uint PersonalShopOpen = 0x45540600;
+    public const uint PersonalShopClose = 0x45540601;
+    public const uint PersonalShopView = 0x45540602;
+    public const uint PersonalShopBuy = 0x45540603;
+    public const uint PersonalShopResult = 0x45540604;
+    public const uint PersonalShopListing = 0x45540605;
+    public const uint PersonalShopDetails = 0x45540606;
+    public const uint PartyInvite = 0x45540700;
+    public const uint PartyAnswer = 0x45540701;
+    public const uint PartyCommand = 0x45540702;
+    public const uint PartyRequest = 0x45540703;
+    public const uint PartyMembers = 0x45540704;
+    public const uint TradeRequest = 0x45540800;
+    public const uint TradeAnswer = 0x45540801;
+    public const uint TradeOffer = 0x45540802;
+    public const uint TradeLock = 0x45540803;
+    public const uint TradeCancel = 0x45540804;
+    public const uint TradeAsked = 0x45540805;
+    public const uint TradeState = 0x45540806;
+    public const uint TradeDetails = 0x45540807;
+    public const uint ContactChange = 0x45541000;
+    public const uint ContactRefresh = 0x45541001;
+    public const uint ContactList = 0x45541002;
 
     public const uint PresenceEntries = 0x45540900;
     public const uint DescribeEntity = 0x45540901;
@@ -59,6 +89,7 @@ public static class EtervaleOpcodes
     public const uint CloseRequest = 0x45540D03;
     public const uint WingGateRequest = 0x45540D04;
     public const uint WingGateResult = 0x45540D05;
+    public const uint YahooKey = 0x45540D06;
 
     public const uint EnterWorld = 0x45540E00;
     public const uint WorldEntry = 0x45540E01;

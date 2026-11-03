@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PristonTale.Application.World;
+using PristonTale.Persistence.Abstractions;
 using PristonTale.Persistence.Abstractions.Accounts;
 using PristonTale.Persistence.Abstractions.Characters;
 using PristonTale.Persistence.Abstractions.Security;
@@ -14,6 +15,7 @@ using PristonTale.Simulation.World.Fields;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Simulation.World.Motion;
 using PristonTale.Simulation.World.Npcs;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -43,6 +45,13 @@ internal sealed class MultiplayerServer : IAsyncDisposable
     public string Address { get; }
 
     public WorldServer World => _host.Services.GetRequiredService<WorldServer>();
+
+    // Runs a statement on the server's database, to put storage in the state a scenario needs.
+    public async Task ExecuteAsync(string sql)
+    {
+        await using var connection = await _host.Services.GetRequiredService<IDbConnectionFactory>().OpenAsync();
+        await Dapper.SqlMapper.ExecuteAsync(connection, sql);
+    }
 
     public static async Task<MultiplayerServer> StartAsync(WorldData world, params (string Key, string Value)[] settings)
     {
@@ -109,6 +118,14 @@ internal sealed class MultiplayerServer : IAsyncDisposable
 
         var starter = CharacterRecordFactory.NewStarter(Classes, account.Id, setup.Name, 0, setup.Class, setup.FieldId, level: setup.Level);
         await characters.CreateAsync(CharacterRecordFactory.FromLiveSession(starter, character, setup.FieldId, setup.Position));
+        return userId;
+    }
+
+    // An account with no character, as a new player registers; returns the account name.
+    public async Task<string> CreateAccountAsync(string name)
+    {
+        var userId = $"mp{Interlocked.Increment(ref _accounts):D3}{name}".ToLowerInvariant();
+        await _host.Services.GetRequiredService<IAccountRepository>().CreateAsync(userId, PasswordHash.Value);
         return userId;
     }
 

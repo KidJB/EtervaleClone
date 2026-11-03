@@ -21,18 +21,25 @@ The codecs live in `Shared/PristonTale.Protocol`; the server edge is `Server/Pri
 | `Binary/FrameCodec.cs` | `FrameCodec`: the `{size, code}` header and the 8192-byte limit. |
 | `Binary/PacketReader.cs`, `Binary/PacketWriter.cs` | Little-endian sequential reader/writer; the writer patches the size in `Finish()`. |
 | `Binary/Utf8Text.cs` | Text fields: `{uint16 ByteLength, UTF-8}`, cut at a whole character. |
+| `Binary/WireHeader.cs` | `{uint16 Version, uint16 Flags = 0}` body header: `Write(version)`, `Read(name, minimumVersion = 1)` (newer versions append fields). Domain helpers (`NpcWire.Header`, `ItemUseWire.ReadHeader`...) delegate to it. |
+| `Binary/WireList.cs` | `IWireEntry<T>` (static `Size`, `Read`, instance `Write`) and `WireList`: `{int32 Count, entries}` with the entries filling the rest exactly; every fixed-size list (cooldowns, timers, item effects, shop quotes, item details) uses it. |
+| `Packets/IFramePacket.cs` | `IFramePacket`: a message that writes itself as one frame; every client-to-server message implements it. |
 | `Packets/AccountPackets.cs` | `ProtocolVersion`, `ServerHello`, `Login`/`LoginResult`, `CharacterList`, `CharacterCommand`/`CharacterResult`, `Heartbeat`. |
-| `Packets/PristonUnits.cs` | `PristonUnits` (fixed point x256, 4096-per-turn angles), `MotionStateCode`. |
 | `Packets/PlayerActionPackets.cs` | `MovementReport`, `AttackRequest` and `FieldWarp`. |
 | `Packets/WingGatePackets.cs` | `WingGateRequest` and `WingGateResult`. |
-| `Packets/PresencePackets.cs` | `PresenceEntries`: `VarInt`, `PresenceMotion`, `PresenceEntry`, `PresenceWire` (entry codec), writer and reader. |
+| `Packets/PresencePackets.cs` | `PresenceEntries`: `VarInt`, `PresencePoint`, `PresenceFields`, `PresenceEntry`, `PresenceWire` (entry codec), writer and reader. |
+| `Packets/EventWire.cs` | What the compact combat, skill and status event lists share: entities by presence handle (`IEventHandleWriter`, `IEventHandleReader`), times, points, header and batching. |
 | `Packets/WorldEntryPackets.cs` | `EnterWorld`, `WorldEntry`, `JoinWorld`, `WorldJoined` and `LeaveWorld`. |
 | `Packets/GroundItemPackets.cs` | `GroundItems` and `GroundItemsRemoved`. |
-| `Packets/ChatPackets.cs`, `ChatChannelCode.cs` | `ChatSay` (typed line), `ChatLine` (received line); chat kinds on the wire. |
+| `Packets/ChatPackets.cs` | `ChatSay` (typed line), `ChatLine` (received line, kind `ChatKind` from Contracts). |
 | `Packets/EtervalePackets.cs` | Owner status, inventory parts, skills, inventory/progression commands and results, combat events, removals, presence clock. |
-| `Packets/ItemPackets.cs` | Owner item details (`ItemDetailEntry`, `ItemDetailsPartPacket`) and the equipment status (`OwnerItemStatusPacket`). |
+| `Packets/ItemPackets.cs` | Owner item details (`ItemDetailEntry`, `ItemDetailsPartPacket`), the equipment status (`OwnerItemStatusPacket`) and the aging progress (`AgingProgressPacket`). |
 | `Packets/SkillPackets.cs` | Skill cast, cast result, skill events, status effects, cooldowns. |
-| `Packets/NpcPackets.cs` | NPC result, service request/result, shop catalog and quotes, warehouse, teleport list. |
+| `Packets/PersonalShopPackets.cs` | Personal shop open, close, view and buy requests; result, listing and details. |
+| `Packets/PartyPackets.cs` | Party invite, answer and command requests; the request a player receives and the party's members. |
+| `Packets/TradePackets.cs` | Trade request, answer, offer, lock and cancel; the request a player receives, the trade window and its items' values. |
+| `Packets/ContactPackets.cs` | Friends page: a change to a list, a refresh, and one list with the friends' presence. |
+| `Packets/NpcPackets.cs` | NPC result, service request/result, shop catalog and quotes, warehouse, teleport list, item work result. |
 | [Transport/FrameConnection.cs](../Shared/PristonTale.Protocol/Transport/FrameConnection.cs) | One TLS stream: receive loop and coalesced single-writer send. |
 | `Transport/TlsTransport.cs` | Server and client handshakes, `ServerCertificatePolicy` (system trust, loopback, pin). |
 | `Transport/IPacketSink.cs` | `Send`; implemented by `FrameConnection` and test sinks. |
@@ -50,10 +57,10 @@ search finds; they are not part of the build.
 | --- | --- |
 | Byte order | Little-endian everywhere. |
 | Header | `{int32 size, uint32 code}`; `size` includes the header. |
-| Positions | Fixed point, world units × 256 (`PristonUnits.ToFixed`, `FixedShift` 8). |
-| Angles | Skill messages: 4096 per turn (`PristonUnits.ToAngle`); presence and movement: `uint16`, 65536 per turn. |
+| Positions | Fixed point, world units × 256 (`GameUnits.ToFixed` from Contracts, `FixedShift` 8). |
+| Angles | Skill messages: 4096 per turn (`GameUnits.ToAngle`); presence and movement: `uint16`, 65536 per turn. |
 | Entity ids | 64-bit (`uint64` or `varuint`) on the wire and in memory; players count from 1, monsters, NPCs and summons from `2^32`. |
-| Text | UTF-8 with a `uint16` byte length, cut at a whole character to the field's byte limit (`Utf8Text`). |
+| Text | UTF-8 with a `uint16` byte length, cut at a whole character to the field's byte limit (`Utf8Text`); malformed UTF-8 is refused. |
 | Item identity | Item codes derived from the item key (`ItemCodes`), e.g. gold is `GG101`. |
 | Reading | `PacketReader` requires `size == span length` and `size >= minimum`; trailing bytes are accepted. Overruns throw `InvalidDataException`. |
 | Versioned bodies | Messages with `{uint16 Version, uint16 Flags}` reject version 0. Fixed-size bodies accept newer versions that append fields; list bodies check their length exactly. |
@@ -65,7 +72,7 @@ search finds; they are not part of the build.
 | Port | TCP 10009; the server's `Network:Port` can change it |
 | Security | TLS 1.2 or 1.3 (`TlsTransport`) around the whole stream; the handshake must finish within `Network:HandshakeTimeoutSeconds` (10) |
 | Frame | `int32 size` (including the header), `uint32 code`, 8 to 8192 bytes, inside the TLS stream; anything else closes the connection |
-| Send backlog | More than 512 KiB pending closes the connection |
+| Send backlog | More than 512 KiB pending closes the connection; the server sends a slow reader fewer presence snapshots, and closes one whose backlog stays above 64 KiB for 30 s |
 
 The server presents the certificate in `Network:Certificate:Path` (PKCS#12, default `data/server-certificate.pfx`,
 password `Network:Certificate:Password`). When the file is missing it creates a self-signed ECDSA P-256 certificate for
@@ -83,11 +90,11 @@ Bodies start with `uint16 Version = 1`; text is UTF-8 with a `uint16` byte lengt
 
 | Step | Packet | Notes |
 | --- | --- | --- |
-| Connect | S→C `ServerHello` (`0x45540F00`) | `{uint16 Version, uint16 0, uint32 Protocol, MinimumProtocol, int32 FullPlayers}`: `FullPlayers` = players in the world when a game master's `/user_limit` is reached, else 0 (then only game masters may log in). |
-| Log in | C→S `Login` (`0x45540F01`) | `{uint16 Version, uint16 0, uint32 Protocol, text Account (64 B), text Password (128 B)}`. |
+| Connect | S→C `ServerHello` (`0x45540F00`) | `{uint16 Version, uint16 0, uint32 Protocol, MinimumProtocol, int32 FullPlayers, text ServerName (32 B)}`: `FullPlayers` = players in the world when the player limit (`server.max_users` or `/user_limit`) is reached, else 0 (then only game masters may log in); `ServerName` is `server.name`. |
+| Log in | C→S `Login` (`0x45540F01`) | `{uint16 Version, uint16 0, uint32 Protocol, text Account (64 B), text Password (128 B)}`. `Protocol` is `ProtocolVersion.Current` (3); a change of any message's layout raises it and `ProtocolVersion.Minimum`, so a client built before it is refused instead of misreading the world. |
 | Result | S→C `CharacterList` (`0x45540F03`), then `LoginResult` (`0x45540F02`) | `LoginResult` = `{uint16 Version, uint8 Status, uint8 0}`: 0 ok, 1 bad credentials (also unknown accounts), 2 account blocked, 3 already logged in on this connection, 4 busy (throttled, full or storage failure), 5 client protocol older than the server's minimum. A failed login sends no list. |
-| Character list | S→C `CharacterList` | `{uint16 Version, uint16 0, int32 Count (at most 6)}`, then `{text Name, uint32 ClassCode, int32 Level, uint8 Tier, Face, Hair, Flags (1 in a village), uint32 WeaponCode, ArmorCode, OffHandCode, uint32 0}`. |
-| Create, delete | C→S `CharacterCommand` (`0x45540F04`), S→C `CharacterResult` (`0x45540F05`) | Command `{uint16 Version, uint8 Action (1 create, 2 delete), uint8 0, int32 ClassCode, FaceIndex, text Name}`; result `{uint16 Version, uint8 Action, uint8 Ok, int32 Failure (CreateCharacterFailure), text Name}`. |
+| Character list | S→C `CharacterList` | `{uint16 Version, uint16 0, int32 Count (at most 6)}`, then `{text Name, uint32 Class (PlayerClass), int32 Level, uint8 Tier, Face, Hair, Flags (1 in a village), uint32 WeaponCode, ArmorCode, OffHandCode, uint32 0}`. |
+| Create, delete | C→S `CharacterCommand` (`0x45540F04`), S→C `CharacterResult` (`0x45540F05`) | Command `{uint16 Version, uint8 Action (1 create, 2 delete), uint8 0, int32 Class (PlayerClass), FaceIndex, text Name}`; result `{uint16 Version, uint8 Action, uint8 Ok, int32 Failure (CreateCharacterFailure), text Name}`. |
 | Select | C→S `EnterWorld` (`0x45540E00`) | `{uint16 Version = 1, uint16 0, text Name (64 B)}`. |
 | Entry | S→C `WorldEntry` (`0x45540E01`) | `{uint16 Version, uint8 Status (0 entered, else EnterWorldFailure), uint8 0, uint64 EntityId, int32 Field, int32 X, Z (x256)}`. The owner's stats, inventory and skills follow on the presence stream. |
 | Join | C→S `JoinWorld` (`0x45540E02`), S→C `WorldJoined` (`0x45540E03`) | `JoinWorld` = `{uint16 Version, uint16 0, uint64 EntityId}`, which must be the id from `WorldEntry`; `WorldJoined` = `{uint16 Version, uint8 GameMasterLevel, uint8 0, uint64 EntityId, int64 ServerTimeMs, int64 GameClockMs}`; the level only enables client-side game master controls; `GameClockMs` is the server's game clock (`WorldClock`), which the client's sky follows from then on on its local clock. |
@@ -103,12 +110,13 @@ closing.
 | Message | Direction | Use |
 | --- | --- | --- |
 | `MovementReport` (`0x45540D00`) | C→S | The client's own position, facing, motion, action target and field (see [Player actions](#player-actions)). Sent every 200 ms while moving, on state changes (at most one per 50 ms) and every second while idle. |
-| `PresenceEntries` (`0x45540900`) | S→C | Nearby objects as compact full or motion entries (see [Presence entries](#presence-entries)). |
-| `DescribeEntity` / `EntityDescription` (`0x45540901` / `0x45540902`) | C→S / S→C | Describes an unknown object or one whose description revision changed (see [Entity descriptions](#entity-descriptions)). Monsters and NPCs are cached by template; owned summons and crystal pets carry template 0 in their presence entries and are always described on their own. The client asks again after a second without an answer (the server drops requests beyond its bucket). |
+| `PresenceEntries` (`0x45540900`) | S→C | Nearby objects under the receiver's handles: spawns, changed values and positions (see [Presence entries](#presence-entries)). |
+| `DescribeEntity` / `EntityDescription` (`0x45540901` / `0x45540902`) | C→S / S→C | The server pushes an object's description ahead of its spawn or revision change; the client asks for one it still lacks (see [Entity descriptions](#entity-descriptions)). Monsters and NPCs are cached by template key; owned summons and crystal pets carry template 0 in their presence entries and are always described on their own. The client asks again after a second without an answer (the server drops requests beyond its bucket). |
 | `FieldWarp` (`0x45540D02`) | S→C | The owner's authoritative field and position: a field confirmation, or forced (a correction after a rejected report, a teleport, a restart). |
 | `AttackRequest` (`0x45540D01`) | C→S | The clicked target and the request sequence. Monster: attack lock (held or one swing). NPC: opens it. |
 | `CloseRequest` (`0x45540D03`) | S→C | Asks the client to quit (the end of a game master's shutdown countdown). |
 | `WingGateRequest` / `WingGateResult` (`0x45540D04` / `0x45540D05`) | C→S / S→C | A trip from a warp stone to a stone of the wing warp map, correlated by operation id; a trip that warped also sends a forced `FieldWarp` ([world.md](world.md#wing-warp-gates)). |
+| `YahooKey` (`0x45540D06`) | C→S | Space within the minute a yahoo word opened; the server checks the window, the motion and the stamina, and the cheer shows as the presence motion `yahoo` ([chat-and-gm.md](chat-and-gm.md#server-routing)). |
 
 ### Player actions
 
@@ -120,6 +128,7 @@ Bodies start with `uint16 Version = 1`; positions are fixed point (x256), entity
 | `AttackRequest` | `uint8 Flags (1 held attack), uint8 0, uint64 Target (0 stops), uint64 Sequence` | 28 |
 | `FieldWarp` | `uint8 Flags (1 forced), uint8 0, int32 Field, int32 X, Y, Z` (the client puts the owner on the floor nearest Y) | 28 |
 | `CloseRequest` | `uint16 0` | 12 |
+| `YahooKey` | `uint16 0` | 12 |
 | `WingGateRequest` | `uint16 0, Guid OperationId, uint8 Destination (map index 0..8), uint8 0, uint16 0` | 32 |
 | `WingGateResult` | `uint16 0, Guid OperationId, uint8 Status (WingGateStatus: 0 warped, 1 rejected, 2 not at a stone, 3 beyond the wing, 4 level too low, 5 not enough gold, 6 busy, 7 storage failed), uint8 Destination, uint16 0, int64 Fee` | 40 |
 
@@ -127,7 +136,7 @@ Bodies start with `uint16 Version = 1`; positions are fixed point (x256), entity
 Other field values:
 
 - The character slot record (character select) uses `dwArmorCode` and `dwTemp[13]` for the appearance data.
-- A full presence entry carries the descriptor revision (1 to 255) of the entity's description. The field
+- A presence spawn carries the descriptor revision (1 to 255) of the entity's description. The field
   keeps one revision per entity for every viewer (`FieldDescriptors`) and increments it when level, max HP, template,
   speed, attack rate, equipment, looks (hair, face, pets, big head), village flag, tier, owner or scale change.
 
@@ -140,9 +149,11 @@ The server validates client reports instead of trusting them (`WorldPlayer.Repor
   cannot add up to more than one long report could.
 - During a swing, flinch or potion, drift beyond 192 units is rejected and smaller drift is ignored. Reports from a dead
   player are ignored without a correction.
-- With the field's stage loaded, a report up to 48 units long follows the wall slide and may end at most 8 units from
-  the reported point; a longer report may not cross a wall. A report is rejected when no walkable floor lies under it
-  within 64 units of climb; the accepted height is the floor height.
+- With the field's stage loaded, a report is walked in pieces of at most 48 units; each follows the wall slide and may
+  end at most 8 units from its point on the reported path. The height follows the floor and falls off ledges at 560
+  units a second since the last accepted report, so it can stay above the floor while the player falls. A report is
+  rejected when an 8-unit step finds no walkable floor within 24 units of climb (unless the player is falling) or when it ends
+  over no floor. The client sends a report when a fall begins and when it lands.
 
 A rejected report is answered with a forced `FieldWarp` (at most every 300 ms). A field change in the report is
 accepted only when the player stands at a warp gate or field gate leading to that field and meets its level limit
@@ -157,21 +168,26 @@ Every message code has the high word `0x4554` ("ET"); every message keeps the `{
 
 | Code | Name | Direction | Content |
 | --- | --- | --- | --- |
-| `0x45540100` | `OwnerStatus` | S→C | Level, unsigned 64-bit experience (current, level start, next level), 64-bit money, resources, attributes, combat values and revisions, then the final-tier skill points and the class tier (0..3). 156 B. |
+| `0x45540100` | `OwnerStatus` | S→C | Level, unsigned 64-bit experience (current, level start, next level), 64-bit money, resources, attributes, combat values and revisions, then the final-tier skill points and the class tier (0..3), the bag page shown and the weapon pair held (a byte each, 0 A, 1 B). 158 B. |
 | `0x45540101` | `Skills` | S→C | Skill revision and (code, rank) pairs, at most 512. |
 | `0x45540102` | `Inventory` | S→C | Inventory revision split into parts of up to 100 items; the client replaces its inventory when all parts of a revision arrived. |
-| `0x45540110` / `0x45540111` | `InventoryCommand` / `InventoryResult` | C→S / S→C | Transactional inventory operation, correlated by operation id. A ground pickup (`InventoryAction.Pickup`) names the drop in `ItemId`. |
+| `0x45540110` / `0x45540111` | `InventoryCommand` / `InventoryResult` | C→S / S→C | Transactional inventory operation, correlated by operation id. A ground pickup (`InventoryAction.Pickup`) names the drop in `ItemId`, with `Destination` 0 (received as any item) or `InventoryCommand.PickupToBag` (1: into the bag as a stack of its own, for the client's cursor, or to the hand when the page shown is full; anything else is refused); a throw (`InventoryAction.Drop`) names the bag item or the item in the hand and the amount in `Count`; `Move`, `Merge` and `Swap` naming the item in the hand set it down on the page shown; a gold throw (`InventoryAction.DropGold`) only the amount. |
 | `0x45540120` / `0x45540121` | `ProgressionCommand` / `ProgressionResult` | C→S / S→C | Attribute allocation and skill learning. |
 | `0x45540130` | `NpcResult` | S→C | Completes an NPC click: name, typed services with availability and the line the NPC says. |
-| `0x45540131` / `0x45540132` | `NpcServiceRequest` / `NpcServiceResult` | C→S / S→C | One typed NPC service request (open, close, refresh, buy, sell, repair, warehouse moves and gold, teleport), correlated by operation id. |
+| `0x45540131` / `0x45540132` | `NpcServiceRequest` / `NpcServiceResult` | C→S / S→C | One typed NPC service request (open, close, refresh, buy, sell, repair, warehouse moves and gold, teleport, puzzle exchange, aging), correlated by operation id. |
 | `0x45540133` | `ShopCatalog` | S→C | The NPC's stock with server prices (at most 96), sent before the result of a shop open. |
 | `0x45540134` | `ShopQuotes` | S→C | Sell price and repair cost of every owned item at the inventory revision (at most 128). |
 | `0x45540135` | `Warehouse` | S→C | The account warehouse: revision, gold, weight and items by grid cell (at most 100). |
 | `0x45540136` | `TeleportList` | S→C | A teleporter's destinations with price and minimum level (at most 16). |
+| `0x45540137` | `ItemWork` | S→C | What a work on an item (an aging) came to, sent before its result. |
 | `0x45540140` | `CombatEvents` | S→C | Resolved swings, hits, potions and monster skill impacts. The original lets each client roll its own hits. |
 | `0x45540150` | `RemoveObjects` | S→C | Serials leaving the receiver's view. The original client times objects out after 4-30 seconds. |
 | `0x45540160` | `LeaveWorld` | C→S, echo | Leave the world after the server saves the character. |
-| `0x45540170` | `PresenceClock` | S→C | Server tick of the presence entries that follow (see below). |
+| `0x45540170` | `PresenceClock` | S→C | Server tick of the events that follow when no presence entries of that tick carried it (see below). |
+| `0x45540180` | `Weather` | S→C | `{uint16 Version = 1, uint16 0, uint8 Kind, uint8 Intensity, uint8 WindHeading, uint8 Wind}`: the receiver's field weather (`WeatherState`), when it enters the world and at each change. 16 B. |
+| `0x45540183` | `BossList` | S→C | `{uint16 Version = 1, uint16 0, uint16 Count, uint16 0}`, then `Count` (at most 96) x `{uint32 SecondsLeft, uint8 Exact, uint8 0, uint16 NameBytes, UTF-8 BossName, uint16 FieldBytes, UTF-8 FieldName}` (names at most 32 bytes): every scheduled boss of the world soonest first (`BossList`, built by `WorldServer` when a pass in it has come or the day's minute changed), when the receiver enters the world and whenever the list is rebuilt; the seconds are measured when it is sent. 16 B + entries. |
+| `0x45540182` | `BossSpots` | S→C | `{uint16 Version = 1, uint16 0, uint16 Count, uint16 0}`, then `Count` (at most 16) x `{int32 X, int32 Z (fixed point), uint8 Alive, uint8 0, uint16 NameBytes, UTF-8 BossName (at most 64 bytes)}`: the bosses of the receiver's field at their spot (`FieldInstance.BossSpots`), when it enters the world or a field and whenever a boss comes alive or goes; no entries for a field without bosses. 16 B + entries. |
+| `0x45540181` | `BossTime` | S→C | `{uint16 Version = 1, uint16 0, uint8 Exact, uint8 0, uint16 0, uint32 SecondsLeft, uint16 NameBytes, UTF-8 BossName (at most 64 bytes)}`: the next boss pass of the receiver's field (`BossSpawnSchedule.TryNext`), when it enters the world or a field and when the pass after the next one becomes the next; an empty name for a field without bosses; `Exact` 0 for a pass on a later day, whose minute is rolled only when that day begins. 22 B + name. |
 | `0x45540200` | `SkillCast` | C→S | Cast request (see below). |
 | `0x45540201` | `SkillCastResult` | S→C | Answer to the caster's own cast, by sequence. |
 | `0x45540202` | `SkillEvents` | S→C | Skill starts, impacts, releases and cancels on the presence timeline. |
@@ -179,12 +195,23 @@ Every message code has the high word `0x4554` ("ET"); every message keeps the `{
 | `0x45540204` | `SkillCooldowns` | S→C | The owner's running cooldowns whenever the set changes. |
 | `0x45540300` | `ItemDetails` | S→C | The values of every owned item copy at an inventory revision, in parts sent before its `Inventory` parts. |
 | `0x45540301` | `OwnerItemStatus` | S→C | Carried and maximum weight, critical, block, range, attack speed, belt capacity, regeneration, magic mastery and the eight resistances; sent before every `OwnerStatus`. |
+| `0x45540302` | `AgingProgress` | S→C | The counts of the owner's worn aging copies toward their goals, whenever a count moves. |
 | `0x45540400` / `0x45540401` | `ItemUseCommand` / `ItemUseResult` | C→S / S→C | Use of one carried item, correlated by operation id; a travel item also sends a forced `FieldWarp`. |
 | `0x45540402` | `PremiumTimers` | S→C | The owner's running premium timers whenever they change. |
 | `0x45540403` | `ItemEffects` | S→C | Item effects around players (firecrackers, learn ring, mastery, pet strikes), on the presence timeline. |
+| `0x45540404` | `DismissCrystalPets` | C→S | `{uint16 Version = 1, uint16 0, uint32 StatusCode}`: the owner confirmed dismissing the pet its status code names (each pet has its own); the status's removal answers it. |
 | `0x45540500` / `0x45540501` | `QuestRequest` / `QuestResult` | C→S / S→C | One quest step (talk, proceed, accept, class change, reward choice, skill redistribution), correlated by operation id (see below). |
 | `0x45540502` | `QuestJournal` | S→C | The owner's quest journal view whenever its revision changes. |
 | `0x45540503` | `QuestNotices` | S→C | Quest notices of the world tick and a quest dialog the world opened. |
+| `0x45540600` .. `0x45540603` | `PersonalShopOpen`, `PersonalShopClose`, `PersonalShopView`, `PersonalShopBuy` | C→S | Open a personal shop over bag items, close it, show a seller's shop, buy from it (see below). |
+| `0x45540604` | `PersonalShopResult` | S→C | The answer to a personal shop request, by operation id. |
+| `0x45540605` / `0x45540606` | `PersonalShopListing` / `PersonalShopDetails` | S→C | A seller's shop as the viewer sees it and its copies' values, sent before the result of a view or a purchase while the shop is open. |
+| `0x45540700` .. `0x45540702` | `PartyInvite`, `PartyAnswer`, `PartyCommand` | C→S | Ask a player to group, answer a request, a party window button (see below). |
+| `0x45540703` / `0x45540704` | `PartyRequest` / `PartyMembers` | S→C | A player asks the receiver to group; the receiver's party when it changed. |
+| `0x45540800` .. `0x45540804` | `TradeRequest`, `TradeAnswer`, `TradeOffer`, `TradeLock`, `TradeCancel` | C→S | Ask a player to trade, answer a request, the side's whole offer, lock it, close the trade (see below). |
+| `0x45540805` .. `0x45540807` | `TradeAsked`, `TradeState`, `TradeDetails` | S→C | A player asks the receiver to trade; the trade window when it changed, after its partner items' values. |
+| `0x45541000` / `0x45541001` | `ContactChange` / `ContactRefresh` | C→S | Put a name on the friends or ignored list or take it off; send the lists again. |
+| `0x45541002` | `ContactList` | S→C | One list (friends, then ignored) answering each change or refresh. |
 | `0x45540A00` / `0x45540A01` | `RestartRequest` / `RestartResult` | C→S / S→C | A dead player's restart (field, town, exit), correlated by operation id; a stored restart also sends a forced `FieldWarp`. |
 | `0x45540A02` | `RestartOffer` | S→C | While the owner is dead, what a restart would cost, whenever it changes. |
 | `0x45540B00` / `0x45540B01` | `GroundItems` / `GroundItemsRemoved` | S→C | Drops entering and leaving the receiver's view: within the ground-item range (squared `0xC8000` units, about 905 units), private drops only to their owner. |
@@ -192,34 +219,37 @@ Every message code has the high word `0x4554` ("ET"); every message keeps the `{
 
 ### Owner, inventory and combat layouts
 
-These bodies have no version header.
+These bodies have no version header, except the combat event list's (see [Event lists](#event-lists)).
 
 | Message | Layout after the header | Size |
 | --- | --- | --- |
 | `InventoryCommand` | `Guid OperationId, int64 ExpectedRevision, int32 Action, Guid ItemId, int32 Destination, Count, Slot` | 64 |
-| `ProgressionCommand` | `Guid OperationId, int64 ExpectedRevision, int32 Action, Attribute, Amount, uint SkillCode, uint64 NpcSerial` | 56 |
+| `ProgressionCommand` | `Guid OperationId, int64 ExpectedRevision, int32 Action, Attribute, Amount, uint SkillCode, uint64 NpcId` | 56 |
 | `InventoryResult` / `ProgressionResult` | `Guid OperationId, int32 Ok, int64 Revision, text Message (128 B)` | 38 + text |
 | `Inventory` | `int64 Revision, int32 Part, Parts, Count`, then items `{Guid, uint Code, int32 Kind, Count, Anchor, Slot, int16 Width, Height, text Name (64 B)}` (at most 64 per part) | 28 + up to 106n |
 | `Skills` | `int64 Revision, int32 Count`, then `{uint Code, int32 Rank}` | 20 + 8n |
-| `CombatEvents` | `int32 Count`, then entries of 56 bytes | 12 + 56n |
-| `RemoveObjects` | `int32 Count`, then `uint64 Serial` | 12 + 8n |
+| `CombatEvents` | `uint16 Version (1), uint16 Count`, then compact entries (see [Event lists](#event-lists)) | 12 + 4 to 65 per entry |
+| `RemoveObjects` | `int32 Count`, then `uint64 EntityId` | 12 + 8n |
 | `GroundItems` | `uint16 Version (1), uint16 Flags, int32 Count`, then `{Guid Id, uint32 ItemCode, uint8 Flags (1 gold), uint8 0, uint16 0, int32 Amount, X, Y, Z, text Name (64 B)}` (1 to 64) | 16 + up to 106n |
 | `GroundItemsRemoved` | `uint16 Version (1), uint16 Flags, int32 Count`, then `Guid Id` | 16 + 16n |
-| `ItemDetails` | `uint16 Version (1), uint16 Flags, int64 Revision, int32 Part, Parts, Count`, then 220-byte entries (at most 24) | 32 + 220n |
+| `ItemDetails` | `uint16 Version (1), uint16 Flags, int64 Revision, int32 Part, Parts, Count`, then 236-byte entries (at most 24) | 32 + 236n |
 | `OwnerItemStatus` | `uint16 Version (1), uint16 Flags, int32 CarriedWeight, MaxWeight, CriticalChance, BlockChance, ShootingRange, AttackSpeed, PotionSpace, float LifeRegen, ManaRegen, StaminaRegen, MagicMastery, int16 Resistances[8]` | 72 |
+| `AgingProgress` | `uint16 Version (1), uint16 Count`, then `{Guid InstanceId, int32 Count, Goal}` (at most 16) | 12 + 24n |
 
 An item details entry is `{Guid InstanceId, int32 DurabilityCurrent, DurabilityMax, UpgradeLevel, DamageMin, DamageMax,
 AttackRating, Defence, AddLife, AddMana, AddStamina, RequiredLevel, RequiredStrength, RequiredSpirit, RequiredTalent,
 RequiredAgility, RequiredHealth, Price, Critical, AttackSpeed, ShootingRange, PotionSpace, Weight, UniqueItem, Flags
-(1 two-handed, 2 the owner's class may use it), uint SpecJob, int32 SpecDefence, SpecAttackSpeed, SpecCritical,
+(1 two-handed, 2 the owner's class may use it), AgingCount, AgingGoal (0 of 0 when the copy is not maturing),
+MixSheltom (the mix's highest sheltom, 0 never mixed), MixStats (`MixStat` bits of the stats the mix raised), uint SpecJob, int32 SpecDefence, SpecAttackSpeed, SpecCritical,
 SpecShootingRange, SpecLevelLife, SpecLevelMana, SpecLevelAttackRating, SpecLevelDamage, float Absorb, Block,
 MoveSpeed, LifeRegen, ManaRegen, StaminaRegen, MagicMastery, SpecAbsorb, SpecMoveSpeed, SpecBlock, SpecMagicMastery,
 SpecLifeRegen, SpecManaRegen, SpecStaminaRegen, int16 Resistances[8]}` (`ItemDetailEntry`). The client attaches the
 entries to the inventory of the same revision (`OwnedItemView.Details`) and folds the status into the owner state.
 
-A combat entry is `{uint64 Attacker, Target, byte Kind, byte Flags (1 critical, 2 killed, 4 monster skill), int16 Clip,
-float DurationMs, HitAtMs, int Damage, Resources, SoundCode, X, Y, Z, int16 Angle, int16 0}`. `Kind` is
-`CombatEventKindView`: 1 swing begin, 2 hit, 3 potion begin, 4 potion applied, 5 monster skill impact, 6 heal (amount
+A combat entry is `{uint8 Kind, uint8 Flags (1 critical, 2 killed, 4 monster skill), uint8 Fields, entity Attacker}`, then
+what `Fields` names in its bit order: 1 entity Target, 2 time DurationMs and HitAtMs, 4 varint Damage, 8 varint Resources,
+16 varint SoundCode, 32 point X, Y, Z, 64 varint Angle, 128 varint Clip (absent: Target 0, times 0, values 0, Clip -1). `Kind` is
+`CombatEventKind` (Contracts): 1 swing begin, 2 hit, 3 potion begin, 4 potion applied, 5 monster skill impact, 6 heal (amount
 in `Damage`), 7 evade, 8 revive (returned life in `Damage`), 9 block (a player blocked a monster's normal attack), 10 miss (a player's swing missed; its
 weapon's miss sound plays), 11 level up (a player gained a level; everyone near plays the level-up burst), 12 skill learned
 (a player trained a skill rank; the skill-learn light and sound). The field emits 11 and 12 from `WorldPlayer.TakeProgressCues`
@@ -230,38 +260,58 @@ motions `Eat` and `Warp` in its presence entries.
 
 ### Skills and status effects
 
-Every skill message body starts with `{uint16 Version, uint16 Flags}` (version 1, flags 0, unless stated); readers
-reject version 0, `SkillCast` rejects versions before 3 (the 32-bit target), and `SkillCast` and `SkillCastResult`
-accept newer versions that append fields (the list messages check their length exactly). Entity ids are 64-bit. Positions are fixed point (×256, `PristonUnits`) and angles 4096 per turn.
+Every skill message body but the event lists starts with `{uint16 Version, uint16 Flags}` (version 1, flags 0, unless
+stated); readers reject version 0, `SkillCast` rejects versions before 3 (the 32-bit target), and `SkillCast` and
+`SkillCastResult` accept newer versions that append fields (the cooldown list checks its length exactly). The event
+lists (`SkillEvents`, `StatusEffects`) follow [Event lists](#event-lists). Entity ids are 64-bit; the event lists name
+entities by presence handle. Positions are fixed point (×256, `GameUnits`) and angles 4096 per turn.
 
 | Message | Layout after the header | Size |
 | --- | --- | --- |
-| `SkillCast` (version 3) | `uint Sequence, uint SkillCode, uint64 TargetSerial, int X, Y, Z, int16 Angle, int16 0, uint ClientTimeMs` | 48 |
+| `SkillCast` (version 3) | `uint Sequence, uint SkillCode, uint64 TargetId, int X, Y, Z, int16 Angle, int16 0, uint ClientTimeMs` | 48 |
 | `SkillCastResult` | `uint Sequence, uint SkillCode, byte Status, byte Rank, int16 0, uint CooldownMs, uint RemainingMs, int Mana, int Stamina, uint ServerTick` | 44 |
-| `SkillEvents` (version 3) | `int Count`, then `Count` skill entries of 56 bytes | 16 + 56n |
-| `StatusEffects` (version 2) | `int Count`, then `Count` status entries of 40 bytes | 16 + 40n |
+| `SkillEvents` (version 4) | `uint16 Version, uint16 Count`, then compact skill entries ([Event lists](#event-lists)) | 12 + 9 to 62 per entry |
+| `StatusEffects` (version 3) | `uint16 Version, uint16 Count`, then compact status entries ([Event lists](#event-lists)) | 12 + 7 to 49 per entry |
 | `SkillCooldowns` | `uint ServerTick, int Count`, then `{uint SkillCode, uint RemainingMs, uint DurationMs}` (at most 256) | 20 + 12n |
 
-`SkillCast` flags carry the command (`SkillCastFlags`): 0 a new cast, 1 the release of the held charge of that skill, 2
+`SkillCast` flags carry the command (`SkillCastCommand`): 0 a new cast, 1 the release of the held charge of that skill, 2
 and 3 order the caster's summon of that skill to fight only the caster's target or to pick the nearest enemy; flags
 above 3 fail to decode. A zero `X, Y, Z` means "no ground point". The server
 writes 0 in `SkillCastResult.ServerTick`.
 
-A skill entry is `{uint64 Caster, Target, uint SkillCode, byte Phase (1 start, 2 impact, 3 cancel, 4 release), byte Rank,
-uint16 Flags (1 area, 2 projectile, 4 self, 8 chain link from X, Y, Z to Target, 16 familiar strike, 32 support reaching
-another player, 64 counter strike, 128 full charge, bits 8-9 the resolution mode drawn for the cast), float DurationMs,
-HitAtMs, int X, Y, Z, int16 Angle, uint16 TargetCount, int Radius, int 0}`. A release entry gives the shortened
-remaining motion in `DurationMs` and the time to its next hit in `HitAtMs`. A status entry is `{uint64 Entity, Source,
-uint StatusCode, byte Op (1 add, 2 refresh, 3 remove, 4 tick), byte Stacks, byte SourceKind, byte Control, uint16 Flags (1
-harmful, 2 permanent), int16 0, int DurationMs, RemainingMs, Value}`. Permanent entries carry zero timers.
+A skill entry is `{uint8 Phase (1 start, 2 impact, 3 cancel, 4 release), uint8 Fields, varuint Flags (1 area, 2
+projectile, 4 self, 8 chain link from X, Y, Z to Target, 16 familiar strike, 32 support reaching another player, 64
+counter strike, 128 full charge, bits 8-9 the resolution mode drawn for the cast), uint32 SkillCode, uint8 Rank, entity
+Caster}`, then what `Fields` names: 1 entity Target, 2 time DurationMs and HitAtMs, 4 point X, Y, Z, 8 varint Angle, 16
+varuint TargetCount, 32 varint Radius. A release entry gives the shortened remaining motion in `DurationMs` and the time
+to its next hit in `HitAtMs`. A status entry is `{uint8 Op (1 add, 2 refresh, 3 remove, 4 tick), uint8 Fields, uint32
+StatusCode, entity Entity}`, then what `Fields` names: 1 entity Source, 2 uint8 Stacks, 4 uint8 SourceKind, 8 uint8
+Control, 16 varuint Flags (1 harmful, 2 permanent), 32 varuint DurationMs, 64 varuint RemainingMs, 128 varint Value.
+Permanent entries carry zero timers.
+
+### Event lists
+
+`CombatEvents`, `SkillEvents` and `StatusEffects` share one compact form (`EventWire`): `{size, code, uint16 Version,
+uint16 Count}` and `Count` entries that fill the message exactly; another version is refused. An entry carries only the
+values its event has, named by a `Fields` byte.
+
+- An entity is a varuint: 0 none, 1 followed by the varuint entity id, n >= 2 the receiver's presence handle n - 2 (the
+  one its `PresenceEntries` spawn bound). The server names by handle every entity it has shown the receiver and by id
+  any other; spawns and removals reach the receiver before the events of the same tick, so the reader resolves a
+  handle against the same table the writer used, and an unknown handle is a malformed message.
+- A time is a varuint in sixteenths of a millisecond.
+- A point is the entry's fixed-point (x256) X, Y, Z held at 1/8 of a unit as three int24, like `PresencePoint`.
+
+A message holds the entries that fit one frame; the next message continues. A hit by a shown attacker on the receiver
+takes 6 to 8 bytes. A skill event's `Fields` has no bits above 32; a reader refuses them.
 
 The client sends only the skill, the target and its own position. The server takes rank, costs, range, facing and timing
 from its own state and the class skill files (`Shared/PristonTale.Simulation/Skills/Data/Classes/<Class>.json`) and
 refuses a cast that is unlearned, of another class, cooling down, short of mana or stamina, without the required weapon
 or shield, out of range (rule range plus 24 units, `FieldSkills.RangeSlack`), aimed at a missing or dead target, cast in
 a village, or sent while the player is dead, busy or stunned; `AlreadyActive` (14) refuses a buff whose effect, or one
-it cannot combine with, is already running on its holder. `Status` is the refusal reason (`SkillCastStatus`, the wire
-copy of `SkillCastVerdict`). An accepted cast spends mana and stamina, starts the cooldown, puts the caster in the skill
+it cannot combine with, is already running on its holder. `Status` is the refusal reason (`SkillCastVerdict`, from
+Contracts like the other skill and combat codes). An accepted cast spends mana and stamina, starts the cooldown, puts the caster in the skill
 motion and emits a `Start` event whose `DurationMs` and `HitAtMs` are the motion's length and first event at the
 server's rates; the hits resolve at the motion's event times (projectiles after their flight at 900 units per second,
 `SkillProjectile.UnitsPerSecond`) and emit an `Impact` event with the number of targets hit, then the usual
@@ -284,7 +334,8 @@ Every body starts with `{uint16 Version = 1, uint16 Flags = 0}`; text is UTF-8 w
 
 `Status` is `ItemUseStatus`; `Kind` is `PremiumEffectKind`; `Effect` is `ItemEffectKind` (1 firecracker with its roll
 in `Variant`, 2 mastery, 3 force orb, 4 learn, 5 pet strike with the pet kind in `ItemCode` and the struck entity in
-`Target`, 6 return sparkle at the given position, 7 head change, 8 drink, 9 gift box). Player descriptions carry the
+`Target`, 6 return sparkle at the given position, 7 head change, 8 drink, 9 gift box, 10 a new character's starter gift
+with its order in `Variant`, for its owner's beginner's guide). Player descriptions carry the
 Phoenix flag, the helper pet and the head look (1-2 big head, 3 soccer ball). A sealed puzzle piece travels as the PZ100
 code with the name "Lucky Bag". The puzzle
 collector's exchange is the NPC service action `Exchange` (40) on `QuestEvent`.
@@ -292,14 +343,15 @@ Rules: [special-items.md](special-items.md).
 
 ### Entity descriptions
 
-Bodies start with `{uint16 Version = 1, uint16 Flags = 0}`; text is UTF-8 with a `uint16` byte length (name 64 bytes,
+Bodies start with `{uint16 Version = 2, uint16 Flags = 0}` (version 2 appended the player's shop sign to
+`EntityDescription`; a reader fills it only from version 2); text is UTF-8 with a `uint16` byte length (name 64 bytes,
 model paths 160).
 
 | Message | Layout after the header |
 | --- | --- |
-| `DescribeEntity` | `varuint Serial` |
-| `EntityDescription` | `varuint Serial, uint8 Revision, uint8 Kind (1 player, 2 monster, 3 NPC), varuint Level, varuint MoveSpeed, float32 AttackRate, text Name, text Model`, then the player or template part |
-| Player part | `varuint Job, Tier, Face, Hair, text HeadModel, uint32 Weapon, Armor, OffHand (item codes, 0 none), uint8 Flags (1 village, 2 Phoenix), uint8 HelperPet, uint8 BigHead, glow WeaponGlow, glow OffHandGlow` |
+| `DescribeEntity` | `varuint EntityId` |
+| `EntityDescription` | `varuint EntityId, uint8 Revision, uint8 Kind (1 player, 2 monster, 3 NPC), varuint Level, varuint MoveSpeed, float32 AttackRate, text Name, text Model`, then the player or template part |
+| Player part | `varuint Job, Tier, Face, Hair, text HeadModel, uint32 Weapon, Armor, OffHand (item codes, 0 none), uint8 Flags (1 village, 2 Phoenix), uint8 HelperPet, uint8 BigHead, glow WeaponGlow, glow OffHandGlow, text ShopSign (128 B, empty when the player sells nothing)` |
 | Glow (`DescribedGlow`, 16 bytes) | `int8 Blink (0 none, below 0 steady), int16 R, G, B, A, float32 Scale, int8 Mix (-1 none), uint8 MixScroll, uint8 Flags (1 class-up light)` (`HeldItemGlow`) |
 | Template part | `varuint Template, float32 TemplateScale, varuint SoundCode, varint PortraitY, PortraitZ, uint8 Brood, varuint Owner, float32 InstanceScale, uint32 NpcServices, varuint Class, varint ShadowSize` (the monster class: 1 boss, 200 hammer; the ground shadow -1 none, 0 small to 3 large) |
 
@@ -310,24 +362,39 @@ receiver (`SharedPresenceWire`).
 ### Presence clock and remote playback
 
 `PresenceClock` is 20 bytes: `{int32 size, uint32 code, uint16 Version = 1, uint16 Flags = 0, uint32 ServerTick, uint32
-TickIntervalMs = 50}`. On a tick that produces timeline traffic for the receiver, the server sends it once, before the
-first `PresenceEntries`, `CombatEvents`, `SkillEvents` or `StatusEffects` of that tick, so every sample and event until
-the next clock belongs to `ServerTick × TickIntervalMs` on the server timeline. Readers reject version 0 and a zero
-interval.
+TickIntervalMs = 50}`. Every sample and event until the next clock belongs to `ServerTick × TickIntervalMs` on the server
+timeline. A `PresenceEntries` message carries the clock of its tick in its header, so the server sends `PresenceClock`
+only on a tick whose `CombatEvents`, `SkillEvents` or `StatusEffects` come without entries before them (and for the
+earlier ticks of a reader that fell behind). Readers reject version 0 and a zero interval.
 
 ### Presence entries
 
-`PresenceEntries` is `{int32 size, uint32 code, uint16 Version = 1, uint16 Flags = 0, uint32 Sequence, uint16 Count,
-uint16 0}` followed by `Count` entries that fill the message exactly. An entry is `{varuint Serial, uint8 Kind (bit 0
-full), int24 X, Y, Z (world units × 8), uint16 Facing (65536 per turn), uint8 Motion}`; a full entry adds `{varuint Hp,
-MaxHp, Level, Target, AttackSequence, uint8 Revision, varuint Template, zigzag varint FieldCode}`. `varuint` is
-little-endian base-128 (`VarInt`, up to 64 bits). `Motion` is `PresenceMotion` (0 stand, 1 walk, 2 run, 3 attack, 4
-damage, 5 dead, 6 skill, 7 eat, 8 warp). Positions cover the world's ±1,000,000 units at 1/8 of a unit.
+`PresenceEntries` is `{int32 size, uint32 code, uint16 Version = 2, uint16 TickIntervalMs, uint32 Tick, uint16 Count,
+uint16 0}` followed by `Count` entries that fill the message exactly; another version is refused. An entry is
+`{varuint Handle, uint8 Head}`: bits 0 to 3 of `Head` are the `MotionState` (`Shared/PristonTale.Contracts`; 0 stand,
+1 walk, 2 run, 3 attack, 4 damage, 5 dead, 6 skill, 7 eat, 8 warp, 9 yahoo; a larger value or bit 7 is refused), bit 4
+Spawn, bit 5 Absolute, bit 6 Fields. Then, in order: `varuint EntityId` when Spawn; the position, `int24 X, Y, Z`
+(world units × 8) when Absolute, otherwise `zigzag varint dX, dY, dZ`, the change from the last position this receiver
+was sent for the handle; `uint8 Facing` (256 per turn); and when Fields, `uint8 PresenceFields` then each field it
+names in its bit order: `varuint Life` (bit 0), `MaxLife` (1), `Target` (2), `AttackSequence` (3),
+`uint8 Revision` (4), `varuint Template` (5), `zigzag varint FieldCode` (6); bit 7 is refused. A spawn must be
+Absolute and carry every field. Changes are 32-bit. `varuint` is little-endian base-128 (`VarInt`, up to 64 bits; an
+overlong encoding or a tenth byte above 1 is refused). Positions cover the world's ±1,000,000 units at 1/8 of a unit
+(held to ±2^23 eighths).
 
-The server sends a full entry when an entity enters the receiver's view and whenever its motion, life, target, attack
-sequence or description revision changes; otherwise a motion entry (about 14 bytes) at the near or far rate. Ids,
-targets and the attack sequence are 64-bit. `Template` is the shared template code (monsters and NPCs that are not owned), 0 otherwise;
-`FieldCode` is -1 when not sent.
+A handle is the receiver's own number for an entity: a spawn binds it to the 64-bit entity id, and once the entity's
+`RemoveObjects` went out the server may give it to another entity (a field change frees them all). The server spawns an
+entity when it enters the receiver's view, with Absolute and every field. Afterwards an entry carries the fields that
+changed since the last one sent; one with fields or a changed motion goes out at once, a position-only one (about 8
+bytes walking) at the near or far rate. The position is sent whole when that is not larger than the change.
+`Template` is the shared template key (`PresenceWire.TemplateKey`: a monster's code, or an NPC's code with bit 31 set,
+since the two are numbered apart) of monsters and NPCs that are not owned, 0 otherwise; `FieldCode` is the receiver's
+field. The level belongs to the description: a level change changes the revision.
+
+The server pushes an entity's `EntityDescription` ahead of the entry that spawns it or changes its revision, except a
+shared template's description of the revision it last sent that receiver (the client keeps the last description of each
+template). `DescribeEntity` remains for what the client still lacks: a template of another revision, or a description
+that did not come.
 
 The client plays remote objects back on that timeline
 (`Client/PristonTale.Gameplay/World/Remote/RemoteSnapshotBuffer.cs`): it keeps the timestamped samples of each object
@@ -339,30 +406,99 @@ interpolated ground speed, and a walk or run state without ground motion is show
 
 ### NPC services
 
-Every NPC and quest message body starts with `{uint16 Version = 2, uint16 Flags = 0}` (version 2 widened the NPC serial
-to 64 bits; older versions are refused); readers accept newer versions that append fields, except `ShopQuotes`, whose
+Every NPC and quest message body starts with `{uint16 Version = 3, uint16 Flags = 0}` (version 2 widened the NPC id
+to 64 bits, version 3 added the service request's `Covered`; older versions are refused); readers accept newer versions that append fields, except `ShopQuotes`, whose
 list length is checked exactly. Text is UTF-8 with a `uint16` byte length (names up
 to 64 bytes, item names 40, messages 128, dialog lines 256), and counts are 32-bit. The click itself is an
-`AttackRequest` on the NPC serial; the server answers with `NpcResult`.
+`AttackRequest` on the NPC id; the server answers with `NpcResult`.
 
-- `NpcResult`: `{uint64 NpcSerial, int32 Ok, text Name, text Message, int32 ServiceCount, services {uint8 Kind, uint8
-  Available, uint16 0, int32 Value}, int32 LineCount, text lines}` (at most 32 services and 20 lines). `Kind` is
+- `NpcResult`: `{uint64 NpcId, int32 Ok, text Name, text Message, int32 ServiceCount, services {uint8 Kind, uint8
+  Available, uint16 PricePercent, int32 Value}, int32 LineCount, text lines}` (at most 32 services and 20 lines). `Kind` is
   `NpcServiceKind`, `Value` the authored argument (class-change group, teleport route, mix mode, quest code...). One
   dialog line is sent, chosen at random as the original does.
-- `NpcServiceRequest` (92 bytes): `{Guid OperationId, uint64 NpcSerial, uint8 Service, uint8 Action, uint16 0, int64
-  ExpectedRevision, int64 ExpectedStorageRevision, uint32 ItemCode, Guid ItemId, int32 Anchor, int32 Count, int64
-  Amount}`. The client names a stock entry, an owned item, a grid cell (-1 = first free) or a destination index; it
-  never sends an item, a price or a total. The original buy and warehouse layouts, which carry a whole client-built item
+- `NpcServiceRequest` (108 bytes, more with materials): `{Guid OperationId, uint64 NpcId, uint8 Service, uint8
+  Action, uint16 0, int64 ExpectedRevision, int64 ExpectedStorageRevision, uint32 ItemCode, Guid ItemId, int32 Anchor,
+  int32 Count, int64 Amount, Guid Covered}` (Covered: the one item a warehouse item set down lies over), then for a work on an item `{uint8 Count (1..16), Guid Materials[Count]}` (one unit of an
+  owned item per entry). The client names a stock entry, an owned item, a grid cell (-1 = first free), a destination
+  index or the materials; it never sends an item, a price or a total. The original buy and warehouse layouts, which carry a whole client-built item
   or warehouse, are not used.
-- `NpcServiceResult`: `{Guid OperationId, uint64 NpcSerial, uint8 Service, uint8 Action, uint16 Status, int32 Ok, int64
+- `NpcServiceResult`: `{Guid OperationId, uint64 NpcId, uint8 Service, uint8 Action, uint16 Status, int32 Ok, int64
   Revision, int64 StorageRevision, text Message}`. `Status` is `NpcServiceStatus` (`NotAvailable` for services Etervale
   does not run, `OutOfReach`, `Rejected`, `Stale`, `NotEnoughGold`, `NoSpace`, `GoldLimit`, `Busy`, `StorageFailed`,
-  `Conflict`, `NotOpen`). The state messages a request produces (`ShopCatalog`, `ShopQuotes`, `Warehouse`,
-  `TeleportList`) carry the same operation id and precede the result. A teleport also sends a forced `FieldWarp`.
+  `Conflict`, `NotOpen`, `OverWeight`, `WrongPuzzle`, `WrongMaterials`). The state messages a request produces
+  (`ShopCatalog`, `ShopQuotes`, `Warehouse`, `TeleportList`, `ItemWork`) carry the same operation id and precede the
+  result.
+- `ItemWork`: `{uint16 Version, uint16 0, Guid OperationId, uint64 NpcId, uint8 Service, uint8 Result, uint16 0,
+  Guid ItemId, uint32 Code}`. For the aging NPC `Result` is `AgingResult` (0 lost, 1 down one, 2 down two, 3 success,
+  4 doubled) and `ItemId` is empty when the item was lost; for the mixing NPC it is `MixResult` (0 failed, 1 mixed,
+  2 reconstructed, 3 refined, `ItemId` empty after refining). `PricePercent` of a dialog service is the server's price
+  setting of the aging, mixing and alchemy services (100 for the others). A teleport also sends a forced `FieldWarp`.
 
 The server checks every request against the NPC in the player's field (alive, within 96 units, offering the service),
 writes durable changes before applying them and records the operation id with the character, so a retried request
 returns its first outcome without charging again.
+
+### Personal shops
+
+Every body starts with `{uint16 Version = 1, uint16 Flags = 0}`; text is UTF-8 with a `uint16` byte length (the sign
+128 bytes, names 64, item names 40, messages 128); a shop holds at most 30 items (`PersonalShopLimits`, Contracts).
+
+| Message | Layout after the header |
+| --- | --- |
+| `PersonalShopOpen` | `Guid OperationId, text Sign, int32 Count, entries {Guid ItemId, int64 UnitPrice, int32 Cell}` (a store grid cell) |
+| `PersonalShopClose` | `Guid OperationId` |
+| `PersonalShopView` | `Guid OperationId, uint64 SellerId` |
+| `PersonalShopBuy` | `Guid OperationId, uint64 SellerId, Guid ItemId, int64 UnitPrice, int32 Count, int32 0, int64 ExpectedRevision` (the buyer's inventory) |
+| `PersonalShopResult` | `Guid OperationId, uint8 Action (0 open, 1 close, 2 view, 3 buy), uint8 0, uint16 Status, int32 Count, int64 Revision, int64 UnitPrice, text Message` |
+| `PersonalShopListing` | `Guid OperationId, uint64 SellerId, int32 Count, offers {StoreItemEntry, int64 UnitPrice}`; a store item entry is `{Guid, uint32 Code, uint8 Kind, uint8 0, uint16 0, int32 Count, int32 Cell, int16 Width, int16 Height, text Name}` (the warehouse's too) |
+| `PersonalShopDetails` | `Guid OperationId, uint64 SellerId, int32 Count, ItemDetailEntry entries` |
+
+`Status` is `PersonalShopStatus` (Simulation): 0 ok, `Rejected`, `NotInTown`, `NotListable`, `GoldLimit`, `Closed`,
+`SoldOut`, `CountChanged` and `PriceChanged` (then `Count` and `UnitPrice` name what the shop offers now),
+`NotEnoughGold`, `NoSpace`, `OverWeight`, `Busy`, `StorageFailed`, `Stale`, `OutOfReach`, `Conflict`, `Selling` (the
+requester's own shop holds it). The client never sends a total or an item: the server prices the purchase from the
+listing and moves the copies it holds. A player's sign reaches the others in its `EntityDescription`.
+
+### Parties
+
+Every body starts with `{uint16 Version = 1, uint16 Flags = 0}`; names are UTF-8 with a `uint16` byte length (64
+bytes). Requests are not answered: `PartyMembers` and chat lines show what changed.
+
+| Message | Layout after the header |
+| --- | --- |
+| `PartyInvite` | `uint64 TargetId` |
+| `PartyAnswer` | `uint64 FromId` (the request's), `uint8 Accept` (0 or 1; anything else is refused) |
+| `PartyCommand` | `uint8 Command` (`PartyCommand`: 0 delegate, 1 disband, 2 kick, 3 leave), `uint64 MemberId` (0 for disband and leave) |
+| `PartyRequest` | `uint64 FromId, text FromName, text Recommended` (the player a member recommends to its leader; empty for a request to join) |
+| `PartyMembers` | `uint8 Count` (0..6; 0 once the receiver has no party), members `{uint64 EntityId, text Name, int32 Level, int32 Life, int32 MaxLife, float X, float Z}`, the leader first |
+
+### Trades
+
+Every body starts with `{uint16 Version = 1, uint16 Flags = 0}`; names are UTF-8 with a `uint16` byte length (64
+bytes); a side offers at most 20 items (`TradeLimits`, Contracts). Requests are not answered: `TradeState` and chat lines
+show what changed.
+
+| Message | Layout after the header |
+| --- | --- |
+| `TradeRequest` | `uint64 TargetId` |
+| `TradeAnswer` | `uint64 FromId` (the request's), `uint8 Accept` (0 or 1; anything else is refused) |
+| `TradeOffer` | `int64 Money, int32 Count, entries {Guid ItemId, int32 Cell}` (a cell of the 9x4 trade grid) |
+| `TradeLock`, `TradeCancel` | nothing |
+| `TradeAsked` | `uint64 FromId, text FromName` |
+| `TradeState` | `uint64 PartnerId` (0 once the trade ended), `text PartnerName, uint8 Flags (1 own offer locked, 2 the partner's), int64 OwnMoney, int64 PartnerMoney, int32 Count, own entries, int32 Count, the partner's StoreItemEntry items` (anchored at their trade grid cells) |
+| `TradeDetails` | `int32 Count, ItemDetailEntry entries`: the partner items' values for the receiver, sent just before `TradeState` |
+
+### Contacts
+
+Every body starts with `{uint16 Version = 1, uint16 Flags = 0}`; names are UTF-8 with a `uint16` byte length (64 bytes).
+Both requests are answered by a `ContactList` for each list (one per message, as both would pass the frame limit); a
+refused change also by a chat line.
+
+| Message | Layout after the header |
+| --- | --- |
+| `ContactChange` | `uint8 List` (`ContactList`: 0 friends, 1 ignored), `uint8 Add` (0 or 1), `text Name` |
+| `ContactRefresh` | nothing |
+| `ContactList` | `uint8 List, uint8 Count` (at most 100), entries `{text Name, uint8 Online}` in the order added (`Online` 0 on the ignored list) |
 
 ### Death and restart
 
@@ -386,8 +522,8 @@ choices); a notice list is `{int32 Count, (uint8 Kind, uint8 0, text)...}` (at m
 `QuestCode`, `QuestAction`, `QuestStatus`, `QuestFollowup`, `QuestNoticeKind`, `QuestTimerKind` (see
 [quests.md](quests.md)).
 
-- `QuestRequest` (48 bytes): `{Guid OperationId, uint64 NpcSerial, uint8 Action, uint8 0, uint16 Code, int32 State,
-  int32 Choice}`. `NpcSerial` is 0 only for the redistribution offer and the victory dialog of a duel.
+- `QuestRequest` (48 bytes): `{Guid OperationId, uint64 NpcId, uint8 Action, uint8 0, uint16 Code, int32 State,
+  int32 Choice}`. `NpcId` is 0 only for the redistribution offer and the victory dialog of a duel.
 - `QuestResult`: `{Guid OperationId, uint8 Status, uint8 Flags (1 ok, 2 class change offered, 4 redistribution
   offered, 8 dialog follows), uint16 0, int64 Revision, text Message, [dialog], notices}`.
 - `QuestJournal`: `{int64 Revision, uint16 Code, uint8 Timer, uint8 RedistributionOffered, int32 State, text
@@ -416,20 +552,23 @@ receives what, in which order and how often is specified in [server.md](server.m
   frame also routes the tick's events by the entities they name (`EventRoutes`), so a receiver collects the events of
   the entities it sees instead of scanning every event of its field.
 - Each receiver's `PresenceEncoder` (on its connection's pump, never on the tick) queries the grid, keeps at most 256
-  other entities in view (the nearest, plus its NPCs, its attack target, whoever targets it and its summons; an entity
-  already shown stays out to 1.15 times the cut-off), and sends an object only when it changed: spawns and discrete
-  changes (motion, HP, target, attack, description) immediately, positions at 5 Hz inside the high-detail range
+  other entities in view, at most 100 of them players (the nearest players, then the nearest others, plus its NPCs, its
+  attack target, whoever targets it, its summons and its party; an entity already shown stays out to 1.15 times the
+  cut-off), and sends an object only when it changed: spawns and discrete
+  changes (motion, HP, max HP, target, attack, template, description) immediately, positions at 5 Hz inside the high-detail range
   (squared `0x48000`, about 543 units) and 2 Hz out to the connect range (squared `0x120000`, about 1086 units); an
   object is forgotten beyond 1.15 times the connect range. Position updates share a budget of 2048 bytes per receiver
   per tick, ranked by how overdue they are (a bounded heap keeps only what the budget can carry), which plays the role
   of the original per-receiver user limit and round-robin cursor.
-- Full and motion presence entries and entity descriptions are encoded once per frame and entity
-  (`SharedPresenceWire`) and copied by every receiver that needs them.
+- Entity descriptions are encoded once per frame and entity (`SharedPresenceWire`) and copied by every receiver that
+  needs them; each takes a buffer from the shared array pool, given back when the field reuses the frame, so a frame
+  costs only the entities its tick describes. Presence entries are each receiver's own (handles, changes from what it
+  was sent).
 - Movement reports travel through the command queue as values (no closure or task per report); the verdict comes back
   through `IMovementVerdictSink`.
 - Sockets use .NET asynchronous I/O (IOCP on Windows) with pooled buffers and coalesced writes; the writer and the
   presence pump wait without allocating.
-- Every field's stage collision (`Shared/PristonTale.Geometry`) is loaded at startup, as the original server does: 42
+- Every field's stage collision (`Shared/PristonTale.Assets` reader, `Geometry` mesh) is loaded at startup, as the original server does: 42
   stages, about 1.93 million collision triangles and 179 MiB, in under a second. Monsters step like the original
   server's next-move check (slide along walls with two side probes, climb 20 units, collide only with other monsters);
   NPCs stop at walls and steps above 10 units; spawns, respawns and drops settle on the floor. The client builds its
@@ -448,14 +587,21 @@ beside them, a tenth cast an area skill every three seconds, monsters fight back
 
 | Players | Layout | Tick p50 / p99 | Encode p50 / p99 (all receivers) | Out per client | Allocated per tick |
 | --- | --- | --- | --- | --- | --- |
-| 500 | spread | 2.02 / 4.92 ms | 1.79 / 4.80 ms | 3.6 KiB/s (187 B/tick) | 129 KiB |
-| 1000 | spread | 3.26 / 35.69 ms | 1.75 / 15.72 ms | 3.8 KiB/s (192 B/tick) | 64 KiB |
-| 2000 | spread | 3.98 / 9.66 ms | 2.13 / 3.87 ms | 3.9 KiB/s (200 B/tick) | 82 KiB |
-| 5000 | spread | 13.64 / 24.92 ms | 4.44 / 16.36 ms | 4.0 KiB/s (206 B/tick) | 197 KiB |
-| 500 | crowded | 2.22 / 15.45 ms | 3.41 / 6.73 ms | 21.3 KiB/s (1.1 KiB/tick) | 26 KiB |
-| 1000 | crowded | 4.77 / 16.72 ms | 7.29 / 11.20 ms | 22.2 KiB/s (1.1 KiB/tick) | 45 KiB |
-| 2000 | crowded | 7.96 / 44.97 ms | 12.70 / 27.52 ms | 23.6 KiB/s (1.2 KiB/tick) | 135 KiB |
-| 5000 | crowded | 10.84 / 38.64 ms | 25.99 / 42.23 ms | 24.4 KiB/s (1.2 KiB/tick) | 292 KiB |
+| 500 | spread | 2.18 / 3.94 ms | 1.82 / 6.41 ms | 2.7 KiB/s (140 B/tick) | 221 KiB |
+| 1000 | spread | 3.31 / 28.63 ms | 1.21 / 2.44 ms | 2.8 KiB/s (144 B/tick) | 408 KiB |
+| 2000 | spread | 6.67 / 16.76 ms | 3.43 / 6.18 ms | 2.9 KiB/s (149 B/tick) | 657 KiB |
+| 5000 | spread | 15.42 / 28.32 ms | 6.63 / 10.59 ms | 3.0 KiB/s (154 B/tick) | 1640 KiB |
+| 500 | crowded | 2.92 / 15.20 ms | 5.59 / 15.90 ms | 17.2 KiB/s (882 B/tick) | 194 KiB |
+| 1000 | crowded | 5.05 / 15.56 ms | 8.96 / 16.85 ms | 22.2 KiB/s (1.1 KiB/tick) | 404 KiB |
+| 2000 | crowded | 9.82 / 36.81 ms | 18.85 / 43.24 ms | 25.2 KiB/s (1.3 KiB/tick) | 880 KiB |
+| 5000 | crowded | 13.36 / 70.00 ms | 31.37 / 55.90 ms | 27.4 KiB/s (1.4 KiB/tick) | 2459 KiB |
+
+The rows include the descriptions the server now pushes ahead of every spawn, which earlier runs never sent (the
+benchmark does not ask for them), and the cap of 100 players a receiver shows. Presence v2 (handles, position changes,
+changed fields only, the clock in the message), measured back to back against the build before it, cut 2000 spread
+from 4302 to 2976 bytes per client per second and 2000 crowded from 31246 to 25774 bytes even with those descriptions;
+the 2000 bots of `LoadTest --mode walk`, which do ask, went from 9.5 to 5.5 KiB/s each. Building the pushed
+descriptions allocates about 180 KiB more per crowded tick on the encoders.
 
 The compact presence entries halved the spread traffic and cut the crowded traffic by about 60%: with the original
 play-data entries (84 bytes near, 40 far) the same runs sent 7.6 to 8.4 KiB/s spread and 54.6 to 60.2 KiB/s crowded, and
@@ -487,6 +633,12 @@ collision, the server and every bot on the same machine. Crowded bots start insi
 | 5000 | crowded | 0 | 26.29 / 48.87 ms | 9.3 cores | 27.1 MiB/s | 4398 MiB | 18.4 KiB/s (0.9 KiB/tick) |
 | 5000 | spread | 0 | 22.93 / 42.93 ms | 9.0 cores | 22.2 MiB/s | 3452 MiB | 15.7 KiB/s (0.8 KiB/tick) |
 
+Stored commands (`--mode items`, 2000 bots each switching the bag page once a second, PostgreSQL in Docker on the
+same machine, `Database:MaxPoolSize` 20): the server answers about 1740 commands/s at p50 19 ms, p99 52 to 65 ms and
+at most 95 ms (the prepare and the commit take a tick each), with no refusal and no lost leave save. The background
+character store ([application.md](application.md#character-saves)) writes about 1450 characters/s in batches of 100
+(65 ms each), its queue bounded by the characters playing, and the tick stays at p50 11 ms.
+
 Before this work the load test's 2000 crowded run allocated 57 to 82 MiB/s. At 5000 bots the load-test process itself
 uses most of the remaining cores, so the tick shares the machine; the encoders then fall behind the 20 Hz tick, their
 outboxes coalesce, and each client receives fewer, larger updates (the lower bandwidth per connection) while every
@@ -498,7 +650,7 @@ dotnet run --project tools/PristonTale.DevAccounts -c Release --no-build -- --sq
   create-bots cw 5000 bot-pw --class Mechanician --level 20 --field 2 --at 4184,-11016 --spacing 0 \
   --skills 0x01010002:5,0x01010003:3
 dotnet run --project Server/PristonTale.Server -c Release --no-build -- --Database:SqlitePath=<copy.db> \
-  --Network:Port=10037 --Network:MaxConnectionsPerIp=0 --Server:ReportSeconds=10
+  --Network:Port=10037 --Network:MaxConnectionsPerIp=0 --Network:MaxHandshakesPerIp=0 --Server:ReportSeconds=10
 dotnet run --project tools/PristonTale.LoadTest -c Release --no-build -- --count 2000 \
   --address tcp://127.0.0.1:10037 --prefix cw --mode mixed --seconds 60 --ramp 100 --server-pid <pid> --report 10
 dotnet run --project tests/PristonTale.Tests -c Release --no-build -- \
@@ -513,8 +665,9 @@ connection every `Server:ReportSeconds` (30 by default).
 1. **Code.** Add a constant to `EtervaleOpcodes` in `Binary/EtervaleOpcodes.cs`, in the range of its area (`0x455401xx`
    owner state, `0x4554011x` inventory, `0x4554012x` progression, `0x4554013x` NPC, `0x4554014x` combat, `0x4554015x`
    removals, `0x4554016x` leave, `0x4554017x` clock, `0x455402xx` skills, `0x455403xx` item details, `0x455404xx`
-   usable items, `0x455405xx` quests, `0x455409xx` presence, `0x45540Axx` restart, `0x45540Bxx` ground items,
-   `0x45540Cxx` chat, `0x45540Dxx` player actions, `0x45540Exx` world entry, `0x45540Fxx` account).
+   usable items, `0x455405xx` quests, `0x455406xx` personal shops, `0x455407xx` parties, `0x455408xx` trades, `0x455409xx` presence, `0x45540Axx` restart,
+   `0x45540Bxx` ground items, `0x45540Cxx` chat, `0x45540Dxx` player actions, `0x45540Exx` world entry, `0x45540Fxx`
+   account, `0x455410xx` contacts).
 2. **Packet type.** Add a record in `Packets/` with `Size` or `HeaderSize` constants, `int Write(Span<byte>)` built on
    `PacketWriter` (returning `Finish()`), and `static Read(ReadOnlySpan<byte>)` built on `PacketReader(packet,
    minimum)`. Start new bodies with `{uint16 Version, uint16 Flags}`, reject version 0, append fields only at the end,
@@ -528,7 +681,7 @@ connection every `Server:ReportSeconds` (30 by default).
    it belongs to the timeline.
 5. **Client.** Presence messages: add a case in `PresenceDecoder.TryHandle` and a `PresenceUpdate` member in
    `Client/PristonTale.Client.Net/Presence`. Request replies: add a case in `GameServerConnection.HandleAsync` and
-   complete the pending request by operation id or serial. Requests: add a send method in `GameServerConnection` that
+   complete the pending request by operation id or entity id. Requests: add a send method in `GameServerConnection` that
    writes under `_sendGate`.
 6. **Tests.** Add a layout round trip next to its siblings (`BinaryProtocolTests`, `SkillWireTests`,
    `NpcServiceTests.ProtocolAsync`) and, for presence, a `WireRoundTrip` case; new test classes are registered in
@@ -544,13 +697,14 @@ when the received version has it.
 - Text on the wire is UTF-8, but the HUD font draws only its own glyph ranges; the chat input refuses characters the
   font cannot draw (`HudPainter.CanDraw`).
 - `PacketReader` accepts trailing bytes, so an old reader keeps working when a fixed-size body grows. List bodies
-  (`SkillEvents`, `StatusEffects`, `SkillCooldowns`, `CombatEvents`, `Inventory`, ...) check `Remaining == count *
-  EntrySize` exactly, so appending anything to them breaks every deployed reader; make readers version-aware first or
+  (`SkillCooldowns`, `Inventory`, ...) check `Remaining == count * EntrySize` exactly, and the event lists that their
+  entries end the message, so appending anything to them breaks every deployed reader; make readers version-aware first or
   add a new opcode.
 - A malformed packet that makes a `Read` throw closes the whole connection (`protocol: ...`).
-- `SkillCastStatus` (wire) and `SkillCastVerdict` (simulation), and `CombatEventKindView` and the client's combat kinds,
-  are separate enums cast by value; `SkillWireTests` pins them. Change both sides together.
-- `DescribeEntity` is outside the packet flood count but has its own token bucket; a client that requests every serial
+- Combat, skill and status codes (`CombatEventKind`, `SkillCastVerdict`, `SkillCastCommand`, `SkillEventPhase`,
+  `SkillEventFlags`, `StatusEffectOp`) are declared once in `Shared/PristonTale.Contracts` and used on both sides of
+  the wire as they are; append values, never renumber.
+- `DescribeEntity` is outside the packet flood count but has its own token bucket; a client that requests every entity id
   each frame will see descriptions silently dropped. A client must ask again for an object still undescribed (the
   Etervale client does after a second), or a crowd entering view at once never appears.
 - Two monsters of one template share a description only while both are wild: a summon's description names its owner.

@@ -4,6 +4,8 @@ using PristonTale.Gameplay.Effects;
 using PristonTale.Gameplay.World.Remote;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
+using PristonTale.Contracts.Combat;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Gameplay.World;
 
@@ -19,7 +21,7 @@ public sealed partial class GameScene
     {
         foreach (var combatEvent in update.Events)
         {
-            if (combatEvent.Kind == RemoteCombatEventKind.SwingBegin)
+            if (combatEvent.Kind == CombatEventKind.SwingBegin)
             {
                 _shots.ObserveSwing(combatEvent.AttackerId, combatEvent.TargetId);
             }
@@ -32,16 +34,16 @@ public sealed partial class GameScene
         if (_equipmentPresentation is not null && _playerBody is not null && !_playerController.IsDead)
         {
             Shoot(_remote.SelfEntityId, _equipmentPresentation.Handles, _equipmentPresentation.WeaponKey, _ownWeaponGlow,
-                _playerBody.Position + Vector3.Up * GroundTraversal.VisualOffset, _player is not null && StaffCaster((int)_player.Class.Class));
+                _playerBody.Position + Vector3.Up * GroundTraversal.VisualOffset, _player is not null && StaffCaster(_player.Class.Class));
         }
 
         _remote.ForEachPlayer(_shootRemote ??= (entityId, handles, appearance, position) =>
-            Shoot(entityId, handles, appearance.WeaponKey, appearance.WeaponGlow, position, StaffCaster(appearance.JobCode)));
+            Shoot(entityId, handles, appearance.WeaponKey, appearance.WeaponGlow, position, StaffCaster(appearance.Class)));
         _shots.Update(seconds, _shotTarget);
     }
 
     // Magicians and priestesses shoot with a staff.
-    private static bool StaffCaster(int classCode) => classCode is (int)PlayerClass.Magician or (int)PlayerClass.Priestess;
+    private static bool StaffCaster(PlayerClass playerClass) => playerClass is PlayerClass.Magician or PlayerClass.Priestess;
 
     private void Shoot(ulong entityId, PlayerActorHandles handles, string weaponKey, in HeldItemGlow glow, Vector3 position, bool staffCaster)
     {
@@ -59,13 +61,7 @@ public sealed partial class GameScene
         _shots.Hold(_skillFx, entityId, motion, ticks, weaponKey ?? "", weapon, glow, position, staffCaster, _shotTarget);
     }
 
-    private Vector3? ShotTarget(ulong entityId)
-    {
-        if (_remote is not null && entityId == _remote.SelfEntityId && _playerBody is not null)
-        {
-            return _playerBody.Position + Vector3.Up * GroundTraversal.VisualOffset;
-        }
-
-        return _remote is not null && _remote.TryGetDrawnPosition(entityId, out var drawn) ? drawn : null;
-    }
+    // Shots aim at the local player's drawn feet, which sit the visual offset above its body.
+    private Vector3? ShotTarget(ulong entityId) =>
+        TryGetDrawnPosition(entityId, out var position) ? position + (IsSelf(entityId) ? Vector3.Up * GroundTraversal.VisualOffset : Vector3.Zero) : null;
 }

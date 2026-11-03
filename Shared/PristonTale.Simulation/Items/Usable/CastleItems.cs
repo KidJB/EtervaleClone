@@ -1,5 +1,6 @@
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Modifiers;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Simulation.Items.Usable;
 
@@ -38,7 +39,6 @@ public sealed record CastleItemDefinition(string CatalogKey, int Index, string N
 public static class CastleItems
 {
     public const uint StatusBase = 0xF0000400;
-    public const int CastleFieldId = 33;
     public const int ScrollSeconds = 30;
     public const int StoneSeconds = 60;
     public const int ScrollBonus = 5;

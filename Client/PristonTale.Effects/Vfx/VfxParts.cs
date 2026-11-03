@@ -1,7 +1,8 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using PristonTale.Effects.Legacy;
+using PristonTale.Effects.Scripts;
 using PristonTale.Engine3D.Rendering;
+using PristonTale.Contracts.Units;
 
 namespace PristonTale.Effects.Vfx;
 
@@ -89,6 +90,9 @@ internal struct VfxPart
     public Vector3 Start;
     public Vector3 Velocity;
     public float Gravity;
+    public float MoveTime;
+    public float Swirl;
+    public float SwirlGrowth;
     public float Size;
     public float Height;
     public float HalfWidth;
@@ -112,16 +116,13 @@ internal struct VfxPart
 // or flight ends, and draw from the renderer. Ribbon and blade trails keep their samples in one array per layer.
 internal sealed class PartState
 {
-    private const float TicksPerSecond = BillboardSequence.TicksPerSecond;
-
     public CompiledPart Part = null!;
     public VfxPart[] Parts = [];
     public Vector3[] Trail = [];
     public float Timer;
     private Matrix _turn;
-    // The carried effect of each part and the generation it was started at (instances are pooled and reused).
-    private VfxInstance?[] _carried = [];
-    private int[] _carriedGeneration = [];
+    // The carried effect of each part.
+    private VfxHandle[] _carried = [];
 
     public void Begin(CompiledPart part, ref uint random)
     {
@@ -140,8 +141,7 @@ internal sealed class PartState
 
         if (_carried.Length != count)
         {
-            _carried = new VfxInstance?[count];
-            _carriedGeneration = new int[count];
+            _carried = new VfxHandle[count];
         }
         else
         {
@@ -223,31 +223,24 @@ internal sealed class PartState
     private void Carry(ref VfxPart part, int index, VfxInstance instance, VfxSystem system)
     {
         var carried = _carried[index];
-        if (carried is not null && (carried.Generation != _carriedGeneration[index] || !carried.Alive))
-        {
-            _carried[index] = null;
-            carried = null;
-        }
 
         // As the original hides a projectile's glow when it lands, the carried effect ends with its part.
         if (part.Phase != PartPhase.Live)
         {
-            carried?.StopNow();
-            _carried[index] = null;
+            carried.StopNow();
+            _carried[index] = default;
             return;
         }
 
-        if (carried is not null)
+        if (carried.Alive)
         {
             carried.MoveTo(part.Position);
             return;
         }
 
-        if (part.Age <= 0.1f && system.Resolve(Part.Source.CarryEffect, ref Part.CarryEffect, ref Part.CarryResolved) is { } effect
-            && system.SpawnFrom(instance, effect, part.Position) is { } started)
+        if (part.Age <= 0.1f && system.Resolve(Part.Source.CarryEffect, ref Part.CarryEffect, ref Part.CarryResolved) is { } effect)
         {
-            _carried[index] = started;
-            _carriedGeneration[index] = started.Generation;
+            _carried[index] = system.SpawnFrom(instance, effect, part.Position);
         }
     }
 
@@ -256,12 +249,8 @@ internal sealed class PartState
     {
         for (var index = 0; index < _carried.Length; index++)
         {
-            if (_carried[index] is { } carried && carried.Generation == _carriedGeneration[index])
-            {
-                carried.StopNow();
-            }
-
-            _carried[index] = null;
+            _carried[index].StopNow();
+            _carried[index] = default;
         }
     }
 
@@ -319,6 +308,9 @@ internal sealed class PartState
 
         part.Start = part.Position;
         part.Gravity = Range(source.Gravity, ref random);
+        part.MoveTime = Draw(source.MoveTime, ref random);
+        part.Swirl = Draw(source.Swirl, ref random);
+        part.SwirlGrowth = Draw(source.SwirlGrowth, ref random);
         part.Life = Range(source.Lifetime, ref random);
         part.Size = Range(source.Size, ref random);
         part.Height = source.Height[1] > 0f ? Range(source.Height, ref random) : part.Size;
@@ -399,21 +391,34 @@ internal sealed class PartState
         {
             arrived = Fly(ref part, instance, dt);
         }
-        else if (!(part.Arrived && source.End == VfxPartEnd.Hold) && (source.MoveTime <= 0f || part.Age <= source.MoveTime))
+        else if (!(part.Arrived && source.End == VfxPartEnd.Hold) && (part.MoveTime <= 0f || part.Age <= part.MoveTime))
         {
             part.Velocity.Y += part.Gravity * dt;
             part.Local += part.Velocity * dt;
-            if (source.Swirl != 0f)
+            if (part.Swirl != 0f || part.SwirlGrowth != 0f)
             {
-                part.Local = Vector3.Transform(part.Local, Matrix.CreateRotationY(MathHelper.ToRadians(source.Swirl * dt)));
+                var turn = Matrix.CreateRotationY(MathHelper.ToRadians(part.Swirl * dt));
+                part.Local = Vector3.Transform(part.Local, turn);
+                if (source.Spiral)
+                {
+                    part.Velocity = Vector3.TransformNormal(part.Velocity, turn);
+                }
+
+                part.Swirl += part.SwirlGrowth * dt;
             }
+        }
+        else if (source.End == VfxPartEnd.Hold && part.MoveTime > 0f && !part.Arrived)
+        {
+            part.Arrived = true;
+            End(ref part, instance, system);
+            Exit(ref part);
         }
 
         part.Size += source.Growth * dt;
         part.Height += source.Growth * dt;
         part.Rotation += source.Spin * dt;
         part.Angles += Part.Tumble * dt;
-        part.TickCarry += dt * TicksPerSecond;
+        part.TickCarry += dt * GameUnits.TicksPerSecond;
         while (part.TickCarry >= 1f)
         {
             part.TickCarry -= 1f;
@@ -723,6 +728,9 @@ internal sealed class PartState
             min.Z + (max.Z - min.Z) * VfxInstance.NextUnit(ref random));
 
     private static float Range(float[] range, ref uint random) => range[0] + (range[1] - range[0]) * VfxInstance.NextUnit(ref random);
+
+    // A range drawn only when it spans values, so effects that keep it constant draw the same random sequence as before.
+    private static float Draw(float[] range, ref uint random) => range[1] > range[0] ? Range(range, ref random) : range[0];
 
     private static Vector3 RandomDirection(ref uint random)
     {

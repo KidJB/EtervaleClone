@@ -26,6 +26,12 @@ public sealed record ItemRoll(
     uint SpecJob,
     ItemSpecBonus Spec)
 {
+    public int CriticalBonus { get; init; }
+    public int AttackSpeedBonus { get; init; }
+
+    // The magic mastery the copy rolled above its definition's, the low end of the authored range.
+    public float MagicMasteryBonus { get; init; }
+
     public bool SpecializedFor(JobBitCode job) => (SpecJob & (uint)job) != 0;
 }
 

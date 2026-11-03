@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Net;
 using System.Numerics;
+using PristonTale.Application.Contacts;
 using PristonTale.Application.Chat;
 using PristonTale.Application.Services;
 using PristonTale.Application.Sessions;
@@ -17,6 +18,11 @@ using PristonTale.Simulation.Quests;
 using PristonTale.Simulation.Skills;
 using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Npcs;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.World;
+using PristonTale.Contracts.Skills;
+using PristonTale.Contracts.Sessions;
+using PristonTale.Contracts.Units;
 
 namespace PristonTale.Server.Net;
 
@@ -35,6 +41,10 @@ internal sealed record SessionServices(
     RestartAppService Restart,
     WingGateAppService WingGates,
     QuestAppService Quests,
+    PersonalShopAppService PersonalShops,
+    PartyAppService Parties,
+    TradeAppService Trades,
+    ContactAppService Contacts,
     ChatAppService Chat,
     GameServerControl Control)
 {
@@ -47,6 +57,9 @@ internal sealed record SessionServices(
 internal sealed partial class ClientSession : IMovementVerdictSink
 {
     private const long CorrectionIntervalMs = 300;
+    internal const int PresenceBacklogBytes = 64 * 1024;
+    // A backlog that stays above PresenceBacklogBytes this long means the client stopped reading.
+    private static readonly TimeSpan SendStallTimeout = TimeSpan.FromSeconds(30);
 
     private readonly FrameConnection _connection;
     private readonly SessionServices _services;
@@ -63,6 +76,8 @@ internal sealed partial class ClientSession : IMovementVerdictSink
     private long _lastCorrectionMs;
     private readonly PacketRateLimiter _packetRate;
     private readonly TokenBucket _playerInfoRate;
+    private readonly TokenBucket _storedRate;
+    private readonly SessionPacketQueue _packets = new();
 
     public ClientSession(FrameConnection connection, SessionServices services)
     {
@@ -72,6 +87,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         LastReceivedMs = ConnectedMs;
         _packetRate = new PacketRateLimiter(services.Limits.PacketLimit, services.Limits.PacketWindowMs);
         _playerInfoRate = new TokenBucket(services.Limits.PlayerInfoBurst, services.Limits.PlayerInfoPerSecond);
+        _storedRate = new TokenBucket(services.Limits.StoredOperationBurst, services.Limits.StoredOperationsPerSecond);
         _countingSink = new CountingSink(this);
     }
 
@@ -86,23 +102,37 @@ internal sealed partial class ClientSession : IMovementVerdictSink
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         var players = _services.World.PlayerCount;
-        var hello = new ServerHelloPacket(ProtocolVersion.Current, ProtocolVersion.Minimum, _services.Control.Full(players) ? Math.Max(1, players) : 0);
-        SendLarge(hello.Write, ServerHelloPacket.Size);
+        var hello = new ServerHelloPacket(ProtocolVersion.Current, ProtocolVersion.Minimum, _services.Control.Full(players) ? Math.Max(1, players) : 0,
+            _services.Control.ServerName);
+        SendLarge(hello.Write, ServerHelloPacket.MaxSize);
+        var handling = HandleQueuedAsync();
         try
         {
-            await _connection.RunAsync(HandleAsync, cancellationToken);
+            await _connection.RunAsync(ReceiveAsync, cancellationToken);
         }
         finally
         {
-            await ClosePlayAsync();
-            if (_token is not null)
+            _packets.Complete();
+            try
             {
-                _services.Registry.Remove(_token);
+                await handling;
+            }
+            finally
+            {
+                await ClosePlayAsync();
+                if (_token is not null)
+                {
+                    _services.Registry.Remove(_token);
+                }
+
+                _packets.Dispose();
             }
         }
     }
 
-    private async ValueTask HandleAsync(ReadOnlyMemory<byte> memory)
+    // The receive loop only reads: it answers heartbeats at once and queues every other packet for HandleQueuedAsync, so
+    // nothing a handler waits on (storage above all) stops the connection from being read or kept alive.
+    private ValueTask ReceiveAsync(ReadOnlyMemory<byte> memory)
     {
         var now = Environment.TickCount64;
         LastReceivedMs = now;
@@ -114,24 +144,62 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         {
             LogRejected(code, "packet flood, closing");
             _connection.Close("packet flood");
-            return;
+        }
+        else if (code == EtervaleOpcodes.Heartbeat)
+        {
+            AnswerHeartbeat(HeartbeatPacket.Read(memory.Span));
+        }
+        else if (!_packets.TryEnqueue(memory.Span, code == EtervaleOpcodes.MovementReport))
+        {
+            LogRejected(code, "command backlog, closing");
+            _connection.Close("command backlog");
         }
 
+        return ValueTask.CompletedTask;
+    }
+
+    private void AnswerHeartbeat(HeartbeatPacket heartbeat)
+    {
+        var beat = heartbeat with { TimeMs = Environment.TickCount64 };
+        SendLarge(beat.Write, HeartbeatPacket.Size);
+        if (_player is not null && _session is { } playing)
+        {
+            _services.Chat.Heartbeat(playing.EntityId);
+        }
+    }
+
+    // Handles the queued packets one at a time, in order. A handler's unexpected failure closes the connection and is
+    // rethrown once the session has closed its play, as when it escaped the receive loop.
+    private async Task HandleQueuedAsync()
+    {
+        while (await _packets.DequeueAsync() is { } packet)
+        {
+            try
+            {
+                if (!_connection.IsClosed)
+                {
+                    await HandleAsync(packet.Memory);
+                }
+            }
+            catch
+            {
+                _connection.Close("handler failed");
+                throw;
+            }
+            finally
+            {
+                SessionPacketQueue.Return(packet);
+            }
+        }
+    }
+
+    private async ValueTask HandleAsync(ReadOnlyMemory<byte> memory)
+    {
+        var code = BinaryPrimitives.ReadUInt32LittleEndian(memory.Span[4..]);
         try
         {
             switch (code)
             {
-                case EtervaleOpcodes.Heartbeat:
-                {
-                    var beat = HeartbeatPacket.Read(memory.Span) with { TimeMs = Environment.TickCount64 };
-                    SendLarge(beat.Write, HeartbeatPacket.Size);
-                    if (_player is not null && _session is { } playing)
-                    {
-                        _services.Chat.Heartbeat(playing.EntityId);
-                    }
-
-                    break;
-                }
                 case EtervaleOpcodes.ChatSay:
                     await SayAsync(ChatSayPacket.Read(memory.Span));
                     break;
@@ -152,6 +220,22 @@ internal sealed partial class ClientSession : IMovementVerdictSink
                     break;
                 case EtervaleOpcodes.AttackRequest:
                     await AttackAsync(AttackRequestPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.YahooKey:
+                    YahooKeyPacket.Read(memory.Span);
+                    if (_player is not null && _session is { } cheering)
+                    {
+                        _ = _services.World.YahooAsync(cheering.EntityId, key: true);
+                    }
+
+                    break;
+                case EtervaleOpcodes.DismissCrystalPets:
+                    var dismissal = DismissCrystalPetsPacket.Read(memory.Span);
+                    if (_player is not null && _session is { } owner)
+                    {
+                        _ = _services.World.DismissCrystalPetsAsync(owner.EntityId, dismissal.StatusCode);
+                    }
+
                     break;
                 case EtervaleOpcodes.DescribeEntity:
                     DescribeObject(DescribeEntityPacket.Read(memory.Span));
@@ -180,9 +264,48 @@ internal sealed partial class ClientSession : IMovementVerdictSink
                 case EtervaleOpcodes.SkillCast:
                     await CastSkillAsync(SkillCastPacket.Read(memory.Span));
                     break;
+                case EtervaleOpcodes.PersonalShopOpen:
+                    await OpenPersonalShopAsync(PersonalShopOpenPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.PersonalShopClose:
+                    await ClosePersonalShopAsync(PersonalShopClosePacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.PersonalShopView:
+                    await ViewPersonalShopAsync(PersonalShopViewPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.PersonalShopBuy:
+                    await BuyFromPersonalShopAsync(PersonalShopBuyPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.PartyInvite:
+                    await InviteToPartyAsync(PartyInvitePacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.PartyAnswer:
+                    await AnswerPartyAsync(PartyAnswerPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.PartyCommand:
+                    await CommandPartyAsync(PartyCommandPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.TradeRequest:
+                    await RequestTradeAsync(TradeRequestPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.TradeAnswer:
+                    await AnswerTradeAsync(TradeAnswerPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.TradeOffer:
+                    await OfferTradeAsync(TradeOfferPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.TradeLock or EtervaleOpcodes.TradeCancel:
+                    await SignalTradeAsync(TradeSignalPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.ContactChange:
+                    await ChangeContactAsync(ContactChangePacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.ContactRefresh:
+                    ContactRefreshPacket.Read(memory.Span);
+                    RefreshContacts();
+                    break;
                 case EtervaleOpcodes.LeaveWorld:
-                    await ClosePlayAsync();
-                    SendLarge(new LeaveWorldPacket(Saved: true).Write, LeaveWorldPacket.Size);
+                    SendLarge(new LeaveWorldPacket(Saved: await ClosePlayAsync()).Write, LeaveWorldPacket.Size);
                     break;
                 default:
                     // The original dispatcher also ignores codes it does not handle (PlayerInfo2, network-quality reports, ...).
@@ -192,6 +315,12 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException)
         {
             LogRejected(code, ex.Message);
+        }
+        catch (CommitInvariantException ex)
+        {
+            _services.Logger.LogError(ex, "Commit invariant broken for {Code:X8} from {Remote}; closing so the character reloads from storage",
+                code, _connection.RemoteEndPoint);
+            _connection.Close("state diverged");
         }
         catch (System.Data.Common.DbException ex)
         {
@@ -264,19 +393,30 @@ internal sealed partial class ClientSession : IMovementVerdictSink
             return;
         }
 
+        // The connection is logged in only once its list is read: a list storage refuses answers Busy and leaves the
+        // connection free to log in again.
+        try
+        {
+            await SendCharacterListAsync(outcome.SessionToken);
+        }
+        catch
+        {
+            _services.Registry.Remove(outcome.SessionToken);
+            throw;
+        }
+
         Volatile.Write(ref _token, outcome.SessionToken);
         _account = request.Account;
         _session = session;
-        await SendCharacterListAsync();
         SendLoginResult(LoginFailure.None);
     }
 
     private void SendLoginResult(LoginFailure failure) =>
         SendLarge(new LoginResultPacket((byte)failure).Write, LoginResultPacket.Size);
 
-    private async Task SendCharacterListAsync()
+    private async Task SendCharacterListAsync(string token)
     {
-        _characters = await _services.Characters.ListCharactersAsync(RequireToken());
+        _characters = await _services.Characters.ListCharactersAsync(token);
         var list = new CharacterListPacket(_characters.Take(CharacterListPacket.MaxCharacters).Select(WireMapping.Entry).ToArray());
         SendLarge(list.Write, CharacterListPacket.MaxSize);
     }
@@ -287,10 +427,10 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         var token = RequireToken();
         if (command.Action == CharacterAction.Create)
         {
-            var created = await _services.Characters.CreateCharacterAsync(token, command.Name, command.ClassCode, command.FaceIndex);
+            var created = await _services.Characters.CreateCharacterAsync(token, command.Name, command.Class, command.FaceIndex);
             if (created.Ok)
             {
-                await SendCharacterListAsync();
+                await SendCharacterListAsync(token);
             }
 
             SendCharacterResult(command, created.Ok, (int)created.Failure);
@@ -300,7 +440,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         var deleted = await _services.Characters.DeleteCharacterAsync(token, command.Name);
         if (deleted.Ok)
         {
-            await SendCharacterListAsync();
+            await SendCharacterListAsync(token);
         }
 
         SendCharacterResult(command, deleted.Ok, 0);
@@ -329,8 +469,14 @@ internal sealed partial class ClientSession : IMovementVerdictSink
     private async Task JoinWorldAsync(JoinWorldPacket request)
     {
         var session = _session;
-        if (_player is not null || session?.Character is null || session.Loaded is null || request.EntityId != session.EntityId
-            || !session.TryBeginPlay())
+        if (_player is not null || session?.Character is null || session.Loaded is null || request.EntityId != session.EntityId)
+        {
+            throw new InvalidOperationException("JoinWorld before a successful EnterWorld.");
+        }
+
+        // Read before joining, so the player is in the chat as soon as it is in the world.
+        var contacts = await LoadContactsAsync(session);
+        if (!session.TryBeginPlay())
         {
             throw new InvalidOperationException("JoinWorld before a successful EnterWorld.");
         }
@@ -359,7 +505,8 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         SendLarge(new WorldJoinedPacket(session.EntityId, Environment.TickCount64, (byte)Math.Clamp(session.GmLevel, 0, 255),
             _services.World.GameClockMs).Write, WorldJoinedPacket.Size);
         _pump = PumpAsync(outbox, _encoder);
-        JoinChat(session);
+        JoinChat(session, contacts);
+        RefreshContacts();
     }
 
     private async Task PumpAsync(WorldOutbox outbox, PresenceEncoder encoder)
@@ -369,26 +516,35 @@ internal sealed partial class ClientSession : IMovementVerdictSink
             // The outbox completes when the session leaves the world or closes; waiting without a token allocates nothing.
             while (await outbox.Reader.WaitToReadAsync())
             {
-                while (outbox.Reader.TryRead(out var snapshot))
+                // A client that reads slower than its world changes gets fewer snapshots, each joining what it missed,
+                // instead of a backlog that grows until the connection closes.
+                await _connection.WaitForBacklogAsync(PresenceBacklogBytes, SendStallTimeout);
+                if (!outbox.Reader.TryRead(out var snapshot))
                 {
-                    try
+                    continue;
+                }
+
+                try
+                {
+                    using (_connection.Batch())
                     {
                         encoder.Encode(snapshot, _countingSink);
                     }
-                    finally
-                    {
-                        snapshot.ReleaseFrame();
-                    }
+                }
+                finally
+                {
+                    snapshot.ReleaseFrame();
                 }
             }
         }
         catch (OperationCanceledException)
         {
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
-            _services.Logger.LogWarning("Presence stream ended for {Remote}: {Message}", _connection.RemoteEndPoint, ex.Message);
-            _connection.Close("presence overflow");
+            // A connection whose presence stopped would play blind: the client reconnects instead.
+            _services.Logger.LogError(ex, "Presence failed for {Remote}", _connection.RemoteEndPoint);
+            _connection.Close("presence failed");
         }
         finally
         {
@@ -432,7 +588,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
 
         // A saturated queue or quota drops the report; the next one carries the newer position.
         _services.World.TryReportMovement(session.FieldId, session.EntityId, position, report.Facing, report.Moving,
-            report.Motion == PresenceMotion.Run, report.ActionTarget, this);
+            report.Motion == MotionState.Run, report.ActionTarget, this);
     }
 
     // On the tick thread: a rejection is answered from the thread pool, where the correction may wait for the encoder.
@@ -472,7 +628,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         }
 
         var target = attack.Target;
-        if (target != 0 && _encoder.KindOf(target) == EntityKindView.Npc)
+        if (target != 0 && _encoder.KindOf(target) == EntityKind.Npc)
         {
             await InteractNpcAsync(session, target);
             return;
@@ -492,8 +648,8 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         }
 
         var hasPoint = packet.X != 0 || packet.Y != 0 || packet.Z != 0;
-        var point = new Vector3(PristonUnits.FromFixed(packet.X), PristonUnits.FromFixed(packet.Y), PristonUnits.FromFixed(packet.Z));
-        var request = new SkillCastRequest(packet.Sequence, packet.SkillCode, packet.TargetSerial, point, hasPoint, (SkillCastCommand)packet.Flags);
+        var point = new Vector3(GameUnits.FromFixed(packet.X), GameUnits.FromFixed(packet.Y), GameUnits.FromFixed(packet.Z));
+        var request = new SkillCastRequest(packet.Sequence, packet.SkillCode, packet.TargetId, point, hasPoint, packet.Command);
         SkillCastOutcome outcome;
         try
         {
@@ -509,7 +665,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
             LogRejected(EtervaleOpcodes.SkillCast, $"skill {packet.SkillCode:X8}: {outcome.Verdict}");
         }
 
-        var result = new SkillCastResultPacket(outcome.Sequence, outcome.SkillCode, (SkillCastStatus)outcome.Verdict, (byte)Math.Clamp(outcome.Rank, 0, 255),
+        var result = new SkillCastResultPacket(outcome.Sequence, outcome.SkillCode, outcome.Verdict, (byte)Math.Clamp(outcome.Rank, 0, 255),
             (uint)Math.Max(0, outcome.CooldownMs), (uint)Math.Max(0, outcome.RemainingMs), outcome.Mana, outcome.Stamina, 0);
         SendLarge(result.Write, SkillCastResultPacket.Size);
     }
@@ -517,7 +673,9 @@ internal sealed partial class ClientSession : IMovementVerdictSink
     private async Task InteractNpcAsync(PlayerSession session, ulong npc)
     {
         var interaction = await _services.World.InteractNpcAsync(session, npc);
-        var services = interaction.Services.Select(offer => new NpcServiceEntry((byte)offer.Kind, offer.Available, offer.Value)).ToArray();
+        var services = interaction.Services
+            .Select(offer => new NpcServiceEntry((byte)offer.Kind, offer.Available, offer.Value, (ushort)Math.Clamp(offer.PricePercent, 0, ushort.MaxValue)))
+            .ToArray();
         var dialog = new NpcDialogPacket(npc, interaction.Ok, interaction.Name, interaction.Message, services, interaction.Dialog);
         SendLarge(dialog.Write, FrameCodec.MaxFrameSize);
     }
@@ -525,19 +683,23 @@ internal sealed partial class ClientSession : IMovementVerdictSink
     private async Task RequestNpcServiceAsync(NpcServiceRequestPacket request)
     {
         var session = _session;
-        var command = new NpcServiceCommand(request.OperationId, request.NpcSerial, (NpcServiceKind)request.Service,
+        var command = new NpcServiceCommand(request.OperationId, request.NpcId, (NpcServiceKind)request.Service,
             (NpcServiceAction)request.Action,
-            request.ExpectedRevision, request.ExpectedStorageRevision, request.ItemCode, request.ItemId, request.Anchor, request.Count, request.Amount);
+            request.ExpectedRevision, request.ExpectedStorageRevision, request.ItemCode, request.ItemId, request.Anchor, request.Count, request.Amount,
+            request.Materials, request.Covered);
         NpcServiceReply reply;
         try
         {
+            AdmitStoredOperation();
             reply = session is null || _player is null
                 ? new NpcServiceReply(NpcServiceOutcome.Failed(NpcServiceStatus.Rejected, "enter the world first"))
                 : await _services.Npc.RequestAsync(RequireToken(), command);
         }
         catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException or System.Data.Common.DbException)
         {
-            reply = new NpcServiceReply(NpcServiceOutcome.Failed(NpcServiceStatus.StorageFailed, ex.Message));
+            reply = new NpcServiceReply(ex is WorldBusyException
+                ? NpcServiceOutcome.Failed(NpcServiceStatus.Busy, ex.Message)
+                : NpcServiceOutcome.Failed(NpcServiceStatus.StorageFailed, ex.Message));
         }
 
         NpcWireMapping.SendState(request, reply, packet => SendLarge(packet, FrameCodec.MaxFrameSize));
@@ -553,13 +715,14 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         QuestOutcome outcome;
         try
         {
+            AdmitStoredOperation();
             outcome = session is null || _player is null
                 ? QuestOutcome.Failed(QuestStatus.Rejected, "enter the world first")
                 : await _services.Quests.RequestAsync(RequireToken(), QuestWireMapping.ToCommand(request));
         }
-        catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException or System.Data.Common.DbException)
+        catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException)
         {
-            outcome = QuestOutcome.Failed(QuestStatus.StorageFailed, ex.Message);
+            outcome = QuestOutcome.Failed(ex is WorldBusyException ? QuestStatus.Busy : QuestStatus.StorageFailed, ex.Message);
         }
 
         var result = QuestWireMapping.ToResult(request.OperationId, outcome);
@@ -575,17 +738,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
             return;
         }
 
-        if (_encoder is { } encoder)
-        {
-            lock (_sendGate)
-            {
-                var length = encoder.WriteDescription(request.Serial, _scratch);
-                if (length > 0)
-                {
-                    SendSpan(_scratch.AsSpan(0, length));
-                }
-            }
-        }
+        _encoder?.SendRequestedDescription(request.EntityId, _countingSink);
     }
 
     private async Task ApplyInventoryAsync(InventoryCommandPacket request)
@@ -595,6 +748,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         InventoryOutcome outcome;
         try
         {
+            AdmitStoredOperation();
             outcome = await _services.Sessions.ApplyInventoryAsync(RequireToken(), command);
         }
         catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException or System.Data.Common.DbException)
@@ -613,6 +767,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         ItemUseReply reply;
         try
         {
+            AdmitStoredOperation();
             reply = _session is null || _player is null
                 ? new ItemUseReply(ItemUseOutcome.Refused(request.ExpectedRevision, ItemUseStatus.Rejected))
                 : await _services.ItemUse.UseAsync(RequireToken(), command);
@@ -621,7 +776,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         {
             reply = new ItemUseReply(ItemUseOutcome.Refused(request.ExpectedRevision, ItemUseStatus.Busy));
         }
-        catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException or System.Data.Common.DbException)
+        catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException)
         {
             reply = new ItemUseReply(ItemUseOutcome.Refused(request.ExpectedRevision, ItemUseStatus.StorageFailed));
         }
@@ -642,6 +797,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         WingGateReply reply;
         try
         {
+            AdmitStoredOperation();
             reply = _session is null || _player is null
                 ? new WingGateReply(new WingGateOutcome(WingGateStatus.Rejected, command.Destination))
                 : await _services.WingGates.TravelAsync(RequireToken(), command);
@@ -650,7 +806,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         {
             reply = new WingGateReply(new WingGateOutcome(WingGateStatus.Busy, command.Destination));
         }
-        catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException or System.Data.Common.DbException)
+        catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException)
         {
             reply = new WingGateReply(new WingGateOutcome(WingGateStatus.StorageFailed, command.Destination));
         }
@@ -671,6 +827,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         RestartReply reply;
         try
         {
+            AdmitStoredOperation();
             reply = _session is null || _player is null
                 ? new RestartReply(new RestartOutcome(RestartStatus.Rejected, command.Choice))
                 : await _services.Restart.RestartAsync(RequireToken(), command);
@@ -679,7 +836,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         {
             reply = new RestartReply(new RestartOutcome(RestartStatus.Busy, command.Choice));
         }
-        catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException or System.Data.Common.DbException)
+        catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException)
         {
             reply = new RestartReply(new RestartOutcome(RestartStatus.StorageFailed, command.Choice));
         }
@@ -697,13 +854,14 @@ internal sealed partial class ClientSession : IMovementVerdictSink
     private async Task ApplyProgressionAsync(ProgressionCommandPacket request)
     {
         var command = new ProgressionCommand(request.OperationId, request.ExpectedRevision, (ProgressionAction)request.Action,
-            (CharacterAttribute)request.Attribute, request.Amount, request.SkillCode, request.NpcSerial);
+            (CharacterAttribute)request.Attribute, request.Amount, request.SkillCode, request.NpcId);
         ProgressionOutcome outcome;
         try
         {
+            AdmitStoredOperation();
             outcome = await _services.Sessions.ApplyProgressionAsync(RequireToken(), command);
         }
-        catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException or System.Data.Common.DbException)
+        catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException)
         {
             outcome = new ProgressionOutcome(false, request.ExpectedRevision, ex.Message);
         }
@@ -712,7 +870,8 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         SendLarge(result.Write, OperationResultPacket.MaxSize);
     }
 
-    private async Task ClosePlayAsync()
+    // Whether the character was stored; false when nothing was playing.
+    private async Task<bool> ClosePlayAsync()
     {
         var outbox = _outbox;
         var player = _player;
@@ -720,7 +879,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         var pump = _pump;
         if (outbox is null || player is null || session is null)
         {
-            return;
+            return false;
         }
 
         _outbox = null;
@@ -728,12 +887,15 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         _pump = null;
         LeaveChat(session);
         outbox.Writer.TryComplete();
-        await _services.World.LeaveAsync(session.FieldId, session.EntityId, outbox.Writer);
+        var leave = await _services.World.LeaveAsync(session.FieldId, session.EntityId, outbox.Writer);
+        _services.Chat.Directory.Deliver(leave.Notices);
         session.EndPlay();
-        session.SpawnPosition = new Vector3(player.Position.X, 0f, player.Position.Z);
+        var saved = false;
         try
         {
-            await _services.Sessions.SaveCharacterAsync(_token!, CancellationToken.None);
+            saved = leave.Save is { } left
+                ? await _services.Sessions.SaveLeftCharacterAsync(_token!, left, CancellationToken.None)
+                : await _services.Sessions.SaveCharacterAsync(_token!, CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -743,6 +905,16 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         if (pump is not null)
         {
             await pump;
+        }
+
+        return saved;
+    }
+
+    private void AdmitStoredOperation()
+    {
+        if (!_storedRate.TryTake(Environment.TickCount64))
+        {
+            throw new WorldBusyException("too many requests");
         }
     }
 

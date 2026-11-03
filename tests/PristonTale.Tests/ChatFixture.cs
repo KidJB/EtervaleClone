@@ -14,6 +14,7 @@ using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Fields;
 using PristonTale.Simulation.World.Loot;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -28,7 +29,8 @@ internal sealed class ChatFixture
     private long _accounts;
 
     public ChatFixture(GameMasterOptions? options = null, IPartyRoster? parties = null, IClanRoster? clans = null,
-        FieldTerrain? terrain = null, IReadOnlyList<FieldPoint>? startPoints = null)
+        FieldTerrain? terrain = null, IReadOnlyList<FieldPoint>? startPoints = null, FieldState state = FieldState.Forest, TimeProvider? clock = null,
+        IGmAudit? audit = null)
     {
         var empty = WorldData.Empty;
         Data = new WorldDataHolder
@@ -36,7 +38,7 @@ internal sealed class ChatFixture
             Current = new WorldData(new ItemCatalog([Axe, Potion]), new MonsterCatalog([Hopy]), empty.Npcs,
                 new Dictionary<int, FieldSpawnData> { [Field] = FieldSpawnData.Empty }, empty.Motions)
         };
-        var catalog = new WorldCatalog([new FieldDef("fixture", "Fixture Field", FieldState.Forest, new FieldBackdrop("", "", ""), "", [])
+        var catalog = Catalog = new WorldCatalog([new FieldDef("fixture", "Fixture Field", state, new FieldBackdrop("", "", ""), "", [])
         {
             FieldCode = Field,
             StartPoints = startPoints ?? []
@@ -47,17 +49,17 @@ internal sealed class ChatFixture
             terrains.Publish(new Dictionary<int, FieldTerrain> { [Field] = terrain });
         }
 
-        World = new WorldServer(Data, catalog, terrain: terrains);
+        World = new WorldServer(Data, catalog, clock, terrain: terrains, log: Log);
         Directory = new ChatDirectory();
         Server = new FakeServer();
-        GameMasters = new GameMasterCommands(Directory, World, Data, options, Server, Audit)
+        GameMasters = new GameMasterCommands(Directory, World, Data, options, Server, Audit, audit ?? Audit)
         {
             Accounts = Accounts,
-            Characters = Characters,
+            Saves = new ImmediateSaves(Characters),
             Warehouses = Warehouses,
             NowMs = () => NowMs
         };
-        Chat = new ChatAppService(Directory, World, GameMasters, parties, clans);
+        Chat = new ChatAppService(Directory, World, GameMasters, parties, clans) { NowMs = () => NowMs };
     }
 
     public static readonly MonsterDefinition Hopy = new(1, "Hopy", MonsterFaction.Enemy, MonsterClass.Normal, MonsterBrood.Normal,
@@ -88,6 +90,8 @@ internal sealed class ChatFixture
 
     public static readonly ItemDefinition Potion = new(0x0405_0100, "Mini Life Potion", ItemKind.Potion, MaxStack: 100) { CatalogKey = "PL101", Weight = 1 };
 
+    public ISessionRegistry Sessions => _sessions;
+    public WorldCatalog Catalog { get; }
     public WorldDataHolder Data { get; }
     public WorldServer World { get; }
     public ChatDirectory Directory { get; }
@@ -95,18 +99,19 @@ internal sealed class ChatFixture
     public MemoryGameMasters Audit { get; } = new();
     public MemoryAccounts Accounts { get; } = new();
     public MemoryCharacterBook Characters { get; } = new();
+    public RecordingLog Log { get; } = new();
     public MemoryWarehouses Warehouses { get; } = new();
     public GameMasterCommands GameMasters { get; }
     public ChatAppService Chat { get; }
     public long NowMs { get; set; } = 1_000_000;
 
-    public async Task<Player> JoinAsync(string name, float x, float z, int gmLevel = 0, PlayerClass playerClass = PlayerClass.Fighter)
+    public async Task<Player> JoinAsync(string name, float x, float z, int gmLevel = 0, PlayerClass playerClass = PlayerClass.Fighter, int level = 1)
     {
         var session = _sessions.Create(++_accounts, name.ToLowerInvariant() + "-account");
         session.GmLevel = gmLevel;
         Assert.True(session.TryBeginEntry(), "fixture entry");
         var record = CharacterRecordFactory.NewStarter(_classes, session.AccountId, name, 0, playerClass, Field) with { Id = (long)session.EntityId };
-        session.Character = _classes.CreatePlayer(playerClass, name);
+        session.Character = _classes.CreatePlayer(playerClass, name, level);
         session.Loaded = record;
         session.CharacterName = name;
         session.FieldId = Field;
@@ -123,22 +128,9 @@ internal sealed class ChatFixture
 
     public async Task SayAsync(Player player, string text) => await RunAsync(Chat.SayAsync(player.Session.EntityId, text));
 
-    public async Task RunAsync(Task task)
-    {
-        for (var step = 0; !task.IsCompleted && step < 2000; step++)
-        {
-            World.Tick(0.05f, ++_tick);
-            await Task.Delay(1);
-        }
+    public Task RunAsync(Task task) => WorldPump.RunAsync(World, task, () => ++_tick);
 
-        await task.WaitAsync(TimeSpan.FromSeconds(5));
-    }
-
-    public async Task<T> RunAsync<T>(Task<T> task)
-    {
-        await RunAsync((Task)task);
-        return await task;
-    }
+    public Task<T> RunAsync<T>(Task<T> task) => WorldPump.RunAsync(World, task, () => ++_tick);
 
     public void Tick(int ticks)
     {
@@ -213,6 +205,8 @@ internal sealed class FakeServer : IServerOperations
 {
     public int OpenConnections => 5;
     public int UserLimit { get; set; }
+
+    public string ServerName { get; set; } = "";
     public int Shutdowns { get; private set; }
     public List<BlockedLogin> Blocked { get; } = [new BlockedLogin("guesser", 240_000)];
 
@@ -234,7 +228,7 @@ internal sealed class FakeServer : IServerOperations
     public bool ReleaseBlockedLogin(string account) => Blocked.RemoveAll(entry => entry.Account == account) > 0;
 }
 
-internal sealed class MemoryGameMasters : IGameMasterRepository
+internal sealed class MemoryGameMasters : IGameMasterRepository, IGmAudit
 {
     public List<GmAuditEntry> Entries { get; } = new();
     public Dictionary<string, int> Levels { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -248,12 +242,16 @@ internal sealed class MemoryGameMasters : IGameMasterRepository
 
     public Task AppendAuditAsync(GmAuditEntry entry, CancellationToken ct = default)
     {
+        Append(entry);
+        return Task.CompletedTask;
+    }
+
+    public void Append(GmAuditEntry entry)
+    {
         lock (Entries)
         {
             Entries.Add(entry);
         }
-
-        return Task.CompletedTask;
     }
 
     public Task<IReadOnlyList<GmAuditRecord>> RecentAuditAsync(int limit, CancellationToken ct = default) =>
@@ -294,11 +292,48 @@ internal sealed class MemoryCharacterBook : ICharacterRepository
     public Task<CharacterRecord?> FindByNameForAccountAsync(long accountId, string name, CancellationToken ct = default) =>
         Task.FromResult(Records.GetValueOrDefault(name));
 
-    public Task<bool> UpdateAsync(CharacterRecord record, CancellationToken ct = default)
+    // Runs before a write of one character.
+    public Func<CharacterRecord, Task>? BeforeUpdate { get; set; }
+
+    public async Task<bool> UpdateAsync(CharacterRecord record, CancellationToken ct = default)
     {
+        if (BeforeUpdate is not null)
+        {
+            await BeforeUpdate(record);
+        }
+
         Updates++;
         Records[record.Name] = record;
-        return Task.FromResult(true);
+        return true;
+    }
+
+    public async Task<int> SaveAllAsync(IReadOnlyList<CharacterRecord> records, CancellationToken ct = default)
+    {
+        foreach (var record in records)
+        {
+            await UpdateAsync(record, ct);
+        }
+
+        return records.Count;
+    }
+
+    // Runs before a write of several characters; false refuses it with nothing written.
+    public Func<IReadOnlyList<CharacterRecord>, Task<bool>>? BeforeUpdateAll { get; set; }
+
+    public async Task<bool> UpdateAllAsync(IReadOnlyList<CharacterRecord> records, CancellationToken ct = default)
+    {
+        if (BeforeUpdateAll is not null && !await BeforeUpdateAll(records))
+        {
+            return false;
+        }
+
+        Updates++;
+        foreach (var record in records)
+        {
+            Records[record.Name] = record;
+        }
+
+        return true;
     }
 
     public Task<IReadOnlyList<CharacterRecord>> ListByAccountAsync(long accountId, CancellationToken ct = default) =>

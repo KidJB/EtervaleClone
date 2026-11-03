@@ -8,6 +8,7 @@ using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.World;
 using Microsoft.Xna.Framework.Graphics;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Tests;
 
@@ -15,10 +16,25 @@ internal static class CharacterSelectTests
 {
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
-        yield return ("character summary carries persisted equipment into character selection", EquipmentSummaryAsync);
+        yield return ("character summary carries persisted equipment into character selection, a stored weapon pair and a right-hand ring beside it", EquipmentSummaryAsync);
         yield return ("character-select roster and class positions preserve the original ordering", OriginalPlacementAsync);
         yield return ("character-select face layout scales the authored canvas uniformly", FaceLayoutAsync);
         yield return ("Assassin and Shaman use the original creation definitions", ExtendedClassDefinitionsAsync);
+        yield return ("a text box takes the window's typed text, so a held Backspace or key repeats, and only while focused", TypedTextAsync);
+    }
+
+    private static Task TypedTextAsync()
+    {
+        var field = new PristonTale.Gameplay.UI.TextInputField { MaxLength = 8, Focused = true };
+        field.Update("Pan zer!_9.-", 0);
+        Assert.True(field.Text == "Panzer_9", $"the box took {field.Text}");
+        // A held Backspace arrives as the system repeats it, one '\b' per repeat.
+        field.Update(new string('\b', 10), 0);
+        Assert.True(field.Text.Length == 0, $"a held Backspace left {field.Text}");
+        field.Focused = false;
+        field.Update("abc", 0);
+        Assert.True(field.Text.Length == 0, "an unfocused box took typed text");
+        return Task.CompletedTask;
     }
 
     private static async Task EquipmentSummaryAsync()
@@ -36,11 +52,25 @@ internal static class CharacterSelectTests
         {
             CatalogKey = "DS101"
         };
-        var itemCatalog = new ItemCatalog([armor, weapon, shield]);
+        var spare = new ItemDefinition(0x0100_0005, "Spare Claw", ItemKind.Claw, EquipmentSlot.Weapon)
+        {
+            CatalogKey = "WC102"
+        };
+        var ring = new ItemDefinition(0x0100_0006, "Ring", ItemKind.Ring, EquipmentSlot.RingLeft)
+        {
+            CatalogKey = "OR101"
+        };
+        var itemCatalog = new ItemCatalog([armor, weapon, shield, spare, ring]);
         var player = classes.CreatePlayer(PlayerClass.Mechanician, "Armored", 80);
         player.Equip(EquipmentSlot.Armor, new ItemInstance(armor));
         player.Equip(EquipmentSlot.Weapon, new ItemInstance(weapon));
         player.Equip(EquipmentSlot.OffHand, new ItemInstance(shield));
+        player.Equip(EquipmentSlot.RingLeft, new ItemInstance(ring));
+        player.Equip(EquipmentSlot.RingRight, new ItemInstance(ring));
+        // The stored weapon pair (key W) is saved in the hand slots beside the held one; the summary shows the held pair.
+        Assert.True(player.TrySwitchWeaponSet(1), "pair B was not shown");
+        player.Equip(EquipmentSlot.Weapon, new ItemInstance(spare));
+        Assert.True(player.TrySwitchWeaponSet(0) && player.StoredWeapon?.Definition == spare, "pair A was not held back with pair B stored");
 
         var starter = CharacterRecordFactory.NewStarter(classes, 1, player.Name, 0, player.Class.Class, 3);
         var record = CharacterRecordFactory.FromLiveSession(starter, player, 3, System.Numerics.Vector3.Zero);

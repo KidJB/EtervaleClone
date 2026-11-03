@@ -6,6 +6,8 @@ using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Materials;
 using SharpGLTF.Scenes;
 using SharpGLTF.Schema2;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Units;
 
 using StageMesh = SharpGLTF.Geometry.MeshBuilder<SharpGLTF.Geometry.VertexTypes.VertexPositionNormal, SharpGLTF.Geometry.VertexTypes.VertexColor1Texture1, SharpGLTF.Geometry.VertexTypes.VertexEmpty>;
 using StageVB = SharpGLTF.Geometry.VertexBuilder<SharpGLTF.Geometry.VertexTypes.VertexPositionNormal, SharpGLTF.Geometry.VertexTypes.VertexColor1Texture1, SharpGLTF.Geometry.VertexTypes.VertexEmpty>;
@@ -42,14 +44,14 @@ internal sealed record ExportOptions(
 
 internal static class GltfSceneExport
 {
-    internal const float TicksPerSecond = 160000f / 33f;
+    internal const float TicksPerSecond = GameUnits.FrameTicksPerSecond;
 
     // Animated stage objects advance two ticks per elapsed millisecond and, after the first pass,
     // wraps playback into the [160, MaxFrame] range.
     internal const float StageObjectTicksPerSecond = 2000f;
-    private const int StageObjectLoopStartTicks = 160;
+    private const int StageObjectLoopStartTicks = GameUnits.FrameTicks;
 
-    private const int SampleStepTicks = 160;
+    private const int SampleStepTicks = GameUnits.FrameTicks;
     private const int MaxSurfacesPerMesh = 200;
     private const float TransformTolerance = 5e-3f;
     private const double CollapsedAxisScale = 1e-5;
@@ -94,7 +96,7 @@ internal static class GltfSceneExport
 
         foreach (var face in stage.Faces)
         {
-            if (!ValidFace(face.A, face.B, face.C, stage.Vertices.Count))
+            if (!face.FitsIn(stage.Vertices.Count))
             {
                 continue;
             }
@@ -180,7 +182,7 @@ internal static class GltfSceneExport
             var emitted = false;
             foreach (var face in modelObject.Faces)
             {
-                if (!ValidFace(face.A, face.B, face.C, modelObject.Vertices.Count))
+                if (!face.FitsIn(modelObject.Vertices.Count))
                 {
                     continue;
                 }
@@ -297,7 +299,7 @@ internal static class GltfSceneExport
 
             foreach (var face in modelObject.Faces)
             {
-                if (!ValidFace(face.A, face.B, face.C, modelObject.Vertices.Count))
+                if (!face.FitsIn(modelObject.Vertices.Count))
                 {
                     continue;
                 }
@@ -641,8 +643,8 @@ internal static class GltfSceneExport
             var startTicks = (int)startTicksLong;
             var endTicks = (int)endTicksLong;
 
-            var baseName = Enum.IsDefined(typeof(PristonActorMotion), motion.State)
-                ? ((PristonActorMotion)motion.State).ToString()
+            var baseName = Enum.IsDefined(typeof(MotionCode), motion.State)
+                ? ((MotionCode)motion.State).ToString()
                 : $"State_0x{motion.State:X}";
             var name = baseName;
             if (usedNames.TryGetValue(baseName, out var duplicateCount))
@@ -741,7 +743,7 @@ internal static class GltfSceneExport
         public string[] Names { get; }
         public NodeBuilder[] Nodes { get; }
 
-        // Static nodes whose legacy matrix carries shear keep only their TRS part; the residual linear
+        // Static nodes whose original matrix carries shear keep only their TRS part; the residual linear
         // part is baked into their vertices so glTF node matrices stay TRS-decomposable.
         public Matrix?[] VertexBake { get; }
 
@@ -860,7 +862,7 @@ internal static class GltfSceneExport
             resolved[index] = true;
         }
 
-        // Legacy bones may combine a parent's non-uniform scale with their own rotation. glTF TRS cannot
+        // Original bones may combine a parent's non-uniform scale with their own rotation. glTF TRS cannot
         // hold the resulting shear, so those bones are found up front and exported through an SVD carrier.
         private void FindShearedNodes(Matrix[] absoluteBind)
         {
@@ -1067,7 +1069,7 @@ internal static class GltfSceneExport
         }
 
         // Carrier bones are written as rotation-then-scale (R*S); plain glTF nodes apply S*R, so both
-        // orders must reproduce the legacy matrix before a bone may skip the SVD carrier.
+        // orders must reproduce the original matrix before a bone may skip the SVD carrier.
         private bool IsTrs(Matrix local, int index)
         {
             // Translation is copied exactly, so only the linear part decides whether shear is present.
@@ -1189,7 +1191,7 @@ internal static class GltfSceneExport
             largest = Math.Max(largest, sigma[axis]);
         }
 
-        // Legacy rigs hide parts by scaling bones to zero; collapsed axes keep a tiny scale so the
+        // Original rigs hide parts by scaling bones to zero; collapsed axes keep a tiny scale so the
         // hierarchy stays invertible while remaining visually identical.
         var floor = Math.Max(largest * CollapsedAxisScale, 1e-9);
         if (Determinant(v) < 0d)
@@ -1776,22 +1778,6 @@ internal static class GltfSceneExport
             : PristonTexLink.Empty;
     }
 
-    private static bool ValidFace(
-        int first,
-        int second,
-        int third,
-        int vertexCount)
-    {
-        return first >= 0
-            && second >= 0
-            && third >= 0
-            && first < vertexCount
-            && second < vertexCount
-            && third < vertexCount
-            && first != second
-            && second != third
-            && first != third;
-    }
 
     private static Matrix[] Copy(Matrix[] source)
     {
@@ -1833,7 +1819,7 @@ internal static class GltfSceneExport
                 var averaged = new Vector3[modelObject.Vertices.Count];
                 foreach (var face in modelObject.Faces)
                 {
-                    if (!ValidFace(face.A, face.B, face.C, modelObject.Vertices.Count))
+                    if (!face.FitsIn(modelObject.Vertices.Count))
                     {
                         continue;
                     }
@@ -1874,7 +1860,7 @@ internal static class GltfSceneExport
         var normals = new Vector3[stage.Vertices.Count];
         foreach (var face in stage.Faces)
         {
-            if (!ValidFace(face.A, face.B, face.C, stage.Vertices.Count))
+            if (!face.FitsIn(stage.Vertices.Count))
             {
                 continue;
             }

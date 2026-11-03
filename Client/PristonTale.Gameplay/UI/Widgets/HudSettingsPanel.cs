@@ -11,16 +11,16 @@ internal sealed class HudSettingsPanel
     public const int BoxX = 50;
     public const int BoxY = 45;
     public const int SizeW = 9;
-    public const int SizeH = 12;
+    public const int SizeH = 14;
     private const int RowHeight = 17;
+    private const int CloudQualities = (int)CloudQuality.High + 1;
 
     private static readonly int[] FrameLimits = [0, 30, 60, 90, 120, 144, 165, 240, 360];
     private static readonly int[] ShadowSizes = [1024, 2048, 4096, 8192];
     private static readonly GraphicsQuality[] Presets = [GraphicsQuality.Low, GraphicsQuality.Medium, GraphicsQuality.High, GraphicsQuality.Ultra];
     private static readonly int[] ShadowUpdateRates = [30, 60, 120, 0];
-    private static readonly Point[] WindowSizes = [new(800, 600), new(1024, 768), new(1280, 720), new(1920, 1080), new(2560, 1440)];
     private readonly PresentationSettings _settings;
-    private readonly string[] _labels = new string[15];
+    private readonly string[] _labels = new string[19];
     private ClientSettings _labelSettings;
 
     public HudSettingsPanel(PresentationSettings settings) => _settings = settings;
@@ -64,6 +64,10 @@ internal sealed class HudSettingsPanel
                 12 => current with { Quality = GraphicsQuality.Custom, ShadowUpdateRate = Cycle(ShadowUpdateRates, current.ShadowUpdateRate, direction) },
                 13 => current with { Quality = GraphicsQuality.Custom, ShadowsEnabled = !current.ShadowsEnabled },
                 14 => current with { ClassicTargetHealthBar = !current.ClassicTargetHealthBar },
+                15 => current with { ClassicNamePlates = !current.ClassicNamePlates },
+                16 => current with { WeatherEnabled = !current.WeatherEnabled },
+                17 => current with { RealisticSky = !current.RealisticSky },
+                18 => current with { Quality = GraphicsQuality.Custom, CloudQuality = (CloudQuality)(((int)current.CloudQuality + direction + CloudQualities) % CloudQualities) },
                 _ => current
             };
             return;
@@ -99,25 +103,39 @@ internal sealed class HudSettingsPanel
 
     private ClientSettings NextResolution(ClientSettings current, int direction)
     {
-        var sizes = current.WindowMode == WindowMode.Fullscreen ? new List<Point>() : new List<Point>(WindowSizes);
-        foreach (var mode in _settings.DisplayModes)
-        {
-            var size = new Point(mode.Width, mode.Height);
-            if ((current.Monitor == -1 || mode.Monitor == current.Monitor) && !sizes.Contains(size))
-            {
-                sizes.Add(size);
-            }
-        }
-
-        sizes.Sort(static (left, right) => ((long)left.X * left.Y).CompareTo((long)right.X * right.Y));
+        var sizes = Resolutions(current.WindowMode, _settings.DisplayModes, _settings.Desktop);
         if (sizes.Count == 0)
         {
             return current;
         }
 
         var index = sizes.IndexOf(new Point(current.WindowWidth, current.WindowHeight));
-        var next = sizes[(index + direction + sizes.Count) % sizes.Count];
+        var next = index < 0 && direction < 0 ? sizes[^1] : sizes[(index + direction + sizes.Count) % sizes.Count];
         return current with { WindowWidth = next.X, WindowHeight = next.Y };
+    }
+
+    // The sizes a mode offers, smallest first, all from the modes the monitor reports: fullscreen any of them; a window
+    // those that fit on the desktop below its title bar; borderless none, since it always covers the desktop.
+    internal static List<Point> Resolutions(WindowMode mode, IReadOnlyList<DisplayModeOption> modes, DisplayModeOption desktop)
+    {
+        var sizes = new List<Point>();
+        if (mode == WindowMode.Borderless)
+        {
+            return sizes;
+        }
+
+        foreach (var option in modes)
+        {
+            var size = new Point(option.Width, option.Height);
+            var fits = mode == WindowMode.Fullscreen || option.Width <= desktop.Width && option.Height <= desktop.Height - WindowPlacement.TitleBar;
+            if (fits && !sizes.Contains(size))
+            {
+                sizes.Add(size);
+            }
+        }
+
+        sizes.Sort(static (left, right) => ((long)left.X * left.Y).CompareTo((long)right.X * right.Y));
+        return sizes;
     }
 
     private int NextFrequency(ClientSettings current, int direction)
@@ -178,7 +196,7 @@ internal sealed class HudSettingsPanel
         _labelSettings = settings;
         _labels[0] = $"Window: {settings.WindowMode}";
         _labels[1] = settings.Monitor < 0 ? "Monitor: current" : $"Monitor: {settings.Monitor}";
-        _labels[2] = $"Resolution: {settings.WindowWidth} x {settings.WindowHeight}";
+        _labels[2] = settings.WindowMode == WindowMode.Borderless ? "Resolution: desktop" : $"Resolution: {settings.WindowWidth} x {settings.WindowHeight}";
         _labels[3] = settings.WindowMode != WindowMode.Fullscreen ? "Frequency: desktop" : $"Frequency: {settings.RefreshRate} Hz (0 = automatic)";
         _labels[4] = settings.VerticalSync ? "VSync: on" : "VSync: off";
         _labels[5] = settings.MusicEnabled ? "BGM: on" : "BGM: off";
@@ -193,5 +211,9 @@ internal sealed class HudSettingsPanel
         _labels[12] = settings.ShadowUpdateRate == 0 ? "Shadow animation: every frame" : $"Shadow animation: {settings.ShadowUpdateRate} Hz";
         _labels[13] = settings.ShadowsEnabled ? "Shadows: on" : "Shadows: off";
         _labels[14] = settings.ClassicTargetHealthBar ? "Target HP: classic (after first hit)" : "Target HP: always, with percentage";
+        _labels[15] = settings.ClassicNamePlates ? "Name plates: classic" : "Name plates: compact";
+        _labels[16] = settings.WeatherEnabled ? "Weather: on" : "Weather: off";
+        _labels[17] = settings.RealisticSky ? "Sky: realistic" : "Sky: classic";
+        _labels[18] = $"Clouds: {settings.CloudQuality}";
     }
 }

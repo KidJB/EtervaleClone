@@ -1,12 +1,16 @@
 using PristonTale.Protocol.Binary;
+using PristonTale.Contracts.Sessions;
+using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Protocol.Packets;
 
 // The version of this protocol. A client older than the server's minimum is refused at login.
+// The protocol a client speaks, sent in its login; a server refuses a client older than its Minimum as outdated. A change
+// of any message's layout raises both: 2 is the presence entries of version 2, 3 the compact event lists.
 public static class ProtocolVersion
 {
-    public const uint Current = 1;
-    public const uint Minimum = 1;
+    public const uint Current = 3;
+    public const uint Minimum = 3;
 }
 
 // Account messages: the server greets every connection, the client logs in, manages its characters and keeps the
@@ -27,21 +31,23 @@ public static class AccountWire
     }
 }
 
-// S->C on connect {header, uint16 Version = 1, uint16 0, uint32 Protocol, MinimumProtocol, int32 FullPlayers}: FullPlayers
-// is the number of players in the world when a game master's player limit is reached (then only game masters may log
-// in), else 0.
-public readonly record struct ServerHelloPacket(uint Protocol, uint MinimumProtocol, int FullPlayers)
+// S->C on connect {header, uint16 Version = 1, uint16 0, uint32 Protocol, MinimumProtocol, int32 FullPlayers, text
+// ServerName (32 B)}: FullPlayers is the number of players in the world when the player limit is reached (then only game
+// masters may log in), else 0.
+public readonly record struct ServerHelloPacket(uint Protocol, uint MinimumProtocol, int FullPlayers, string ServerName = "")
 {
     public const int Size = 8 + 4 + 12;
+    public const int MaxServerNameBytes = 32;
+    public const int MaxSize = Size + 2 + MaxServerNameBytes;
 
     public int Write(Span<byte> destination)
     {
         var writer = new PacketWriter(destination, EtervaleOpcodes.ServerHello);
-        writer.UInt16(AccountWire.CurrentVersion);
-        writer.UInt16(0);
+        WireHeader.Write(ref writer, AccountWire.CurrentVersion);
         writer.UInt32(Protocol);
         writer.UInt32(MinimumProtocol);
         writer.Int32(FullPlayers);
+        Utf8Text.Write(ref writer, ServerName, MaxServerNameBytes);
         return writer.Finish();
     }
 
@@ -50,20 +56,20 @@ public readonly record struct ServerHelloPacket(uint Protocol, uint MinimumProto
         var reader = new PacketReader(packet, Size);
         AccountWire.ReadVersion(ref reader, "Server hello");
         reader.Skip(2);
-        return new ServerHelloPacket(reader.UInt32(), reader.UInt32(), reader.Int32());
+        var hello = new ServerHelloPacket(reader.UInt32(), reader.UInt32(), reader.Int32());
+        return reader.Remaining > 0 ? hello with { ServerName = Utf8Text.Read(ref reader, MaxServerNameBytes, "Server hello") } : hello;
     }
 }
 
 // C->S {header, uint16 Version = 1, uint16 0, uint32 Protocol, text Account (64 B), text Password (128 B)}.
-public readonly record struct LoginPacket(uint Protocol, string Account, string Password)
+public readonly record struct LoginPacket(uint Protocol, string Account, string Password) : IFramePacket
 {
     public const int MaxSize = 8 + 4 + 4 + 2 + AccountWire.MaxAccountBytes + 2 + AccountWire.MaxPasswordBytes;
 
     public int Write(Span<byte> destination)
     {
         var writer = new PacketWriter(destination, EtervaleOpcodes.Login);
-        writer.UInt16(AccountWire.CurrentVersion);
-        writer.UInt16(0);
+        WireHeader.Write(ref writer, AccountWire.CurrentVersion);
         writer.UInt32(Protocol);
         Utf8Text.Write(ref writer, Account, AccountWire.MaxAccountBytes);
         Utf8Text.Write(ref writer, Password, AccountWire.MaxPasswordBytes);
@@ -116,7 +122,7 @@ public readonly record struct LoginResultPacket(byte Status)
 }
 
 // One character of the account as character select shows it; item codes are 0 for an empty slot.
-public sealed record CharacterListEntry(string Name, uint ClassCode, int Level, int Tier, int FaceIndex, int HairIndex, uint WeaponCode, uint ArmorCode,
+public sealed record CharacterListEntry(string Name, PlayerClass Class, int Level, int Tier, int FaceIndex, int HairIndex, uint WeaponCode, uint ArmorCode,
     uint OffHandCode, bool InVillage)
 {
     public const int MaxSize = 2 + AccountWire.MaxNameBytes + 4 + 4 + 4 + 12 + 4;
@@ -125,7 +131,7 @@ public sealed record CharacterListEntry(string Name, uint ClassCode, int Level, 
     public void Write(ref PacketWriter writer)
     {
         Utf8Text.Write(ref writer, Name, AccountWire.MaxNameBytes);
-        writer.UInt32(ClassCode);
+        writer.UInt32((uint)Class);
         writer.Int32(Level);
         writer.Byte((byte)Math.Clamp(Tier, 0, 255));
         writer.Byte((byte)Math.Clamp(FaceIndex, 0, 255));
@@ -140,7 +146,7 @@ public sealed record CharacterListEntry(string Name, uint ClassCode, int Level, 
     public static CharacterListEntry Read(ref PacketReader reader)
     {
         var name = Utf8Text.Read(ref reader, AccountWire.MaxNameBytes, "Character list");
-        var classCode = reader.UInt32();
+        var playerClass = (PlayerClass)reader.UInt32();
         var level = reader.Int32();
         var tier = reader.Byte();
         var face = reader.Byte();
@@ -150,11 +156,11 @@ public sealed record CharacterListEntry(string Name, uint ClassCode, int Level, 
         var armor = reader.UInt32();
         var offHand = reader.UInt32();
         reader.Skip(4);
-        return new CharacterListEntry(name, classCode, level, tier, face, hair, weapon, armor, offHand, (flags & VillageFlag) != 0);
+        return new CharacterListEntry(name, playerClass, level, tier, face, hair, weapon, armor, offHand, (flags & VillageFlag) != 0);
     }
 }
 
-// S->C {header, uint16 Version = 1, uint16 0, int32 Count, entries {text Name, uint32 ClassCode, int32 Level, uint8 Tier,
+// S->C {header, uint16 Version = 1, uint16 0, int32 Count, entries {text Name, uint32 Class, int32 Level, uint8 Tier,
 // Face, Hair, Flags (1 in a village), uint32 WeaponCode, ArmorCode, OffHandCode, uint32 0}}: after login and after each
 // change.
 public sealed record CharacterListPacket(IReadOnlyList<CharacterListEntry> Characters)
@@ -170,8 +176,7 @@ public sealed record CharacterListPacket(IReadOnlyList<CharacterListEntry> Chara
         }
 
         var writer = new PacketWriter(destination, EtervaleOpcodes.CharacterList);
-        writer.UInt16(AccountWire.CurrentVersion);
-        writer.UInt16(0);
+        WireHeader.Write(ref writer, AccountWire.CurrentVersion);
         writer.Int32(Characters.Count);
         foreach (var character in Characters)
         {
@@ -213,9 +218,9 @@ public static class CharacterAction
     public const byte Delete = 2;
 }
 
-// C->S {header, uint16 Version = 1, uint8 Action (1 create, 2 delete), uint8 0, int32 ClassCode, FaceIndex,
+// C->S {header, uint16 Version = 1, uint8 Action (1 create, 2 delete), uint8 0, int32 Class, FaceIndex,
 // text Name (64 B)}.
-public readonly record struct CharacterCommandPacket(byte Action, int ClassCode, int FaceIndex, string Name)
+public readonly record struct CharacterCommandPacket(byte Action, PlayerClass Class, int FaceIndex, string Name) : IFramePacket
 {
     public const int MaxSize = 8 + 4 + 8 + 2 + AccountWire.MaxNameBytes;
 
@@ -225,7 +230,7 @@ public readonly record struct CharacterCommandPacket(byte Action, int ClassCode,
         writer.UInt16(AccountWire.CurrentVersion);
         writer.Byte(Action);
         writer.Byte(0);
-        writer.Int32(ClassCode);
+        writer.Int32((int)Class);
         writer.Int32(FaceIndex);
         Utf8Text.Write(ref writer, Name, AccountWire.MaxNameBytes);
         return writer.Finish();
@@ -242,9 +247,9 @@ public readonly record struct CharacterCommandPacket(byte Action, int ClassCode,
             throw new InvalidDataException("Character command has an unknown action.");
         }
 
-        var classCode = reader.Int32();
+        var playerClass = (PlayerClass)reader.Int32();
         var face = reader.Int32();
-        return new CharacterCommandPacket(action, classCode, face, Utf8Text.Read(ref reader, AccountWire.MaxNameBytes, "Character command"));
+        return new CharacterCommandPacket(action, playerClass, face, Utf8Text.Read(ref reader, AccountWire.MaxNameBytes, "Character command"));
     }
 }
 
@@ -278,15 +283,14 @@ public readonly record struct CharacterResultPacket(byte Action, bool Ok, int Fa
 
 // Both directions {header, uint16 Version = 1, uint16 0, uint32 Counter, int64 TimeMs}: the client sends one
 // every 4 s; the server echoes it with its own time and closes connections silent for 60 s.
-public readonly record struct HeartbeatPacket(uint Counter, long TimeMs)
+public readonly record struct HeartbeatPacket(uint Counter, long TimeMs) : IFramePacket
 {
     public const int Size = 8 + 4 + 4 + 8;
 
     public int Write(Span<byte> destination)
     {
         var writer = new PacketWriter(destination, EtervaleOpcodes.Heartbeat);
-        writer.UInt16(AccountWire.CurrentVersion);
-        writer.UInt16(0);
+        WireHeader.Write(ref writer, AccountWire.CurrentVersion);
         writer.UInt32(Counter);
         writer.Int64(TimeMs);
         return writer.Finish();

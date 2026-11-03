@@ -185,7 +185,9 @@ internal sealed class SequenceState
                 }
 
                 ref var particle = ref Particles[index];
-                if (definition.Follow)
+                // A particle that lives until its effect stops is part of the effect (a monster's ground circle, which
+                // the original traces on the monster's bone): it moves with the effect's anchor.
+                if (definition.Follow || particle.Lifetime >= UntilStoppedLifetime)
                 {
                     particle.World = source;
                 }
@@ -342,9 +344,7 @@ internal sealed class SequenceState
             return particle.Local;
         }
 
-        var rotation = Matrix.CreateRotationX(MathHelper.ToRadians(particle.Orbit.X)) * Matrix.CreateRotationY(MathHelper.ToRadians(particle.Orbit.Y))
-            * Matrix.CreateRotationZ(MathHelper.ToRadians(particle.Orbit.Z));
-        return Vector3.Transform(particle.Local, rotation);
+        return Vector3.Transform(particle.Local, VfxAngles.Rotation(particle.Orbit));
     }
 
     private void RunEvents(ref VfxSequenceParticle particle, ref uint random)

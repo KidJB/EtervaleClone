@@ -1,13 +1,15 @@
 using Microsoft.Xna.Framework;
 using PristonTale.Client.Net.Presence;
-using PristonTale.Effects;
-using PristonTale.Effects.Effects;
 using PristonTale.Engine3D.Diagnostics;
 using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Engine3D.Rendering.Lighting;
 using PristonTale.Gameplay.Effects;
+using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items.Usable;
+using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Units;
+using PristonTale.Engine3D;
 
 namespace PristonTale.Gameplay.World.Remote;
 
@@ -17,34 +19,32 @@ namespace PristonTale.Gameplay.World.Remote;
 // frames in, the Phoenix's 60, with the strike's projectile, impact particles and sounds.
 public sealed class PremiumPetPresentation : IDisposable
 {
-    private const float FrameRate = 70f;
-    private const float Scale = (256f + 80f) / 256f;
-    private const float Near = 300f / 256f;
+    private const float Scale = (GameUnits.FixedScale + 80f) / GameUnits.FixedScale;
+    private const float Near = 300f / GameUnits.FixedScale;
     // About the height of a character's head above its feet.
     private const float OwnerHeight = 36f;
-    private const float ProjectileSpeed = 1800f / 256f * FrameRate;
+    private const float ProjectileSpeed = 1800f / GameUnits.FixedScale * GameUnits.TicksPerSecond;
     private static readonly string[] HelperMeshes = ["Pet_terry.smd", "Pet_nepsys.smd", "Pet_io.smd", "Pet_mute.smd"];
 
     private readonly IActorScene _scene;
     private readonly string _assetRoot;
     private readonly IClientLog _log;
-    private readonly EffectsEngine _engine;
+    private readonly IScriptEffects _scripts;
     private readonly PristonTransientLights _lights;
     private readonly SkillSoundBank _sounds;
     private readonly Task<PristonActor>[] _helpers = new Task<PristonActor>[4];
     private readonly Task<PristonActor> _phoenix;
     private readonly Dictionary<ulong, Owner> _owners = new();
     private readonly List<Projectile> _projectiles = new();
-    private readonly Dictionary<string, EffectDefinition> _scripts = new(StringComparer.Ordinal);
     private readonly Random _random = new();
 
-    public PremiumPetPresentation(IActorScene scene, PristonActorLoader loader, string assetRoot, LegacyEffectLibrary library, EffectsEngine engine,
+    public PremiumPetPresentation(IActorScene scene, PristonActorLoader loader, string assetRoot, IScriptEffects scripts,
         PristonTransientLights lights, SkillSoundBank sounds, IClientLog log)
     {
         _scene = scene;
         _assetRoot = assetRoot;
         _log = log;
-        _engine = engine;
+        _scripts = scripts;
         _lights = lights;
         _sounds = sounds;
         for (var index = 0; index < HelperMeshes.Length; index++)
@@ -56,14 +56,6 @@ public sealed class PremiumPetPresentation : IDisposable
 
         var phoenix = Path.Combine(assetRoot, "Effect", "PcBangPet", "Pet_Phoenimin", "Phoenix");
         _phoenix = Prepare(loader, phoenix + ".smd", phoenix + ".smb");
-        foreach (var name in new[] { "FireShot1", "FireHIt1", "IceShot1", "IceHIt1", "LightStart1", "LightHIt1" })
-        {
-            if (library?.ParticleScript(assetRoot, name) is { } script)
-            {
-                _scripts[name] = script;
-            }
-        }
-
         sounds?.Preload(Sounds(PremiumEffectKind.HelpPetTerry).Concat(Sounds(PremiumEffectKind.HelpPetNepsys)).Concat(Sounds(PremiumEffectKind.HelpPetIo)));
     }
 
@@ -73,6 +65,15 @@ public sealed class PremiumPetPresentation : IDisposable
     internal IEnumerable<(ulong Owner, PremiumEffectKind Kind, Vector3 Position)> Pets =>
         _owners.SelectMany(pair => new[] { pair.Value.Helper, pair.Value.Phoenix }.Where(pet => pet is { HasActor: true })
             .Select(pet => (pair.Key, pet.Kind, pet.Position)));
+
+    // The helper pet beside a player (kind 1 to 4) and where it is drawn, null until its model is placed.
+    public bool TryGetHelper(ulong ownerId, out int kind, out Vector3? position)
+    {
+        var helper = _owners.TryGetValue(ownerId, out var owner) ? owner.Helper : null;
+        kind = helper is null ? 0 : HelpPets.KindOf(helper.Kind);
+        position = helper is { HasActor: true } ? helper.Position : null;
+        return helper is not null;
+    }
 
     // The pets each player shows, from the spawns of players, and the strikes the server reports.
     public void Observe(PresenceUpdate update, Func<ulong, Vector3?> targetPosition)
@@ -117,7 +118,7 @@ public sealed class PremiumPetPresentation : IDisposable
             _owners[ownerId] = owner;
         }
 
-        var helperKind = helper is >= 1 and <= 4 ? (PremiumEffectKind)((int)PremiumEffectKind.HelpPetTerry + helper - 1) : (PremiumEffectKind?)null;
+        var helperKind = helper is >= 1 and <= HelpPets.Kinds ? HelpPets.Effect(helper) : (PremiumEffectKind?)null;
         if (owner.Helper?.Kind != helperKind)
         {
             owner.Helper?.Remove(_scene);
@@ -148,7 +149,7 @@ public sealed class PremiumPetPresentation : IDisposable
     // pose: the owner's drawn position and facing (yaw), or null when it is not drawn.
     public void Update(float dt, Func<ulong, (Vector3 Position, float Facing)?> pose, Func<ulong, Vector3?> targetPosition, Vector3 listener)
     {
-        var ticks = dt * FrameRate;
+        var ticks = dt * GameUnits.TicksPerSecond;
         foreach (var (ownerId, owner) in _owners)
         {
             if (pose(ownerId) is not { } at)
@@ -190,7 +191,7 @@ public sealed class PremiumPetPresentation : IDisposable
         }
 
         pet.Position = owner + new Vector3(30f, OwnerHeight + 10f, 30f);
-        pet.Handle = _scene.AddActor(new PristonActorInstance(preparation.Result, Matrix.CreateTranslation(pet.Position), PristonActorMotion.Stand));
+        pet.Handle = _scene.AddActor(new PristonActorInstance(preparation.Result, Matrix.CreateTranslation(pet.Position), MotionCode.Stand));
         _scene.SetActorPlaybackRate(pet.Handle, 0f);
         pet.HasActor = true;
         return true;
@@ -233,15 +234,11 @@ public sealed class PremiumPetPresentation : IDisposable
             }
 
             projectile.Position += Vector3.Normalize(toTarget) * step;
-            if (projectile.Trail is not null)
-            {
-                projectile.Trail.Position = projectile.Position;
-            }
+            projectile.Trail?.MoveTo(projectile.Position);
         }
     }
 
-    private EffectInstance Spawn(string name, Vector3 position) =>
-        _engine is not null && _scripts.TryGetValue(name, out var script) && _engine.Instances.Count < 128 ? _engine.Spawn(script, position) : null;
+    private IScriptEffect Spawn(string name, Vector3 position) => _scripts?.Spawn(name, position, Matrix.Identity);
 
     private static string[] Sounds(PremiumEffectKind kind) => kind switch
     {
@@ -281,9 +278,9 @@ public sealed class PremiumPetPresentation : IDisposable
         public Pet Phoenix { get; set; }
     }
 
-    private sealed class Projectile(EffectInstance trail, Vector3 position, Vector3 target, bool ice)
+    private sealed class Projectile(IScriptEffect trail, Vector3 position, Vector3 target, bool ice)
     {
-        public EffectInstance Trail { get; } = trail;
+        public IScriptEffect Trail { get; } = trail;
         public Vector3 Position { get; set; } = position;
         public Vector3 Target { get; } = target;
         public bool Ice { get; } = ice;
@@ -339,7 +336,7 @@ public sealed class PremiumPetPresentation : IDisposable
             }
 
             Facing = _attacking && targetPosition(Target) is { } target && Vector3.DistanceSquared(target, Position) > 1f
-                ? MathF.Atan2(target.X - Position.X, target.Z - Position.Z)
+                ? WorldSpace.RenderYaw(target - Position)
                 : ownerFacing;
             if (_attacking)
             {

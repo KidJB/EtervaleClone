@@ -1,10 +1,11 @@
 using PristonTale.Protocol.Binary;
+using PristonTale.Contracts.World;
 
 namespace PristonTale.Protocol.Packets;
 
 // C->S {header, uint16 Version = 1, uint16 0, Guid OperationId, uint8 Destination, uint8 0, uint16 0}: a player standing
 // on a warp stone travels to the stone of the wing warp map at this index.
-public sealed record WingGateRequestPacket(Guid OperationId, byte Destination)
+public sealed record WingGateRequestPacket(Guid OperationId, byte Destination) : IFramePacket
 {
     public const ushort CurrentVersion = 1;
     public const int Size = 8 + 4 + 16 + 4;
@@ -12,8 +13,7 @@ public sealed record WingGateRequestPacket(Guid OperationId, byte Destination)
     public int Write(Span<byte> destination)
     {
         var writer = new PacketWriter(destination, EtervaleOpcodes.WingGateRequest);
-        writer.UInt16(CurrentVersion);
-        writer.UInt16(0);
+        WireHeader.Write(ref writer, CurrentVersion);
         writer.Guid(OperationId);
         writer.Byte(Destination);
         writer.Zero(3);
@@ -44,8 +44,7 @@ public sealed record WingGateResultPacket(Guid OperationId, byte Status, byte De
     public int Write(Span<byte> destination)
     {
         var writer = new PacketWriter(destination, EtervaleOpcodes.WingGateResult);
-        writer.UInt16(CurrentVersion);
-        writer.UInt16(0);
+        WireHeader.Write(ref writer, CurrentVersion);
         writer.Guid(OperationId);
         writer.Byte(Status);
         writer.Byte(Destination);

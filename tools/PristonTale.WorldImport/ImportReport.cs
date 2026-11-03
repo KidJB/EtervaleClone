@@ -14,7 +14,7 @@ public sealed class ImportReport
 
     public int MonsterFilesParsed { get; set; }
     public int MonsterRows { get; set; }
-    public int MonsterDropConfigRows { get; set; }
+    public int MonsterDropLineRows { get; set; }
     public int MonsterDropItemRows { get; set; }
     public int MonsterDropPlusRows { get; set; }
 
@@ -23,6 +23,7 @@ public sealed class ImportReport
     public int NpcShopRows { get; set; }
     public int NpcServiceRows { get; set; }
     public int NpcDialogRows { get; set; }
+    public int DialogLineRows { get; set; }
 
     public int FieldRows { get; set; }
     public int SpawnPointRows { get; set; }

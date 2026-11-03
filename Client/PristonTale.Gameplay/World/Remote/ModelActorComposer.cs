@@ -1,33 +1,43 @@
 using Microsoft.Xna.Framework;
 using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.Rendering;
+using PristonTale.Contracts.Motion;
+using PristonTale.Assets;
 
 namespace PristonTale.Gameplay.World.Remote;
 
 public interface IModelActorComposer
 {
     Task PrepareAsync(string assetRoot, string modelInxPath) => Task.CompletedTask;
-    ComposedModelActor Compose(string assetRoot, string modelInxPath, Matrix world, PristonActorMotion motion);
+    ComposedModelActor Compose(string assetRoot, string modelInxPath, Matrix world, MotionCode motion);
 }
 
-public readonly record struct ComposedModelActor(ActorHandle Handle, PristonModelInfo Info);
+// Alternate: the model's sub model on its own skeleton (AlternateModel), hidden until a motion only it has plays.
+public readonly record struct ComposedModelActor(ActorHandle Handle, PristonModelInfo Info, ActorHandle Alternate = default,
+    PristonModelInfo AlternateInfo = null);
 
 public sealed class ModelActorComposer(IActorScene scene, PristonActorLoader actorLoader) : IModelActorComposer
 {
     private readonly IActorScene _scene = scene;
     private readonly PristonActorLoader _actorLoader = actorLoader;
-    private readonly Dictionary<string, Task<PristonActor>> _prepared = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Task<(PristonActor Main, PristonActor Alternate)>> _prepared = new(StringComparer.OrdinalIgnoreCase);
 
     public Task PrepareAsync(string assetRoot, string modelInxPath)
     {
-        var path = AssetPath(assetRoot, modelInxPath);
+        var path = AssetFiles.Combine(assetRoot, modelInxPath);
         if (!_prepared.TryGetValue(path, out var preparation))
         {
             preparation = Task.Run(async () =>
             {
                 var actor = _actorLoader.Load(assetRoot, path);
                 await _scene.PrepareActorResourcesAsync(actor);
-                return actor;
+                var alternate = LoadAlternate(assetRoot, actor);
+                if (alternate is not null)
+                {
+                    await _scene.PrepareActorResourcesAsync(alternate);
+                }
+
+                return (actor, alternate);
             });
             _prepared.Add(path, preparation);
         }
@@ -35,22 +45,42 @@ public sealed class ModelActorComposer(IActorScene scene, PristonActorLoader act
         return preparation;
     }
 
-    public ComposedModelActor Compose(string assetRoot, string modelInxPath, Matrix world, PristonActorMotion motion)
+    // An unreadable sub model leaves the model without its alternate rather than without the model.
+    private PristonActor LoadAlternate(string assetRoot, PristonActor main)
     {
-        var path = AssetPath(assetRoot, modelInxPath);
+        if (AlternateModel.Path(assetRoot, main.Info) is not { } path)
+        {
+            return null;
+        }
+
+        try
+        {
+            var alternate = _actorLoader.Load(assetRoot, path);
+            return AlternateModel.Alternates(main.Info, alternate.Info) ? alternate : null;
+        }
+        catch (Exception exception) when (exception is InvalidDataException or IOException)
+        {
+            return null;
+        }
+    }
+
+    public ComposedModelActor Compose(string assetRoot, string modelInxPath, Matrix world, MotionCode motion)
+    {
+        var path = AssetFiles.Combine(assetRoot, modelInxPath);
         if (!_prepared.TryGetValue(path, out var preparation) || !preparation.IsCompletedSuccessfully)
         {
             throw new InvalidOperationException("model actor must be prepared before composition");
         }
 
-        var actor = preparation.Result;
+        var (actor, alternate) = preparation.Result;
         var handle = _scene.AddActor(new PristonActorInstance(actor, world, motion));
-        return new ComposedModelActor(handle, actor.Info);
-    }
+        if (alternate is null)
+        {
+            return new ComposedModelActor(handle, actor.Info);
+        }
 
-    private static string AssetPath(string assetRoot, string relativePath)
-    {
-        var normalized = relativePath.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
-        return Path.Combine(assetRoot, normalized);
+        var alternateHandle = _scene.AddActor(new PristonActorInstance(alternate, world, motion));
+        _scene.SetActorHidden(alternateHandle, true);
+        return new ComposedModelActor(handle, actor.Info, alternateHandle, alternate.Info);
     }
 }

@@ -1,6 +1,7 @@
 using PristonTale.Application.Chat;
 using PristonTale.Application.GameMasters;
 using PristonTale.Simulation.Social;
+using PristonTale.Contracts.Social;
 
 namespace PristonTale.Tests;
 
@@ -8,13 +9,35 @@ internal static class ChatRoutingTests
 {
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
-        yield return ("a spoken line reaches players within the spoken range with the speaker's name and serial", SpokenRangeAsync);
+        yield return ("a spoken line reaches players within the spoken range with the speaker's name and entityId", SpokenRangeAsync);
         yield return ("long spoken lines are cut to 68 characters and an ellipsis, slash lines are never spoken", ShortenAsync);
         yield return ("whispers name both sides, refuse when whispers are disabled and report missing players", WhisperAsync);
         yield return ("trade lines reach everybody, clan lines the clan, party lines the other members only", ChannelsAsync);
         yield return ("notices reach everybody at once; the standing notice comes once with the next heartbeat", NoticesAsync);
         yield return ("the shutdown countdown warns, asks every client to close and then stops", ShutdownAsync);
         yield return ("chat command text parsing follows the classic word and number rules", ParsingAsync);
+        yield return ("the server drops a repeated line and freezes a speaker after ten quick lines, as the client does", FloodAsync);
+    }
+
+    private static async Task FloodAsync()
+    {
+        var fixture = new ChatFixture();
+        var speaker = await fixture.JoinAsync("Talker", 0, 0);
+        var listener = await fixture.JoinAsync("Hearer", 10, 10);
+        await fixture.SayAsync(speaker, "same");
+        fixture.NowMs += 1000;
+        await fixture.SayAsync(speaker, "same");
+        Assert.True(listener.Link.Lines.Count == 1, "a repeated line within five seconds was spoken twice");
+        for (var line = 0; line < 12; line++)
+        {
+            fixture.NowMs += 100;
+            await fixture.SayAsync(speaker, $"line {line}");
+        }
+
+        Assert.True(listener.Link.Lines.Count == 1 + ChatRules.FloodLines - 1, $"{listener.Link.Lines.Count} lines reached the listener during a flood");
+        fixture.NowMs += ChatRules.FloodPenaltyMs + 1;
+        await fixture.SayAsync(speaker, "after");
+        Assert.True(listener.Link.Last == "Talker: after", "the speaker stayed frozen after the penalty");
     }
 
     private static async Task SpokenRangeAsync()

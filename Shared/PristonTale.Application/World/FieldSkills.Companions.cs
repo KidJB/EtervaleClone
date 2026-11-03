@@ -1,8 +1,10 @@
 using System.Numerics;
 using PristonTale.Simulation.Combat;
+using PristonTale.Simulation.Items.Usable;
 using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.Skills;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Contracts.Skills;
 
 namespace PristonTale.Application.World;
 
@@ -129,7 +131,7 @@ internal sealed partial class FieldSkills
             dealt = SkillFormulas.PowerAgainst(Math.Max(1, power), damageRule, target.Def, character.Effects.Totals, target.Effects.Totals, rank);
         }
 
-        _skillEvents.Add(new SkillEventView(holder.EntityId, target.EntityId, rule.Code, SkillEventPhaseView.Impact, rank, SkillEventFlagsView.Companion,
+        _skillEvents.Add(new SkillEventView(holder.EntityId, target.EntityId, rule.Code, SkillEventPhase.Impact, rank, SkillEventFlags.Companion,
             0f, 0f, target.Position, holder.Facing, 1, 0f));
         Pay(holder, target, dealt, false);
     }
@@ -140,6 +142,11 @@ internal sealed partial class FieldSkills
         if (_summonSkills.TryGetValue(change.Entity, out var summonSkill) && summonSkill == code)
         {
             DismissSummon(change.Entity);
+        }
+
+        if (MonsterCrystals.TryGetByPetStatus(code, out _))
+        {
+            EndCrystalPets(change.Entity, code);
         }
     }
 

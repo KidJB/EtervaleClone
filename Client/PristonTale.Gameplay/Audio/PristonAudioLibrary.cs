@@ -4,6 +4,8 @@ using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.IO;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Simulation.World.Npcs;
+using PristonTale.Contracts.Motion;
+using PristonTale.Assets;
 
 namespace PristonTale.Gameplay.Audio;
 
@@ -11,20 +13,20 @@ public sealed class PristonAudioLibrary : IDisposable
 {
     private static readonly (int Code, string Directory)[] NpcSoundBankDirectories =
     [
-        (LegacyNpcSoundCode.Wolverine, "wav/Effects/monster/Wolverin"),
-        (LegacyNpcSoundCode.Fury, "wav/Effects/monster/Fury"),
-        (LegacyNpcSoundCode.Morif, "wav/Effects/NPC/morif"),
-        (LegacyNpcSoundCode.MollyWolf, "wav/Effects/NPC/mollywolf"),
-        (LegacyNpcSoundCode.SkillMaster, "wav/Effects/NPC/SkillMaster"),
-        (LegacyNpcSoundCode.MagicMaster, "wav/Effects/NPC/MagicMaster"),
-        (LegacyNpcSoundCode.CastleDoor, "wav/Effects/NPC/castledoor"),
-        (LegacyNpcSoundCode.CastleCrystalRed, "wav/Effects/NPC/crystal_r"),
-        (LegacyNpcSoundCode.CastleCrystalGreen, "wav/Effects/NPC/crystal_g"),
-        (LegacyNpcSoundCode.CastleCrystalBlue, "wav/Effects/NPC/crystal_b"),
-        (LegacyNpcSoundCode.CastleTower, "wav/Effects/NPC/tower-b"),
-        (LegacyNpcSoundCode.CastleSoldierA, "wav/Effects/NPC/Soldier_A"),
-        (LegacyNpcSoundCode.CastleSoldierB, "wav/Effects/NPC/Soldier_B"),
-        (LegacyNpcSoundCode.CastleSoldierC, "wav/Effects/NPC/Soldier_C")
+        (CharacterSoundCodes.Wolverine, "wav/Effects/monster/Wolverin"),
+        (CharacterSoundCodes.Fury, "wav/Effects/monster/Fury"),
+        (CharacterSoundCodes.Morif, "wav/Effects/NPC/morif"),
+        (CharacterSoundCodes.MollyWolf, "wav/Effects/NPC/mollywolf"),
+        (CharacterSoundCodes.SkillMaster, "wav/Effects/NPC/SkillMaster"),
+        (CharacterSoundCodes.MagicMaster, "wav/Effects/NPC/MagicMaster"),
+        (CharacterSoundCodes.CastleDoor, "wav/Effects/NPC/castledoor"),
+        (CharacterSoundCodes.CastleCrystalFire, "wav/Effects/NPC/crystal_r"),
+        (CharacterSoundCodes.CastleCrystalLightning, "wav/Effects/NPC/crystal_g"),
+        (CharacterSoundCodes.CastleCrystalIce, "wav/Effects/NPC/crystal_b"),
+        (CharacterSoundCodes.CastleTower, "wav/Effects/NPC/tower-b"),
+        (CharacterSoundCodes.CastleSoldierA, "wav/Effects/NPC/Soldier_A"),
+        (CharacterSoundCodes.CastleSoldierB, "wav/Effects/NPC/Soldier_B"),
+        (CharacterSoundCodes.CastleSoldierC, "wav/Effects/NPC/Soldier_C")
     ];
 
     private static readonly (string Code, string Path)[] FieldMusicFiles =
@@ -93,10 +95,12 @@ public sealed class PristonAudioLibrary : IDisposable
     private readonly Dictionary<string, SoundEffect> _fieldMusic = new(StringComparer.Ordinal);
     private readonly SoundEffect[] _ambients = new SoundEffect[AmbientFiles.Length];
     private readonly SoundEffect[] _fieldAmbients = new SoundEffect[FieldAmbientFiles.Length];
-    private readonly Dictionary<(int SoundCode, PristonActorMotion Motion), SoundEffect[]> _npcSounds = [];
+    private readonly Dictionary<(int SoundCode, MotionCode Motion), SoundEffect[]> _npcSounds = [];
     private readonly Dictionary<uint, SoundEffect> _talkSounds = [];
     private readonly List<SoundEffect> _owned = [];
     private readonly Dictionary<string, SoundEffect> _itemSounds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<LoginCue, SoundEffect> _loginCues = [];
+    private readonly List<(SoundEffect Sound, float Volume)> _characterSelectLoops = [];
     private int _npcSoundCount;
 
     private PristonAudioLibrary()
@@ -105,6 +109,7 @@ public sealed class PristonAudioLibrary : IDisposable
 
     public SoundEffect OpeningMusic { get; private set; }
     public SoundEffect CharacterSelectMusic { get; private set; }
+    public IReadOnlyList<(SoundEffect Sound, float Volume)> CharacterSelectLoops => _characterSelectLoops;
     public SoundEffect PortalWarpSound { get; private set; }
 
     // Played when a quest starts, moves on or ends.
@@ -112,6 +117,12 @@ public sealed class PristonAudioLibrary : IDisposable
 
     // Played when a whisper or notice opens the closed chat window.
     public SoundEffect WhisperSound { get; private set; }
+
+    public SoundEffect CraftFailureSound { get; private set; }
+
+    // The rain's loop and a lightning strike's thunder.
+    public SoundEffect RainSound { get; private set; }
+    public SoundEffect ThunderSound { get; private set; }
     public bool MusicEnabled { get; private set; } = true;
     public bool SoundEnabled { get; private set; } = true;
     public int AmbientCount => _ambients.Length;
@@ -130,9 +141,22 @@ public sealed class PristonAudioLibrary : IDisposable
             var byPath = new Dictionary<string, SoundEffect>(StringComparer.OrdinalIgnoreCase);
             library.OpeningMusic = library.Load(assetRoot, "StartImage/Opening/Intro.wav", byPath);
             library.CharacterSelectMusic = library.Load(assetRoot, "StartImage/login/CharacterSelect.wav", byPath);
+            foreach (var (cue, path) in LoginAudio.CueFiles)
+            {
+                library._loginCues.Add(cue, library.Load(assetRoot, path, byPath));
+            }
+
+            foreach (var (path, volume) in LoginAudio.CharacterSelectLoopFiles)
+            {
+                library._characterSelectLoops.Add((library.Load(assetRoot, path, byPath), volume));
+            }
+
             library.PortalWarpSound = library.Load(assetRoot, "wav/Effects/Skill/Learn_Skill.wav", byPath);
             library.QuestFanfareSound = library.Load(assetRoot, "image/Sinimage/Sound/drink2.wav", byPath);
             library.WhisperSound = library.Load(assetRoot, "wav/Effects/event/hosound.wav", byPath);
+            library.CraftFailureSound = library.Load(assetRoot, "image/Sinimage/Sound/sheltom-failure.wav", byPath);
+            library.RainSound = library.Load(assetRoot, "wav/rain01.wav", byPath);
+            library.ThunderSound = library.Load(assetRoot, "wav/thunder1.wav", byPath);
             foreach (var (code, path) in FieldMusicFiles)
             {
                 library._fieldMusic.Add(code, library.Load(assetRoot, path, byPath));
@@ -171,6 +195,8 @@ public sealed class PristonAudioLibrary : IDisposable
 
     public SoundEffect ItemSound(string catalogKey) => _itemSounds.GetValueOrDefault(ItemSoundRules.For(catalogKey));
 
+    public SoundEffect Cue(LoginCue cue) => _loginCues.GetValueOrDefault(cue);
+
     public SoundEffect CoinSound => _itemSounds.GetValueOrDefault(ItemSoundRules.Coin);
 
     public bool TryGetFieldMusic(string code, out SoundEffect music)
@@ -204,7 +230,7 @@ public sealed class PristonAudioLibrary : IDisposable
         return _fieldAmbients[code];
     }
 
-    public bool TryGetNpcSound(int soundCode, PristonActorMotion motion, out SoundEffect[] variants)
+    public bool TryGetNpcSound(int soundCode, MotionCode motion, out SoundEffect[] variants)
     {
         return _npcSounds.TryGetValue((soundCode, motion), out variants);
     }
@@ -217,7 +243,7 @@ public sealed class PristonAudioLibrary : IDisposable
             return false;
         }
 
-        return _talkSounds.TryGetValue(LegacyTalkSound.GetSoundCode(message), out sound);
+        return _talkSounds.TryGetValue(TalkSound.GetSoundCode(message), out sound);
     }
 
     public void ApplySettings(ClientSettings settings)
@@ -244,10 +270,10 @@ public sealed class PristonAudioLibrary : IDisposable
 
     private void LoadNpcSoundBanks(string assetRoot, Dictionary<string, SoundEffect> byPath)
     {
-        var grouped = new Dictionary<(int SoundCode, PristonActorMotion Motion), List<SoundEffect>>();
+        var grouped = new Dictionary<(int SoundCode, MotionCode Motion), List<SoundEffect>>();
         foreach (var (soundCode, relativeDirectory) in NpcSoundBankDirectories)
         {
-            var directory = PristonFileResolver.Resolve(Path.Combine(assetRoot, relativeDirectory));
+            var directory = AssetFiles.Resolve(Path.Combine(assetRoot, relativeDirectory));
             var paths = Directory.EnumerateFiles(directory, "*.wav", SearchOption.TopDirectoryOnly)
                 .Order(StringComparer.OrdinalIgnoreCase);
             foreach (var path in paths)
@@ -279,7 +305,7 @@ public sealed class PristonAudioLibrary : IDisposable
     private void LoadTalkSounds(string assetRoot, Dictionary<string, SoundEffect> byPath, IClientLog log)
     {
         var relativeDirectory = Path.Combine("wav", "Talk");
-        var directory = PristonFileResolver.Resolve(Path.Combine(assetRoot, relativeDirectory));
+        var directory = AssetFiles.Resolve(Path.Combine(assetRoot, relativeDirectory));
         if (!Directory.Exists(directory))
         {
             log.Info("[Audio] wav/Talk is absent; hashed NPC voice playback is disabled until the original voice archive is supplied.");
@@ -301,48 +327,48 @@ public sealed class PristonAudioLibrary : IDisposable
         }
     }
 
-    private static bool TryGetMotion(string fileName, out PristonActorMotion motion)
+    private static bool TryGetMotion(string fileName, out MotionCode motion)
     {
         if (fileName.StartsWith("attack", StringComparison.OrdinalIgnoreCase))
         {
-            motion = PristonActorMotion.Attack;
+            motion = MotionCode.Attack;
             return true;
         }
 
         if (fileName.StartsWith("damage", StringComparison.OrdinalIgnoreCase))
         {
-            motion = PristonActorMotion.Damage;
+            motion = MotionCode.Damage;
             return true;
         }
 
         if (fileName.StartsWith("dead", StringComparison.OrdinalIgnoreCase))
         {
-            motion = PristonActorMotion.Dead;
+            motion = MotionCode.Dead;
             return true;
         }
 
         if (fileName.StartsWith("neutral", StringComparison.OrdinalIgnoreCase))
         {
-            motion = PristonActorMotion.Stand;
+            motion = MotionCode.Stand;
             return true;
         }
 
         if (fileName.StartsWith("move", StringComparison.OrdinalIgnoreCase))
         {
-            motion = PristonActorMotion.Walk;
+            motion = MotionCode.Walk;
             return true;
         }
 
         if (fileName.StartsWith("disappear", StringComparison.OrdinalIgnoreCase)
             || fileName.StartsWith("change", StringComparison.OrdinalIgnoreCase))
         {
-            motion = PristonActorMotion.Warp;
+            motion = MotionCode.Warp;
             return true;
         }
 
         if (fileName.StartsWith("skill", StringComparison.OrdinalIgnoreCase))
         {
-            motion = PristonActorMotion.Skill;
+            motion = MotionCode.Skill;
             return true;
         }
 
@@ -359,6 +385,8 @@ public sealed class PristonAudioLibrary : IDisposable
 
         _owned.Clear();
         _fieldMusic.Clear();
+        _loginCues.Clear();
+        _characterSelectLoops.Clear();
         _npcSounds.Clear();
         _talkSounds.Clear();
         _npcSoundCount = 0;

@@ -12,11 +12,8 @@ namespace PristonTale.Application.World;
 // the service and the service running in Etervale. Prices, stock and totals come from the catalogs, never the client.
 internal static class NpcServiceTransactions
 {
-    public static bool CanReach(WorldPlayer player, WorldNpc npc)
-    {
-        var delta = player.Position - npc.Position;
-        return !player.IsDead && delta.X * delta.X + delta.Z * delta.Z <= NpcInteraction.Reach * NpcInteraction.Reach;
-    }
+    public static bool CanReach(WorldPlayer player, WorldNpc npc) =>
+        !player.IsDead && player.Shop is null && NpcInteraction.WithinReach(player.Position, npc.Position);
 
     public static NpcServiceOutcome Check(WorldPlayer player, FieldInstance field, NpcServiceCommand command, out WorldNpc? npc,
         out NpcService? service)
@@ -36,6 +33,12 @@ internal static class NpcServiceTransactions
         if (!NpcServiceAvailability.IsAvailable(service))
         {
             return NpcServiceOutcome.Failed(NpcServiceStatus.NotAvailable, "this service is not available yet");
+        }
+
+        // A skill master trains only the classes of its own town: Ricarten's the Tempskron, Pillai's the Morion.
+        if (command.Service == NpcServiceKind.SkillMaster && !Simulation.Quests.QuestClasses.IsHomeTown(player.Character, field.FieldId))
+        {
+            return NpcServiceOutcome.Failed(NpcServiceStatus.Rejected, "this master trains another town's classes");
         }
 
         // A character over the weight limit cannot open the warehouse.
@@ -74,18 +77,15 @@ internal static class NpcServiceTransactions
             return new PreparedNpcOperation(original, null, null, shown);
         }
 
-        foreach (var applied in original.ServiceOperations)
+        if (original.ServiceOperations.Find(command.OperationId) is { } applied)
         {
-            if (applied.Command.OperationId == command.OperationId)
+            if (applied.Command != command)
             {
-                if (applied.Command != command)
-                {
-                    return Final(original, NpcServiceOutcome.Failed(NpcServiceStatus.Conflict, "operation identity conflict", original.InventoryRevision));
-                }
-
-                var replayed = State(command, original, storage, Done(original, storage, "already committed"));
-                return new PreparedNpcOperation(original, null, null, replayed);
+                return Final(original, NpcServiceOutcome.Failed(NpcServiceStatus.Conflict, "operation identity conflict", original.InventoryRevision));
             }
+
+            var replayed = State(command, original, storage, Done(original, storage, "already committed"));
+            return new PreparedNpcOperation(original, null, null, replayed);
         }
 
         if (command.OperationId == Guid.Empty || command.ExpectedRevision != original.InventoryRevision
@@ -107,6 +107,7 @@ internal static class NpcServiceTransactions
         var fieldId = field.FieldId;
         var position = player.Position;
         TeleportArrival? arrival = null;
+        ItemWorkResult? work = null;
         var carryLimit = MoneyLimits.CarryLimit(candidate.Level, candidate.Tier);
         NpcServiceStatus status;
         switch (command.Action)
@@ -117,7 +118,7 @@ internal static class NpcServiceTransactions
                     : NpcServiceStatus.Rejected;
                 break;
             case NpcServiceAction.Sell:
-                status = NpcShopRules.TrySell(candidate, command.ItemId, carryLimit, out _);
+                status = NpcShopRules.TrySell(candidate, command.ItemId, command.Count, carryLimit, out _);
                 break;
             case NpcServiceAction.Repair:
                 status = NpcShopRules.TryRepair(candidate, command.ItemId, out _);
@@ -126,13 +127,13 @@ internal static class NpcServiceTransactions
                 status = NpcShopRules.TryRepairAll(candidate, out _);
                 break;
             case NpcServiceAction.Deposit:
-                status = storage!.TryDeposit(candidate, command.ItemId, command.Anchor);
+                status = storage!.TryDeposit(candidate, command.ItemId, command.Anchor, command.Covered);
                 break;
             case NpcServiceAction.Withdraw:
-                status = storage!.TryWithdraw(candidate, command.ItemId, command.Anchor);
+                status = storage!.TryWithdraw(candidate, command.ItemId, command.Anchor, command.Covered);
                 break;
             case NpcServiceAction.Move:
-                status = storage!.TryMove(command.ItemId, command.Anchor);
+                status = storage!.TryMove(command.ItemId, command.Anchor, command.Covered);
                 break;
             case NpcServiceAction.DepositGold:
                 status = storage!.TryDepositGold(candidate, command.Amount);
@@ -152,6 +153,18 @@ internal static class NpcServiceTransactions
             case NpcServiceAction.Exchange:
                 status = Simulation.Items.Usable.PuzzleExchange.TryExchange(candidate, items, field.ItemRng, out _);
                 break;
+            case NpcServiceAction.Age:
+                status = Simulation.Items.Aging.AgingWork.TryAge(candidate, command.ItemId, command.Materials ?? [], field.ItemRng, out work, out _,
+                    field.Aging);
+                break;
+            case NpcServiceAction.Mix:
+                status = Simulation.Items.Mixing.MixingWork.TryMix(candidate, command.ItemId, command.Materials ?? [], field.ItemRng, out work, out _,
+                    field.Mixing);
+                break;
+            case NpcServiceAction.Refine:
+                status = Simulation.Items.Mixing.MixingWork.TryRefine(candidate, command.Materials ?? [], items, field.ItemRng, out work, out _,
+                    field.Mixing);
+                break;
             default:
                 status = NpcServiceStatus.Rejected;
                 break;
@@ -164,8 +177,8 @@ internal static class NpcServiceTransactions
 
         candidate.RecordServiceOperation(command);
         var snapshot = CharacterRecordFactory.Capture(session.Loaded!, candidate, fieldId, position);
-        var outcome = Done(candidate, storage ?? session.Warehouse, "committed");
-        var reply = State(command, candidate, storage, outcome) with { Arrival = arrival };
+        var outcome = Done(candidate, storage ?? session.Warehouse, "");
+        var reply = State(command, candidate, storage, outcome) with { Arrival = arrival, Work = work };
         return new PreparedNpcOperation(original, candidate, snapshot, reply, candidate.Money - original.Money, storage,
             session.Warehouse?.Revision ?? 0);
     }
@@ -245,13 +258,10 @@ internal static class NpcServiceTransactions
     public static ShopQuotes Quotes(PlayerCharacter character)
     {
         var quotes = new List<ShopQuote>();
-        for (var anchor = 0; anchor < character.Inventory.Capacity; anchor++)
+        foreach (var item in character.Inventory.Items())
         {
-            if (character.Inventory[anchor] is { } item)
-            {
-                var sell = NpcShopRules.CanSell(item) ? NpcShopRules.SellPrice(item) : -1;
-                quotes.Add(new ShopQuote(item.InstanceId, sell, NpcShopRules.RepairCost(item), item.DurabilityCurrent, item.DurabilityMax));
-            }
+            var sell = NpcShopRules.CanSell(item) ? NpcShopRules.SellPrice(item, item.Count) : -1;
+            quotes.Add(new ShopQuote(item.InstanceId, sell, NpcShopRules.RepairCost(item), item.DurabilityCurrent, item.DurabilityMax));
         }
 
         foreach (var equipped in character.Equipment.Values)
@@ -283,6 +293,8 @@ internal static class NpcServiceTransactions
             or NpcServiceAction.WithdrawGold => service == NpcServiceKind.Warehouse,
         NpcServiceAction.Teleport => service == NpcServiceKind.Teleporter,
         NpcServiceAction.Exchange => service == NpcServiceKind.QuestEvent,
+        NpcServiceAction.Age => service == NpcServiceKind.ItemAging,
+        NpcServiceAction.Mix or NpcServiceAction.Refine => service == NpcServiceKind.ItemMix,
         _ => false
     };
 
@@ -293,6 +305,7 @@ internal static class NpcServiceTransactions
         NpcServiceStatus.GoldLimit => "you cannot carry more gold",
         NpcServiceStatus.OverWeight => ItemRuleMessages.OverWeight,
         NpcServiceStatus.WrongPuzzle => "The puzzle is wrong",
+        NpcServiceStatus.WrongMaterials => "These materials do not fit this work",
         _ => "the NPC refused"
     };
 

@@ -3,6 +3,8 @@ using PristonTale.Simulation.Items;
 using PristonTale.Simulation.Quests;
 using PristonTale.Simulation.World.Npcs;
 using static PristonTale.Tests.QuestFixture;
+using PristonTale.Contracts.Characters;
+using PristonTale.Simulation.World;
 
 namespace PristonTale.Tests;
 
@@ -193,6 +195,11 @@ internal static class QuestTests
         Assert.True(fighter.Skills.Ranks.Values.Sum() == 0 && fighter.SkillPoints >= points + learned && !fighter.Quests.SkillResetOffered,
             "the redistribution did not refund the ranks");
         Assert.True(Run(fighter, QuestNpc.None, QuestAction.ResetSkills, QuestCode.None, 0).Status == QuestStatus.Rejected, "a second redistribution ran");
+        fighter.Quests.SkillResetOffered = true;
+        Expect(fighter, QuestNpc.None, QuestAction.DeclineSkillReset, QuestCode.None, 0, "No did not end the redistribution offer");
+        Assert.True(!fighter.Quests.SkillResetOffered
+            && Run(fighter, QuestNpc.None, QuestAction.ResetSkills, QuestCode.None, 0).Status == QuestStatus.Rejected,
+            "a declined offer still stood (it opened again at the next login)");
         return Task.CompletedTask;
     }
 
@@ -257,9 +264,13 @@ internal static class QuestTests
             && active is { State: 3, WeaponStage: 1, WeaponKillsLeft: 30, WeaponCreatedUnixMs: 1000 }, "the quest weapon differs");
         Assert.True(RankUpByQuestWeapon.IsBound(fighter, weapon), "the quest weapon is not bound");
 
+        // The forged weapon goes on the empty weapon slot, as any item received; taken off, it counts no kill.
+        Assert.True(fighter.GetEquipped(EquipmentSlot.Weapon) == weapon && fighter.TryUnequip(EquipmentSlot.Weapon), "the forged weapon was not worn");
         Kill(fighter, QuestMonsters.Bargon, 30);
         Assert.True(fighter.Quests.Active.WeaponKillsLeft == 30, "kills counted with the weapon unequipped");
         Assert.True(fighter.TryEquipFromInventory(fighter.Inventory.Find(weapon.InstanceId), EquipmentSlot.Weapon), "the quest weapon cannot be wielded");
+        // The bag kept a copy of the weapon taken off: follow the one worn now.
+        weapon = fighter.GetEquipped(EquipmentSlot.Weapon);
         Kill(fighter, QuestMonsters.HeadCutter, 5);
         var context = Context(fighter);
         var grows = false;
@@ -278,6 +289,11 @@ internal static class QuestTests
         Kill(fighter, QuestMonsters.HeadCutter, 50);
         Drop(fighter, QuestItems.Vamp);
         Assert.True(fighter.Quests.Active is { State: 4, WeaponStage: RankUpByQuestWeapon.FinalStage, WeaponLifeBonus: 12 }, "the weapon did not finish growing");
+        Assert.True(RankUpByQuestWeapon.HuntLine(QuestWeaponHunt.Melee, 1, 18) == "Bargon:12/30"
+            && RankUpByQuestWeapon.HuntLine(QuestWeaponHunt.Melee, 2, 40) == "Skeleton Warrior:0/40"
+            && RankUpByQuestWeapon.HuntLine(QuestWeaponHunt.Field, 3, 1) == "Ancient Prison 1F's Monster:99/100"
+            && RankUpByQuestWeapon.HuntLine(QuestWeaponHunt.Melee, RankUpByQuestWeapon.FinalStage, 0) == "",
+            "the quest weapon's box does not name its hunt with the kills made");
         Assert.True(fighter.Effects.TryGet(QuestEffects.QuestWeaponCode, out _), "the wielded quest weapon gives no bonus");
 
         Assert.True(Talk(fighter, HomeMaster).Prompt is { State: 4, Document: "ChangeJob3_4" }, "the second rank-up dialog differs");
@@ -335,7 +351,7 @@ internal static class QuestTests
         Drop(fighter, QuestItems.RoyalAmulet, monsterCode: holder, source: QuestDropSource.EventItem);
         Assert.True(Talk(fighter, HomeMaster).Prompt is { State: 6 }, "the master did not take the amulet step");
         var duel = Expect(fighter, HomeMaster, QuestAction.Proceed, QuestCode.RankUpMasterTrial, 6, "the duel did not open");
-        Assert.True(duel.Duel is { Quest: QuestCode.RankUpMasterTrial, SoundCode: LegacyNpcSoundCode.SkillMaster }
+        Assert.True(duel.Duel is { Quest: QuestCode.RankUpMasterTrial, SoundCode: CharacterSoundCodes.SkillMaster }
             && duel.Travel is { Kind: QuestTravelKind.Arena, FieldCode: QuestArena.FieldCode } && !QuestInventory.Has(fighter, QuestItems.RoyalAmulet),
             "the duel request differs");
 
@@ -346,11 +362,11 @@ internal static class QuestTests
         Assert.True(RankUpByMasterTrial.OnDuelWon(won) && won.Prompt is { State: 8, Followup: QuestFollowup.Confirm }, "the victory dialog differs");
         var promoted = Expect(fighter, QuestNpc.None, QuestAction.Accept, QuestCode.RankUpMasterTrial, 8, "the final rank-up failed",
             field: QuestArena.FieldCode);
-        Assert.True(fighter.Tier == 3 && promoted.Travel is { Kind: QuestTravelKind.Home, FieldCode: QuestClasses.RicartenField }
+        Assert.True(fighter.Tier == 3 && promoted.Travel is { Kind: QuestTravelKind.Home, FieldCode: FieldCodes.Ricarten }
             && !Talk(fighter, HomeMaster).ClassChangeOffered, "the final tier differs");
 
         var morion = Character(PlayerClass.Magician, "Mage", 60, tier: 2);
-        Assert.True(QuestClasses.DuelMasterSound(morion) == LegacyNpcSoundCode.MagicMaster, "Morion classes do not duel the magic master");
+        Assert.True(QuestClasses.DuelMasterSound(morion) == CharacterSoundCodes.MagicMaster, "Morion classes do not duel the magic master");
         return Task.CompletedTask;
     }
 
@@ -373,13 +389,13 @@ internal static class QuestTests
             Assert.True(Talk(hero, npc).Prompt is { Followup: QuestFollowup.Confirm } prompt && prompt.State == battle, $"battle {battle} dialog differs");
             var enter = Expect(hero, npc, QuestAction.Accept, QuestCode.FuryOfPhantom, battle, $"battle {battle} did not open");
             var fighting = battle == 3 ? 4 : battle + 1;
-            Assert.True(hero.Quests.Active.State == fighting && enter.Duel is { SoundCode: LegacyNpcSoundCode.Fury } duel && duel.Level == level
+            Assert.True(hero.Quests.Active.State == fighting && enter.Duel is { SoundCode: CharacterSoundCodes.Fury } duel && duel.Level == level
                 && enter.Travel?.FieldCode == QuestArena.FieldCode, $"battle {battle} duel differs");
             var won = Context(hero, field: QuestArena.FieldCode);
             Assert.True(FuryOfPhantomQuest.OnDuelWon(won) && won.Prompt is { Document: "100LVQuest_Victory" }, "the Fury victory dialog differs");
             var back = Expect(hero, QuestNpc.None, QuestAction.Proceed, QuestCode.FuryOfPhantom, fighting, "the victory step failed",
                 field: QuestArena.FieldCode);
-            Assert.True(back.Travel is { Kind: QuestTravelKind.Home, FieldCode: QuestClasses.PillaiField } && !hero.Quests.Active.ArenaWon,
+            Assert.True(back.Travel is { Kind: QuestTravelKind.Home, FieldCode: FieldCodes.Pillai } && !hero.Quests.Active.ArenaWon,
                 "a won battle did not send the player to Pillai");
             if (battle == 3)
             {
@@ -513,12 +529,12 @@ internal static class QuestTests
         var done = Character(PlayerClass.Fighter, "Done", 100, tier: 3);
         Assert.True(!Talk(done, HomeMaster).ClassChangeOffered
             && Run(done, HomeMaster, QuestAction.ChangeClass, QuestCode.None, 0).Status == QuestStatus.Rejected, "a final-tier class changed again");
-        Assert.True(JobTitles.At(PlayerClass.Fighter, 1).Length > 0, "job titles are missing");
+        Assert.True(ClassProfiles.Of(PlayerClass.Fighter).TitleAt(1).Length > 0, "job titles are missing");
 
         // The quests split the classes by class number: the assassin takes the Morion side but gathers trophies.
         var assassin = Character(PlayerClass.Assassin, "Shade", 30);
         Assert.True(Talk(assassin, new QuestNpc(GiverCode: 1001)).Prompt is null && Talk(assassin, new QuestNpc(GiverCode: 1002)).Prompt is
-            { Code: QuestCode.Level30 } && QuestClasses.HomeField(assassin) == QuestClasses.PillaiField, "the assassin's quest side differs");
+            { Code: QuestCode.Level30 } && QuestClasses.HomeField(assassin) == FieldCodes.Pillai, "the assassin's quest side differs");
         Assert.True(Run(Character(PlayerClass.Assassin, "Shade", 20), HomeMaster, QuestAction.ChangeClass, QuestCode.None, 0).Prompt is
             { Code: QuestCode.RankUpTrophies }, "the assassin's first rank-up differs");
         Assert.True(Run(Character(PlayerClass.Shaman, "Mystic", 20), HomeMaster, QuestAction.ChangeClass, QuestCode.None, 0).Prompt?.Code is

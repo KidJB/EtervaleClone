@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using PristonTale.Engine3D.Formats;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Simulation.Characters;
+using PristonTale.Contracts.Motion;
 
 namespace PristonTale.Gameplay.World.Remote;
 
@@ -9,6 +10,49 @@ public readonly record struct PlayerActorHandles(ActorHandle Body, ActorHandle H
 {
     public ActorHandle Weapon { get; init; } = ActorHandle.None;
     public ActorHandle OffHand { get; init; } = ActorHandle.None;
+
+    // The body and the head move and play as one (the weapons follow by attachment).
+    public void SetWorld(IActorScene scene, Matrix world)
+    {
+        scene.SetActorWorld(Body, world);
+        scene.SetActorWorld(Head, world);
+    }
+
+    public void SetMotion(IActorScene scene, MotionCode motion)
+    {
+        scene.SetActorMotion(Body, motion);
+        scene.SetActorMotion(Head, motion);
+    }
+
+    public void RestartMotion(IActorScene scene, MotionCode motion)
+    {
+        scene.RestartActorMotion(Body, motion);
+        scene.RestartActorMotion(Head, motion);
+    }
+
+    public void SetMotionIndex(IActorScene scene, int motionIndex)
+    {
+        scene.SetActorMotionIndex(Body, motionIndex);
+        scene.SetActorMotionIndex(Head, motionIndex);
+    }
+
+    public void SeekMotion(IActorScene scene, int framesFromStart)
+    {
+        scene.SeekActorMotion(Body, framesFromStart);
+        scene.SeekActorMotion(Head, framesFromStart);
+    }
+
+    public void SetPlaybackRate(IActorScene scene, float rate)
+    {
+        scene.SetActorPlaybackRate(Body, rate);
+        scene.SetActorPlaybackRate(Head, rate);
+    }
+
+    public void SetColorAdd(IActorScene scene, Vector3 colorAdd)
+    {
+        scene.SetActorColorAdd(Body, colorAdd);
+        scene.SetActorColorAdd(Head, colorAdd);
+    }
 
     // The body first: it carries the skeleton the others follow.
     public int CopyTo(Span<ActorHandle> destination)
@@ -52,58 +96,77 @@ public readonly record struct PlayerActorHandles(ActorHandle Body, ActorHandle H
 public interface IPlayerActorComposer
 {
     Task PrepareAsync(string assetRoot, CharacterVisualSet visuals, int faceIndex) => Task.CompletedTask;
-    PlayerActorHandles Compose(string assetRoot, CharacterVisualSet visuals, int faceIndex, Matrix world, PristonActorMotion motion);
+    PlayerActorHandles Compose(string assetRoot, CharacterVisualSet visuals, int faceIndex, Matrix world, MotionCode motion);
 }
 
+// Each part of a look (body, head, weapon, shield) is read and prepared once and shared by every look that wears it, so
+// two players in the same armour, or one player stepping into a village (another stance, the same parts), read nothing
+// again. A look is ready when its parts are.
 public sealed class PlayerActorComposer(IActorScene scene, PristonActorLoader actorLoader) : IPlayerActorComposer
 {
     private readonly IActorScene _scene = scene;
     private readonly PristonActorLoader _actorLoader = actorLoader;
     private readonly Dictionary<(string Root, CharacterVisualSet Visuals, int Face), Task<Prepared>> _prepared = new();
+    private readonly Dictionary<(string Path, bool Rigid), Task<PristonActor>> _parts = new();
 
     public Task PrepareAsync(string assetRoot, CharacterVisualSet visuals, int faceIndex)
     {
         var key = (assetRoot, visuals, faceIndex);
         if (!_prepared.TryGetValue(key, out var preparation))
         {
-            preparation = Task.Run(async () =>
-            {
-                var prepared = Load(assetRoot, visuals, faceIndex);
-                await _scene.PrepareActorResourcesAsync(prepared.Body);
-                await _scene.PrepareActorResourcesAsync(prepared.Head);
-                if (prepared.Weapon is not null)
-                {
-                    await _scene.PrepareActorResourcesAsync(prepared.Weapon);
-                }
-
-                if (prepared.OffHand is not null)
-                {
-                    await _scene.PrepareActorResourcesAsync(prepared.OffHand);
-                }
-
-                return prepared;
-            });
+            var (body, head, weapon, offHand) = PartPaths(assetRoot, visuals, faceIndex);
+            preparation = Combine(Part(assetRoot, body, rigid: false), Part(assetRoot, head, rigid: false),
+                weapon is null ? null : Part(assetRoot, weapon, rigid: true), offHand is null ? null : Part(assetRoot, offHand, rigid: true));
             _prepared.Add(key, preparation);
         }
 
         return preparation;
     }
 
-    private Prepared Load(string root, CharacterVisualSet visuals, int face)
+    private static (string Body, string Head, string Weapon, string OffHand) PartPaths(string root, CharacterVisualSet visuals, int face) => (
+        Path.Combine(root, visuals.Body.InxExtensionPath),
+        Path.Combine(root, CharacterFace.ResolveHeadPath(visuals, face)),
+        string.IsNullOrEmpty(visuals.WeaponKey) ? null : Path.Combine(root, EquipmentVisuals.MeshPath(visuals.WeaponKey)),
+        string.IsNullOrEmpty(visuals.OffHandKey) ? null : Path.Combine(root, EquipmentVisuals.MeshPath(visuals.OffHandKey)));
+
+    private Task<PristonActor> Part(string root, string path, bool rigid)
     {
-        var body = _actorLoader.Load(root, Path.Combine(root, visuals.Body.InxExtensionPath));
-        var head = _actorLoader.Load(root, Path.Combine(root, CharacterFace.ResolveHeadPath(visuals, face)));
-        var weapon = string.IsNullOrEmpty(visuals.WeaponKey) ? null : _actorLoader.LoadRigid(Path.Combine(root, EquipmentVisuals.MeshPath(visuals.WeaponKey)));
-        var offHand = string.IsNullOrEmpty(visuals.OffHandKey) ? null : _actorLoader.LoadRigid(Path.Combine(root, EquipmentVisuals.MeshPath(visuals.OffHandKey)));
-        return new Prepared(body, head, weapon, offHand);
+        if (!_parts.TryGetValue((path, rigid), out var part))
+        {
+            part = Task.Run(async () =>
+            {
+                var actor = ReadPart(root, path, rigid);
+                await _scene.PrepareActorResourcesAsync(actor);
+                return actor;
+            });
+            _parts.Add((path, rigid), part);
+        }
+
+        return part;
     }
 
-    public PlayerActorHandles Compose(string assetRoot, CharacterVisualSet visuals, int faceIndex, Matrix world, PristonActorMotion motion)
+    private static async Task<Prepared> Combine(Task<PristonActor> body, Task<PristonActor> head, Task<PristonActor> weapon, Task<PristonActor> offHand) =>
+        new(await body, await head, weapon is null ? null : await weapon, offHand is null ? null : await offHand);
+
+    private PristonActor ReadPart(string root, string path, bool rigid) => rigid ? _actorLoader.LoadRigid(path) : _actorLoader.Load(root, path);
+
+    // A look composed before its preparation: the parts already prepared, the others read now.
+    private Prepared Load(string root, CharacterVisualSet visuals, int face)
+    {
+        var (body, head, weapon, offHand) = PartPaths(root, visuals, face);
+        return new Prepared(Ready(root, body, false), Ready(root, head, false), weapon is null ? null : Ready(root, weapon, true),
+            offHand is null ? null : Ready(root, offHand, true));
+    }
+
+    private PristonActor Ready(string root, string path, bool rigid) =>
+        _parts.TryGetValue((path, rigid), out var part) && part.IsCompletedSuccessfully ? part.Result : ReadPart(root, path, rigid);
+
+    public PlayerActorHandles Compose(string assetRoot, CharacterVisualSet visuals, int faceIndex, Matrix world, MotionCode motion)
     {
         return Compose(assetRoot, visuals, faceIndex, world, motion, visibleInMainPass: true);
     }
 
-    public PlayerActorHandles ComposePortrait(string assetRoot, CharacterVisualSet visuals, int faceIndex, PristonActorMotion motion)
+    public PlayerActorHandles ComposePortrait(string assetRoot, CharacterVisualSet visuals, int faceIndex, MotionCode motion)
     {
         return Compose(assetRoot, visuals, faceIndex, Matrix.Identity, motion, visibleInMainPass: false);
     }
@@ -113,7 +176,7 @@ public sealed class PlayerActorComposer(IActorScene scene, PristonActorLoader ac
         CharacterVisualSet visuals,
         int faceIndex,
         Matrix world,
-        PristonActorMotion motion,
+        MotionCode motion,
         bool visibleInMainPass)
     {
         var prepared = ResolvePrepared(assetRoot, visuals, faceIndex);
@@ -142,19 +205,21 @@ public sealed class PlayerActorComposer(IActorScene scene, PristonActorLoader ac
             {
                 handles = handles with
                 {
-                    Weapon = _scene.AddActor(new PristonActorInstance(prepared.Weapon, world, PristonActorMotion.Stand)
+                    Weapon = _scene.AddActor(new PristonActorInstance(prepared.Weapon, world, MotionCode.Stand)
                     {
                         VisibleInMainPass = visibleInMainPass
                     })
                 };
-                _scene.AttachActor(handles.Weapon, handles.Body, EquipmentVisuals.WeaponBone(visuals.WeaponKey, visuals.InVillage));
+                var held = EquipmentVisuals.WeaponBone(visuals.WeaponKey, visuals.InVillage);
+                var back = EquipmentVisuals.WeaponBone(visuals.WeaponKey, village: true);
+                _scene.AttachActor(handles.Weapon, handles.Body, held, back == held ? null : back);
             }
 
             if (prepared.OffHand is not null)
             {
                 handles = handles with
                 {
-                    OffHand = _scene.AddActor(new PristonActorInstance(prepared.OffHand, world, PristonActorMotion.Stand)
+                    OffHand = _scene.AddActor(new PristonActorInstance(prepared.OffHand, world, MotionCode.Stand)
                     {
                         VisibleInMainPass = visibleInMainPass
                     })
@@ -176,7 +241,7 @@ public sealed class PlayerActorComposer(IActorScene scene, PristonActorLoader ac
         CharacterVisualSet visuals,
         int faceIndex,
         Matrix world,
-        PristonActorMotion motion,
+        MotionCode motion,
         bool visibleInMainPass = true)
     {
         var prepared = ResolvePrepared(assetRoot, visuals, faceIndex);

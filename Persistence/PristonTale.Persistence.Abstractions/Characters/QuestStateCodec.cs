@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PristonTale.Simulation.Quests;
+using PristonTale.Simulation.Characters;
 
 namespace PristonTale.Persistence.Abstractions.Characters;
 
@@ -47,7 +48,7 @@ public static class QuestStateCodec
         var saved = new SavedQuest(active.Code, active.State, active.Target, active.Kills, active.KillsNeeded, active.Variant, active.Timer, active.TimerMs,
             active.StartLevel, active.WeaponId, active.RingId, active.WeaponCreatedUnixMs, active.WeaponStage, active.WeaponKillsLeft, active.WeaponLifeBonus,
             active.WeaponManaRegenTenths, active.ArenaWon);
-        var operations = journal.Operations
+        var operations = StoredHistory.Newest(journal.Operations)
             .Select(static applied => new SavedQuestOperation(applied.Command.OperationId, applied.Command.NpcEntityId, applied.Command.Action,
                 applied.Command.Code, applied.Command.State, applied.Command.Choice, applied.Revision))
             .ToArray();
@@ -58,14 +59,14 @@ public static class QuestStateCodec
     public static QuestJournal Read(JsonText json)
     {
         var journal = new QuestJournal();
-        if (CharacterStateCodec.IsLegacyEmpty(json, JsonValueKind.Object))
+        if (CharacterStateCodec.IsBlank(json, JsonValueKind.Object))
         {
             return journal;
         }
 
         var state = JsonSerializer.Deserialize<SavedQuests>(json.Value, CharacterStateCodec.Options);
         if (state is null || state.Version != CurrentVersion || state.Active is null || state.Finished is null || state.Operations is null
-            || state.Finished.Length > QuestJournal.FinishedCapacity || state.Operations.Length > QuestJournal.OperationCapacity)
+            || state.Finished.Length > QuestJournal.FinishedCapacity || state.Operations.Length > OperationHistory<AppliedQuestOperation>.Capacity)
         {
             throw new InvalidDataException("Unsupported quest-state version or size.");
         }
