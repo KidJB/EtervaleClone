@@ -197,7 +197,11 @@ public sealed class FieldGroundLoot(ItemCatalog catalog, FieldTerrain? terrain =
     // The gold a drop holds; 0 for an item or a drop that is gone.
     public long GoldOf(Guid id) => _entries.TryGetValue(id, out var entry) && entry.View.Gold ? entry.View.Amount : 0;
 
-    public bool TryReserve(Guid id, Guid operation, WorldPlayer player, out GroundDropView? view, out ItemInstance? item)
+    // Gold or a potion, which a helper pet fetches for its owner (PetFetch).
+    public bool PetFetches(Guid id) =>
+        _entries.TryGetValue(id, out var entry) && (entry.View.Gold || entry.Item?.Definition.Kind == ItemKind.Potion);
+
+    public bool TryReserve(Guid id, Guid operation, WorldPlayer player, out GroundDropView? view, out ItemInstance? item, float reach = PickupReach)
     {
         view = null;
         item = null;
@@ -208,7 +212,7 @@ public sealed class FieldGroundLoot(ItemCatalog catalog, FieldTerrain? terrain =
         }
 
         var delta = player.Position - entry.View.Position;
-        if (delta.X * delta.X + delta.Z * delta.Z > PickupReach * PickupReach)
+        if (delta.X * delta.X + delta.Z * delta.Z > reach * reach)
         {
             return false;
         }

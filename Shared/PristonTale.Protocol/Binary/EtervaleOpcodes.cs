@@ -26,6 +26,7 @@ public static class EtervaleOpcodes
     public const uint BossTime = 0x45540181;
     public const uint BossSpots = 0x45540182;
     public const uint BossList = 0x45540183;
+    public const uint PetCollection = 0x45540184;
 
     public const uint SkillCast = 0x45540200;
     public const uint SkillCastResult = 0x45540201;

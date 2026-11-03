@@ -23,6 +23,7 @@ internal static class WorldRewardsTests
         yield return ("reference XP event multiplies before level penalty and crosses real level thresholds", ExperienceAsync);
         yield return ("field death materializes its rolled loot and grants XP exactly once", DeathAsync);
         yield return ("ground loot respects ownership, reservations, rollback and expiry", GroundAsync);
+        yield return ("a helper pet fetches gold and potions from farther than the hand reaches, and nothing else", PetFetchAsync);
         yield return ("ground presence survives skipped snapshots", PresenceAsync);
         yield return ("drops fall in turn on a ring around their origin, passing held cells and cells without floor", DropSpotsAsync);
     }
@@ -74,6 +75,31 @@ internal static class WorldRewardsTests
         }
 
         Assert.True(field.GroundLoot.Count == 1 && character.Experience == 525, "corpse paid twice");
+        return Task.CompletedTask;
+    }
+
+    private static Task PetFetchAsync()
+    {
+        var potion = new ItemDefinition(60, "Life Potion", ItemKind.Potion) { CatalogKey = "PL101" };
+        var axe = new ItemDefinition(55, "Stone Axe", ItemKind.Axe) { CatalogKey = "WA101" };
+        var ground = new FieldGroundLoot(new ItemCatalog([potion, axe]));
+        ground.Place(new KillPayout(2, 1, 0, [RolledDrop.Gold(40), RolledDrop.Item(60), RolledDrop.Item(55)]), Vector3.Zero, true, 0, new CombatRng(1));
+        var drops = ground.Snapshot().Select(state => state.View).ToArray();
+        var gold = drops.Single(drop => drop.Gold);
+        var bottle = drops.Single(drop => drop.ItemCode == 60);
+        var weapon = drops.Single(drop => drop.ItemCode == 55);
+        Assert.True(ground.PetFetches(gold.Id) && ground.PetFetches(bottle.Id) && !ground.PetFetches(weapon.Id), "the pet would fetch the wrong drops");
+
+        // Halfway to the pet's reach: past the hand, within the pet.
+        var character = new CharacterClassRegistry().CreatePlayer(PlayerClass.Fighter, "Pet owner");
+        var owner = new WorldPlayer(1, gold.Position + new Vector3(PetFetch.Reach / 2, 0, 0), character, false, default);
+        Assert.True(!ground.TryReserve(gold.Id, Guid.NewGuid(), owner, out _, out _), "the hand reached past its reach");
+        Assert.True(ground.TryReserve(gold.Id, Guid.NewGuid(), owner, out _, out _, PetFetch.Reach), "the pet did not reach gold within its reach");
+        var far = new WorldPlayer(1, bottle.Position + new Vector3(PetFetch.Reach + 1, 0, 0), character, false, default);
+        Assert.True(!ground.TryReserve(bottle.Id, Guid.NewGuid(), far, out _, out _, PetFetch.Reach), "the pet reached past its reach");
+
+        Assert.True(PetFetch.LooksLikePotion("PL101") && PetFetch.LooksLikePotion("pm202") && PetFetch.LooksLikePotion("PS103")
+            && !PetFetch.LooksLikePotion("WA101") && !PetFetch.LooksLikePotion("PL") && !PetFetch.LooksLikePotion(""), "the client's potion guess is wrong");
         return Task.CompletedTask;
     }
 

@@ -73,6 +73,7 @@ public sealed partial class GameplayHud : IDisposable
     private readonly HudMinimap _minimap = new();
     private readonly HudBossTime _bossTime = new();
     private readonly HudBossList _bossList = new();
+    private readonly HudPetWindow _petWindow = new();
     private readonly List<HudMapMarker> _minimapMarkers = new(64);
     private int _savedMap = -1;
     private readonly HudTargetPortrait _portrait;
@@ -130,6 +131,7 @@ public sealed partial class GameplayHud : IDisposable
         _sprites.Request(HudQuestArt.All);
         _painter = new HudPainter(context.SpriteBatch, context.Font, _sprites);
         _icons = new HudItemIcons(context.GraphicsDevice, context.AssetRoot, context.Log);
+        _icons.Request([PetSkins.IconKey]);
         _personalShop = new HudPersonalShopController(context.Log) { Notify = _notice.Show, AskCount = (first, second, maximum, accepted) => _countBox.Open(first, second, maximum, accepted) };
         _serviceWindows = [_shop, _warehouse, _aging, _mix, _personalShop.Window, _trade];
         _sprites.Request(HudPersonalShopArt.All);
@@ -215,6 +217,9 @@ public sealed partial class GameplayHud : IDisposable
 
     // The bosses of the player's field at their spot (grey until alive, red while alive on the minimap).
     public IReadOnlyList<PristonTale.Client.Net.Presence.BossSpotInfo> BossSpots { get; set; } = [];
+
+    // The local player's pet collection, for the pet window.
+    public PristonTale.Client.Net.Presence.PetCollectionInfo PetCollection { get; set; } = new(0, 0);
 
     // Every scheduled boss of the world, for the boss list beside the minimap.
     public IReadOnlyList<PristonTale.Client.Net.Presence.BossListInfo> BossList
@@ -360,6 +365,12 @@ public sealed partial class GameplayHud : IDisposable
         if (_bossList.Open)
         {
             _bossList.Close();
+            return true;
+        }
+
+        if (_petWindow.Open)
+        {
+            _petWindow.Close();
             return true;
         }
 
@@ -664,6 +675,7 @@ public sealed partial class GameplayHud : IDisposable
             }
 
             _bossList.DrawButton(_painter, _minimap.Area(layout), pointer);
+            HudPetWindow.DrawButton(_painter, _minimap.Area(layout), pointer, _petWindow.Open);
             _painter.Flush();
             _bossList.Draw(_painter, layout, _minimap.Area(layout), _clock.Elapsed.TotalMilliseconds);
         }
@@ -846,6 +858,8 @@ public sealed partial class GameplayHud : IDisposable
         _partyRequest.Draw(_painter, pointer, _clock.Elapsed.TotalMilliseconds);
         _tradeRequest.Draw(_painter, pointer, _clock.Elapsed.TotalMilliseconds);
         _restart.Draw(_painter, layout, pointer, RestartOffer?.FieldOpen == true, InCastleField);
+        _painter.Flush();
+        _petWindow.Draw(_painter, layout, PetCollection, _icons, pointer);
         _painter.Flush();
         DrawMinimapName(layout, pointer);
         _actionBar.DrawOverlay(_painter, layout, _state, _icons, _skillHud, pointer);

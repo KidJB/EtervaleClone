@@ -376,6 +376,8 @@ public sealed class WorldPlayer
         HelperPet = HelpPets.Active(_character) is { } pet ? HelpPets.KindOf(pet) : 0,
         Phoenix = _character.Premium.IsActive(PremiumEffectKind.PhoenixPet),
         BigHead = _character.Premium.BigHeadMode,
+        PetSkin = _character.PetOut,
+        PetName = _character.PetName,
         ShopSign = Shop?.Sign ?? ""
     };
 

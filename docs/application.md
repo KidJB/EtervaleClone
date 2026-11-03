@@ -334,6 +334,11 @@ summon status ends. Charmed wild monsters become summons for the charm duration.
 - Pickup reserves a drop by operation id (`TryReserve`, reach 32 units); a reserved drop does not expire. `Resolve`
   removes it on commit (a pickup has no store, so nothing releases it before). Inventory-delivered drops (`ToInventory`)
   throw `NotSupportedException`.
+- A helper pet fetches: while a helper pet is beside the player (`HelpPets.Active`), a pickup of gold or a potion
+  (`FieldGroundLoot.PetFetches`: the item's kind) reserves within `PetFetch.Reach` (200 units) instead of the hand's
+  reach. The client sends those pickups itself (`GroundLootInteraction`, every 300 ms while nothing else is picked:
+  the nearest gold, and potions it guesses from their key unless `petPicksUpPotions` is off), leaving a refused drop
+  alone for 5 s.
 - The reserved copy keeps the rolled values of the drop under the drop's id. A pickup that would carry the character
   over the weight limit is refused with `ItemRuleMessages.OverWeight`.
 
@@ -548,6 +553,19 @@ command quota), leaving the world or changing place ends the trade for both; the
 delivered after the tick (`TakeTickNotices`). Every snapshot carries the receiver's `TradeView` (the partner items with
 their values for it) and pending `TradeRequest`. Meanwhile inventory commands and item uses on an offered item
 (`Offers`), NPC services and opening a personal shop are refused.
+
+## Pet skins
+
+A pet skin is a monster drawn small beside its owner (`PetSkins`: id, name, monster, model, scale and item; ten to start).
+The account owns the skins it unlocked: each character row keeps a bit per skin (`pet_skins`) and entering the world
+joins every row of the account (`SessionAppService`, `PlayerCharacter.JoinAccountPetSkins`); a character has at most one
+pet out (`pet_out`, `PlayerCharacter.SendPetOut`, which refuses a skin not unlocked). A skin's item (`PE101`-`PE110`,
+added to the imported catalog by `WorldDataAppService`, `ItemKind.Misc`) drops from its monster at 50 in 10,000 kills
+(`FieldCombat.FinishDrops`); using it (`PetSkinUse`) unlocks the skin and sends that pet out, and is refused for a skin
+already unlocked so the item is kept. `/pet <id>` sends an unlocked skin's pet out and `/pet off` puts it away
+(`PetCommand`, `WorldServer.SendPetOutAsync`); the client's pet window sends them. The pet out is part of the player's
+looks (`PlayerAppearanceView.PetSkin`, description version 3) and the owner's collection travels as `PetCollection`
+(protocol.md). A pet out fetches gold and potions as a helper pet does (Ground loot).
 
 ## Beginner's helper pet
 

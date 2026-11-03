@@ -57,6 +57,8 @@ public sealed record ClientSettings
     public bool LevelGuide { get; init; } = true;
     // The weather the server sends: clouds, rain, lightning and their sounds; off keeps the sky clear.
     public bool WeatherEnabled { get; init; } = true;
+    // A helper pet beside the player fetches potions from the ground as well as gold; off: gold only.
+    public bool PetPicksUpPotions { get; init; } = true;
     // The physical sky (sun, moon, stars, volumetric clouds) instead of the original's painted domes, and its clouds.
     public bool RealisticSky { get; init; } = true;
     public CloudQuality CloudQuality { get; init; } = CloudQuality.Medium;

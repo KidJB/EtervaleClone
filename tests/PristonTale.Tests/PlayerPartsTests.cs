@@ -14,7 +14,7 @@ internal static class PlayerPartsTests
 {
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
-        yield return ("looks that share a body, head or weapon read and prepare each part once and show the same model", SharedAsync);
+        yield return ("looks that share a body, head or weapon read and prepare each part once and show the same model; an unknown held item is left out", SharedAsync);
     }
 
     private static async Task SharedAsync()
@@ -41,6 +41,11 @@ internal static class PlayerPartsTests
         composer.Compose(root, claw, 0, Matrix.Identity, MotionCode.Stand);
         var bodies = scene.Added.Where(actor => ReferenceEquals(actor, scene.Added[0])).Count();
         Assert.True(bodies == 2 && scene.Added.Distinct().Count() == 4, "two looks in the same armour did not show the same body model");
+
+        // A held item the equipment table has no model for is left out of the look instead of stopping its preparation.
+        var unknown = plain with { WeaponKey = "WD999", OffHandKey = "DS999" };
+        await composer.PrepareAsync(root, unknown, 0);
+        composer.Compose(root, unknown, 0, Matrix.Identity, MotionCode.Stand);
     }
 
     private static string? FindAssets()

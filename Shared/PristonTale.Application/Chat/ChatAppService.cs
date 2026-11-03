@@ -68,6 +68,37 @@ public sealed class ChatAppService
             return;
         }
 
+        if (Simulation.Characters.PetNames.TryParseCommand(text, out var petName))
+        {
+            try
+            {
+                if (!await World.RenamePetAsync(entityId, petName))
+                {
+                    await SystemLineAsync(entityId, $"A pet's name is up to {Simulation.Characters.PetNames.MaxLength} letters, digits and spaces.");
+                }
+            }
+            catch (WorldBusyException)
+            {
+                // A full tick queue drops the command, as it drops a spoken line.
+            }
+
+            return;
+        }
+
+        if (Simulation.Characters.PetCommand.TryParse(text, out var petSkin))
+        {
+            try
+            {
+                await World.SendPetOutAsync(entityId, petSkin);
+            }
+            catch (WorldBusyException)
+            {
+                // A full tick queue drops the command, as it drops a spoken line.
+            }
+
+            return;
+        }
+
         if (Simulation.Characters.HelpPets.Commands.Any(command => ChatCommandText.Match(command, text) > 0))
         {
             try

@@ -1,3 +1,4 @@
+using PristonTale.Simulation.Characters;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
@@ -362,6 +363,12 @@ internal sealed class FieldCombat
         if (monster.Def.DeathGoldChance > 0 && gold.Max > 0 && _rng.RollPercent() < monster.Def.DeathGoldChance)
         {
             drops.Add(RolledDrop.Gold(_rng.Range(gold.Min, gold.Max)));
+        }
+
+        // A pet skin's monster may drop the skin's item.
+        if (PetSkins.ForMonster(monster.Def.Code) is { } skin && _rng.NextExclusive(0, 10_000) < PetSkins.DropPerTenThousand)
+        {
+            drops.Add(RolledDrop.Item(skin.ItemCode));
         }
 
         return drops;

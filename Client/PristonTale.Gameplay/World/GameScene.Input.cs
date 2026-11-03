@@ -107,7 +107,8 @@ public sealed partial class GameScene
         UpdatePendingCast();
         UpdateNpcApproach();
         UpdateReachedPlayer();
-        _lootInteraction?.Update(_groundLoot, _playerBody.Position, _serverPlanarPosition, Owner);
+        _lootInteraction?.Update(_groundLoot, _playerBody.Position, _serverPlanarPosition, Owner, PetOut, _presentation?.Requested.PetPicksUpPotions ?? true,
+            gameTime.TotalGameTime.TotalMilliseconds);
         UpdateAttackPresentation(gameTime);
         if (_followCursor && !WorldClicksBlocked && !SelfCasting)
         {

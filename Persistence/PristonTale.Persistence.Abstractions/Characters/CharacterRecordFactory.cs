@@ -88,6 +88,10 @@ public static class CharacterRecordFactory
             StarterGiftsReceived = character.StarterGiftsReceived,
             HelpPet = (short)character.HelpPet,
             HelpPetHidden = character.HelpPetHidden,
+            // The unsigned skin bits keep their 64-bit pattern in the signed column.
+            PetSkins = unchecked((long)character.PetSkins),
+            PetOut = (short)character.PetOut,
+            PetName = character.PetName,
             Strength = attributes.Strength,
             Spirit = attributes.Spirit,
             Talent = attributes.Talent,

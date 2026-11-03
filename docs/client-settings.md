@@ -78,6 +78,7 @@ renderer through `PresentationSettings.ApplyRendering` and apply at once.
 | `realisticSky` | bool, `true` | | yes (Sky) | The physical sky (sun, moon, stars, aurora, rainbow, clouds) instead of the original's painted domes ([rendering.md](rendering.md#realistic-sky)). |
 | `cloudQuality` | `Off`, `Low`, `Medium` (default), `High` | others: the default | yes (Clouds) | The realistic sky's volumetric clouds and their shadows: off, or their hemisphere rendered at 768 x 192, 1024 x 256 or 1536 x 384 (High costs about 2.7 ms a frame on a GTX 1050 Ti at 1920 x 1080); presets Low and Medium take `Low`, High `Medium`, Ultra `High`. |
 | `weatherEnabled` | bool, `true` | | yes (Weather) | The weather the server sends: clouds, rain, splashes, lightning, the rain and thunder sounds ([client.md](client.md#weather)). `false` keeps the sky clear and the field ambience on, as the original's rain switch did. |
+| `petPicksUpPotions` | bool, `true` | | yes (Pet pickup) | A helper pet beside the player fetches potions from the ground as well as gold (`GroundLootInteraction`); `false`: gold only. |
 
 ### Rendering
 

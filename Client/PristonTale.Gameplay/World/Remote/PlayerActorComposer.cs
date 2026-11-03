@@ -123,11 +123,16 @@ public sealed class PlayerActorComposer(IActorScene scene, PristonActorLoader ac
         return preparation;
     }
 
+    // A held item without a model in the equipment table is not drawn, as an armour without a body keeps the class body:
+    // one unknown item cannot stop the frame that draws its wearer.
     private static (string Body, string Head, string Weapon, string OffHand) PartPaths(string root, CharacterVisualSet visuals, int face) => (
         Path.Combine(root, visuals.Body.InxExtensionPath),
         Path.Combine(root, CharacterFace.ResolveHeadPath(visuals, face)),
-        string.IsNullOrEmpty(visuals.WeaponKey) ? null : Path.Combine(root, EquipmentVisuals.MeshPath(visuals.WeaponKey)),
-        string.IsNullOrEmpty(visuals.OffHandKey) ? null : Path.Combine(root, EquipmentVisuals.MeshPath(visuals.OffHandKey)));
+        HeldPath(root, visuals.WeaponKey),
+        HeldPath(root, visuals.OffHandKey));
+
+    private static string HeldPath(string root, string key) =>
+        string.IsNullOrEmpty(key) || !EquipmentVisuals.HasModel(key) ? null : Path.Combine(root, EquipmentVisuals.MeshPath(key));
 
     private Task<PristonActor> Part(string root, string path, bool rigid)
     {

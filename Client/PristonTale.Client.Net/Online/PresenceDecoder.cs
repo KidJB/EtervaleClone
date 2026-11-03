@@ -149,6 +149,7 @@ internal sealed class PresenceDecoder : IEventHandleReader
             EtervaleOpcodes.BossTime => OnBossTime(BossTimePacket.Read(packet)),
             EtervaleOpcodes.BossSpots => OnBossSpots(BossSpotsPacket.Read(packet)),
             EtervaleOpcodes.BossList => OnBossList(BossListPacket.Read(packet)),
+            EtervaleOpcodes.PetCollection => Update([], []) with { PetCollection = PetCollectionPacket.Read(packet) is var pets ? new PetCollectionInfo(pets.Skins, pets.Out) { Name = pets.Name } : null },
             _ => null
         };
         return update is not null || code is EtervaleOpcodes.PresenceEntries or EtervaleOpcodes.EntityDescription or EtervaleOpcodes.RemoveObjects
@@ -159,7 +160,8 @@ internal sealed class PresenceDecoder : IEventHandleReader
             or EtervaleOpcodes.PremiumTimers or EtervaleOpcodes.ItemEffects or EtervaleOpcodes.RestartOffer or EtervaleOpcodes.QuestJournal or EtervaleOpcodes.QuestNotices
             or EtervaleOpcodes.ChatLine or EtervaleOpcodes.CloseRequest or EtervaleOpcodes.PartyMembers or EtervaleOpcodes.PartyRequest
             or EtervaleOpcodes.TradeDetails or EtervaleOpcodes.TradeState or EtervaleOpcodes.TradeAsked or EtervaleOpcodes.ContactList
-            or EtervaleOpcodes.Weather or EtervaleOpcodes.BossTime or EtervaleOpcodes.BossSpots or EtervaleOpcodes.BossList;
+            or EtervaleOpcodes.Weather or EtervaleOpcodes.BossTime or EtervaleOpcodes.BossSpots or EtervaleOpcodes.BossList
+            or EtervaleOpcodes.PetCollection;
     }
 
     public PresenceUpdate OnBossList(BossListPacket packet)
@@ -727,6 +729,8 @@ internal sealed class PresenceDecoder : IEventHandleReader
                 ItemCodes.KeyOf(looks.Weapon), ItemCodes.KeyOf(looks.Armor), ItemCodes.KeyOf(looks.OffHand), looks.InVillage)
             {
                 HelperPet = looks.HelperPet,
+                PetSkin = looks.PetSkin,
+                PetName = looks.PetName,
                 Phoenix = looks.Phoenix,
                 BigHead = looks.BigHead,
                 WeaponGlow = Glow(looks.WeaponGlow),

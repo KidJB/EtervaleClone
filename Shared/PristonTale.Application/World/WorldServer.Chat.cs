@@ -52,6 +52,14 @@ public sealed partial class WorldServer
     }
 
     // The beginner's pet command: shows or hides it; false when the player has none to show.
+    // Sends a pet skin out (0 puts the pet away); false for a skin the account has not unlocked.
+    public Task<bool> SendPetOutAsync(ulong entityId, int skin) =>
+        EnqueueAsync(entityId, () => _connections.TryGetValue(entityId, out var connection) && connection.Player.Character.SendPetOut(skin));
+
+    // Names the pet (empty clears the name); false for a name PetNames refuses.
+    public Task<bool> RenamePetAsync(ulong entityId, string name) =>
+        EnqueueAsync(entityId, () => _connections.TryGetValue(entityId, out var connection) && connection.Player.Character.RenamePet(name));
+
     public Task<bool> ToggleHelpPetAsync(ulong entityId) =>
         EnqueueAsync(entityId, () => _connections.TryGetValue(entityId, out var connection) && connection.Player.Character.ToggleHelpPet());
 

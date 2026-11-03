@@ -15,6 +15,10 @@ public sealed record PlayerAppearanceInfo(
 {
     // Premium looks: the helper pet (1 Terry, 2 Nepsys, 3 Io, 4 Mute), the Phoenix and the big head (1 or 2).
     public int HelperPet { get; init; }
+
+    // The pet skin out (PetSkins id, 0 none).
+    public int PetSkin { get; init; }
+    public string PetName { get; init; } = "";
     public bool Phoenix { get; init; }
     public int BigHead { get; init; }
 

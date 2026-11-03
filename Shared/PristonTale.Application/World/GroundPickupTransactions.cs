@@ -1,5 +1,6 @@
 using PristonTale.Application.Sessions;
 using PristonTale.Persistence.Abstractions.Characters;
+using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.Parties;
 using PristonTale.Simulation.World.Npcs;
@@ -14,8 +15,12 @@ internal static class GroundPickupTransactions
     {
         var original = player.Character;
         var dropId = command.ItemId;
+        // A helper pet or a skin pet beside the picker fetches gold and potions from farther than the hand reaches.
+        var reach = (HelpPets.Active(original) is not null || original.PetOut != 0) && field.GroundLoot.PetFetches(dropId)
+            ? PetFetch.Reach
+            : FieldGroundLoot.PickupReach;
         if (command.ExpectedRevision != original.InventoryRevision || command.Count != 1 || command.Destination is not (0 or InventoryCommand.PickupToBag)
-            || !field.GroundLoot.TryReserve(dropId, command.OperationId, player, out var drop, out var item))
+            || !field.GroundLoot.TryReserve(dropId, command.OperationId, player, out var drop, out var item, reach))
         {
             return new(original, null, null, new(false, original.InventoryRevision, "drop unavailable or out of reach"));
         }

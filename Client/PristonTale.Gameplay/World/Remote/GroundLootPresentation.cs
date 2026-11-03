@@ -1,3 +1,4 @@
+using PristonTale.Simulation.Characters;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using PristonTale.Client.Net.Presence;
@@ -54,10 +55,12 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
                 continue;
             }
 
-            if (!_prepared.TryGetValue(drop.CatalogKey, out var task))
+            // A pet skin's item lies on the ground as the helper pet's item, whose sprite it shows too.
+            var model = PetSkins.IsItem(drop.CatalogKey) ? PetSkins.IconKey : drop.CatalogKey;
+            if (!_prepared.TryGetValue(model, out var task))
             {
-                task = PrepareAsync(drop.CatalogKey);
-                _prepared.Add(drop.CatalogKey, task);
+                task = PrepareAsync(model);
+                _prepared.Add(model, task);
                 _ = ObserveAsync(task);
             }
 
@@ -157,6 +160,16 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
         }
 
         return lowest;
+    }
+
+    // Fills the caller's list (cleared first) with every drop shown, for the helper pet's fetch, without allocating.
+    public void CollectDrops(List<GroundDropView> drops)
+    {
+        drops.Clear();
+        foreach (var entry in _entries.Values)
+        {
+            drops.Add(entry.Drop);
+        }
     }
 
     public bool TryGetDrop(Guid id, out GroundDropView drop)

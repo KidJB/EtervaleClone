@@ -164,6 +164,7 @@ FluentMigrator scans `PristonTale.Persistence` for `[Migration(n)]` classes. Ver
 | 32 | `M032StarterGifts` | `characters.starter_gifts_received` (int, default 5): the starter gifts a character received; characters stored before count as served |
 | 33 | `M033HelpPet` | `characters.help_pet` (int16, default 0) and `help_pet_hidden` (bool, default false): the beginner's helper pet and whether the player hid it |
 | 34 | `M034StarterOffHand` | The off-hand became the third starter gift: a `starter_gifts_received` of 3 or more rises by one, so a served character stays served |
+| 35 | `M035PetSkins` | `characters.pet_skins` (int64, default 0: the pet skins unlocked, a bit per `PetSkins` id; the account's set is every one of its rows joined at login) and `pet_out` (int16, default 0: the skin out) |
 
 Upgrade path: databases from the earlier migration set at version 12 upgrade in place. Databases at
 versions 1-11 make `M013Baseline` throw; bring them to 12 with the previous release or back up and recreate them.
