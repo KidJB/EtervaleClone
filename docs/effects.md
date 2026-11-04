@@ -33,7 +33,7 @@ writes that data, and the gameplay glue in `Client/PristonTale.Gameplay/Effects/
 | `Client/PristonTale.Gameplay/Effects/MonsterVisualFamilies.cs` | Sound family (and level, size) to effect family |
 | `Client/PristonTale.Gameplay/Effects/ActorLooks.cs`, `World/Remote/ActorLookPresenter.cs` | `ActorLookBook`: skill looks per entity from statuses, casts and impacts; the presenter paints them on actors (tint, opacity, overlay, wobble, shield swap, weapon copy, afterimage echoes) |
 | `Client/PristonTale.Gameplay/Effects/CostumeWings.cs` | Wings of the premium costume body items |
-| `Shared/PristonTale.Simulation/Items/HeldItemGlow.cs`, `Client/PristonTale.Gameplay/World/GameScene.HeldItems.cs`, `Effects/ClassUpLights.cs` | The glow of held weapons and shields (unique colours, aging colours, mix textures) and the class-up weapon lights |
+| `Shared/PristonTale.Simulation/Items/HeldItemGlow.cs`, `Client/PristonTale.Gameplay/World/GameScene.HeldItems.cs`, `Effects/WeaponOrbitLights.cs` | The glow of held weapons and shields (unique colours, aging colours, mix textures), the class-up weapon lights and the weapon orbits of skill statuses |
 | `Shared/PristonTale.Simulation/Skills/SkillRulePresentation.cs` | Rule fields for per-hit sounds and effects and actor looks |
 | `Client/PristonTale.Engine3D/Rendering/PristonVfxEffect.cs`, `PristonMeshEffect.cs` | VFX shader wrapper (`Vfx.fx`, blend modes) and baked effect models |
 | [`tools/PristonTale.VfxImport/`](../tools/PristonTale.VfxImport) | `ptvfx import`: converts the original effect scripts and installs the hand-authored definitions |
@@ -52,7 +52,7 @@ the client. `assets/` is not in Git, so the data is produced by `ptvfx import <a
 | `Scripts/` | `script.<File>`: one per original effect group script (`Effect/NewEffect/*.lua`) | converted |
 | `Particles/` | `particle.<File>`: one per original particle script (`Effect/Particle/Script/*.part`) | converted |
 | `Costumes/` | Costume wings (`vfx.costume.wing.*`) | `tools/PristonTale.VfxImport/Authored/Costumes/` |
-| `Monsters/<Group>/` | One file per monster family (`vfx.monster.<family>.*`), grouped by region: `Field`, `Iron`, `Ice`, `Temple`, `Revived` | `tools/PristonTale.VfxImport/Authored/Monsters/` |
+| `Monsters/<Group>/` | One file per monster family (`vfx.monster.<family>.*`), grouped by region: `Field`, `Iron`, `Ice`, `Temple`, `Revived`, `Arena` (Hestian, whose skills show Chaos Cara's effects) | `tools/PristonTale.VfxImport/Authored/Monsters/` |
 | `Items/` | Reserved for item effects authored the same way | `Authored/Items/` |
 
 Files load in ordinal order of their relative path. A name defined again replaces the earlier definition (reported as
@@ -274,6 +274,10 @@ converted scripts.
 | Impulsion | Weapon glow; rays and hit particles; lightning arcs between chained targets | `vfx.mech.impulsion.*` |
 | Compulsion, Metal Golem | Converted effect groups at the caster | `vfx.mech.compulsion.cast`, `vfx.mech.metalgolem.cast` |
 | Magnetic Sphere | Orb machine hovering by the caster; lightning and shots to what it strikes | `vfx.mech.magneticsphere.*` |
+| Land Mining | Mine particles at the caster; Mechanic Bomb's fire burst over the caster at the hit | `vfx.mech.landmining.cast`, `vfx.impact.bomb` |
+| Hyper Sonic | Converted effect group at the caster; two lights circling the weapon while active (`weaponOrbit`) | `vfx.mech.hypersonic.cast`, `particle.Skill5_Mecanician_HyperSonic1`/`2` |
+| Rolling Smash | Hit particles at each strike; a spinning tornado model rising from the caster at the third, a falling burst at the target at the fourth | `vfx.mech.rollingsmash.*` |
+| Power Enhancement | A starting burst and two particle streams at the weapon hand of each holder while active | `vfx.mech.powerenhance.aura` |
 
 ### Fighter
 
@@ -288,6 +292,10 @@ converted scripts.
 | Destroyer | Long bone band; converted hit group per hit | `vfx.trail.bone.long`, `vfx.fighter.destroyer.hit` |
 | Berserker | Converted group and particles on the caster while active | `vfx.fighter.berserker.aura` |
 | Cyclone Strike | Long bone band; normal hit on each target | `vfx.fighter.cyclone.*` |
+| Down Hit | Down Hit band and a warm light at each strike, hit particles, a flash at the third; the camera shakes near the caster | `vfx.trail.downhit`, `vfx.fighter.downhit.*` |
+| Power Dash | Extinction burst at the caster; the dash models at the target | `vfx.fighter.powerdash.*` |
+| Mortal Blow | Long Down Hit band; triple impact flash and swing at both strikes; the camera shakes | `vfx.trail.mortalblow`, `vfx.fighter.mortalblow.*` |
+| Bloody Berserker | Red lights, roar models and dust; converted group and particles while active; red rage glow | `vfx.fighter.bloodyberserker.*` |
 
 ### Pikeman
 
@@ -299,6 +307,10 @@ converted scripts.
 | Tornado | Two bands sweeping a full turn through the target, two round impacts there | `vfx.pike.tornado.hit` |
 | Expansion | Enlarged red translucent weapon (`weaponGrowth`); round impact per hit | `vfx.pike.expansion.hit` |
 | Venom Spear | Particles ahead of the caster; venom model and three particle bursts at each target | `vfx.pike.venomspear.*` |
+| Dancing Reaper | Light band; hit particles and a critical flash at the target | `vfx.pike.dancingreaper.*` |
+| Final Spear | Particle streams at the weapon; a spear model rising under each enemy struck with two particle bursts | `vfx.pike.finalspear.*` |
+| Amplified | Particle aura for 3 s; Physical Absorption's burst and its orbiting shields while active | `vfx.pike.amplified.cast`, `vfx.cast.absorb`, `vfx.buff.absorb` |
+| Side Spin Attack | Ray band; Destroyer's hit at the first strike, a triple impact above the target at the second | `vfx.pike.sidespin.*`, `vfx.fighter.destroyer.hit` |
 | Vanish | Flares rushing through the caster and particles; translucent body | `vfx.pike.vanish.cast`; `statusLook` |
 | Chain Lance | Red band; hit particles per hit | `vfx.trail.red`, `vfx.pike.chainlance.hit` |
 | Assassin Eye | Converted eye group above the marked target | `vfx.pike.assassineye.mark` |
@@ -320,6 +332,10 @@ converted scripts.
 | Recall Wolverine | Fire particles | `vfx.archer.wolverine.cast` |
 | Phoenix Shot | Phoenix model flying through the target carrying fire | `vfx.archer.phoenix.shot` |
 | Force of Nature | Converted group on the caster while active | `vfx.archer.nature.aura` |
+| Evade Shot | Particle streams at the bow, a burst ahead of and on the caster, hit particles on the target at the first event; Avalanche's arrow and hit at the second | `vfx.archer.evadeshot.cast`, `vfx.archer.avalanche.*` |
+| Thunder Roop | Thunder flash at the caster; a lightning bolt from the bow to the target at the second arrow | `vfx.archer.thunderroop.*` |
+| Nature Splash | Maple model over the caster and maple particles ahead; Avalanche's arrow and hit | `vfx.archer.naturesplash.cast`, `vfx.archer.avalanche.*` |
+| Circle Trap | Particle shot to the target; the trap flash and hit particles there | `vfx.archer.circletrap.*` |
 
 ### Knight
 
@@ -336,6 +352,10 @@ converted scripts.
 | Grand Cross | Hit particles on the first hit, the cross model and other particles on the second | `grandcross.hit`, `grandcross.hit2` (`impactEffects`) |
 | Sword of Justice | Its group at the caster and a blue light | `justice.blade`, `justice.hit` |
 | Divine Piercing | Hit particles per hit; the sound on the last hit only | `divinepiercing.blade`, `divinepiercing.hit` |
+| Soul Breaker | The piercing thrust and its wake at the clip's event | `vfx.knight.soulbreaker.cast`, `vfx.knight.piercing.thrust` |
+| Crescent Moon | Particles at the weapon; the crescent model at the caster and a burst at the target | `vfx.knight.crescentmoon.*` |
+| Saint Blade | Holy swords and particles at the target after the second hit | `vfx.knight.saintblade.hit` |
+| Holy Benedic | Particles at the left hand; a burst and an aura on each holder while active | `vfx.knight.holybenedic.*` |
 
 ### Atalanta
 
@@ -351,6 +371,10 @@ converted scripts.
 | Lightning Javelin | Animated bolt strip; spark ribbons, a light and the lightning group on arrival | `lightning.shot` |
 | Storm Javelin | Per hit a rolling storm javelin with light strips flying ahead; twist burst on the target | `storm.javelin` |
 | X-Rage, Vengeance | Shots diving from above the caster (Vengeance: from the hand), each ending in a hit group | `xrage.cast`, `vengeance.cast` |
+| Talaria | A burst at the caster; a burst and an aura on the holder while active | `vfx.atalanta.talaria.*` |
+| Galaxy Coup | Particles at the caster and at the target | `vfx.atalanta.galaxycoup.cast` |
+| Summon Arcuda | Summoning particles at the caster | `vfx.atalanta.arcuda.cast` |
+| Snippy Fear | A particle javelin flying from the hand to the target at each throw | `vfx.atalanta.snippyfear.shot` |
 
 ### Priestess
 
@@ -371,6 +395,10 @@ Every active skill draws `vfx.priestess.castcircle` at the feet: the animated ci
 | Regeneration Field | The field model and particles while channelling | `regenfield.cast` |
 | Chain Lightning | A sky bolt at the hit; flickering beams between the chained targets | `chainlightning.cast`, `chainlightning.link` |
 | Summon Muspell | The spirit hovering above the caster with flames; its strikes | `muspell.*` |
+| Spirit Impact | Shockwave flashes at the caster and at the target | `vfx.priestess.spiritimpact.hit` |
+| Piercing Ice | Casting circle; an ice spear flying to the target and bursting | `vfx.priestess.piercingice.*` |
+| Summon Ramiel | The angel model and its particles over the caster while active; hit particles and the hand's glow at each strike | `vfx.priestess.ramiel.*` |
+| Blessing Krishna | Casting circle; a burst and an aura while active | `vfx.priestess.krishna.*` |
 
 ### Magician
 
@@ -390,6 +418,22 @@ Every cast draws `vfx.magician.castcircle` (the Magician's circle textures) unle
 | Fire Elemental, Distortion | The cast circle; distorted targets glow red-yellow and wobble | `castcircle`; `statusLook` Distortion |
 | Flame Wave | Five fire streams fanning ahead | `flamewave.wave` |
 | Meteo | Four burning meteors falling around the target, a burst where each lands (once per cast) | `meteo.fall`, `meteo.hit`; `impactEffects` |
+| Silraphim | Casting circle; the Silraphim flash at the target | `vfx.magician.castcircle`, `vfx.magician.silraphim.hit` |
+| Vis Tenus | The shrinking flash at the target, which draws at half its size while shrunk | `vfx.magician.vistenus.beam` |
+| Prima Ignis | Casting circle; the primal fire rolling ahead of the caster | `vfx.magician.primaignis.shot` |
+| Third Anima | Casting circle; five sigils orbiting the holder while active (Zenith's aura) | `vfx.magician.thirdanima.aura` |
+
+### Assassin and Shaman fifth tier
+
+| Skill | Original | Effects |
+|---|---|---|
+| Shadow Bomb | The bomb's burst at the caster | `vfx.assassin.shadowbomb.hit` |
+| Rising Slash | Particles at the caster, then at the target | `vfx.assassin.risingslash.*` |
+| Violent Stab | Particles at the caster; one burst at the target per stab | `vfx.assassin.violentstab.*` |
+| Storm | The wind wall at the target | `vfx.assassin.storm.hit` |
+| Creed | The casting circle and the rising light at the caster; the light kept while it lasts | `vfx.shaman.creed.*` |
+| Press Of Deity | One meteor falling onto the target, bursting there | `vfx.shaman.pressofdeity.*` |
+| Ghostly Nail | The casting circle and the nails at the caster; their burst at the target | `vfx.shaman.ghostlynail.*` |
 
 ### Actor looks and per-hit sounds
 
@@ -442,13 +486,14 @@ blink is a steady colour; a positive scale grows the item up to it with the puls
 every other described player: `ActorLookPresenter.PaintGlow` adds the pulse to the look the item last took (the mix
 texture replaces the look's overlay) and `EndGlowFrame` returns items that stopped glowing to that look.
 
-Class-up lights (`ClassUpLights`): while its holder is alive, a weapon with the class-up light carries two lights,
+Class-up lights (`WeaponOrbitLights`): while its holder is alive, a weapon with the class-up light carries two lights,
 each `particle.ClassUpWeapon1` (the light) plus `particle.ClassUpWeapon2` (its trail), circling a point of the weapon
 (along its length, `TryGetActorReach`: a sword at 0.8 of it, 0.75 above 5000 fixed units; a staff 0.7; a bow 0.7 turned
 45 degrees, in the left hand its end less 10 turned a quarter; a javelin 0.4 behind the grip; a claw twice its reach
 beside the hand; anything else its middle; a two-handed weapon's point leans 9 degrees). The circle turns 70/4096 of a
 turn and its radius moves 10 between 1000 and 1600 fixed units each 70 Hz frame, across the weapon (a claw's and a
-bow's along it).
+bow's along it). A skill status whose rule names a `weaponOrbit` (Hyper Sonic) draws the same two lights with its own
+light and trail effects on its holder's weapon while it lasts, beside any class-up light.
 
 ## Limitations
 

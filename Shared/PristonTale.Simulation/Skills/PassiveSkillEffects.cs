@@ -1,6 +1,7 @@
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.Modifiers;
+using PristonTale.Simulation.Combat;
 
 namespace PristonTale.Simulation.Skills;
 
@@ -22,14 +23,9 @@ public static class PassiveSkillEffects
 
             var rank = character.Skills.RankOf(skill.Code);
             var active = rank > 0 && WeaponMatches(character, passive);
-            var hasEffect = character.Effects.TryGet(skill.Code, out var current);
             if (!active)
             {
-                if (hasEffect)
-                {
-                    character.Effects.Remove(skill.Code, 0, null);
-                }
-
+                character.Effects.SetPermanent(skill.Code, EffectSourceKind.PlayerSkill, false, null);
                 continue;
             }
 
@@ -40,13 +36,7 @@ public static class PassiveSkillEffects
                 modifiers[index] = new StatModifier(entry.Stat, entry.Op, entry.Values[rank - 1]);
             }
 
-            if (hasEffect && current.Permanent && current.Spec.Modifiers.SequenceEqual(modifiers))
-            {
-                continue;
-            }
-
-            var spec = new EffectSpec(skill.Code, EffectSourceKind.PlayerSkill, false, modifiers);
-            character.Effects.Apply(spec, 0, float.PositiveInfinity);
+            character.Effects.SetPermanent(skill.Code, EffectSourceKind.PlayerSkill, false, modifiers);
         }
     }
 
@@ -64,8 +54,7 @@ public static class PassiveSkillEffects
             return default;
         }
 
-        var stats = weapon.TotalStats;
-        return ((int)(percent / 100f * stats.DamageMin), (int)(percent / 100f * stats.DamageMax));
+        return WeaponDamage.PercentOfWeapon(weapon, percent);
     }
 
     private static bool WeaponMatches(PlayerCharacter character, SkillPassiveRule passive)

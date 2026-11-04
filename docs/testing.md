@@ -52,7 +52,7 @@ Default case files by area (all `tests/PristonTale.Tests/<Name>.cs`):
 | World tick | `WorldTickTests` | The tick's absolute timeline: late ticks caught up, stalls skipped |
 | Starter gifts | `StarterGiftTests` | A new character's gifts: order, pace, perfect copies of its class's specialization worn or kept, the class's own weapon family and off-hand, chat line, stored count |
 | Multiplayer | `MultiplayerMovementTests`, `MultiplayerCombatTests`, `MultiplayerPresenceTests`, `MultiplayerSessionTests`, `MultiplayerSocialTests`, `PresencePipelineTests` | Propagation between real clients over TCP (see Multiplayer propagation); frames, shared encoding, revisions, crowd cap, event ticks, grid, status book |
-| World data | `WorldImportTests`, `NpcPlacementMigrationTests`, `MonsterNameTests`, `NpcServiceTests` | Import and migrations on temp SQLite |
+| World data | `WorldImportTests`, `NpcPlacementMigrationTests`, `MonsterNameTests`, `NpcServiceTests`, `FieldOrderTests` | Import and migrations on temp SQLite; field codes, warps with several exits, travel levels, the deep and action fields |
 | Rewards, spawns | `WorldRewardsTests`, `SpawnGateTests`, `SpawnScheduleTests` | Loot, XP, spawn masks, boss hours |
 | Movement | `MovementAndStreamingTests`, `GroundTraversalTests`, `TerrainTests`, `EntitySweepTests`, `SpatialIndexTests` | Reports, stacked floors, ramps, gaps, steps |
 | Camera | `CameraTests` | Camera collision across fields, clearance, follow, edge orbit, middle drag |
@@ -61,6 +61,7 @@ Default case files by area (all `tests/PristonTale.Tests/<Name>.cs`):
 | Skill data | `ClassSkillDataTests`, `SkillCatalogTests`, `SkillSystemTests`, `PassiveSkillTests`, `SkillWireTests` | Catalog, formulas, wire |
 | Skill mechanics | `SkillAllyTests`, `SkillAreaTests`, `SkillChargeTests`, `SkillCompanionTests`, `SkillControlTests` | Server resolution |
 | Skill mechanics | `SkillDefenseTests`, `SkillEnchantTests`, `SkillResurrectionTests`, `SkillStealthTests`, `SkillSummonTests` | Server resolution |
+| Class skills | `MechanicianSkillTests`, `FighterSkillTests`, `PikemanSkillTests`, `ArcherSkillTests`, `KnightSkillTests`, `AtalantaSkillTests`, `PriestessSkillTests`, `MagicianSkillTests`, `AssassinSkillTests`, `ShamanSkillTests` | A class's own skills that need more than their table (the fifth tiers) |
 | Skill client | `SkillPresentationTests`, `VfxLayerTests`, `VfxImportTests` | VFX definitions, catalog, layers, converter, authored data, cooldown and status books |
 | Quests | `QuestTests` (with `QuestFixture`), `QuestServiceTests`, `QuestHudTests` | Every quest family's steps, rank-ups and the tier; journal storage, quest messages, durable requests, kill credit, upkeep, the arena duel; quest HUD flows and layout |
 | Trades | `TradeTests` (with `ChatFixture`), `TradeHudTests` | Requests, offers, locks and their delay, the stored exchange, refusals, how a trade ends (also while it is stored), offered items changed elsewhere, both sides locking at once, rules, wire; the trade window |
@@ -174,10 +175,11 @@ when reading those assets is authorized. GPU probes:
 | --- | --- | --- |
 | `--verify-shaders <content>` | yes | Draws every technique into float targets and compares with C# references (see below) |
 | `--benchmark-render <assets> <content> <report.json> <field-id> <settings.json> [options]` | yes | Frame timing report plus `<report>.png` |
+| `--render-minimaps <assets> <content> <output-dir> <field-id>...` | yes | Each field's minimap (`<field-id>.tga` and a `.png`): the stage and its objects from straight above at noon, framed by the stage's authored map rectangle, 2048 pixels on the longer side (drawn in 512-pixel tiles at twice that and averaged), black outside the stage. Copy a map into `Field/map` under the game data's file name |
 | `--check-look <mode> <assets> <content> <output-dir>` | yes | Fails on look regressions; `mode` is `charselect`, `actor`, `opening`, `scenery` or `shade` |
 | `--profile-stream <assets> <content>` | yes | Incremental stage upload with the game's policy at a fixed 60 Hz |
 | `--profile-stream-baseline <assets> <content>` | yes | Same with an 8-step upload limit for comparison |
-| `--capture-hud <assets> <content> <output-dir> [<background.png>]` | yes | In-game HUD scenarios to PNG (scales 2 and 3, `npc-*` dialogs and service windows (shop, warehouse, aging, mix, alchemy), `buffs-*` continuous-skill bar, `restart-*` restart window, `quest-*` quest dialog, boxes, window and timer, `help-*` help window, guide list and page, level guide notice and summary, `skill-right-select` prints the right socket after a right click) |
+| `--capture-hud <assets> <content> <output-dir> [<background.png>]` | yes | In-game HUD scenarios to PNG (scales 2 and 3, `npc-*` dialogs and service windows (shop, warehouse, aging, mix, alchemy), `buffs-*` continuous-skill bar, `restart-*` restart window, `quest-*` quest dialog, boxes, window and timer, `help-*` help window, guide list and page, level guide notice and summary, `skill-right-select` prints the right socket after a right click, `skills-fifth*` and `skill-master-fifth` a fifth-tier class on both pages of the skill window) |
 | `--capture-hud-target <assets> <content> <output-dir>` | yes | Ricarten at 14:00 with remote-roster entities; target frame, bar, resolutions |
 | `--capture-chat <assets> <content> <output-dir> [<background.png>]` | yes | Chat window open, closed, unfocused, per tab, assistant split and page, shrunk beside the inventory, at 1280x720 and scale 2; speech bubbles over players, an NPC and a monster |
 | `--capture-item-hud <assets> <content> <output-dir>` | yes | Premium timer column, hover and blink, Teleport Core pages and confirmation, item tooltips (orb, package, crystal, gift box, chocolate, castle stone, lucky bag), item effects, castle items and boosters in the effects bar, the puzzle board, finished puzzle and collector question, an item carried over a free cell, another item and the weapon slot, and the count box for a carried stack set down above the window |
@@ -186,7 +188,7 @@ when reading those assets is authorized. GPU probes:
 | `--capture-login <assets> <content> <output-dir> <background.png>` | yes | Login screen edge cases (see below) |
 | `--capture-skills <assets> <content> <output-dir> [<hex,hex,...>]` | yes | Casts skills with the server timeline (see below) |
 | `--capture-sky <assets> <content> <output-dir>` | yes | One `sky-NN.png` per sky profile |
-| `--capture-weather <assets> <content> <output-dir>` | yes | Ricarten's start under each weather at 1920x1080 after two seconds: clear, overcast, light, heavy and storm rain, a lightning flash, rain at dusk and at night, close under the eaves, the clouds' shadows and a morning mist, also over the harbour toward the sunrise (`mist-harbour`: the water and the far quays must fade into the haze, without blue patches or bright silhouettes); the realistic sky toward the horizon at noon, at sunrise with and without the mist, in a broken afternoon, at sunset and dusk, under a full and a new moon, overcast, in a storm and its lightning, in a storm at night and at dawn, with a rainbow and the aurora, and the classic dome; `sky-drift`, eight frames of clouds in a strong wind with each frame's change from the last (`sky-drift-N-change.png`, and the count of pixels changed by more than 6 levels), where a wavering or flickering sky shows over the clouds' bodies (`WeatherCaptureProbe`) |
+| `--capture-weather <assets> <content> <output-dir>` | yes | Ricarten's start under each weather at 1920x1080 after two seconds: clear, overcast, light, heavy and storm rain, a lightning flash, rain at dusk and at night, close under the eaves, the clouds' shadows and a morning mist, a storm in the morning mist (`storm-dawn-mist`: the deck and the mist grey, not orange), also over the harbour toward the sunrise (`mist-harbour`: the water and the far quays must fade into the haze, without blue patches or bright silhouettes); the realistic sky toward the horizon at noon, at sunrise with and without the mist, in a broken afternoon, at sunset and dusk, under a full and a new moon, overcast, in a storm and its lightning, in a storm at night and at dawn, with a rainbow and the aurora, and the classic dome, also in the rain at noon, in the afternoon, at dusk and at night (`sky-classic-rain*`: the clouds must go on past the rain dome's rim, without a band of the hour's colour above it); `sky-drift`, eight frames of clouds in a strong wind with each frame's change from the last (`sky-drift-N-change.png`, and the count of pixels changed by more than 6 levels), where a wavering or flickering sky shows over the clouds' bodies (`WeatherCaptureProbe`) |
 | `--capture-npcs <assets> <content> <output.png>` | yes | NPC presentation capture |
 | `--capture-job-heads <assets> <content> <output.png>` | yes | Job-head presentation capture |
 | `--capture-equipment <assets> <content> <output-dir>` | yes | Equipment captures |
@@ -257,11 +259,11 @@ Other probe details:
   `npc-*` scenarios, the item box with rolled values, red requirements and a specialization (`inventory-item-hover-*`),
   the carried weight and unusable-item tint (`inventory-*`), the resistance boxes (`status-*`) and the block word
   (`block-800`). Its `quest-*` scenarios show a quest dialog with its document text, the yes/no box, the Fury reward
-  list and reward view, the training box and skill window a home-town master opens, with the lit class-change button
-  and only the reached tier's skills (`quest-class-change-800`; with points left, `skill-master-800`; under a quest dialog, `skill-master-quest-800`; a skill's yes/no
-  answered with Enter, `skill-training-enter-800`), the quest window with a description (800x600 and scale 2), the
-  quest timer icon with and without effect icons and the redistribution offer. It reads the Ricarten stage only for the
-  authored minimap rectangle.
+  list and reward view, the training box and skill window a home-town master opens, with the lit class-change button and
+  only the reached tier's skills (`quest-class-change-800`; with points left, `skill-master-800`; under a quest dialog,
+  `skill-master-quest-800`; a skill's yes/no answered with Enter, `skill-training-enter-800`), the quest window with a
+  description (800x600 and scale 2), the quest timer icon with and without effect icons and the redistribution offer. It
+  reads the Ricarten stage only for the authored minimap rectangle.
 - `--capture-hud-target` spawns monsters of two races, an NPC and a player through the remote entity roster and captures
   the target frame's live portrait, the classic bar, 1280x720, 1920x1080, scale 2 and the minimap under the cursor.
 - `--verify-world-rewards` migrates the given database twice, then checks that every item drop code resolves, Hopy
@@ -293,7 +295,7 @@ Draws the static and skinned surface effects into a float target and checks agai
 
 | Mode | Fails when |
 | --- | --- |
-| `charselect` | Character-select stage, braziers with their green flames (`CharSelectFlames`), roster: > 2 % of the frame clipped to white or > 5 % with a clipped channel |
+| `charselect` | Character-select stage, braziers with their green flames (`CharSelectFlames`), roster: > 2 % of the frame clipped to white or > 5 % with a clipped channel; then the face selection of every class of both lineups, drawn after the world's frame: a portrait (`face-<class>.png`) with fewer than 2000 pixels |
 | `actor` | NPCs at noon, front and back: the two-pixel silhouette ring is more than 1.25 times the interior luminance |
 | `opening` | Login flythrough with meteors: the town in the lower third is more than 1.8 times redder than blue |
 | `scenery` | Ricarten metal on a stage quad vs an animated scenery model, noon and 20:00: luminance > 8 % apart, saturation > 0.05 apart, |

@@ -25,8 +25,6 @@ internal sealed partial class FieldSkills
     private readonly Dictionary<ulong, ulong> _summons = new();
     private readonly Dictionary<ulong, uint> _summonSkills = new();
 
-    public bool TryGetSummon(ulong ownerId, out ulong summonId) => _summons.TryGetValue(ownerId, out summonId);
-
     private bool CallSummon(WorldPlayer owner, SkillRule rule, int rank)
     {
         var summon = rule.Summon;
@@ -286,13 +284,6 @@ internal sealed partial class FieldSkills
             return;
         }
 
-        target.TargetId = summon.EntityId;
-        target.TargetLockMsLeft = SummonRetaliationLockMs;
-        if (target.AiState is MonsterAiState.Idle or MonsterAiState.Wander or MonsterAiState.Leash)
-        {
-            target.AiState = MonsterAiState.Chase;
-            target.ManoeuvreClipsLeft = 0;
-            target.SinceDecisionMs = MonsterAiTuning.DecisionIntervalMs;
-        }
+        MonsterAiBrain.ForceTarget(target, summon.EntityId, SummonRetaliationLockMs);
     }
 }

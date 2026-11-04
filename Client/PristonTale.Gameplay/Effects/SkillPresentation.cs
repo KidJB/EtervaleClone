@@ -7,6 +7,7 @@ using PristonTale.Effects.Vfx;
 using PristonTale.Engine3D.Diagnostics;
 using PristonTale.Engine3D.Rendering.Lighting;
 using PristonTale.Protocol.Packets;
+using PristonTale.Simulation.Physics;
 using PristonTale.Simulation.Skills;
 using PristonTale.Contracts.Combat;
 using PristonTale.Contracts.Skills;
@@ -34,14 +35,19 @@ public interface ISkillSceneHost : IVfxAnchors
 
     // How the entity's actors look this frame (tints, translucency, shield swaps, afterimages); Normal once a look ends.
     void ApplyLook(ulong entityId, in EntityLook look) { }
+
+    // How far behind the server's timeline another entity is drawn, so its skill events wait as long as its motion does.
+    double PlaybackDelayMsOf(ulong entityId) => World.Remote.RemoteSnapshotBuffer.BaseDelayMs;
+
+    // A skill's impact shakes the local player's camera by this factor (SkillRule.CameraShake).
+    void ShakeCamera(int factor) { }
 }
 
 // Turns the server's skill timeline into motions, effects, sounds, lights, floating numbers and the buff and
-// cooldown state the HUD shows. Events of other entities wait for the remote playback delay, so their effects line up
-// with the interpolated motion; the local player's events play at once.
+// cooldown state the HUD shows. Events of other entities wait for their caster's playback delay, so their effects line
+// up with the interpolated motion; the local player's events play at once.
 public sealed class SkillPresentation : IVfxServices, IDisposable
 {
-    public const double RemoteDelayMs = 150d;
     public const string ReviveEffect = "vfx.priestess.resurrection.rise";
     private const float ChainLinkSeconds = 0.08f;
     // Game-thread time per frame spent registering effect definitions until all are ready.
@@ -101,7 +107,7 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
 
         foreach (var skillEvent in update.SkillEvents)
         {
-            var due = nowMs + (skillEvent.CasterId == _host.SelfId ? 0d : RemoteDelayMs);
+            var due = nowMs + (skillEvent.CasterId == _host.SelfId ? 0d : _host.PlaybackDelayMsOf(skillEvent.CasterId));
             _pending.Add(new Pending(due, PendingKind.Event, skillEvent, 0));
         }
 
@@ -335,6 +341,16 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
 
     private void Impact(SkillEventInfo skillEvent, SkillRule rule)
     {
+        if ((skillEvent.Flags & SkillEventFlags.Struck) != 0)
+        {
+            if (rule.TargetEffect.Length > 0)
+            {
+                Spawn(rule.TargetEffect, skillEvent.CasterId, skillEvent.TargetId, Position(skillEvent.TargetId, skillEvent.Position), -skillEvent.Facing);
+            }
+
+            return;
+        }
+
         if ((skillEvent.Flags & (SkillEventFlags.Companion | SkillEventFlags.Counter)) != 0 && rule.CompanionEffect.Length > 0)
         {
             Strike(skillEvent, rule);
@@ -367,6 +383,14 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
         }
 
         _sounds.Play(ImpactSoundOf(rule, skillEvent, impact), point, _host.ListenerPosition);
+        if (rule.CameraShake)
+        {
+            var distance = Planar.Distance(Position(skillEvent.CasterId, skillEvent.Position).ToNumerics(), _host.ListenerPosition.ToNumerics());
+            if (distance < SkillRule.CameraShakeReach)
+            {
+                _host.ShakeCamera((int)((SkillRule.CameraShakeReach - distance) / 15f));
+            }
+        }
     }
 
     // The impact's sound: the rule's per-hit list when it has one (landed hits only), else its single impact sound.
@@ -389,7 +413,7 @@ public sealed class SkillPresentation : IVfxServices, IDisposable
         var sound = rule.ImpactSoundOrder switch
         {
             SkillSoundOrder.Random => sounds[random.Next(sounds.Length)],
-            SkillSoundOrder.Final => impact + 1 >= SkillImpacts.Count(rule, rank) ? sounds[0] : "",
+            SkillSoundOrder.Final => impact + 1 >= SkillFormulas.HitCount(rule, rank) ? sounds[0] : "",
             _ => sounds[impact % sounds.Length]
         };
         return sound == SkillRule.Silent ? "" : sound;

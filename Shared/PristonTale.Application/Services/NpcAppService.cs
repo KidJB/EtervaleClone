@@ -19,16 +19,6 @@ public sealed class NpcAppService(
 {
     private readonly DurableOperations _durable = new(saves);
 
-    public Task<NpcInteraction> InteractAsync(string sessionToken, ulong npcId)
-    {
-        if (!sessions.TryGet(sessionToken, out var session))
-        {
-            return Task.FromResult(NpcInteraction.Rejected("invalid session"));
-        }
-
-        return world.InteractNpcAsync(session, npcId);
-    }
-
     public async Task<NpcServiceReply> RequestAsync(string sessionToken, NpcServiceCommand command, CancellationToken ct = default)
     {
         using var lease = await _durable.AdmitAsync(sessions, sessionToken, ct);
@@ -42,14 +32,13 @@ public sealed class NpcAppService(
             session => world.PrepareNpcServiceAsync(session, command),
             world.CommitNpcServiceAsync,
             prepared => prepared.Reply,
-            failure => failure switch
+            failure => Failed(failure switch
             {
-                DurableFailure.NoSession => Failed(NpcServiceStatus.Rejected, "invalid session"),
-                DurableFailure.Busy => Failed(NpcServiceStatus.Busy, "save or character operation pending; retry"),
-                DurableFailure.StorageFailed => Failed(NpcServiceStatus.StorageFailed, "storage rejected operation; character unchanged"),
-                DurableFailure.Conflict => Failed(NpcServiceStatus.Conflict, "the warehouse changed elsewhere; open it again"),
-                _ => Failed(NpcServiceStatus.Rejected, "character is not playing")
-            },
+                DurableFailure.Busy => NpcServiceStatus.Busy,
+                DurableFailure.StorageFailed => NpcServiceStatus.StorageFailed,
+                DurableFailure.Conflict => NpcServiceStatus.Conflict,
+                _ => NpcServiceStatus.Rejected
+            }, DurableFailures.Message(failure)),
             StoreAsync,
             storeFirst: static prepared => prepared.Warehouse is not null);
     }

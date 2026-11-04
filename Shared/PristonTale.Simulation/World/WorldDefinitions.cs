@@ -14,7 +14,29 @@ public enum FieldState
     Iron,
     Ice,
     QuestArena,
-    Castle
+    Castle,
+
+    // A side-scrolling field: the camera stands at the field's fixed height and depth and follows the player along x,
+    // and the arrow keys move the player.
+    Action
+}
+
+// A field's continuous background loop, in the order of the client's field ambience files.
+public enum FieldAmbience
+{
+    Town,
+    ForestDay,
+    ForestNight,
+    RuinWind,
+    DesertWind,
+    Dungeon,
+    Temple,
+    Cave,
+    DarkSanctuary,
+    Iron,
+    Iron2,
+    BabelApproach,
+    IceWind
 }
 
 public sealed record FieldBackdrop(
@@ -51,7 +73,45 @@ public sealed record FieldWarpGate(
     int DestinationZ,
     int DestinationY,
     int LimitLevel,
-    int SpecialEffect);
+    int SpecialEffect)
+{
+    private const float MinimumRadius = 48f;
+    // The server answers a gate (a warp or a wing stone) this far past its radius, for a report a step late.
+    private const float ServerTolerance = 64f;
+
+    // Where the client's feet trigger the gate: its width, at least MinimumRadius.
+    public float Radius => MathF.Max(Width, MinimumRadius);
+
+    // How far from the gate the server accepts a player standing on it.
+    public float ServerReach => Radius + ServerTolerance;
+
+    // A gate may lead to several places in its destination: the traveller comes out at one of them, picked at random.
+    public IReadOnlyList<FieldVector> MoreExits { get; init; } = [];
+
+    public int ExitCount => 1 + MoreExits.Count;
+
+    // Exit 0 is the destination point; the others follow in MoreExits.
+    public FieldVector Exit(int index) => index == 0 ? new FieldVector(DestinationX, DestinationY, DestinationZ) : MoreExits[index - 1];
+}
+
+// Where an action field's camera stands: FixedHeight in fixed point (the camera rises 80 units above it), at depth Z,
+// following the player along x between LeftX and RightX. It looks along +z at the player's height.
+public sealed record FieldActionCamera(
+    int FixedHeight,
+    int Z,
+    int LeftX,
+    int RightX)
+{
+    public const int LookAtZ = 326711;
+    // The side view's vertical angle (pi / 4.4): standing a few hundred units in front of the player and close to the
+    // ground, a wider lens shows the void below the ground strip.
+    public const float FieldOfViewRadians = MathF.PI / 4.4f;
+    private const float Rise = 80f;
+
+    public float Height => PristonTale.Contracts.Units.GameUnits.FromFixed(FixedHeight) + Rise;
+
+    public float FollowX(float playerX) => Math.Clamp(playerX, LeftX, RightX);
+}
 
 public sealed record FieldAmbient(
     FieldVector Position,
@@ -122,15 +182,25 @@ public sealed record FieldDef(
     public int FieldCode { get; init; }
     public FieldPoint Center { get; init; } = FieldPoint.Zero;
     public IReadOnlyList<FieldPoint> StartPoints { get; init; } = [];
+
+    // Where a traveller arrives in the field (an entry, a teleport, a warp, a quest's travel): its first start point,
+    // else its centre.
+    public FieldPoint Arrival => StartPoints.Count > 0 ? StartPoints[0] : Center;
     public IReadOnlyList<FieldGate> Gates { get; init; } = [];
     public IReadOnlyList<FieldWarpGate> WarpGates { get; init; } = [];
     public IReadOnlyList<FieldAmbient> Ambients { get; init; } = [];
+
+    // The background loop when the field names its own; null keeps its state's.
+    public FieldAmbience? Ambience { get; init; }
     public FieldLighting Lighting { get; init; } = new();
     public FieldCamera Camera { get; init; } = new();
     public FieldDayNight DayNight { get; init; } = new();
     public string BackMusicCode { get; init; } = string.Empty;
     public string ServerCode { get; init; } = string.Empty;
     public FieldEventKind FieldEvent { get; init; }
+
+    // Set for an action field.
+    public FieldActionCamera ActionCamera { get; init; }
 
     // How much of the distance haze the field clears (0..1), and the cells of sight it adds before the haze starts.
     public float HazeReduction { get; init; }
@@ -143,23 +213,26 @@ public sealed record FieldDef(
 
     // The ice fields show the aurora at night.
     public bool ShowsAurora => State == FieldState.Ice;
+    // The snow skies bring falling snow at every hour.
+    public bool Snows => Backdrop == FieldBackdrops.Snow;
     public int SightCells { get; init; }
+
+    // The level a character needs to walk into the field.
     public int LimitLevel { get; init; }
+
+    // The level a character needs to be sent there (wings, teleporters): the walking level unless the field sets its own.
+    public int TravelLevel
+    {
+        get => _travelLevel ?? LimitLevel;
+        init => _travelLevel = value;
+    }
+
+    private readonly int? _travelLevel;
 
     // Dungeon state disables sky and daylight in favor of stage lighting.
     public bool Underground => State == FieldState.Dungeon;
 
     public FieldSpawnData Spawns { get; init; } = FieldSpawnData.Empty;
-
-    public Action<IFieldContext> OnLoaded { get; init; }
-    public Action<IFieldContext, float> OnUpdate { get; init; }
-}
-
-public interface IFieldContext
-{
-    float TimeOfDay { get; }
-    void SetTimeOfDay(float hours);
-    void SetDayLength(float seconds);
 }
 
 public sealed class WorldCatalog
@@ -212,7 +285,16 @@ public sealed class WorldCatalog
             LostField.Definition,
             LosttempleField.Definition,
             QuestArenaField.Definition,
-            Sod2Field.Definition
+            Sod2Field.Definition,
+            FallGameField.Definition,
+            SlabField.Definition,
+            SwampField.Definition,
+            AncientWeaponsField.Definition,
+            SeaOfAbyssField.Definition,
+            StempleField.Definition,
+            HeartOfFireField.Definition,
+            CrystalNestField.Definition,
+            LandOfNurwnField.Definition
         ];
 
         _fieldsById = AllFields.ToDictionary(static field => field.Id);

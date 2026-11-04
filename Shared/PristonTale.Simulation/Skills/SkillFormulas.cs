@@ -6,6 +6,7 @@ using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Simulation.World.Motion;
 using PristonTale.Contracts.Skills;
+using PristonTale.Simulation.Progression;
 
 namespace PristonTale.Simulation.Skills;
 
@@ -27,7 +28,7 @@ public static partial class SkillFormulas
     private const int Gauge = 35;
     public const float FrameStepAtRateOne = 80f;
 
-    // Proficiency = min(talent / 3 + item mastery, 50) x 100 + uses (100 per completed use streak), at most 10000.
+    // Proficiency = min(talent / 3 + item mastery, 50) x 100 + uses (100 per completed use streak), at most LearnedSkills.MaxUses.
     // Mastery units M = base + perRank x rank - proficiency / 100, clamped to 1..70. The 35-step gauge then fills one
     // step every max(1, 35 / floor(70 / M)) ticks: from 0.49 s (M 1-3) to 17.15 s (M 36-70).
     public static int CooldownMs(SkillRule rule, int rank, int talent, int itemMastery, int uses)
@@ -37,24 +38,24 @@ public static partial class SkillFormulas
             return 0;
         }
 
-        // Final-tier skills have no proficiency to train: they always count as fully trained.
-        var proficiency = IsFinalTier(rule.Code) ? 10000 : Math.Min(10000, Math.Min(talent / 3 + itemMastery, 50) * 100 + Math.Max(0, uses));
+        // Fourth- and fifth-tier skills have no proficiency to train: they always count as fully trained.
+        var proficiency = IsFullyTrained(rule.Code) ? LearnedSkills.MaxUses : Math.Min(LearnedSkills.MaxUses, Math.Min(talent / 3 + itemMastery, 50) * 100 + Math.Max(0, uses));
         var mastery = Math.Clamp(rule.MasteryBase + rule.MasteryPerRank * rank - proficiency / 100, 1, 70);
         var step = Math.Max(1, 70 / mastery);
         var ticksPerStep = Math.Max(1, Gauge / step);
         return Gauge * ticksPerStep * CooldownTickMs;
     }
 
-    public static bool IsFinalTier(uint code) => (code >> 16 & 0xFF) == (uint)JobTier.Job4;
+    public static bool IsFullyTrained(uint code) => (code >> 16 & 0xFF) is (uint)JobTier.Job4 or (uint)JobTier.Job5;
 
     // Casts per proficiency step by skill-window position; higher ranks need one more cast every three ranks.
-    private static ReadOnlySpan<int> CastsPerStep => [5, 5, 5, 5, 7, 7, 7, 7, 9, 9, 9, 9, 14, 15, 16, 17];
+    private static ReadOnlySpan<int> CastsPerStep => [5, 5, 5, 5, 7, 7, 7, 7, 9, 9, 9, 9, 14, 15, 16, 17, 18, 19, 20, 21];
 
     // Every completed streak of casts adds 100 to the skill's proficiency (one mastery unit), as the original use counter.
     public static int UsesAfterCast(int uses, int casts, int windowIndex, int rank)
     {
-        var step = CastsPerStep[Math.Clamp(windowIndex, 0, CastsPerStep.Length - 1)] + (Math.Clamp(rank, 1, 10) - 1) / 3;
-        return casts > 0 && casts % step == 0 ? Math.Min(10000, uses + 100) : uses;
+        var step = CastsPerStep[Math.Clamp(windowIndex, 0, CastsPerStep.Length - 1)] + (Math.Clamp(rank, 1, SkillLearning.MaxRank) - 1) / 3;
+        return casts > 0 && casts % step == 0 ? Math.Min(LearnedSkills.MaxUses, uses + 100) : uses;
     }
 
     public static int ManaCost(Skill skill, int rank, ModifierTotals modifiers)
@@ -92,6 +93,11 @@ public static partial class SkillFormulas
             return SkillCastVerdict.AlreadyActive;
         }
 
+        if (!HoldsRequiredEffect(caster, rule))
+        {
+            return SkillCastVerdict.NotCastable;
+        }
+
         if (skill.AllowedWeaponsMask != 0 && !WeaponAllowed(caster, skill))
         {
             return SkillCastVerdict.WeaponNotAllowed;
@@ -120,15 +126,18 @@ public static partial class SkillFormulas
 
     // Cast range: the skill's table (at least the weapon's range, or added to it, per RangeMode), or the weapon's attack
     // range r grown by the skill: r + (r - 50) x percent / 100 plus a flat bonus.
-    public static float Range(SkillRule rule, int rank, PlayerCharacter caster)
+    public static float Range(SkillRule rule, int rank, PlayerCharacter caster) => Range(rule, rank, PlayerAttackReach.For(caster));
+
+    // The same for a caster's weapon reach (PlayerAttackReach, which the owner's client receives as its attack range).
+    public static float Range(SkillRule rule, int rank, float reach)
     {
         var range = rule.At(rule.Range, rank);
         switch (rule.RangeMode)
         {
             case SkillRangeMode.AtLeastWeapon:
-                return Math.Max(range, PlayerAttackReach.For(caster));
+                return Math.Max(range, reach);
             case SkillRangeMode.AddWeapon:
-                return PlayerAttackReach.For(caster) + range;
+                return reach + range;
         }
 
         if (range > 0)
@@ -136,8 +145,7 @@ public static partial class SkillFormulas
             return range;
         }
 
-        var reach = PlayerAttackReach.For(caster);
-        return reach + (reach - 50f) * rule.At(rule.ReachPercent, rank) / 100f + rule.At(rule.ReachBonus, rank);
+        return reach + (reach - MeleeReach.PlayerBaseRange) * rule.At(rule.ReachPercent, rank) / 100f + rule.At(rule.ReachBonus, rank);
     }
 
     // The timeline of a held charge (see SkillChargeRule): the full-charge hits and length, and where the window starts
@@ -167,11 +175,20 @@ public static partial class SkillFormulas
     public static SkillMotionPlan Plan(SkillRule rule, int rank)
     {
         var ranked = rule.ForRank(rank);
-        var events = rule.HitFramesByRank.Length == 10 ? rule.HitFramesByRank[Math.Clamp(rank, 1, 10) - 1] : ranked.HitFrames();
+        var events = At(rule.HitFramesByRank, rank, null) ?? ranked.HitFrames();
         var plan = new SkillMotionPlan(ranked.Motion, ranked.MotionIndex, ranked.MotionFrames, events, ranked.MotionSpeed);
 
         var speed = rule.At(rule.MotionSpeedByRank, rank);
         return speed > 0 ? plan with { Speed = speed } : plan;
+    }
+
+    // The hits one cast of the rank deals, as Timing places them: one per loop of a weapon clip, every hit frame of a
+    // skill clip on every loop (at least one).
+    public static int HitCount(SkillRule rule, int rank)
+    {
+        var plan = Plan(rule, rank);
+        var loops = Math.Max(1, rule.At(rule.Loops, rank));
+        return plan.Motion == SkillMotion.Attack ? loops : Math.Max(1, plan.Events.Length) * loops;
     }
 
     // Playback rate of a skill's motion: a fixed frame step (80 = rate 1), or the caster's attack rate plus the skill's
@@ -237,6 +254,7 @@ public static partial class SkillFormulas
         var damage = rule.Damage ?? new SkillDamageRule();
         var rating = basic.AttackRating + rule.At(rule.AttackRating, rank) + (rule.AttackRatingPlusLevel ? caster.Level : 0);
         rating += rating * rule.At(rule.AttackRatingPercent, rank) / 100;
+        rating += rating * BorrowedRating(caster, rule, hit) / 100;
         var flat = 0;
         // An elemental add (FlatElement) is rolled by the caller, which resists it with its own element.
         if (damage.Min.Length > 0 && damage.FlatElement is null)
@@ -288,6 +306,18 @@ public static partial class SkillFormulas
         return rank == 0 ? 0 : rule.At(borrowed.Values, rank) / Math.Max(1, borrowed.Divisor);
     }
 
+    private static int BorrowedRating(PlayerCharacter caster, SkillRule rule, int hit)
+    {
+        var borrowed = rule.BorrowedRating;
+        if (borrowed is null || hit + 1 < borrowed.FromHit)
+        {
+            return 0;
+        }
+
+        var rank = caster.Skills.RankOf(borrowed.Skill);
+        return rank == 0 ? 0 : rule.At(borrowed.Values, rank);
+    }
+
     // The brood bonus of a weapon skill, applied after the hit like the original's race bonus: the fixed percent, then
     // the per-rank percent.
     public static int WithBroodBonus(int damage, SkillRule rule, MonsterDefinition target, int rank = 0) =>
@@ -305,18 +335,23 @@ public static partial class SkillFormulas
             damage += damage * rule.BonusPercent / 100;
         }
 
-        var perRank = rule.BonusPercentByRank.Length == 10 ? rule.BonusPercentByRank[Math.Clamp(rank, 1, 10) - 1] : 0;
+        var perRank = At(rule.BonusPercentByRank, rank);
         return perRank == 0 ? damage : damage + damage * perRank / 100;
     }
 
     // The rolled power of a magic bolt or an area skill, before the target's resistance and absorption.
     public static int RollPower(PlayerCharacter caster, SkillRule rule, int rank, CombatRng rng) => RollPower(caster, rule, rule.Damage, rank, rng);
 
-    public static int RollPower(PlayerCharacter caster, SkillRule rule, SkillDamageRule damage, int rank, CombatRng rng)
+    // weaponItem: the weapon damage the spell terms use in place of the caster's own (a party echo strikes with the
+    // weapon of the skill's caster).
+    public static int RollPower(PlayerCharacter caster, SkillRule rule, SkillDamageRule damage, int rank, CombatRng rng, (int Min, int Max)? weaponItem = null)
     {
         var spell = caster.Effects.Totals.Flat(StatKind.SpellDamage);
-        var low = rule.At(damage.Min, rank) + spell;
-        var high = rule.At(damage.Max, rank) + spell;
+        var tablePercent = At(damage.TablePercent, rank);
+        var low = rule.At(damage.Min, rank);
+        var high = rule.At(damage.Max, rank);
+        low += low * tablePercent / 100 + spell;
+        high += high * tablePercent / 100 + spell;
         if (damage.SpellPower)
         {
             var boost = caster.Effects.Totals.Flat(StatKind.SpellPower);
@@ -327,31 +362,40 @@ public static partial class SkillFormulas
         if (damage.AttackPower)
         {
             var attack = WeaponDamage.Compute(caster);
-            low += attack.Min;
-            high += attack.Max;
+            var attackPercent = At(damage.AttackPowerPercent, rank);
+            low += attack.Min + attack.Min * attackPercent / 100;
+            high += attack.Max + attack.Max * attackPercent / 100;
         }
 
+        var item = weaponItem ?? WeaponItemDamage(caster);
         if (damage.WeaponDivisor > 0)
         {
-            var weapon = damage.WeaponFromAttack ? WeaponDamage.Compute(caster) : WeaponItemDamage(caster);
+            var weapon = damage.WeaponFromAttack ? WeaponDamage.Compute(caster) : item;
             low += weapon.Min / damage.WeaponDivisor;
             high += weapon.Max / damage.WeaponDivisor;
         }
 
+        low += item.Min * At(damage.WeaponTimesMin, rank);
+        high += item.Max * At(damage.WeaponTimesMax, rank);
+        var levelPart = caster.Level * At(damage.LevelPercent, rank) / 100;
+        low += levelPart;
+        high += levelPart;
         if (damage.StrengthMaxDivisor > 0)
         {
             high += caster.Attributes.Strength / damage.StrengthMaxDivisor;
         }
 
         var spirit = caster.Attributes.Spirit;
-        if (damage.SpiritMinDivisor > 0)
+        var spiritMin = At(damage.SpiritMinDivisorByRank, rank, damage.SpiritMinDivisor);
+        var spiritMax = At(damage.SpiritMaxDivisorByRank, rank, damage.SpiritMaxDivisor);
+        if (spiritMin > 0)
         {
-            low += spirit / damage.SpiritMinDivisor;
+            low += spirit / spiritMin;
         }
 
-        if (damage.SpiritMaxDivisor > 0)
+        if (spiritMax > 0)
         {
-            high += spirit / damage.SpiritMaxDivisor;
+            high += spirit / spiritMax;
         }
 
         var divisor = LevelDivisor(damage, rank);
@@ -387,9 +431,10 @@ public static partial class SkillFormulas
     public static int PowerAgainst(int power, SkillDamageRule damage, MonsterDefinition target, ModifierTotals attacker, ModifierTotals defender, int rank)
     {
         var resistances = ModifierRules.Resistances(defender, target.Combat.Resistances);
-        var value = damage.ResistanceDivisor > 1
-            ? power - power * Math.Clamp(resistances[damage.Element] / damage.ResistanceDivisor, -100, 100) / 100
-            : CombatResolver.ApplyElement(power, damage.Element, resistances);
+        var value = damage.Unresisted ? power
+            : damage.ResistanceDivisor > 1
+                ? CombatResolver.ApplyResistance(power, resistances[damage.Element] / damage.ResistanceDivisor)
+                : CombatResolver.ApplyElement(power, damage.Element, resistances);
         if (damage.Magic)
         {
             value = CombatResolver.ApplyResistance(value, target.MagicResistance);
@@ -418,16 +463,14 @@ public static partial class SkillFormulas
 
     public static float BuffDurationMs(SkillBuffRule buff, int rank, int resistance)
     {
-        var ms = At(buff.DurationTenths, rank) * 100f;
-        if (buff.ResistedByBionic || buff.ResistedBy is not null)
-        {
-            ms = ms * (100 - Math.Clamp(resistance, 0, 100)) / 100f;
-        }
-
-        return ms;
+        var ms = At(buff.DurationTenths, rank) * TenthMs;
+        return buff.ResistedByBionic || buff.ResistedBy is not null ? CombatResolver.Shortened(ms, resistance) : ms;
     }
 
-    public static int At(int[] table, int rank) => table is null || table.Length == 0 ? 0 : table[Math.Clamp(rank, 1, table.Length) - 1];
+    // A per-rank table's value at a rank (clamped to the table), or fallback for a table without values.
+    public static T At<T>(T[] table, int rank, T fallback) => table is { Length: > 0 } ? table[Math.Clamp(rank, 1, table.Length) - 1] : fallback;
+
+    public static int At(int[] table, int rank) => At(table, rank, 0);
 
     // The buff's modifiers at this rank; ranged values roll once per cast (see the overload with the ally share).
     public static StatModifier[] BuffModifiers(SkillRule rule, int rank, CombatRng rng) => BuffModifiers(rule.Buff, rank, rng, null);
@@ -474,6 +517,6 @@ public static partial class SkillFormulas
     private static int LevelDivisor(SkillRule rule, int rank) => LevelDivisor(rule.Damage, rank);
 
     private static int LevelDivisor(SkillDamageRule damage, int rank) =>
-        damage.LevelDivisorByRank.Length == 10 ? damage.LevelDivisorByRank[Math.Clamp(rank, 1, 10) - 1] : damage.LevelDivisor;
+        At(damage.LevelDivisorByRank, rank, damage.LevelDivisor);
 
 }

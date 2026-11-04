@@ -25,10 +25,11 @@ using PristonTale.Contracts.Combat;
 using PristonTale.Engine3D;
 using PristonTale.Assets;
 using PristonTale.Contracts.Characters;
+using PristonTale.Contracts.Units;
 
 namespace PristonTale.Gameplay.World;
 
-public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortraitScene
+public sealed partial class GameScene : IDisposable, IHudPortraitScene
 {
     private ActorHandle _playerBodyActor = ActorHandle.None;
     private ActorHandle _playerHeadActor = ActorHandle.None;
@@ -70,7 +71,6 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
     private ActorMotionController _playerController = new();
     private bool _runMode;
     private int _selfLife;
-    private int _selfMaxLife;
     private Vector3 _playerForward = Vector3.Forward;
     private MouseState _lastMouseState;
     private Vector2 _moveTarget;
@@ -80,7 +80,6 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
     private float _serverAttackRate = 1f;
     private Vector2 _positionCorrection;
     private readonly GroundFloorQuery _groundFloorQuery;
-    private int? _snapshotField;
 
     private float MovementSpeed(bool running)
     {
@@ -97,14 +96,17 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
     // A game master running with Shift held dashes, as the original's debug mode did; the server allows game masters
     // that speed.
     private bool GameMasterDash => (_playChannel?.GameMasterLevel ?? 0) > 0 && !KeyboardCaptured
-        && (Keyboard.GetState().IsKeyDown(Keys.LeftShift) || Keyboard.GetState().IsKeyDown(Keys.RightShift));
+        && ShiftHeld(Keyboard.GetState());
+
+    private static bool ShiftHeld(KeyboardState keyboard) => keyboard.IsKeyDown(Keys.LeftShift) || keyboard.IsKeyDown(Keys.RightShift);
 
     public bool RunFlag => _runFlag;
 
     public void ToggleRun() => _runFlag = !_runFlag;
 
-    // The original's walk/run rule: the setting decides, except that a player tracing a target or holding the button
-    // keeps its pace while its stamina is at a quarter or less, and walks once it runs out. Overweight only walks.
+    // The original's walk/run rule: the setting (in an action field, the dash) decides, except that a player tracing a
+    // target or holding the button keeps its pace while its stamina is at a quarter or less, and walks once it runs out.
+    // Overweight only walks.
     private void UpdateRunMode(MouseState mouse)
     {
         var tracing = _hasMoveTarget || _followCursor || _attackInput.TargetId != 0 || _npcTargetId != 0
@@ -114,7 +116,7 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
         var run = _runMode;
         if (!tracing || stamina > maxStamina / 4)
         {
-            run = _runFlag;
+            run = InActionField ? _actionDash : _runFlag;
         }
 
         run = run && stamina > 0 && !Overweight;
@@ -126,8 +128,8 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
     }
 
     private const float PlayerRadius = 24f;
-    private const float BodyProbeHeight = 30f;
-    private const float WallFloorThreshold = 0.25f;
+    private const float BodyProbeHeight = FieldTerrain.BodyProbeHeight;
+    private WallTrace _wallTrace;
     private const double DoubleClickMs = 350.0;
     private double _lastLeftClickMs = double.NegativeInfinity;
     // The walk/run setting (R or the bar's button), running at first as in the original.
@@ -237,8 +239,8 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
             }
 
             // Stage map rectangles are fixed point with the original's z, the engine's -z.
-            var x = Math.Clamp(position.X, map.Left / 256f, map.Right / 256f) - position.X;
-            var z = Math.Clamp(-position.Z, map.Top / 256f, map.Bottom / 256f) + position.Z;
+            var x = Math.Clamp(position.X, GameUnits.FromFixed(map.Left), GameUnits.FromFixed(map.Right)) - position.X;
+            var z = Math.Clamp(-position.Z, GameUnits.FromFixed(map.Top), GameUnits.FromFixed(map.Bottom)) + position.Z;
             var distance = x * x + z * z;
             if (distance < best)
             {
@@ -252,8 +254,7 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
     }
     public Vector3 PlayerPosition => _playerBody?.Position ?? Vector3.Zero;
     public Vector3 PlayerForward => _playerForward;
-    private float PlayerYaw => WorldSpace.RenderYaw(_playerForward);
-    public bool RunMode => _runMode;
+    private float PlayerYaw => InActionField ? ActionFieldView.Facing(WorldSpace.RenderYaw(_playerForward)) : WorldSpace.RenderYaw(_playerForward);
     public event Action<PresenceUpdate> PresenceObserved;
 
     // What a request answers when the scene has no world connection.
@@ -347,12 +348,6 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
     public Color SkyColor => _renderer?.SkyColor ?? new Color(72, 92, 116);
     public int StageLightCount => _renderer?.StageLightCount ?? 0;
 
-    public float DayLengthSeconds
-    {
-        get => _renderer?.DayLengthSeconds ?? 0f;
-        set { if (_renderer != null) _renderer.DayLengthSeconds = value; }
-    }
-
     // The server keeps the time of day; the sky follows its clock.
     private void FollowServerClock()
     {
@@ -365,7 +360,6 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
         _renderer.SetTimeOfDay(WorldClock.HoursAt(clock));
         _renderer.MoonPhase = WorldClock.MoonPhaseAt(clock);
     }
-    public void SetTimeOfDay(float hours) => _renderer?.SetTimeOfDay(hours);
 
     public bool ShadowsEnabled => _renderer?.ShadowsEnabled ?? false;
 
@@ -416,12 +410,9 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
     private WarpInfo _pendingFieldWarp;
     // The server settles teleports within twice the drop tolerance of their height.
     private const float WarpFloorTolerance = 64f;
+    // A warp landing farther than this from the server's place is corrected to it.
+    private const float WarpCorrection = 200f;
     private float _pendingWarpDelay;
-
-    public int PlayerServerLife => _selfLife;
-    public int PlayerServerMaxLife => _selfMaxLife;
-
-    void IFieldContext.SetDayLength(float seconds) => DayLengthSeconds = seconds;
 
     public void Update(GameTime gameTime)
     {
@@ -431,6 +422,8 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
             _playerBodyActor = _equipmentPresentation.Handles.Body;
             _playerHeadActor = _equipmentPresentation.Handles.Head;
         }
+        // The monsters in view, collected once for their effects and their sounds.
+        _remote?.CollectMonsters(_monsterViews);
         UpdateMonsterEffects((float)gameTime.ElapsedGameTime.TotalSeconds);
         UpdateCombatSounds();
         var frameDt = (float)gameTime.ElapsedGameTime.TotalSeconds;
@@ -457,7 +450,7 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
         UpdateStreaming();
         if (_camera != null && _activeField != null)
         {
-            _camera.Update(gameTime, _graphicsDevice, _playerBody.Position, _playerForward, _fieldCollision, PointerCaptured, CameraInputEnabled);
+            UpdateCamera(gameTime);
         }
 
         if (_renderer != null)
@@ -468,7 +461,6 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
 
         var dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
         UpdateMovementReport(dt);
-        _currentField?.OnUpdate?.Invoke(this, dt);
     }
 
     private void OnNpcMotionStarted(int soundCode, MotionCode motion, Vector3 sourcePosition)
@@ -490,13 +482,29 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
         var current = _playerController.Current;
         var moving = current is MotionCode.Walk or MotionCode.Run;
         var running = current == MotionCode.Run;
-        var target = _attackInput.TargetId;
-        var fieldCode = _activeField.Definition.FieldCode;
-        if (!_reports.TryTake(moving, running, target, fieldCode))
+        if (_reports.TryTake(moving, running, _attackInput.TargetId, _activeField.Definition.FieldCode))
+        {
+            SendMovementReport(moving, running);
+        }
+    }
+
+    // The position the server measures a cast from: reported at once, ahead of the cast on the same ordered stream, so a
+    // walk into range is not measured from the last paced report behind it.
+    private void ReportMovementNow()
+    {
+        if (_playChannel == null || _activeField == null || _playerBody == null)
         {
             return;
         }
 
+        _reports.Taken(false, false, _attackInput.TargetId, _activeField.Definition.FieldCode);
+        SendMovementReport(false, false);
+    }
+
+    private void SendMovementReport(bool moving, bool running)
+    {
+        var target = _attackInput.TargetId;
+        var fieldCode = _activeField.Definition.FieldCode;
         var planar = _playerBody.PlanarPosition;
         var position = WorldSpace.Mirror(new NumVector3(planar.X, _playerBody.Height, planar.Y));
         var facing = WorldSpace.TransportFacing(_playerForward);
@@ -505,9 +513,20 @@ public sealed partial class GameScene : IDisposable, IFieldContext, IHudPortrait
 
     private void SendUpstream(Task send, string what)
     {
-        // Network sends must never block the game loop.
+        // Network sends must never block the game loop. A send that already completed (the usual case) needs no watch; the
+        // others are watched by a static continuation with the scene as its state, so a send allocates no closure.
+        if (send.IsCompletedSuccessfully)
+        {
+            return;
+        }
+
         _ = send.ContinueWith(
-            t => _log.Warn($"[Remote] {what} send failed: {t.Exception?.GetBaseException().Message}"),
+            static (t, state) =>
+            {
+                var (scene, what) = ((GameScene, string))state;
+                scene._log.Warn($"[Remote] {what} send failed: {t.Exception?.GetBaseException().Message}");
+            },
+            (this, what),
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);

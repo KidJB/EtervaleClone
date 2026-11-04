@@ -17,6 +17,8 @@ internal sealed class HudSettingsPanel
 
     private static readonly int[] FrameLimits = [0, 30, 60, 90, 120, 144, 165, 240, 360];
     private static readonly int[] ShadowSizes = [1024, 2048, 4096, 8192];
+    private static readonly int WindowModes = Enum.GetValues<WindowMode>().Length;
+    private static readonly int AntiAliasingModes = Enum.GetValues<AntiAliasingMode>().Length;
     private static readonly GraphicsQuality[] Presets = [GraphicsQuality.Low, GraphicsQuality.Medium, GraphicsQuality.High, GraphicsQuality.Ultra];
     private static readonly int[] ShadowUpdateRates = [30, 60, 120, 0];
     private readonly PresentationSettings _settings;
@@ -26,8 +28,8 @@ internal sealed class HudSettingsPanel
     public HudSettingsPanel(PresentationSettings settings) => _settings = settings;
 
     public static Rectangle Box => HudPainter.HelpBoxBounds(BoxX, BoxY, SizeW, SizeH);
-    public static Rectangle Title => new(BoxX + (SizeW * 32 + 64) / 2 - 76, BoxY + 14, 152, 28);
-    public static Rectangle OkButton => new(BoxX + (SizeW * 32 + 64) / 2 - 24 + 9, BoxY + SizeH * 32 - 2 + 4, 32, 16);
+    public static Rectangle Title => HudPainter.HelpBoxTitle(BoxX, BoxY, SizeW);
+    public static Rectangle OkButton => HudPainter.HelpBoxOk(BoxX, BoxY, SizeW, SizeH);
 
     public static Rectangle Row(int row) => new(BoxX + 24, BoxY + 64 + row * RowHeight, SizeW * 32 + 64 - 48, RowHeight - 1);
 
@@ -49,7 +51,7 @@ internal sealed class HudSettingsPanel
             var direction = backwards ? -1 : 1;
             _settings.Requested = row switch
             {
-                0 => current with { WindowMode = (WindowMode)(((int)current.WindowMode + direction + 3) % 3) },
+                0 => current with { WindowMode = (WindowMode)(((int)current.WindowMode + direction + WindowModes) % WindowModes) },
                 1 => current with { Monitor = ((current.Monitor + 1 + direction + _settings.MonitorCount + 1) % (_settings.MonitorCount + 1)) - 1 },
                 2 => NextResolution(current, direction),
                 3 => current with { RefreshRate = NextFrequency(current, direction) },
@@ -58,7 +60,7 @@ internal sealed class HudSettingsPanel
                 6 => current with { SoundEnabled = !current.SoundEnabled },
                 7 => current with { MaxFps = Cycle(FrameLimits, current.MaxFps, direction) },
                 8 => current with { BackgroundMaxFps = Cycle(FrameLimits, current.BackgroundMaxFps, direction) },
-                9 => current with { Quality = GraphicsQuality.Custom, AntiAliasing = (AntiAliasingMode)(((int)current.AntiAliasing + direction + 5) % 5) },
+                9 => current with { Quality = GraphicsQuality.Custom, AntiAliasing = (AntiAliasingMode)(((int)current.AntiAliasing + direction + AntiAliasingModes) % AntiAliasingModes) },
                 10 => current with { Quality = GraphicsQuality.Custom, ShadowMapSize = Cycle(ShadowSizes, current.ShadowMapSize, direction) },
                 11 => current.WithQuality(NextPreset(current.Quality, direction)),
                 12 => current with { Quality = GraphicsQuality.Custom, ShadowUpdateRate = Cycle(ShadowUpdateRates, current.ShadowUpdateRate, direction) },
@@ -81,7 +83,7 @@ internal sealed class HudSettingsPanel
         painter.HelpBox(BoxX, BoxY, SizeW, SizeH);
         var title = Title;
         painter.Sprite(HudArt.HelpTitle, title.X, title.Y);
-        painter.TextCentered("Settings", title.Left, title.Right, title.Y + 7, new Color(255, 255, 180));
+        painter.TextCentered("Settings", title.Left, title.Right, title.Y + 7, HudTextColors.BoxTitle);
         for (var index = 0; index < _labels.Length; index++)
         {
             var row = Row(index);
@@ -94,9 +96,9 @@ internal sealed class HudSettingsPanel
         }
 
         var notes = Row(_labels.Length);
-        painter.Text(painter.Fit(_settings.EffectiveDisplay, notes.Width - 8), notes.X + 6, notes.Y + 6, new Color(200, 200, 200));
+        painter.Text(painter.Fit(_settings.EffectiveDisplay, notes.Width - 8), notes.X + 6, notes.Y + 6, HudTextColors.Hint);
         var hint = _settings.Message.Length > 0 ? "Settings need attention; see the client log." : "Click: next   Shift+click: previous";
-        painter.Text(hint, notes.X + 6, notes.Y + 6 + RowHeight, _settings.Message.Length > 0 ? Color.Orange : new Color(200, 200, 200));
+        painter.Text(hint, notes.X + 6, notes.Y + 6 + RowHeight, _settings.Message.Length > 0 ? Color.Orange : HudTextColors.Hint);
         var ok = OkButton;
         painter.Sprite(HudArt.HelpButton, ok.X - 9, ok.Y - 4);
         painter.Sprite(ok.Contains(pointer) ? HudArt.OkYellow : HudArt.OkGray, ok.X, ok.Y);

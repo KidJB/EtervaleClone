@@ -24,8 +24,8 @@ namespace PristonTale.Application.World;
 
 public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IFieldCombatHost, IFieldSkillHost
 {
-    public const int PlayerNearRadiusSquared = 0x120000;
-    public static readonly float PlayerNearRadius = MathF.Sqrt(PlayerNearRadiusSquared);
+    public const int PlayerNearRadiusSquared = ViewRanges.ConnectSquared;
+    public static readonly float PlayerNearRadius = ViewRanges.Connect;
 
     private readonly Dictionary<ulong, WorldPlayer> _players = new();
     private readonly Dictionary<ulong, MonsterInstance> _monsters = new();
@@ -33,6 +33,7 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
 
     // Reused scratch (tick thread only) so Step allocates no per-tick garbage on the hot path.
     private readonly List<MonsterInstance> _liveScratch = new();
+    private readonly List<MonsterInstance> _expiredScratch = new();
     private readonly List<MonsterInstance> _summonScratch = new();
     private readonly List<EntityNeighbour> _neighbourScratch = new();
     private readonly FieldPreyView _prey = new();
@@ -119,7 +120,7 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         _spawner = new FieldSpawner(spawnData, catalog, rng);
         _spawnPoints = spawnData.SpawnPoints;
         _brain = new MonsterAiBrain(rng);
-        _combat = new FieldCombat(this, rng, experienceMultiplier);
+        _combat = new FieldCombat(this, rng, experienceMultiplier) { ActionField = fieldId == FieldCodes.FallGame };
         _skills = new FieldSkills(this, rng);
         _combat.SkillCombat = _skills;
         _monsterSkills = new FieldMonsterSkills(this, rng) { Combat = _combat };
@@ -169,9 +170,10 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
             _skills.LeaveCrystalPets(leaving);
         }
 
+        // The skills forget the player while it is still here, so its summon's keep icon leaves with the summon.
+        _skills.Forget(entityId);
         _players.Remove(entityId, out _);
         Statuses.Take(entityId);
-        _skills.Forget(entityId);
         Premium.Forget(entityId);
     }
 
@@ -244,10 +246,10 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         {
             _spawner.MaintainPopulation(dtMs, _liveScratch, this, nowMs, this);
         }
-        IReadOnlyList<MonsterInstance> expired = _spawner.MaintainDespawns(dtMs, _liveScratch, this);
-        for (int i = 0; i < expired.Count; i++)
+        _spawner.MaintainDespawns(dtMs, _liveScratch, this, _expiredScratch);
+        for (int i = 0; i < _expiredScratch.Count; i++)
         {
-            RemoveMonster(expired[i].EntityId);
+            RemoveMonster(_expiredScratch[i].EntityId);
         }
 
         // The shared world clock emits one pass for all fields, independent of player entry.
@@ -363,9 +365,9 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
 
     bool IFieldSkillHost.TryGetMonster(ulong entityId, [MaybeNullWhen(false)] out MonsterInstance monster) => _monsters.TryGetValue(entityId, out monster);
 
-    IEnumerable<MonsterInstance> IFieldSkillHost.Monsters => _monsters.Values;
+    Dictionary<ulong, MonsterInstance>.ValueCollection IFieldSkillHost.Monsters => _monsters.Values;
 
-    IEnumerable<WorldPlayer> IFieldSkillHost.Players => _players.Values;
+    Dictionary<ulong, WorldPlayer>.ValueCollection IFieldSkillHost.Players => _players.Values;
 
     KillPayout? IFieldSkillHost.ApplyPlayerDamage(WorldPlayer player, MonsterInstance monster, int damage, bool crit, bool forceFlinch, ulong sourceEntityId) =>
         _combat.ApplyPlayerDamage(player, monster, damage, crit, NowMs, forceFlinch, sourceEntityId);
@@ -713,7 +715,7 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
     bool IFieldCombatHost.TryGetMonster(ulong entityId, [MaybeNullWhen(false)] out MonsterInstance monster)
         => _monsters.TryGetValue(entityId, out monster);
 
-    IEnumerable<MonsterInstance> IFieldCombatHost.Monsters => _monsters.Values;
+    Dictionary<ulong, MonsterInstance>.ValueCollection IFieldCombatHost.Monsters => _monsters.Values;
 
     IReadOnlyList<PreyCandidate> IFieldCombatHost.NearbyPlayers(Vector3 origin, float radius) => _prey.Nearby(origin, radius);
 

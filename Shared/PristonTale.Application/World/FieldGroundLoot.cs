@@ -64,7 +64,7 @@ public sealed class FieldGroundLoot(ItemCatalog catalog, FieldTerrain? terrain =
                 item.Sealed = drop.Sealed;
             }
 
-            _entries.Add(id, new Entry(view, item, payout.CreditedPlayerId, publicDrop ? nowMs : nowMs + 5000, nowMs + LifetimeMs(definition), NoThrower));
+            _entries.Add(id, new Entry(view, item, payout.CreditedPlayerId, publicDrop ? nowMs : nowMs + OwnedDropMs, nowMs + LifetimeMs(definition), NoThrower));
             _dirty = true;
         }
     }
@@ -194,9 +194,6 @@ public sealed class FieldGroundLoot(ItemCatalog catalog, FieldTerrain? terrain =
         return _snapshot;
     }
 
-    // The gold a drop holds; 0 for an item or a drop that is gone.
-    public long GoldOf(Guid id) => _entries.TryGetValue(id, out var entry) && entry.View.Gold ? entry.View.Amount : 0;
-
     // Gold or a potion, which a helper pet fetches for its owner (PetFetch).
     public bool PetFetches(Guid id) =>
         _entries.TryGetValue(id, out var entry) && (entry.View.Gold || entry.Item?.Definition.Kind == ItemKind.Potion);
@@ -244,10 +241,17 @@ public sealed class FieldGroundLoot(ItemCatalog catalog, FieldTerrain? terrain =
         }
     }
 
-    // Gold (no definition), life and stamina potions lie for 90 s; mana potions and other items for 180 s.
+    // Gold (no definition), life and stamina potions lie for ShortLifetimeMs; mana potions and other items for
+    // LongLifetimeMs.
+    private const long ShortLifetimeMs = 90_000;
+    // A drop that is not public belongs to the credited player this long.
+    private const long OwnedDropMs = 5000;
+    private const long LongLifetimeMs = 180_000;
+
     private static long LifetimeMs(ItemDefinition? definition) =>
-        definition is null || definition.CatalogKey.StartsWith("PL", StringComparison.OrdinalIgnoreCase)
-        || definition.CatalogKey.StartsWith("PS", StringComparison.OrdinalIgnoreCase) ? 90_000 : 180_000;
+        definition is null || PotionDefinition.FamilyOf(definition.CatalogKey) is PotionResource.Life or PotionResource.Stamina
+            ? ShortLifetimeMs
+            : LongLifetimeMs;
 
     private void RemoveEntry(Guid id)
     {

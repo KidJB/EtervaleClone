@@ -13,8 +13,8 @@ public static class ChatRules
     // A line is cut to this many characters.
     public const int MessageCapacity = 255;
 
-    // Spoken lines reach players closer than 0x48000 squared world units (about 543 units).
-    public const float AreaRangeSquared = 0x48000;
+    // Spoken lines reach players inside the near range (about 543 units).
+    public const float AreaRangeSquared = World.ViewRanges.NearSquared;
 
     // Overhead bubbles: other characters' lines stay five seconds, the local player's own line seven.
     public const int OtherBubbleMs = 5000;
@@ -46,4 +46,7 @@ public static class ChatRules
     public static bool IsWhisper(string text) => text.Length > 1 && text[0] == '/' && (text[1] == ':' || text[1] == ';');
 
     public static string ClipToCapacity(string text) => text.Length > MessageCapacity ? text[..MessageCapacity] : text;
+
+    // A notice line every player sees, clipped to a message.
+    public static string Notice(string text) => ClipToCapacity("Notice> " + text);
 }

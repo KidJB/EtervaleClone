@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using PristonTale.Engine3D.Rendering;
 
 namespace PristonTale.Effects.Vfx;
 
@@ -206,7 +207,7 @@ public sealed partial class VfxRenderer
             return;
         }
 
-        var parameters = new Vector2(8f, 0f);
+        var parameters = new Vector2(VfxSystem.StripSoftness, 0f);
         _scratch[at] = new VfxVertex { Position = a, Color = color, TexCoord = new Vector2(uv.X, uv.Y), Params = parameters };
         _scratch[at + 1] = new VfxVertex { Position = b, Color = color, TexCoord = new Vector2(uv.Z, uv.Y), Params = parameters };
         _scratch[at + 2] = new VfxVertex { Position = c, Color = color, TexCoord = new Vector2(uv.Z, uv.W), Params = parameters };
@@ -218,7 +219,7 @@ public sealed partial class VfxRenderer
         new(SrgbToLinear(color.X / 255f), SrgbToLinear(color.Y / 255f), SrgbToLinear(color.Z / 255f), Math.Clamp(color.W / 255f, 0f, 1f));
 
     // The sRGB curve sampled at 1024 steps and read with linear interpolation (within 1e-6 of the curve): every particle
-    // decodes its colour each frame, and the curve's Pow was the costliest part of building a quad.
+    // decodes its colour each frame, so the decode must not cost a Pow per channel.
     private const int SrgbSteps = 1024;
     private static readonly float[] SrgbTable = BuildSrgbTable();
 
@@ -235,7 +236,7 @@ public sealed partial class VfxRenderer
         for (var index = 0; index <= SrgbSteps; index++)
         {
             var value = index / (float)SrgbSteps;
-            table[index] = value <= 0.04045f ? value / 12.92f : MathF.Pow((value + 0.055f) / 1.055f, 2.4f);
+            table[index] = PristonColorSpace.SrgbToLinear(value);
         }
 
         return table;

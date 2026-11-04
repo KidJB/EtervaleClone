@@ -40,13 +40,10 @@ public static class MonsterSkillRules
     // The mystic's skill only curses; every other skill deals its damage roll.
     public static bool DealsSkillDamage(MonsterDefinition definition) => definition.SoundCode != CharacterSoundCodes.Mystic;
 
-    public static MonsterCurse Curse(MonsterDefinition definition) => definition.Skill.CurseSkillCode switch
-    {
-        101 => MonsterCurse.Defence,
-        102 => MonsterCurse.AllyPower,
-        103 => MonsterCurse.Attack,
-        _ => MonsterCurse.None
-    };
+    public static MonsterCurse Curse(MonsterDefinition definition) =>
+        (MonsterCurse)definition.Skill.CurseSkillCode is var curse && curse is MonsterCurse.Defence or MonsterCurse.AllyPower or MonsterCurse.Attack
+            ? curse
+            : MonsterCurse.None;
 
     public static (int Min, int Max) CurseDefenceRange(MonsterDefinition definition) =>
         definition.SoundCode == CharacterSoundCodes.Mystic ? (10, 16) : (2, 6);
@@ -88,7 +85,7 @@ public static class MonsterSkillRules
     // The great bosses deal eight times their roll to monsters; Kelvezu's blow kills a monster outright.
     public static bool MultipliesAgainstMonsters(MonsterDefinition definition) =>
         definition.SoundCode is CharacterSoundCodes.Babel or CharacterSoundCodes.ChaosCara or CharacterSoundCodes.DeathKnight or CharacterSoundCodes.Mokova
-            or CharacterSoundCodes.Kelvezu;
+            or CharacterSoundCodes.Kelvezu or CharacterSoundCodes.Hestian;
 
     public const int MonsterDamageMultiplier = 8;
 
@@ -135,7 +132,7 @@ public static class MonsterSkillRules
             case CharacterSoundCodes.Chimera:
                 riders[count++] = new MonsterHitRider(MonsterRiderKind.Status, MonsterStatuses.Stun, MonsterStatuses.StunFrames);
                 break;
-            case CharacterSoundCodes.ChaosCara when char.ToUpperInvariant(key) != 'J':
+            case CharacterSoundCodes.ChaosCara or CharacterSoundCodes.Hestian when char.ToUpperInvariant(key) != 'J':
                 riders[count++] = new MonsterHitRider(MonsterRiderKind.ManaByPower);
                 break;
             case CharacterSoundCodes.CastleCrystalIce:

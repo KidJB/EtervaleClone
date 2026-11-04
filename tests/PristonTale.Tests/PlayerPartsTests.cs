@@ -48,19 +48,9 @@ internal static class PlayerPartsTests
         composer.Compose(root, unknown, 0, Matrix.Identity, MotionCode.Stand);
     }
 
-    private static string? FindAssets()
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-        {
-            var candidate = Path.Combine(directory.FullName, "assets");
-            if (Directory.Exists(Path.Combine(candidate, "char")))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
-    }
+    // The repository's assets, when they hold the char folder this case reads.
+    private static string? FindAssets() =>
+        PristonTale.Assets.AssetFiles.FindAssetsRoot() is { } root && Directory.Exists(Path.Combine(root, "char")) ? root : null;
 
     private sealed class PartScene : IActorScene
     {

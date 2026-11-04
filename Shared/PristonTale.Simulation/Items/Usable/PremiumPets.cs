@@ -21,10 +21,13 @@ public static class PremiumPets
     public const float SlowMs = 10_000f;
     public const int SlowSpeedPercent = 180 * 100 / 256 - 100;
 
+    private static readonly PremiumEffectKind[] HelperPets =
+        [PremiumEffectKind.HelpPetTerry, PremiumEffectKind.HelpPetNepsys, PremiumEffectKind.HelpPetIo, PremiumEffectKind.HelpPetMute];
+
     // The helper pet the timers run, if any.
     public static PremiumEffectKind? HelperPet(PremiumTimers timers)
     {
-        foreach (var kind in new[] { PremiumEffectKind.HelpPetTerry, PremiumEffectKind.HelpPetNepsys, PremiumEffectKind.HelpPetIo, PremiumEffectKind.HelpPetMute })
+        foreach (var kind in HelperPets)
         {
             if (timers.IsActive(kind))
             {
@@ -67,8 +70,7 @@ public static class PremiumPets
         var damage = rng.Range(min, max);
         if (ElementOf(pet) is { } element)
         {
-            var resist = Math.Clamp((int)monster.Resistances[element], -100, 100);
-            damage -= damage * resist / 100;
+            damage = Combat.CombatResolver.ApplyResistance(damage, monster.Resistances[element]);
         }
 
         damage -= damage * Math.Clamp(monster.Absorption, 0, 100) / 100;
@@ -78,5 +80,5 @@ public static class PremiumPets
     public static EffectSpec Slow() =>
         new(SlowStatusCode, EffectSourceKind.Item, true, [StatModifier.Percent(StatKind.MoveSpeed, SlowSpeedPercent)], control: ControlFlags.Slow);
 
-    public static float SlowDurationMs(int iceResist) => SlowMs * Math.Clamp(100 - iceResist, 0, 100) / 100f;
+    public static float SlowDurationMs(int iceResist) => CombatResolver.Shortened(SlowMs, iceResist);
 }

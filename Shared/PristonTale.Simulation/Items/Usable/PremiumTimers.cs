@@ -50,8 +50,8 @@ public enum PremiumStartResult
 public sealed class PremiumTimers
 {
     public const int MaxTimers = 17;
-    public const int SoccerHeadMode = 3;
-    private const int MaxHeadMode = 3;
+    public const int SoccerHeadMode = Characters.CharacterHead.SoccerLook;
+    private const int MaxHeadMode = Characters.CharacterHead.SoccerLook;
 
     private readonly List<PremiumTimer> _timers = new();
 
@@ -101,8 +101,6 @@ public sealed class PremiumTimers
 
     // The value of a running timer (a percent, or carrying capacity for Might of Awell), or 0.
     public int ValueOf(PremiumEffectKind kind) => Find(kind)?.Value ?? 0;
-
-    public bool HelperPetActive => _timers.Any(static timer => IsHelperPet(timer.Kind));
 
     public PremiumStartResult CanStart(PremiumEffectKind kind, PremiumConflict conflict, long nowSeconds)
     {

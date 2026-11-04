@@ -82,6 +82,11 @@ public static class HudSkillDetails
         if (damage.Min.Length == 10)
         {
             lines.Add($"Damage {rule.At(damage.Min, rank)}-{rule.At(damage.Max, rank)}{(damage.Element == Simulation.Combat.Element.Bionic ? "" : " " + damage.Element)}");
+            var tablePercent = SkillFormulas.RankValue(damage.TablePercent, rank);
+            if (tablePercent != 0)
+            {
+                lines.Add($"Adding rate {Signed(tablePercent)}%");
+            }
         }
 
         if (percent != 0)
@@ -106,8 +111,8 @@ public static class HudSkillDetails
             lines.Add($"{string.Join("/", damage.BonusBroods)} {Signed(bonus)}%");
         }
 
-        var hits = rule.ForRank(rank).HitFrames().Length * Math.Max(1, rule.At(rule.Loops, rank));
-        if (rule.Motion == SkillMotion.Skill && hits > 1)
+        var hits = SkillFormulas.HitCount(rule, rank);
+        if (SkillFormulas.Plan(rule, rank).Motion == SkillMotion.Skill && hits > 1)
         {
             lines.Add($"{hits} hits");
         }
@@ -127,7 +132,7 @@ public static class HudSkillDetails
         }
 
         var radius = rule.At(rule.Radius, rank);
-        var targets = rule.MaxTargetsByRank.Length == 10 ? $", {rule.At(rule.MaxTargetsByRank, rank)} targets" : "";
+        var targets = rule.MaxTargetsByRank.Length > 0 ? $", {rule.At(rule.MaxTargetsByRank, rank)} targets" : "";
         lines.Add(rule.AreaShape switch
         {
             SkillAreaShape.Box => $"Area {rule.BoxWidth} x {radius}{targets}",

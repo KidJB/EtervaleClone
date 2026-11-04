@@ -240,8 +240,7 @@ public sealed partial class Importer
             return [];
         }
 
-        var text = Cp949.GetString(bytes);
-        var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        var lines = Cp949.Lines(bytes);
         var fields = new List<SourceField>();
 
         for (var index = 0; index < lines.Length; index++)
@@ -648,13 +647,8 @@ public sealed partial class Importer
     // Resolve a subfolder case-insensitively under the GameServer root.
     private string? ResolveDir(string name)
     {
-        var direct = Path.Combine(_root, name);
-        if (Directory.Exists(direct))
-            return direct;
-        foreach (var d in Directory.EnumerateDirectories(_root))
-            if (string.Equals(Path.GetFileName(d), name, StringComparison.OrdinalIgnoreCase))
-                return d;
-        return null;
+        var resolved = AssetFiles.Resolve(Path.Combine(_root, name));
+        return Directory.Exists(resolved) ? resolved : null;
     }
 
     // The field .spm/.spp/.spc are named "<aseBase>.<ext>" or "<aseBase>.ase.<ext>" (case-insensitive).

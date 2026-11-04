@@ -98,7 +98,7 @@ internal static class GmServerCommands
         var name = context.Word();
         var value = context.Rest.Trim();
         if (context.Commands.Settings is not { } settings
-            || Settings.ServerSettingCatalog.All.FirstOrDefault(setting => setting.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) is not { } definition)
+            || Settings.ServerSettingCatalog.Find(name) is not { } definition)
         {
             context.Reply(Format("Unknown setting {0}", name));
             return;
@@ -158,7 +158,7 @@ internal static class GmServerCommands
 public static class ServerNotices
 {
     public static void Broadcast(ChatDirectory directory, string text) =>
-        directory.Broadcast(new ChatLine(ChatKind.Notice, 0, Simulation.Social.ChatRules.ClipToCapacity("Notice> " + text)));
+        directory.Broadcast(new ChatLine(ChatKind.Notice, 0, Simulation.Social.ChatRules.Notice(text)));
 
     // A line that already carries its own prefix (the shutdown countdown).
     public static void BroadcastRaw(ChatDirectory directory, string text) =>

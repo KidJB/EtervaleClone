@@ -11,10 +11,6 @@ namespace PristonTale.Application.Services;
 
 public sealed class CharacterAppService
 {
-    // Up to 6 characters per account, matching the original character slot count.
-    private const int MaxCharactersPerAccount = CharacterSlots.Maximum;
-    // New characters start in the starting town (Ricarten = field 3) at its spawn (resolved later).
-
     private readonly ISessionRegistry _sessions;
     private readonly ICharacterRepository _characters;
     private readonly CharacterClassRegistry _classes;
@@ -49,13 +45,6 @@ public sealed class CharacterAppService
         return summaries;
     }
 
-    // IsRecordData request: whether any account already uses the name.
-    public async Task<bool> NameExistsAsync(string sessionToken, string name, CancellationToken ct = default)
-    {
-        Authenticate(sessionToken);
-        return await _characters.NameExistsAsync(name?.Trim() ?? string.Empty, ct);
-    }
-
     public async Task<CreateCharacterOutcome> CreateCharacterAsync(
         string sessionToken, string name, PlayerClass playerClass, int faceIndex, CancellationToken ct = default)
     {
@@ -75,9 +64,8 @@ public sealed class CharacterAppService
             return CreateCharacterOutcome.Failed(CreateCharacterFailure.NameTaken);
 
         var usedSlots = await _characters.UsedSlotsAsync(session.AccountId, ct);
-        if (usedSlots.Count >= MaxCharactersPerAccount)
+        if (CharacterSlots.FirstFree(usedSlots) is not { } slot)
             return CreateCharacterOutcome.Failed(CreateCharacterFailure.NoFreeSlot);
-        var slot = FirstFreeSlot(usedSlots);
 
         var record = CharacterRecordFactory.NewStarter(
             _classes,
@@ -98,11 +86,28 @@ public sealed class CharacterAppService
         var session = Authenticate(sessionToken);
 
         var trimmed = name?.Trim() ?? string.Empty;
+        var found = await _characters.FindByNameForAccountAsync(session.AccountId, trimmed, ct);
+        if (found is null)
+        {
+            return DeleteCharacterOutcome.Denied("character not found");
+        }
 
-        var deleted = await _characters.DeleteByNameAsync(session.AccountId, trimmed, ct);
-        return deleted
-            ? DeleteCharacterOutcome.Success()
-            : DeleteCharacterOutcome.Denied("character not found");
+        // A character in play (by this session or another of the account) is claimed: it cannot be deleted under its saves.
+        if (!_sessions.TryClaimCharacter(found.Id, sessionToken))
+        {
+            return DeleteCharacterOutcome.Denied("the character is in play");
+        }
+
+        try
+        {
+            return await _characters.DeleteByNameAsync(session.AccountId, trimmed, ct)
+                ? DeleteCharacterOutcome.Success()
+                : DeleteCharacterOutcome.Denied("character not found");
+        }
+        finally
+        {
+            _sessions.ReleaseCharacter(found.Id, sessionToken);
+        }
     }
 
     private PlayerSession Authenticate(string token)
@@ -112,7 +117,34 @@ public sealed class CharacterAppService
         return session;
     }
 
+    // A character whose saved equipment cannot be read is listed without its looks, so the rest of the account still logs
+    // in; entering it is refused as an unsupported saved state.
     private CharacterSummary BuildSummary(CharacterRecord character)
+    {
+        var (armorKey, weaponKey, offHandKey) = (string.Empty, string.Empty, string.Empty);
+        try
+        {
+            (armorKey, weaponKey, offHandKey) = VisualKeys(character);
+        }
+        catch (Exception exception) when (exception is InvalidDataException or System.Text.Json.JsonException or ArgumentException)
+        {
+        }
+
+        var inVillage = _world.TryGetFieldByCode(character.FieldId, out var field) && field.State == FieldState.Village;
+        return new CharacterSummary(
+            character.Name,
+            (PlayerClass)character.JobCode,
+            character.Level,
+            character.FaceIndex,
+            character.Tier,
+            character.HairIndex,
+            armorKey,
+            weaponKey,
+            offHandKey,
+            inVillage);
+    }
+
+    private (string Armor, string Weapon, string OffHand) VisualKeys(CharacterRecord character)
     {
         var equipment = CharacterStateCodec.ReadEquipment(character.Equipment);
         var occupiedSlots = new HashSet<EquipmentSlot>();
@@ -146,18 +178,7 @@ public sealed class CharacterAppService
             AssignVisualKey(saved.Slot.Value, definition, ref armorKey, ref weaponKey, ref offHandKey);
         }
 
-        var inVillage = _world.TryGetFieldByCode(character.FieldId, out var field) && field.State == FieldState.Village;
-        return new CharacterSummary(
-            character.Name,
-            (PlayerClass)character.JobCode,
-            character.Level,
-            character.FaceIndex,
-            character.Tier,
-            character.HairIndex,
-            armorKey,
-            weaponKey,
-            offHandKey,
-            inVillage);
+        return (armorKey, weaponKey, offHandKey);
     }
 
     private static void AssignVisualKey(
@@ -185,18 +206,5 @@ public sealed class CharacterAppService
                 offHandKey = definition.CatalogKey;
                 break;
         }
-    }
-
-    private static short FirstFreeSlot(IReadOnlyList<short> used)
-    {
-        for (short slot = 0; slot < MaxCharactersPerAccount; slot++)
-        {
-            if (!used.Contains(slot))
-            {
-                return slot;
-            }
-        }
-
-        throw new InvalidOperationException("no free slot");
     }
 }

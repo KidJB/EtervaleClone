@@ -22,6 +22,7 @@ layouts live in [protocol.md](protocol.md).
 | `Hosting/DatabaseMigrationService.cs` | Hosted service: `IDatabaseMigrator.MigrateAsync` on start. |
 | `Hosting/GameLogService.cs` | Hosted service: the item transfer writer, the currency sinks every `Logs:CurrencyMinutes`, the server's start and stop, the daily prune. |
 | `Hosting/CharacterSaveService.cs` | Hosted service: stores the save journal on start, runs `CharacterSaveQueue` until the host stops, logs its counts every `Server:ReportSeconds`. |
+| `Hosting/ReportInterval.cs` | The period of the report lines (`Server:ReportSeconds`), read once by the world tick, the TCP server and the character saves. |
 | `Hosting/WorldDataLoadService.cs` | Hosted service: `WorldDataAppService.BuildAsync` into `WorldDataHolder.Current`; logs catalog counts. |
 | `Hosting/FieldTerrainLoadService.cs` | Hosted service: reads every field's stage `.smd` collision in parallel into `FieldTerrainCatalog`. |
 | `World/WorldTickService.cs` | `BackgroundService` calling `WorldServer.Tick(1/20 s, tick)` on its own thread, on the absolute timeline of `TickSchedule` (owed ticks run back to back, a stall past 5 ticks is skipped); logs tick percentiles, ticks caught up and skipped, the command and field phases, process CPU, allocation rate, collections, heap and working set. |
@@ -100,7 +101,6 @@ All registrations are singletons in `HostingExtensions.AddPristonServer`.
 | `GmAuditQueue` | factory: `IGameMasterRepository` | The game masters' audit writer, run by `GameLogService`; a failed row is logged as an error and retried. |
 | `CharacterSaveQueue`, `ICharacterSaves` | factory: the character repository, `SaveJournal` (`Database:SaveJournalPath`), `Database:SaveBatchSize` | The background character store ([application.md](application.md#character-saves)); a failed batch is logged as an error. |
 | `ServerSettingsAppService` | factory | Reads the settings table and applies it to the world, `GameMasterCommands.Options` and `GameServerControl` (name, player limit). |
-| `IServerStatusReadModel` | `WorldStatusReadModel` | Registered for status queries; nothing in the server consumes it. |
 
 Hosted services are registered in the order of the startup table.
 
@@ -111,7 +111,7 @@ Hosted services are registered in the order of the startup table.
 | SQLite (default) | `Database:Provider` = `Sqlite` (case-insensitive) or unset | `Database:SqlitePath`, default `data/pristontale.db`. |
 | PostgreSQL | `Database:Provider` = `Postgres` | `ConnectionStrings:Postgres`; `appsettings.json` points at the `docker-compose.yml` instance on port 5433. |
 
-- A relative SQLite path is resolved by `SqliteDatabasePath.Resolve` against the first ancestor of the executable
+- A relative SQLite path is resolved by `DataPath.Resolve` against the first ancestor of the executable
   directory that contains `PristonTale.sln`, else against the executable directory. It does not depend on the working
   directory. The directory is created if missing.
 - SQLite runs with WAL journaling and `synchronous=NORMAL`; `-wal` and `-shm` files sit next to the database.
@@ -144,8 +144,8 @@ that limit; negative values stop startup. The game settings live in the database
 | `Network:Port` | 10009 | `GameTcpServer` | TCP game port, 0 to 65535; 0 binds a free port (in-process tests read it from `GameTcpServer.BoundPort`). The client always connects to 10009. |
 | `Network:Certificate:Path` | `data/server-certificate.pfx` | `ServerCertificate` | TLS certificate (PKCS#12); relative paths resolve from the solution root. Created self-signed when missing. |
 | `Network:Certificate:Password` | none | `ServerCertificate` | Password of the PKCS#12 file. |
-| `Network:HandshakeTimeoutSeconds` | 10 | `GameTcpServer` | Deadline of the TLS handshake of an accepted socket. |
-| `Server:ReportSeconds` | 30 | `WorldTickService`, `GameTcpServer` | Period of the tick and TCP report lines; at least 1. |
+| `Network:HandshakeTimeoutSeconds` | 10 | `NetworkLimits` | Deadline of the TLS handshake of an accepted socket; at least 1. |
+| `Server:ReportSeconds` | 30 | `ReportInterval` | Period of the tick, TCP and character save report lines; at least 1. |
 | `Network:PacketLimit` | 251 | `NetworkLimits` | Packets per window before the connection closes (`DescribeEntity` excluded). |
 | `Network:PacketWindowSeconds` | 5 | `NetworkLimits` | Fixed window of the packet limit. |
 | `Network:MaxConnectionsPerIp` | 8 | `NetworkLimits` | Open connections per remote address; extra sockets are closed on accept. |
@@ -181,7 +181,7 @@ show or write one row with `/setting name [value]` ([chat-and-gm.md](chat-and-gm
 | `server.name` | `Etervale` | Up to 32 characters; sent in `ServerHello` and shown on the character screen. |
 | `server.code` | 0 | Server number that prefixes the game-master information replies. |
 | `server.max_users` | 0 | Players beyond which only game masters may log in; 0 for no limit. A game master's `/user_limit` lasts until this row changes. |
-| `server.test` | false | Every game master may use `/GiveMeExp!` and `/GiveMeMoney!`. |
+| `server.test` | false | Every game master may use `/expup`, `/GiveMeExp!` and `/GiveMeMoney!`. |
 | `server.debug` | false | As `server.test`, and `/` with an item code drops that item. |
 | `server.settings_reload_minutes` | 5 | Minutes between two readings, 1 to 1440. |
 | `players.starter_gifts` | true | A new character receives its starter gifts ([application.md](application.md#starter-gifts)). |
@@ -251,8 +251,14 @@ required per opcode; both envelopes reach the same switch.
 | `NpcServiceRequest` | `RequestNpcServiceAsync` | `NpcAppService.RequestAsync` | State messages, `NpcServiceResult`, and a forced `FieldWarp` for a teleport. |
 | `QuestRequest` | `RequestQuestAsync` | `QuestAppService.RequestAsync` | `QuestResult`; travel to or from the arena arrives as the encoder's `FieldWarp`. |
 | `SkillCast` | `CastSkillAsync` | `WorldServer.CastSkillAsync` | `SkillCastResult`. |
+| `ItemUseCommand` | `UseItemAsync` | `ItemUseAppService.UseAsync` | `ItemUseResult` ([special-items.md](special-items.md)). |
+| `RestartRequest` | `RestartAsync` | `RestartAppService.RestartAsync` | `RestartResult`; the arrival comes as the encoder's `FieldWarp`. |
+| `WingGateRequest` | `TravelWingGateAsync` | `WingGateAppService.TravelAsync` | `WingGateResult`. |
+| `PersonalShopOpen`, `PersonalShopClose`, `PersonalShopView`, `PersonalShopBuy` | `OpenPersonalShopAsync`, `ClosePersonalShopAsync`, `ViewPersonalShopAsync`, `BuyFromPersonalShopAsync` | `PersonalShopAppService` | `PersonalShopListing` and `PersonalShopDetails` for a view, then `PersonalShopResult`. |
+| `YahooKey` | inline | `WorldServer.YahooAsync` | None; the cheer arrives as presence. |
+| `DismissCrystalPets` | inline | `WorldServer.DismissCrystalPetsAsync` | None; the pets' end arrives as presence. |
 | `LeaveWorld` | inline | `ClosePlayAsync` (leave, save) | `LeaveWorld` with `Saved` true when the character was stored. |
-| anything else | ignored | none | none |
+| a code without a handler | ignored | none | none |
 
 Error handling inside `HandleAsync`:
 
@@ -260,7 +266,7 @@ Error handling inside `HandleAsync`:
 | --- | --- |
 | `InvalidSessionException`, `InvalidOperationException` (includes `WorldBusyException`) | Packet dropped, sampled `Rejected` warning; the connection stays open. |
 | `DbException` | `ReplyStorageFailure`: login gets `LoginResult` busy, character commands get a `CharacterResult` with `CreateCharacterFailure.Rejected`, `EnterWorld` gets a `WorldEntry` with `EnterWorldFailure.Rejected`. |
-| `InvalidDataException` (malformed packet from a `Read`) | Escapes to `FrameConnection`, which closes with `protocol: ...`. |
+| `InvalidDataException` (malformed packet from a `Read`) | Closes the connection (`handler failed`) and is logged as `Client session ... failed` once the session has closed its play. |
 | anything else | Ends the session; logged as `Client session ... failed`. |
 
 Inventory, progression, NPC service and quest handlers convert session, operation and storage exceptions into a failed

@@ -9,7 +9,7 @@ namespace PristonTale.Simulation.Quests;
 public static class RankUpByMasterTrial
 {
     public const QuestCode Code = QuestCode.RankUpMasterTrial;
-    public const int MinimumLevel = 60;
+    public static readonly int MinimumLevel = RankUpRules.RequiredLevel(2);
     public const int DuelMinimumLevel = 49;
 
     // 4900 seconds of play time per hunt; the timer runs in every field and through deaths.
@@ -197,49 +197,18 @@ public static class RankUpByMasterTrial
     public static void OnKill(QuestContext context, int monsterCode)
     {
         var active = context.Journal.Active;
-        if (active.Code != Code || active.Target == 0 || monsterCode != active.Target || active.State > SecondHuntDone || active.KillsNeeded == 0
-            || active.HuntComplete)
+        if (active.Code == Code && active.State <= SecondHuntDone)
         {
-            return;
+            QuestSteps.CreditHunt(context, monsterCode);
         }
-
-        var kills = active.Kills + 1;
-        var name = QuestMonsters.NameOf(active.Target);
-        context.Notice(QuestNoticeKind.Chat, QuestTexts.Count(name, kills));
-        if (kills >= active.KillsNeeded)
-        {
-            context.Notice(QuestNoticeKind.Event, QuestTexts.HuntFinished(active.KillsNeeded, name));
-        }
-
-        context.Journal.Active = active with { Kills = kills };
     }
 
-    // The hunt timer counts play time; when it runs out an unfinished hunt step is lost.
     public static void StepTimer(QuestContext context, long elapsedMs)
     {
-        var active = context.Journal.Active;
-        if (active.Code != Code || active.Timer != QuestTimerKind.Expiring || elapsedMs <= 0)
+        if (context.Journal.Active.Code == Code)
         {
-            return;
+            QuestSteps.StepHuntTimer(context, elapsedMs);
         }
-
-        var left = active.TimerMs - elapsedMs;
-        if (left > 0)
-        {
-            context.Journal.Active = active with { TimerMs = left };
-            return;
-        }
-
-        // Run out: back one step with the kill count cleared; the needed count is kept so the master restarts the hunt.
-        context.Journal.Active = active with
-        {
-            State = active.KillsNeeded > 0 ? active.State - 1 : active.State,
-            Kills = 0,
-            Target = 0,
-            Timer = QuestTimerKind.None,
-            TimerMs = 0
-        };
-        context.Notice(QuestNoticeKind.Message, QuestTexts.MissionTimedOut);
     }
 
     // The royal amulet drops from the named monster of the step, one at a time.
@@ -274,7 +243,4 @@ public static class RankUpByMasterTrial
         context.Journal.Active = active with { State = SecondHuntDone };
         return true;
     }
-
-    public static bool InHunt(PlayerCharacter character) =>
-        character.Quests.Active is { Code: Code, Timer: QuestTimerKind.Expiring };
 }

@@ -13,7 +13,6 @@ internal sealed class CharSelectViewModel
     public int StateIndex;
     public string ErrorMessage = string.Empty;
 
-    public string ServerName = string.Empty;
     public double ElapsedSeconds;
 
     public bool RosterHasChars;
@@ -35,6 +34,10 @@ internal sealed class CharSelectViewModel
 
 internal sealed class CharacterSelectView
 {
+    // The selected character's level as text, made when the selection's level changes.
+    private int _levelShown = -1;
+    private string _levelText = "";
+
     private const int InfoPanelValueColumnX = 102;
     private const float InfoPanelValueScale = 0.45f;
     private const float InfoPanelValueBaselineAdjustment = -2f;
@@ -58,11 +61,6 @@ internal sealed class CharacterSelectView
 
         DrawFrame(viewport);
         DrawTitle(viewport, m.StateIndex);
-        if (!string.IsNullOrEmpty(m.ServerName))
-        {
-            _sb.DrawString(_font, m.ServerName, new Vector2(16f, 20f), Color.Gold, 0f, Vector2.Zero, InfoPanelValueScale, SpriteEffects.None, 0f);
-        }
-
         switch (m.StateIndex)
         {
             case 0:
@@ -314,7 +312,12 @@ internal sealed class CharacterSelectView
 
         var valueX = boxX + InfoPanelValueColumnX;
         SmallValue(info.Name, valueX, boxY + 20 + InfoPanelValueBaselineAdjustment, new Color(255, 250, 235));
-        SmallValue(info.Level.ToString(), valueX, boxY + 40 + InfoPanelValueBaselineAdjustment, new Color(255, 220, 100));
+        if (info.Level != _levelShown)
+        {
+            (_levelShown, _levelText) = (info.Level, info.Level.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        SmallValue(_levelText, valueX, boxY + 40 + InfoPanelValueBaselineAdjustment, new Color(255, 220, 100));
         SmallValue(info.BroodName, valueX, boxY + 60 + InfoPanelValueBaselineAdjustment, new Color(255, 250, 235));
         SmallValue(info.ClassName, valueX, boxY + 80 + InfoPanelValueBaselineAdjustment, new Color(255, 250, 235));
     }

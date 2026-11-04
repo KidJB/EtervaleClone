@@ -12,6 +12,8 @@ using PristonTale.Contracts.Motion;
 using PristonTale.Contracts.World;
 using PristonTale.Contracts.Combat;
 using PristonTale.Contracts.Characters;
+using PristonTale.Simulation.Items;
+using PristonTale.Simulation.World.Monsters;
 
 namespace PristonTale.Gameplay.World.Remote;
 
@@ -67,8 +69,6 @@ public sealed partial class RemoteEntityManager
 
     // Another player entered a motion: its class code, the motion and where it stands.
     public event Action<PlayerClass, MotionCode, XnaVector3> PlayerMotionStarted;
-
-    public int PendingMonsterCount => _pendingModels.Count;
 
     public void SetSelfSink(
         Action<EntitySpawnInfo> onSelfSpawn,
@@ -256,7 +256,7 @@ public sealed partial class RemoteEntityManager
             return;
         }
 
-        var position = ToXna(spawn.Position);
+        var position = (XnaVector3)spawn.Position;
         var sampleTime = _clock.Stamp(spawn.ServerTimeMs);
         var seedTime = sampleTime;
         var seedFacing = spawn.Facing;
@@ -309,7 +309,7 @@ public sealed partial class RemoteEntityManager
         };
         replacement.MotionStarted += OnMotionStarted;
         replacement.SetRates(spawn.MoveSpeed, spawn.AttackRate);
-        replacement.SetTarget(sampleTime, ToXna(spawn.Position), spawn.Facing, spawn.MoveState, spawn.Life);
+        replacement.SetTarget(sampleTime, (XnaVector3)spawn.Position, spawn.Facing, spawn.MoveState, spawn.Life);
         _entities[spawn.EntityId] = replacement;
     }
 
@@ -333,7 +333,7 @@ public sealed partial class RemoteEntityManager
             return;
         }
 
-        var position = ToXna(spawn.Position);
+        var position = (XnaVector3)spawn.Position;
         if (spawn.OwnerId != 0)
         {
             _summonOwners[spawn.EntityId] = spawn.OwnerId;
@@ -379,7 +379,7 @@ public sealed partial class RemoteEntityManager
         if (_entities.TryGetValue(state.EntityId, out var entity))
         {
             entity.SetRates(state.MoveSpeed, state.AttackRate);
-            entity.SetTarget(_clock.Stamp(state.ServerTimeMs), ToXna(state.Position), state.Facing, state.MoveState, state.Life);
+            entity.SetTarget(_clock.Stamp(state.ServerTimeMs), (XnaVector3)state.Position, state.Facing, state.MoveState, state.Life);
             if (!_preparingActors.ContainsKey(state.EntityId))
             {
                 return;
@@ -388,39 +388,19 @@ public sealed partial class RemoteEntityManager
 
         if (_preparingActors.TryGetValue(state.EntityId, out var preparing))
         {
-            var latest = preparing.Spawn with
-            {
-                Position = state.Position,
-                Facing = state.Facing,
-                MoveState = state.MoveState,
-                Life = state.Life,
-                MoveSpeed = state.MoveSpeed,
-                AttackRate = state.AttackRate,
-                ServerTimeMs = state.ServerTimeMs
-            };
-            _preparingActors[state.EntityId] = (latest, preparing.Preparation);
+            _preparingActors[state.EntityId] = (WithState(preparing.Spawn, state), preparing.Preparation);
             return;
         }
 
         if (_pendingModels.TryGetValue(state.EntityId, out var pending))
         {
-            _pendingModels[state.EntityId] = pending with
-            {
-                Position = state.Position,
-                Facing = state.Facing,
-                MoveState = state.MoveState,
-                Life = state.Life,
-                MoveSpeed = state.MoveSpeed,
-                AttackRate = state.AttackRate,
-                ServerTimeMs = state.ServerTimeMs
-            };
+            _pendingModels[state.EntityId] = WithState(pending, state);
             return;
         }
 
         _log.Info($"[Remote] state for unknown entity {state.EntityId} dropped (spawn not yet seen).");
     }
 
-    private const int HammerClass = 200;
 
     // The monsters drawn this frame, for the presentation that follows their clips.
     public void CollectMonsters(List<PristonTale.Gameplay.Effects.MonsterActorView> into)
@@ -431,12 +411,10 @@ public sealed partial class RemoteEntityManager
             if (entity is RemoteModelEntity { Kind: EntityKind.Monster } monster && monster.Actor.IsValid)
             {
                 into.Add(new PristonTale.Gameplay.Effects.MonsterActorView(id, monster.Actor, monster.SoundCode, monster.Level, monster.Scale,
-                    monster.DrawnPosition, monster.RenderFacing, monster.IsDead, monster.MonsterClass == HammerClass));
+                    monster.DrawnPosition, monster.RenderFacing, monster.IsDead, monster.MonsterClass == (int)MonsterClass.Hammer));
             }
         }
     }
-
-    public bool TryGetSummonOwner(ulong entityId, out ulong ownerId) => _summonOwners.TryGetValue(entityId, out ownerId);
 
     public void SeekSkillMotion(ulong entityId, int framesFromStart, float rate)
     {
@@ -533,6 +511,7 @@ public sealed partial class RemoteEntityManager
         var now = _clock.NowMs;
         foreach (var entity in _entities.Values)
         {
+            entity.SideView = SideView;
             entity.Update(dt, now);
         }
     }
@@ -548,6 +527,37 @@ public sealed partial class RemoteEntityManager
         EntityKind.Npc => NpcPickRadius,
         _ => 0f,
     };
+
+    // Draws every actor facing left or right (an action field).
+    public bool SideView { get; set; }
+
+    // The live entity nearest along x that stands within depth of the origin's z and within reach on the side it faces:
+    // a monster, or with allies a player or a summoned creature.
+    public ulong FindAhead(ulong selfId, XnaVector3 origin, bool facingRight, float reach, float depth, bool allies)
+    {
+        ulong found = 0;
+        var nearest = reach;
+        foreach (var (id, entity) in _entities)
+        {
+            if (id == selfId || entity.IsDead)
+            {
+                continue;
+            }
+
+            var summon = _summonOwners.ContainsKey(id);
+            var wanted = allies ? entity.Kind == EntityKind.Player || summon : entity.Kind == EntityKind.Monster && !summon;
+            var position = entity.DrawnPosition;
+            var across = MathF.Abs(position.X - origin.X);
+            if (wanted && MathF.Abs(position.Z - origin.Z) < depth && across < nearest
+                && (facingRight ? position.X > origin.X : position.X < origin.X))
+            {
+                nearest = across;
+                found = id;
+            }
+        }
+
+        return found;
+    }
 
     public bool TryPick(Microsoft.Xna.Framework.Ray ray, ulong selfId, out ulong entityId, out EntityKind kind)
     {
@@ -591,6 +601,10 @@ public sealed partial class RemoteEntityManager
         position = default;
         return false;
     }
+
+    // An entity's drawing delay behind the server's timeline; the base delay for one not in the roster.
+    public double PlaybackDelayMsOf(ulong entityId) =>
+        _entities.TryGetValue(entityId, out var entity) ? entity.PlaybackDelayMs : RemoteSnapshotBuffer.BaseDelayMs;
 
     public bool TryGetDrawnFacing(ulong entityId, out float facing)
     {
@@ -670,7 +684,7 @@ public sealed partial class RemoteEntityManager
             case RemoteEntity player:
                 handles = player.Handles;
                 holdsShield = _playerAppearances.TryGetValue(entityId, out var appearance)
-                    && appearance.OffHandKey.StartsWith("DS", StringComparison.OrdinalIgnoreCase);
+                    && ItemEquipmentMetadata.IsShield(appearance.OffHandKey);
                 return true;
             case RemoteModelEntity model:
                 handles = new PlayerActorHandles(model.Actor, ActorHandle.None);
@@ -795,5 +809,15 @@ public sealed partial class RemoteEntityManager
         return false;
     }
 
-    private static XnaVector3 ToXna(NumVector3 v) => new(v.X, v.Y, v.Z);
+    // A spawn still waiting for its model, moved to the latest state the server sent.
+    private static EntitySpawnInfo WithState(EntitySpawnInfo spawn, EntityStateInfo state) => spawn with
+    {
+        Position = state.Position,
+        Facing = state.Facing,
+        MoveState = state.MoveState,
+        Life = state.Life,
+        MoveSpeed = state.MoveSpeed,
+        AttackRate = state.AttackRate,
+        ServerTimeMs = state.ServerTimeMs
+    };
 }

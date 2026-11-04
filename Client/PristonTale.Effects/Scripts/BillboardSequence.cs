@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using PristonTale.Effects.Vfx;
 
 namespace PristonTale.Effects.Scripts;
 
@@ -50,22 +51,13 @@ public sealed class BillboardSequence
     public IReadOnlyList<BillboardFrame> Frames { get; }
     public int StartAlpha { get; }
     public int BlendType { get; }
+
+    // The authored blend codes.
+    public const int ColourBlend = 0;
+    public const int AlphaBlend = 1;
+    public const int LampBlend = 2;
+    public const int ShadowBlend = 3;
     public BillboardChannels Channels { get; }
-
-    // Ticks a one-shot playback lasts: every frame's hold time.
-    public int DurationTicks
-    {
-        get
-        {
-            var total = 0;
-            foreach (var frame in Frames)
-            {
-                total += Math.Max(1, frame.DelayTicks);
-            }
-
-            return total;
-        }
-    }
 
     // Reads an animation by file name from Effect/AnimationData and its image set from Effect/ImageData; open returns a
     // stream for an asset-relative path.
@@ -81,18 +73,15 @@ public sealed class BillboardSequence
             throw new InvalidDataException($"Image set {dataFile} has {count} images.");
         }
 
-        var dot = source.IndexOf('.', StringComparison.Ordinal);
-        if (dot <= 0)
+        if (source.LastIndexOf('.') <= 0)
         {
             throw new InvalidDataException($"Image set {dataFile} names no extension.");
         }
 
-        var stem = source[..dot];
-        var extension = source[(dot + 1)..];
         var images = new string[count];
         for (var index = 0; index < count; index++)
         {
-            images[index] = $"{stem}{index + 1}.{extension}";
+            images[index] = VfxCatalog.FrameName(source, index + 1);
         }
 
         var imageNumbers = Numbers(Required(animation, "ImageNum", animationName));

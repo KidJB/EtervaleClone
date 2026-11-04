@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using PristonTale.Simulation.Progression;
 
 namespace PristonTale.Simulation.Skills;
 
@@ -39,7 +40,7 @@ public sealed class LearnedSkills
     internal void Increase(uint code)
     {
         var rank = RankOf(code);
-        if (!IsAvailable(code) || rank >= 10)
+        if (!IsAvailable(code) || rank >= Progression.SkillLearning.MaxRank)
         {
             throw new ArgumentOutOfRangeException(nameof(code));
         }
@@ -71,7 +72,7 @@ public sealed class LearnedSkills
 
     public void Restore(uint code, int rank, int uses = 0)
     {
-        if (!IsAvailable(code) || rank < 1 || rank > 10 || uses < 0 || uses > MaxUses || !_ranks.TryAdd(code, rank))
+        if (!IsAvailable(code) || rank < 1 || rank > SkillLearning.MaxRank || uses < 0 || uses > MaxUses || !_ranks.TryAdd(code, rank))
         {
             throw new ArgumentException("Invalid or duplicate learned skill.");
         }

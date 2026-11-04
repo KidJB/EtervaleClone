@@ -1,3 +1,4 @@
+using PristonTale.Simulation.World.Spawning;
 using System.Numerics;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
@@ -5,6 +6,7 @@ using PristonTale.Simulation.Quests;
 using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World.Loot;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Simulation.World.Monsters.Skills;
 using PristonTale.Simulation.World.Npcs;
 using PristonTale.Contracts.Motion;
 using PristonTale.Contracts.Combat;
@@ -20,6 +22,7 @@ public sealed partial class FieldInstance
 
     private readonly Dictionary<ulong, Duel> _duels = new();
     private readonly List<ulong> _duelScratch = new();
+    private readonly List<ulong> _companionScratch = new();
 
     // Wall-clock milliseconds for quest item lifetimes; the world sets it from its time provider.
     internal Func<long> QuestClock { get; set; } = static () => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -199,6 +202,7 @@ public sealed partial class FieldInstance
                 var context = TickContext(player);
                 var revision = character.Quests.Revision;
                 QuestTick.Step(context, elapsed);
+                Retreat(player, context);
                 if (context.Notices.Count > 0 || character.Quests.Revision != revision)
                 {
                     Publish(player, context, revision);
@@ -224,22 +228,22 @@ public sealed partial class FieldInstance
         StepDuels(nowMs);
     }
 
+    // A quest ended the player's duel on the tick: the player goes home, and the duel closes once the player has left.
+    private void Retreat(WorldPlayer player, QuestContext context)
+    {
+        if (context.Retreat && FieldId == QuestArena.FieldCode)
+        {
+            player.QuestState.PendingTravel = new QuestTravel(QuestTravelKind.Home, QuestClasses.HomeField(player.Character), 0, 0);
+        }
+    }
+
     // Opens the duel a quest asked for: the opponent appears at the arena's duel spot, grown with the player's level,
-    // and fights only that player. A previous opponent of the player leaves first.
+    // and fights only that player. A previous opponent of the player leaves first. A boss with lives (Hestian) keeps its
+    // lives and must be killed; the others carry three potions more than their own.
     internal MonsterInstance? OpenDuel(WorldPlayer player, QuestArenaDuel duel, long nowMs)
     {
         CloseDuelsOf(player.EntityId);
-        MonsterDefinition? definition = null;
-        foreach (var candidate in _catalog.All)
-        {
-            if (candidate.SoundCode == duel.SoundCode && (duel.Level == 0 || candidate.Combat.Level == duel.Level)
-                && (definition is null || candidate.Code < definition.Code))
-            {
-                definition = candidate;
-            }
-        }
-
-        if (definition is null)
+        if (!_catalog.TryLowestOfFamily(duel.SoundCode, duel.Level, out var definition))
         {
             return null;
         }
@@ -265,10 +269,17 @@ public sealed partial class FieldInstance
             DuelPlayerId = player.EntityId,
             Potions = definition.PotionCount + QuestArena.ExtraPotions
         };
+        if (MonsterLifeRules.HasVirtualLives(definition))
+        {
+            opponent.VirtualLives = definition.PotionCount;
+            opponent.VirtualLivesMax = definition.PotionCount;
+            opponent.Potions = 0;
+        }
+
         var master = duel.Quest == QuestCode.RankUpMasterTrial;
         opponent.MinimumLife = master ? QuestArena.YieldLife(combat.MaxLife) : opponent.Potions > 0 ? 1 : 0;
         _monsters[opponent.EntityId] = opponent;
-        _duels[opponent.EntityId] = new Duel(player.EntityId, duel.Quest, nowMs + QuestArena.OpponentLifetimeMs, master,
+        _duels[opponent.EntityId] = new Duel(player.EntityId, duel.Quest, nowMs + QuestArena.OpponentLifetimeMs(duel.Quest), master,
             definition.SoundCode == CharacterSoundCodes.MagicMaster);
         player.QuestState.DuelOpponentId = opponent.EntityId;
         return opponent;
@@ -372,14 +383,14 @@ public sealed partial class FieldInstance
         }
 
         var skilling = opponent.Motion == MotionState.Skill;
-        if (skilling && !duel.WasSkilling && duel.Master && !HelperAlive(duel) && _rng.NextExclusive(0, 100) < QuestArena.HelperPercent)
+        if (skilling && !duel.WasSkilling && duel.Master && !HelperAlive(duel) && _rng.RollPercent() < QuestArena.HelperPercent)
         {
             CallHelper(opponent, duel, player);
             duel.HelperExpiresAtMs = nowMs + QuestArena.HelperLifetimeMs;
         }
 
         duel.WasSkilling = skilling;
-        if (duel.MagicMaster && !skilling && _rng.NextExclusive(0, 100) < QuestArena.MagicMasterBlinkPercent
+        if (duel.MagicMaster && !skilling && _rng.RollPercent() < QuestArena.MagicMasterBlinkPercent
             && Vector3.DistanceSquared(Flat(opponent.Position), Flat(player.Position)) < QuestArena.MagicMasterBlinkReach * QuestArena.MagicMasterBlinkReach)
         {
             var reach = (int)QuestArena.MagicMasterBlinkReach;
@@ -398,25 +409,13 @@ public sealed partial class FieldInstance
     {
         var sound = duel.MagicMaster ? CharacterSoundCodes.FireElemental
             : _rng.NextExclusive(0, 2) == 0 ? CharacterSoundCodes.MetalGolem : CharacterSoundCodes.SummonedWolverine;
-        MonsterDefinition? definition = null;
-        foreach (var candidate in _catalog.All)
-        {
-            if (candidate.SoundCode == sound && (definition is null || candidate.Code < definition.Code))
-            {
-                definition = candidate;
-            }
-        }
-
-        if (definition is null)
+        if (!_catalog.TryLowestOfFamily(sound, 0, out var definition))
         {
             return;
         }
 
-        var helper = new MonsterInstance(_ids.NextMonsterId(), definition, Terrain.PlaceOnFloor(opponent.Position), opponent.Facing, spawnPointIndex: -1)
-        {
-            DuelPlayerId = player.EntityId
-        };
-        _monsters[helper.EntityId] = helper;
+        var helper = ((ISpawnSink)this).Spawn(definition, opponent.Position, -1, opponent.Facing);
+        helper.DuelPlayerId = player.EntityId;
         duel.HelperId = helper.EntityId;
     }
 
@@ -437,13 +436,14 @@ public sealed partial class FieldInstance
             return;
         }
 
-        // Fury beaten with no potion left.
+        // Fury beaten with no potion left, or Hestian with no life left.
         if (_players.TryGetValue(duel.PlayerId, out var player))
         {
             WinDuel(player, duel.Quest);
         }
 
         DismissHelper(duel);
+        RemoveCompanions(duel.PlayerId, killed.EntityId);
         _duels.Remove(killed.EntityId);
     }
 
@@ -451,9 +451,15 @@ public sealed partial class FieldInstance
     {
         var context = TickContext(player);
         var revision = player.Character.Quests.Revision;
-        var won = quest == QuestCode.FuryOfPhantom ? FuryOfPhantomQuest.OnDuelWon(context) : RankUpByMasterTrial.OnDuelWon(context);
+        var won = quest switch
+        {
+            QuestCode.FuryOfPhantom => FuryOfPhantomQuest.OnDuelWon(context),
+            QuestCode.RankUpHestian => RankUpByHestian.OnDuelWon(context),
+            _ => RankUpByMasterTrial.OnDuelWon(context)
+        };
         if (won)
         {
+            Retreat(player, context);
             Publish(player, context, revision);
         }
     }
@@ -462,6 +468,7 @@ public sealed partial class FieldInstance
     {
         RankUpByMasterTrial.OnDuelLost(context);
         FuryOfPhantomQuest.OnDuelLost(context);
+        RankUpByHestian.OnDuelLost(context);
         CloseDuelsOf(player.EntityId);
     }
 
@@ -487,6 +494,7 @@ public sealed partial class FieldInstance
         if (_duels.Remove(opponentId, out var duel))
         {
             DismissHelper(duel);
+            RemoveCompanions(duel.PlayerId, opponentId);
             if (_players.TryGetValue(duel.PlayerId, out var player) && player.QuestState.DuelOpponentId == opponentId)
             {
                 player.QuestState.DuelOpponentId = 0;
@@ -494,5 +502,23 @@ public sealed partial class FieldInstance
         }
 
         RemoveMonster(opponentId);
+    }
+
+    // The monsters an opponent called for its player (Hestian's Xetans) leave with the duel.
+    private void RemoveCompanions(ulong playerId, ulong opponentId)
+    {
+        _companionScratch.Clear();
+        foreach (var (id, monster) in _monsters)
+        {
+            if (id != opponentId && monster.DuelPlayerId == playerId)
+            {
+                _companionScratch.Add(id);
+            }
+        }
+
+        foreach (var id in _companionScratch)
+        {
+            RemoveMonster(id);
+        }
     }
 }

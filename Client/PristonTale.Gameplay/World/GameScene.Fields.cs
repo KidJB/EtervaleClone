@@ -63,9 +63,8 @@ public sealed partial class GameScene
         _playerController = new ActorMotionController();
         _runMode = false;
         _selfLife = _player.Life;
-        _selfMaxLife = d.MaxLife;
         var spawn = entered != null && (entered.SpawnX != 0f || entered.SpawnZ != 0f)
-            ? new Vector2(entered.SpawnX, -entered.SpawnZ)
+            ? WorldSpace.Planar(entered.SpawnX, entered.SpawnZ)
             : SpawnPlanarPosition(field);
         _playerBody = new PhysicsBody(spawn) { Radius = PlayerRadius };
         UpdateBodyHeight(_playerBody);
@@ -108,7 +107,7 @@ public sealed partial class GameScene
 
     private LoadedField AddFieldToWorld(string assetRoot, FieldDef field)
     {
-        var existing = _fields.FirstOrDefault(f => f.Definition.Id == field.Id);
+        var existing = FindLoaded(field.Id);
         if (existing != null)
             return existing;
 
@@ -265,10 +264,23 @@ public sealed partial class GameScene
         _renderer.UndergroundAmbient = new Vector3(ambient.R, ambient.G, ambient.B);
         _renderer.ConfigureDayNight(ToDayNightSettings(field.Definition.DayNight));
         _fieldAudio?.SelectField(field.Definition);
-        field.Definition.OnLoaded?.Invoke(this);
     }
 
-    private bool IsLoaded(string fieldId) => _fields.Any(f => f.Definition.Id == fieldId);
+    private bool IsLoaded(string fieldId) => FindLoaded(fieldId) is not null;
+
+    // The loaded field with this id, or null; asked every frame while a warp waits for its field, so it allocates nothing.
+    private LoadedField FindLoaded(string fieldId)
+    {
+        foreach (var field in _fields)
+        {
+            if (field.Definition.Id == fieldId)
+            {
+                return field;
+            }
+        }
+
+        return null;
+    }
 
     private void UnloadField(LoadedField field)
     {
@@ -329,7 +341,7 @@ public sealed partial class GameScene
 
     private static Vector2 SpawnPlanarPosition(FieldDef field)
     {
-        var point = field.StartPoints.Count > 0 ? field.StartPoints[0] : field.Center;
+        var point = field.Arrival;
         return WorldSpace.Planar(point.X, point.Z);
     }
 }

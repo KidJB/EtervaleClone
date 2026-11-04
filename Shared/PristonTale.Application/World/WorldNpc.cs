@@ -62,8 +62,8 @@ public sealed class WorldNpc
         MotionTimingSet? motionTimings = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
-        var position = new Vector3(placement.X / 256f, placement.Y / 256f, placement.Z / 256f);
-        var facing = (placement.Angle & 4095) * (MathF.Tau / 4096);
+        var position = new Vector3(GameUnits.FromFixed(placement.X), GameUnits.FromFixed(placement.Y), GameUnits.FromFixed(placement.Z));
+        var facing = GameUnits.FromAngle(placement.Angle);
         return new WorldNpc(entityId, definition, position, facing, motionTimings);
     }
 
@@ -88,8 +88,8 @@ public sealed class WorldNpc
                 return Position;
             }
 
-            // Original wandering NPC pattern: after a Stand boundary, ((rand()%4096 >> 2) & 3)==0
-            // gives the wandering branch a 25% chance when the model has Walk and a non-zero radius.
+            // After a Stand boundary an NPC whose model walks and whose wander radius is not zero wanders one time in four:
+            // bits 2 and 3 of a draw in 0..4095 are both clear.
             if (((NextRandom(4096) >> 2) & 3) != 0)
             {
                 BeginStand();

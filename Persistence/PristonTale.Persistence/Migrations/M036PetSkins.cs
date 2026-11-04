@@ -4,8 +4,8 @@ namespace PristonTale.Persistence.Migrations;
 
 // A character's pets: the skins its account unlocked (a bit per PetSkins id; the account's set is every one of its rows
 // joined) and the skin it has out (0 none).
-[Migration(35)]
-public sealed class M035PetSkins : Migration
+[Migration(36)]
+public sealed class M036PetSkins : Migration
 {
     public override void Up()
     {

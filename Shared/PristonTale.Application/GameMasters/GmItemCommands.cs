@@ -45,7 +45,7 @@ internal static class GmItemCommands
 
         if (await context.Commands.World.EndPremiumAsync(context.Issuer.EntityId, (PremiumEffectKind)kind))
         {
-            context.Reply(Format("({0})Item Init Success", PremiumName((PremiumEffectKind)kind)));
+            context.Reply(Format("({0})Item Init Success", ItemStatuses.PremiumName((PremiumEffectKind)kind)));
         }
     }
 
@@ -108,7 +108,7 @@ internal static class GmItemCommands
             return;
         }
 
-        var spec = Enum.IsDefined((PlayerClass)job) && job is >= 1 and <= 8 ? (uint)JobBits.Of((PlayerClass)job) : 0u;
+        var spec = Enum.IsDefined((PlayerClass)job) && ClassProfiles.Specializes((PlayerClass)job) ? (uint)JobBits.Of((PlayerClass)job) : 0u;
         var overrides = spec != 0 && ItemRoller.CanTakeSpec(definition, spec) ? new ItemRollOverrides(spec) : ItemRollOverrides.None;
         var dropped = await context.Commands.World.DropAsync(context.Issuer.EntityId, rng =>
         {
@@ -204,9 +204,9 @@ internal static class GmItemCommands
             return 0;
         }
 
-        if (name.Length == 1 && name[0] is >= '1' and <= '8')
+        if (name.Length == 1 && name[0] - '0' is var digit && Enum.IsDefined((PlayerClass)digit) && ClassProfiles.Specializes((PlayerClass)digit))
         {
-            return name[0] - '0';
+            return digit;
         }
 
         var shortNames = new[] { ("FS", 1), ("MS", 2), ("AS", 3), ("PS", 4), ("ATA", 5), ("KS", 6), ("MG", 7), ("PRS", 8) };
@@ -220,7 +220,7 @@ internal static class GmItemCommands
 
         foreach (var playerClass in Enum.GetValues<PlayerClass>())
         {
-            if ((int)playerClass <= 8 && playerClass.ToString().Equals(name, StringComparison.OrdinalIgnoreCase))
+            if (ClassProfiles.Specializes(playerClass) && playerClass.ToString().Equals(name, StringComparison.OrdinalIgnoreCase))
             {
                 return (int)playerClass;
             }
@@ -228,23 +228,6 @@ internal static class GmItemCommands
 
         return -1;
     }
-
-    public static string PremiumName(PremiumEffectKind kind) => kind switch
-    {
-        PremiumEffectKind.ThirdEyes => "Third Eyes",
-        PremiumEffectKind.ExperienceUp => "EXP Increase Potion",
-        PremiumEffectKind.VampiricCuspid => "Vampiric Cuspid",
-        PremiumEffectKind.ManaRecharging => "Mana Recharging Potion",
-        PremiumEffectKind.MightOfAwell => "Might of Awell",
-        PremiumEffectKind.ManaReduce => "Mana Reduce Potion",
-        PremiumEffectKind.PhoenixPet => "Phoenix",
-        PremiumEffectKind.HelpPetTerry => "Terry",
-        PremiumEffectKind.HelpPetNepsys => "Nepsys",
-        PremiumEffectKind.HelpPetIo => "Io",
-        PremiumEffectKind.HelpPetMute => "Mute",
-        PremiumEffectKind.VampiricCuspidEx => "Super Vampiric Cuspid",
-        _ => "Stamina Reduce Potion"
-    };
 
     // A code names a non-unique item; a double-quoted phrase names any item by its name.
     private static ItemDefinition? Find(GmCommandContext context, string argument)

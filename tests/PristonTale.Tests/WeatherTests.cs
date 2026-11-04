@@ -8,7 +8,9 @@ using PristonTale.Engine3D.Physics;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Engine3D.Rendering.Atmosphere;
 using PristonTale.Engine3D.Rendering.Weather;
+using PristonTale.Gameplay.Effects;
 using PristonTale.Gameplay.Weather;
+using PristonTale.Simulation.World.Fields;
 using Xna = Microsoft.Xna.Framework;
 
 namespace PristonTale.Tests;
@@ -26,11 +28,101 @@ internal static class WeatherTests
         yield return ("the rain stops on the highest surface of each cell, reading only the cells a moving centre uncovers", OcclusionAsync);
         yield return ("a lighter rain lands fewer, smaller and fainter splashes than its share of a downpour's", SplashesAsync);
         yield return ("the realistic sky's clouds gather with the weather, its rainbow needs a light rain under a low sun, the moon turns through its phases and the cloud noise tiles", SkyAsync);
+        yield return ("snow falls on the snow skies' fields ahead of and above the player, plays out when it leaves and starts again when it ends", SnowAsync);
+        yield return ("snow entered before its effect is ready starts once the effect system can run it", SnowLateAsync);
+    }
+
+    private sealed class FakeScript(Xna.Vector3 position) : IScriptEffect
+    {
+        public Xna.Vector3 Position { get; private set; } = position;
+        public bool Stopped { get; private set; }
+        public bool Ended { get; set; }
+        public bool Alive => !Ended;
+
+        public void MoveTo(Xna.Vector3 position) => Position = position;
+
+        public void Stop() => Stopped = true;
+    }
+
+    private sealed class FakeScripts : IScriptEffects
+    {
+        public List<(string Script, FakeScript Effect)> Spawned { get; } = [];
+        public bool Ready { get; set; } = true;
+        public int Attempts { get; private set; }
+
+        public IScriptEffect? Spawn(string script, Xna.Vector3 position, Xna.Matrix orientation)
+        {
+            Attempts++;
+            if (!Ready)
+            {
+                return null;
+            }
+
+            var effect = new FakeScript(position);
+            Spawned.Add((script, effect));
+            return effect;
+        }
+    }
+
+    private static Task SnowAsync()
+    {
+        foreach (var field in new[] { Ice1Field.Definition, Ice2Field.Definition, IceUraField.Definition })
+        {
+            Assert.True(field.Snows, $"{field.Id} has a snow sky but no snow");
+        }
+
+        Assert.True(!GreedyField.Definition.Snows && GreedyField.Definition.Backdrop == FieldBackdrops.Greedy, "Greedy took the snow sky");
+        Assert.True(!RicartenField.Definition.Snows, "Ricarten snows");
+
+        var scripts = new FakeScripts();
+        var snow = new FieldSnow(scripts);
+        var player = new Xna.Vector3(100f, 50f, 200f);
+        snow.Update(false, player, Xna.Vector3.Forward, 0.016f);
+        Assert.True(scripts.Spawned.Count == 0 && !snow.Falling, "snow started on a field without it");
+
+        snow.Update(true, player, new Xna.Vector3(0f, 0.3f, -2f), 0.016f);
+        Assert.True(scripts.Spawned.Count == 1 && scripts.Spawned[0].Script.Equals("snow", StringComparison.OrdinalIgnoreCase),
+            "the snow script did not start");
+        var first = scripts.Spawned[0].Effect;
+        var expected = player + new Xna.Vector3(0f, FieldSnow.SourceHeight, -FieldSnow.AheadDistance);
+        Assert.True(Xna.Vector3.Distance(first.Position, expected) < 0.01f, $"snow source {first.Position}, expected {expected}");
+
+        snow.Update(true, player + Xna.Vector3.UnitX * 30f, Xna.Vector3.Right, 0.016f);
+        expected = player + new Xna.Vector3(30f + FieldSnow.AheadDistance, FieldSnow.SourceHeight, 0f);
+        Assert.True(scripts.Spawned.Count == 1 && Xna.Vector3.Distance(first.Position, expected) < 0.01f, "the snow did not follow the player");
+
+        first.Ended = true;
+        snow.Update(true, player, Xna.Vector3.Forward, 0.016f);
+        Assert.True(scripts.Spawned.Count == 2, "an ended snow effect did not start again");
+
+        var second = scripts.Spawned[1].Effect;
+        snow.Update(true, player, Xna.Vector3.Forward, FieldSnow.RenewSeconds);
+        Assert.True(scripts.Spawned.Count == 3 && second.Stopped, "the snow was not renewed before the effect's time ran out");
+
+        snow.Update(false, player, Xna.Vector3.Forward, 0.016f);
+        Assert.True(scripts.Spawned[2].Effect.Stopped && !snow.Falling, "leaving the snow did not let the flakes play out");
+        return Task.CompletedTask;
+    }
+
+    private static Task SnowLateAsync()
+    {
+        // The effect library compiles over the first frames, so a player entering Ice 1 asks for the script before it exists.
+        var scripts = new FakeScripts { Ready = false };
+        var snow = new FieldSnow(scripts);
+        var player = new Xna.Vector3(100f, 50f, 200f);
+        snow.Update(true, player, Xna.Vector3.Forward, 0.016f);
+        snow.Update(true, player, Xna.Vector3.Forward, FieldSnow.RetrySeconds / 2f);
+        Assert.True(scripts.Attempts == 1 && !snow.Falling, $"a missing script was asked for {scripts.Attempts} times within the retry delay");
+
+        scripts.Ready = true;
+        snow.Update(true, player, Xna.Vector3.Forward, FieldSnow.RetrySeconds);
+        Assert.True(snow.Falling && scripts.Spawned.Count == 1, "the snow never started once its effect was ready");
+        return Task.CompletedTask;
     }
 
     private static Task SplashesAsync()
     {
-        var light = WeatherSchedule.LightRain / 255f;
+        var light = WeatherSchedule.LightRain / (float)WeatherSchedule.StormRain;
         Assert.True(PristonRain.SplashesPerSecond(light) < light * PristonRain.SplashesPerSecond(1f),
             "a light rain landed its share of a downpour's splashes or more");
         Assert.True(PristonRain.SplashSize(light) < PristonRain.SplashSize(1f) && PristonRain.SplashOpacity(light) < PristonRain.SplashOpacity(1f),

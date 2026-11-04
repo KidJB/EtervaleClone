@@ -84,7 +84,7 @@ public static class NpcShopRules
         return character.TryChangeMoney(-cost) ? NpcServiceStatus.Ok : NpcServiceStatus.Rejected;
     }
 
-    public static NpcServiceStatus TrySell(PlayerCharacter character, Guid itemId, int count, long carryLimit, out long proceeds)
+    public static NpcServiceStatus TrySell(PlayerCharacter character, Guid itemId, int count, out long proceeds)
     {
         proceeds = 0;
         var anchor = character.Inventory.Find(itemId);
@@ -95,7 +95,7 @@ public static class NpcShopRules
         }
 
         proceeds = SellPrice(item, count);
-        if (character.Money > carryLimit - proceeds)
+        if (!MoneyLimits.CanCarry(character, proceeds))
         {
             return NpcServiceStatus.GoldLimit;
         }
@@ -165,7 +165,8 @@ public static class MoneyLimits
             0 => Math.Max(200_000L, level * 200_000L - 1_800_000L),
             1 => 10_000_000,
             2 => 50_000_000,
-            _ => 100_000_000
+            3 => 500_000_000,
+            _ => 700_000_000
         };
     }
 

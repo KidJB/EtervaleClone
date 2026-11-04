@@ -28,6 +28,10 @@ public enum HudShopAction
 // owned items while that mode is active.
 public sealed class HudShopWindow : IHudServiceWindow
 {
+    private static readonly HudShopButton[] Buttons = Enum.GetValues<HudShopButton>();
+    // The hovered offer's price line, made once per offer.
+    private object _pricedOffer;
+    private string _priceText = "";
     private const int GoodsTab = 2;
     private readonly HudSlide _slide = new();
     private readonly List<List<Placed>>[] _pages = [[], [], []];
@@ -194,9 +198,13 @@ public sealed class HudShopWindow : IHudServiceWindow
         }
 
         var offer = _hovered;
-        var price = $"Price: {offer.Price:N0} gold";
+        if (!ReferenceEquals(offer, _pricedOffer))
+        {
+            (_pricedOffer, _priceText) = (offer, $"Price: {offer.Price:N0} gold");
+        }
+
         const string action = "Click: buy";
-        HudItemTooltip.Draw(painter, layout, pointer, offer.Name, price, action);
+        HudItemTooltip.Draw(painter, layout, pointer, offer.Name, _priceText, action);
     }
 
     private void DrawTabs(HudPainter painter, Point origin)
@@ -242,7 +250,7 @@ public sealed class HudShopWindow : IHudServiceWindow
     private HudShopButton? ButtonAt(Point pointer)
     {
         var origin = Origin;
-        foreach (var button in Enum.GetValues<HudShopButton>())
+        foreach (var button in Buttons)
         {
             if ((Tab != GoodsTab || button is not (HudShopButton.Repair or HudShopButton.RepairAll)) && Bounds(button, origin).Contains(pointer))
             {
@@ -304,7 +312,7 @@ public sealed class HudShopWindow : IHudServiceWindow
     private static List<List<Placed>> Pack(IEnumerable<ShopOffer> offers)
     {
         var pages = new List<List<Placed>>();
-        var occupied = new List<bool[]>();
+        var occupied = new List<uint[]>();
         foreach (var offer in offers)
         {
             if (offer.Width > HudStoreLayout.Columns || offer.Height > HudStoreLayout.Rows || offer.Width < 1 || offer.Height < 1)
@@ -317,7 +325,7 @@ public sealed class HudShopWindow : IHudServiceWindow
             if (anchor < 0)
             {
                 pages.Add([]);
-                occupied.Add(new bool[HudStoreLayout.Columns * HudStoreLayout.Rows]);
+                occupied.Add(HudStoreLayout.NewGrid());
                 page = pages.Count - 1;
                 anchor = HudStoreLayout.FindSpace(occupied[page], offer.Width, offer.Height);
             }

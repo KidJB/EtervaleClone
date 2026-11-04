@@ -24,7 +24,7 @@ public static class ModifierRules
             AttackDamageMax = Math.Max(0, totals.Apply(StatKind.DamageMax, stats.AttackDamageMax)),
             Defence = Math.Max(0, totals.Apply(StatKind.Defence, stats.Defence)),
             Absorption = Math.Max(0, totals.Apply(StatKind.Absorption, stats.Absorption)),
-            MoveSpeed = Math.Max(0, totals.Apply(StatKind.MoveSpeed, stats.MoveSpeed)),
+            MoveSpeed = Locomotion.StepLevel(Math.Max(0, totals.Apply(StatKind.MoveSpeed, stats.MoveSpeed)), totals.Flat(StatKind.MoveSpeedUnbound) > 0),
             AttackSpeed = totals.Apply(StatKind.AttackSpeed, stats.AttackSpeed)
         };
     }
@@ -54,6 +54,10 @@ public static class ModifierRules
             Resist(resistances.Water, all + totals.Flat(StatKind.ResistWater)),
             Resist(resistances.Wind, all + totals.Flat(StatKind.ResistWind)));
     }
+
+    // A value changed by the percent and flat sums of one modifier (as percents), never below floor.
+    public static int ChangedBy(int value, ModifierTotals totals, StatKind stat, int floor) =>
+        Math.Max(floor, value + value * (totals.Percent(stat) + totals.Flat(stat)) / 100);
 
     // Percent change of damage dealt by the attacker and taken by the defender, applied once after resolution.
     public static int ScaleDamage(int damage, ModifierTotals attacker, ModifierTotals defender)

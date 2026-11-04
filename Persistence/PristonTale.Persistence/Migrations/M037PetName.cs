@@ -3,8 +3,8 @@ using FluentMigrator;
 namespace PristonTale.Persistence.Migrations;
 
 // The name a character gave its pet (empty: the pet shows its skin's name).
-[Migration(36)]
-public sealed class M036PetName : Migration
+[Migration(37)]
+public sealed class M037PetName : Migration
 {
     public override void Up()
     {

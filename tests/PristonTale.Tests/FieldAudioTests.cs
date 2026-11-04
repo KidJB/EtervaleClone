@@ -109,7 +109,8 @@ internal static class FieldAudioTests
         var codes = CharacterSoundBanks.Directories.Select(bank => bank.Code).ToHashSet();
         Assert.True(codes.Contains(0x1600) && codes.Contains(CharacterSoundCodes.Wolverine) && codes.Contains(CharacterSoundCodes.Morif)
             && Enumerable.Range(1, 10).All(codes.Contains), "a monster, NPC or class bank is missing");
-        foreach (var keyword in (string[])["Greedy", "Hestian", "ISoldier", "Lizard_Papa", "UndeadStalker", "Yagditha"])
+        Assert.True(CharacterSoundCodes.Resolve("Furia") == CharacterSoundCodes.Fury, "the red gladiator lost the Fury's sounds");
+        foreach (var keyword in (string[])["Greedy", "Hestian", "ISoldier", "Lizard_Papa", "UndeadStalker", "Yagditha", "Soldier_D"])
         {
             var code = CharacterSoundCodes.Resolve(keyword);
             Assert.True(code >= 0x6000 && codes.Contains(code), $"the newer monster sound {keyword} has no code or bank");
@@ -224,7 +225,17 @@ internal static class FieldAudioTests
         Assert.True(FieldAudioController.SelectFieldAmbientCode(catalog.GetField("dun-4"), 12f) == 6, "temple ambience is wrong");
         Assert.True(FieldAudioController.SelectFieldAmbientCode(catalog.GetField("Tcave"), 12f) == 7, "cave ambience is wrong");
         Assert.True(FieldAudioController.SelectFieldAmbientCode(catalog.GetField("Dcave"), 12f) == 8, "dark sanctuary ambience is wrong");
-        Assert.True(FieldAudioController.SelectFieldAmbientCode(catalog.GetField("dun-7"), 12f) == -1, "unsupported late dungeon gained an invented ambience");
+        Assert.True(FieldAudioController.SelectFieldAmbientCode(catalog.GetField("dun-7"), 12f) == (int)FieldAmbience.Dungeon, "a field's own ambience lost to its state's");
+        Assert.True(FieldAudioController.SelectFieldAmbientCode(catalog.GetField("HeartOfFire"), 12f) == (int)FieldAmbience.DarkSanctuary
+            && FieldAudioController.SelectFieldAmbientCode(catalog.GetField("CrystalNest"), 12f) == (int)FieldAmbience.IceWind,
+            "a later field plays another loop than its own");
+        foreach (var field in catalog.AllFields.Where(static field => field.State is FieldState.Dungeon or FieldState.Action))
+        {
+            var code = FieldAudioController.SelectFieldAmbientCode(field, 12f);
+            Assert.True(code >= 0 || field.Ambients.Count > 0, $"{field.Id} plays no background loop");
+        }
+
+        Assert.True(Enum.GetValues<FieldAmbience>().Length == 13, "the field ambience names and the client's loops differ in number");
         Assert.True(FieldAudioController.SelectFieldAmbientCode(catalog.GetField("iron-1"), 12f) == 9, "iron ambience is wrong");
         Assert.True(FieldAudioController.SelectFieldAmbientCode(catalog.GetField("ice1"), 12f) == 12, "ice wind ambience is wrong");
         Assert.True(FieldAudioController.SelectFieldAmbientCode(catalog.GetField("castle"), 12f) == -1, "castle gained an invented ambience");

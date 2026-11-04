@@ -62,6 +62,10 @@ public readonly record struct VfxSpawn(ulong CasterId, ulong TargetId, Vector3 P
 public sealed class VfxSystem
 {
     public const int MaxInstances = 1024;
+    // The longest step an update advances; a longer frame advances by this.
+    public const float MaxStepSeconds = 0.1f;
+    // The fade distance of soft strips, ribbons, parts and component quads into the scene (emitters take their own).
+    public const float StripSoftness = 8f;
     internal const int TrailPoints = 32;
 
     private readonly List<VfxInstance> _live = new(64);
@@ -130,7 +134,7 @@ public sealed class VfxSystem
             return;
         }
 
-        seconds = MathF.Min(seconds, 0.1f);
+        seconds = MathF.Min(seconds, MaxStepSeconds);
         for (var index = _live.Count - 1; index >= 0; index--)
         {
             var instance = _live[index];
@@ -361,12 +365,7 @@ public sealed class VfxInstance
 
     internal Vector3 AnchorPosition(VfxAnchor anchor, string bone, Vector3 offset, IVfxAnchors anchors)
     {
-        var entity = anchor switch
-        {
-            VfxAnchor.Caster => Spawn.CasterId,
-            VfxAnchor.Target => Spawn.TargetId,
-            _ => 0u
-        };
+        var entity = EntityOf(anchor);
         var basis = anchor switch
         {
             VfxAnchor.Caster => CasterPosition,
@@ -465,7 +464,7 @@ public sealed class VfxInstance
             any |= PartStates[index].Update(this, dt, emitting, anchors, system, ref _random);
         }
 
-        FireOneShots(definition, anchors, services, system);
+        FireOneShots(definition, anchors, services, system, emitting);
         var children = definition.Children;
         for (var index = 0; index < _children.Length; index++)
         {
@@ -536,9 +535,11 @@ public sealed class VfxInstance
             && definition.Children.Length == 0 && definition.Parts.Length == 0 && Age <= definition.Duration;
     }
 
-    private void FireOneShots(VfxDefinition definition, IVfxAnchors anchors, IVfxServices? services, VfxSystem system)
+    // Children, lights and sounds start only while the effect emits: once Stop() or its duration ends emission, a one-shot
+    // still waiting for its delay never starts.
+    private void FireOneShots(VfxDefinition definition, IVfxAnchors anchors, IVfxServices? services, VfxSystem system, bool emitting)
     {
-        if (_stopped)
+        if (!emitting)
         {
             return;
         }
@@ -753,16 +754,16 @@ internal sealed class EmitterState
         var offset = ShapeOffset(source, ref random);
         particle.Position = origin + Vector3.TransformNormal(offset, instance.Orientation);
         var direction = Vector3.TransformNormal(ConeDirection(Emitter.Direction, Emitter.SpreadCos, source.Shape, offset, ref random), instance.Orientation);
-        particle.Velocity = direction * Lerp(source.Speed, VfxInstance.NextUnit(ref random));
+        particle.Velocity = direction * VfxRandom.Range(source.Speed, ref random);
         particle.Age = 0f;
-        particle.Lifetime = Lerp(source.Lifetime, VfxInstance.NextUnit(ref random));
-        particle.Rotation = MathHelper.ToRadians(Lerp(source.Rotation, VfxInstance.NextUnit(ref random)));
-        particle.Spin = MathHelper.ToRadians(Lerp(source.Spin, VfxInstance.NextUnit(ref random)));
+        particle.Lifetime = VfxRandom.Range(source.Lifetime, ref random);
+        particle.Rotation = MathHelper.ToRadians(VfxRandom.Range(source.Rotation, ref random));
+        particle.Spin = MathHelper.ToRadians(VfxRandom.Range(source.Spin, ref random));
     }
 
     private static Vector3 ShapeOffset(VfxEmitterDefinition source, ref uint random)
     {
-        var radius = Lerp(source.Radius, VfxInstance.NextUnit(ref random));
+        var radius = VfxRandom.Range(source.Radius, ref random);
         var angle = VfxInstance.NextUnit(ref random) * MathHelper.TwoPi;
         switch (source.Shape)
         {
@@ -772,9 +773,7 @@ internal sealed class EmitterState
                 var r = radius * MathF.Sqrt(VfxInstance.NextUnit(ref random));
                 return new Vector3(MathF.Cos(angle) * r, 0f, MathF.Sin(angle) * r);
             case VfxShape.Sphere:
-                var z = VfxInstance.NextUnit(ref random) * 2f - 1f;
-                var planar = MathF.Sqrt(MathF.Max(0f, 1f - z * z));
-                return new Vector3(MathF.Cos(angle) * planar, z, MathF.Sin(angle) * planar) * radius;
+                return VfxRandom.SphereDirection(VfxInstance.NextUnit(ref random) * 2f - 1f, angle) * radius;
             default:
                 return Vector3.Zero;
         }
@@ -795,8 +794,6 @@ internal sealed class EmitterState
         var bitangent = Vector3.Cross(axis, tangent);
         return axis * cos + (tangent * MathF.Cos(phi) + bitangent * MathF.Sin(phi)) * sin;
     }
-
-    private static float Lerp(float[] range, float t) => range[0] + (range[1] - range[0]) * t;
 }
 
 internal sealed class TrailState

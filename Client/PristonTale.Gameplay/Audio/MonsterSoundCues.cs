@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using PristonTale.Engine3D.Formats;
 using PristonTale.Gameplay.Effects;
 using PristonTale.Contracts.Units;
+using PristonTale.Contracts.Motion;
 
 namespace PristonTale.Gameplay.Audio;
 
@@ -10,12 +11,12 @@ namespace PristonTale.Gameplay.Audio;
 // in four) its idle sound when it stops. Every client near a monster plays them from the same presence stream.
 public sealed class MonsterSoundCues(CombatSounds sounds, IMonsterScene scene)
 {
-    private const int StandState = 0x40;
-    private const int AttackState = 0x100;
-    private const int DamageState = 0x110;
-    private const int DeadState = 0x120;
-    private const int SkillState = 0x150;
-    private const int WarpState = 0x210;
+    private const int StandState = (int)MotionCode.Stand;
+    private const int AttackState = (int)MotionCode.Attack;
+    private const int DamageState = (int)MotionCode.Damage;
+    private const int DeadState = (int)MotionCode.Dead;
+    private const int SkillState = (int)MotionCode.Skill;
+    private const int WarpState = (int)MotionCode.Warp;
     private const int SoundEvents = 2;
 
     private readonly Dictionary<ulong, Tracked> _tracked = new();
@@ -66,9 +67,7 @@ public sealed class MonsterSoundCues(CombatSounds sounds, IMonsterScene scene)
         }
 
         var state = (int)motion.State;
-        var start = (float)motion.StartFrame * GameUnits.FrameTicks;
-        var restarted = !ReferenceEquals(motion, tracked.Motion) || ticks < tracked.Ticks;
-        var previous = restarted ? start : tracked.Ticks;
+        var restarted = tracked.Clip.Advance(motion, ticks);
         if (restarted && state != tracked.State)
         {
             tracked.State = state;
@@ -83,18 +82,14 @@ public sealed class MonsterSoundCues(CombatSounds sounds, IMonsterScene scene)
             }
         }
 
-        tracked.Motion = motion;
-        tracked.Ticks = ticks;
         if (state is not (AttackState or SkillState))
         {
             return;
         }
 
-        for (var index = 0; index < SoundEvents && index < motion.EventFrames.Count; index++)
+        for (var index = 0; index < SoundEvents; index++)
         {
-            var frame = motion.EventFrames[index];
-            var at = start + frame;
-            if (frame != 0 && at > previous && at <= ticks)
+            if (tracked.Clip.Passed(index))
             {
                 // A hammer-class monster swings its hammer sound instead of its attack sound.
                 Play(monster, state == SkillState ? CharacterSoundCue.Skill : monster.Hammer ? CharacterSoundCue.Hammer : CharacterSoundCue.Attack, listener);
@@ -118,8 +113,7 @@ public sealed class MonsterSoundCues(CombatSounds sounds, IMonsterScene scene)
 
     private sealed class Tracked
     {
-        public PristonMotionInfo Motion;
-        public float Ticks;
+        public ClipEventCursor Clip;
         public int State = -1;
     }
 }

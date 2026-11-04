@@ -8,7 +8,7 @@ namespace PristonTale.Simulation.Characters.Classes;
 public sealed class KnightClass : CharacterClass
 {
     public static readonly ClassProfile Profile = new(
-        ["Knight", "Paladin", "Holy Knight", "SaintKnight"],
+        ["Knight", "Paladin", "Holy Knight", "SaintKnight", "Valiant"],
         new MotionFallback(3520, 22, 2880),
         static weapon => weapon.Definition.Kind == ItemKind.Sword,
         CastingWeapon: null,
@@ -16,13 +16,15 @@ public sealed class KnightClass : CharacterClass
         QuestWeapon: "WS210",
         BeginnerWeapon: "WS202",
         QuestWeaponHunt.Melee,
-        QuestItems.EmperorRing);
+        QuestItems.EmperorRing,
+        CharacterBrood.Morion,
+        Female: false);
 
     public KnightClass()
         : base(BuildDefinition(
             PlayerClass.Knight,
             "Knight",
-            CharacterBrood.Morion,
+            Profile.Brood,
             bodyInx: "char\\tmABCD\\mA001.inx",
             headInx: "char\\tmABCD\\Mmh-A01.inx",
             armorTableIndex: 4,

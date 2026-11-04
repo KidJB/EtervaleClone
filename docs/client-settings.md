@@ -62,6 +62,7 @@ renderer through `PresentationSettings.ApplyRendering` and apply at once.
 | Field | Type, default | Valid values (else default) | Panel | Effect |
 |---|---|---|---|---|
 | `version` | int, `1` | must be 1 | | Any other value: defaults and a read-only store. |
+| `serverAddress` | string, `"localhost"` | not blank | | The game server, read at startup (`Game1.ResolveServerAddress`, `TlsTransport.ParseAddress`): `host`, `host:port` or `tcp://host:port`, a host name or an IP (IPv6 in brackets), port 10009 when left out; `?cert=<sha-256 hex>` pins the server certificate (needed for a remote server whose certificate the system does not trust, such as the self-signed one). An address that does not parse is logged and the client connects to `tcp://localhost:10009`. A change needs a restart. |
 | `monitor` | int, `-1` | >= -1 | yes | -1 current. The Vulkan platform offers the primary monitor only; a value above 0 logs a warning and uses the primary monitor. Display. |
 | `windowWidth`, `windowHeight` | int, `1280`, `720` | 800-16384, 600-16384 | yes (resolution) | Windowed size (the window is resizable; a manual resize is accepted and saved, except while maximized: the restored size is kept). Fullscreen picks the closest primary-monitor mode; borderless uses the desktop size. Display. |
 | `windowX`, `windowY`, `windowMaximized` | int or null, null; bool, `false` | any | no (saved on exit) | Where the windowed window was left: its client area's top-left in desktop coordinates (MonoGame's `Window.Position`) while not maximized, and whether it was maximized. The first windowed apply restores the position while the title bar lands on the primary monitor (otherwise, or without a position, the window opens centred on it with its title bar on screen), then maximizes the window if it was. Later applies centre a window that no longer fits. A platform that places windows itself (a Wayland session) may ignore the position. Not display fields: moving or maximizing the window applies nothing. |
@@ -77,7 +78,7 @@ renderer through `PresentationSettings.ApplyRendering` and apply at once.
 | `levelGuide` | bool, `true` | | yes (the guide window's On/Off) | On reaching a level the game guide has a page for, a blinking notice offers its summary. |
 | `realisticSky` | bool, `true` | | yes (Sky) | The physical sky (sun, moon, stars, aurora, rainbow, clouds) instead of the original's painted domes ([rendering.md](rendering.md#realistic-sky)). |
 | `cloudQuality` | `Off`, `Low`, `Medium` (default), `High` | others: the default | yes (Clouds) | The realistic sky's volumetric clouds and their shadows: off, or their hemisphere rendered at 768 x 192, 1024 x 256 or 1536 x 384 (High costs about 2.7 ms a frame on a GTX 1050 Ti at 1920 x 1080); presets Low and Medium take `Low`, High `Medium`, Ultra `High`. |
-| `weatherEnabled` | bool, `true` | | yes (Weather) | The weather the server sends: clouds, rain, splashes, lightning, the rain and thunder sounds ([client.md](client.md#weather)). `false` keeps the sky clear and the field ambience on, as the original's rain switch did. |
+| `weatherEnabled` | bool, `true` | | yes (Weather) | The weather the server sends: clouds, rain, splashes, lightning, the rain and thunder sounds ([client.md](client.md#weather)). `false` keeps the sky clear and the field ambience on (the ice fields' snow included), as the original's rain switch did. |
 | `petPicksUpPotions` | bool, `true` | | yes (Pet pickup) | A helper pet beside the player fetches potions from the ground as well as gold (`GroundLootInteraction`); `false`: gold only. |
 
 ### Rendering
@@ -93,7 +94,7 @@ renderer through `PresentationSettings.ApplyRendering` and apply at once.
 | `bloom` | `High` (default), `Low`, `Off` | defined enum | | Bloom pyramid mixed at 5 % (High) or 3 % (Low). |
 | `colorGrading` | bool, `true` | | | Applies the 3D LUT grade after the display transform. |
 | `colorGradingLut` | string, `""` | `null` becomes `""` | | Path of a `.cube` file (any size, display-referred sRGB input) replacing the built-in grade. Relative paths resolve against the process working directory; an unreadable or malformed file logs a warning and keeps the built-in grade. |
-| `sharpening` | float, `0.35` | finite, 0-1 | | Contrast-adaptive sharpening in the final pass. |
+| `sharpening` | float, `0.6` | finite, 0-1 | | Contrast-adaptive sharpening in the final pass: 0 turns it off; above 0 the peak weight runs from -1/8 to -1/5 (FidelityFX CAS's range). With `Taa`, 0.4 is added (capped at 1) to restore the detail the temporal average softens. |
 | `localLightLimit` | int, `32` | 8, 16, 32 | | Local lights shaded per pixel: transient combat lights first (at most 8), then the stage lamps nearest the camera focus. |
 | `shadowsEnabled` | bool, `true` | | yes (Shadows) | All shadows: sun cascades and lamp cube shadows. |
 | `shadowMapSize` | int, `4096` | 1024, 2048, 4096, 8192 | yes (Sun shadow) | Size of the sun's cascade atlas (a 32-bit float depth surface). If allocation fails the renderer halves the size down to 1024. |
@@ -152,7 +153,7 @@ values. The defaults equal the High preset (checked by `PhotorealTests`).
 | Field | Low | Medium | High (default) | Ultra |
 |---|---|---|---|---|
 | `antiAliasing` | `Off` | `Smaa` | `Taa` | `Taa` |
-| `sharpening` | 0 | 0.2 | 0.35 | 0.35 |
+| `sharpening` | 0 | 0.4 | 0.6 | 0.6 |
 | `shadowMapSize` | 2048 | 2048 | 4096 | 4096 |
 | `shadowCascades`, `shadowFilter` | 2, `Pcf` | 3, `Pcf` | 4, `Pcss` | 4, `Pcss` |
 | `shadowUpdateRate` | 30 | 60 | 60 | 0 (every frame) |

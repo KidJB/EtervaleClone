@@ -21,9 +21,25 @@ internal static class EquipmentTests
     {
         yield return ("original catalog metadata enables armor and weapons without allowing two-handed shield combinations", CatalogMetadataAsync);
         yield return ("equipment resources preserve original indices, armor aliases and village bones", ResourcesAsync);
+        yield return ("the assassin holds a dagger in each hand and the shaman's phantom hovers at its back", NewClassWeaponsAsync);
+        yield return ("an item key's family names its kind without allocating", KindOfAsync);
         yield return ("motion selection respects item lists, class and map masks", MotionAsync);
         yield return ("equipment changes refresh public appearance over TCP", PresenceAsync);
         yield return ("remote equipment preparation preserves old actors and discards superseded swaps", ReplacementAsync);
+    }
+
+    private static Task KindOfAsync()
+    {
+        Assert.True(ItemEquipmentMetadata.KindOf("WS101") == ItemKind.Bow && ItemEquipmentMetadata.KindOf("ws201") == ItemKind.Sword
+            && ItemEquipmentMetadata.KindOf("WT105") == ItemKind.ThrowingWeapon && ItemEquipmentMetadata.KindOf("OR201") == ItemKind.Ring,
+            "a family named the wrong kind");
+        Assert.True(ItemEquipmentMetadata.IsShield("DS105") && !ItemEquipmentMetadata.IsShield("OM101") && !ItemEquipmentMetadata.IsShield(null)
+            && ItemEquipmentMetadata.KindOf("XX1") is null && ItemEquipmentMetadata.KindOf("WS") is null, "a shield or an unknown key misread");
+        ItemEquipmentMetadata.KindOf("WM101");
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var staff = ItemEquipmentMetadata.KindOf("WM101");
+        Assert.True(staff == ItemKind.Staff && GC.GetAllocatedBytesForCurrentThread() == before, "the kind lookup allocated");
+        return Task.CompletedTask;
     }
 
     private static Task CatalogMetadataAsync()
@@ -71,6 +87,38 @@ internal static class EquipmentTests
         return Task.CompletedTask;
     }
 
+    private static Task NewClassWeaponsAsync()
+    {
+        Assert.True(EquipmentVisuals.MotionIndex("WN101") == 261 && EquipmentVisuals.MotionIndex("WN153") == 292
+            && EquipmentVisuals.MotionIndex("WD101") == 293 && EquipmentVisuals.MotionIndex("WD153") == 324
+            && EquipmentVisuals.MotionIndex("WD137") == 293, "the phantoms and daggers lost their motion indices");
+        Assert.True(EquipmentVisuals.MeshPath("WN151").EndsWith("itWN120.smd", StringComparison.Ordinal)
+            && EquipmentVisuals.MeshPath("WD136").EndsWith("itWD135.smd", StringComparison.Ordinal), "a phantom or dagger draws another model");
+
+        var registry = new CharacterClassRegistry();
+        CharacterVisualSet Armed(PlayerClass playerClass, string weapon)
+        {
+            var definition = registry.Get(playerClass).Definition;
+            return EquipmentVisuals.Apply(definition.DefaultVisuals, "", weapon, "", false, definition.MotionJobMask);
+        }
+
+        var assassin = Armed(PlayerClass.Assassin, "WD101");
+        Assert.True(EquipmentVisuals.WeaponBone(assassin, false) == "Bip weapon01" && EquipmentVisuals.TwinBone(assassin, false) == "Bip weapon05"
+            && EquipmentVisuals.WeaponBone(assassin, true) == "Bip in07" && EquipmentVisuals.TwinBone(assassin, true) == "Bip in08"
+            && EquipmentVisuals.WeaponHover(assassin) is null, "the assassin does not hold and hang two daggers");
+        var fighter = Armed(PlayerClass.Fighter, "WD101");
+        Assert.True(EquipmentVisuals.TwinBone(fighter, false) is null && EquipmentVisuals.WeaponBone(fighter, true) == "Bip in01",
+            "a dagger doubled outside the assassin");
+        var shaman = Armed(PlayerClass.Shaman, "WN101");
+        Assert.True(EquipmentVisuals.WeaponBone(shaman, false) == "Bip in01" && EquipmentVisuals.WeaponBone(shaman, true) == "Bip in01"
+            && EquipmentVisuals.TwinBone(shaman, false) is null && EquipmentVisuals.WeaponHover(shaman) is { Lift: > 3.9f and < 3.91f },
+            "the shaman's phantom does not hover at its back");
+        Assert.True(PlayerEquipmentTiming.TryGet(PlayerClass.Assassin, "WD101", out var stab) && stab.Frames == 40
+            && PlayerEquipmentTiming.TryGet(PlayerClass.Shaman, "WN101", out var phantom) && phantom.Frames == 40,
+            "the server has no attack timing for the new classes' weapons");
+        return Task.CompletedTask;
+    }
+
     private static Task MotionAsync()
     {
         var empty = new PristonMotionInfo(0, 0, 0, [], 0, 0, 0, 0, 0, 0);
@@ -101,7 +149,7 @@ internal static class EquipmentTests
         Assert.True(projected.WeaponKey == "WC101" && projected.Name == "Gear", "equipment metadata changed over TCP");
         character.Equip(EquipmentSlot.Weapon, null!);
         var refreshed = wire.PushMerged(new WorldSnapshot(2, [player.ToView()], fieldId: 3));
-        Assert.True(refreshed.Spawns.Single().Player!.WeaponKey == "", "unequip did not refresh the PLAYERINFO description");
+        Assert.True(refreshed.Spawns.Single().Player!.WeaponKey == "", "unequip did not refresh the entity description");
         Assert.True(wire.PushMerged(new WorldSnapshot(3, [player.ToView()], fieldId: 3)).Spawns.Count == 0, "unchanged description was resent");
         character.Equip(EquipmentSlot.Weapon, new ItemInstance(new ItemDefinition(1, "Claw", ItemKind.Claw, EquipmentSlot.Weapon) { CatalogKey = "WC101" }));
         Assert.True(cursor.Diff([player.ToView()]).Spawns.Count == 0, "unchanged equipment resent a descriptor");

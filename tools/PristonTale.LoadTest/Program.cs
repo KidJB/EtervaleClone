@@ -9,8 +9,9 @@ using PristonTale.Contracts.World;
 using PristonTale.Contracts.Combat;
 using PristonTale.Contracts.Characters;
 using PristonTale.Simulation.Items;
+using PristonTale.Protocol.Transport;
 
-// Headless load generator over the original Priston protocol. Each bot logs in, creates a character when the account
+// Headless load generator over Etervale's protocol. Each bot logs in, creates a character when the account
 // has none, enters the world and then walks, hunts monsters with basic attacks, casts a skill at them or switches its
 // bag page (a stored inventory command, as a potion or a pickup is), reporting its movement at 5 Hz and draining
 // presence. Accounts (and placed hunting characters) come from:
@@ -18,7 +19,7 @@ using PristonTale.Simulation.Items;
 var options = Options.Parse(args);
 if (options is null)
 {
-    Console.Error.WriteLine("usage: --count <bots> [--address tcp://localhost:10009] [--prefix bot] [--password bot-pw] [--seconds 60] [--ramp 50]");
+    Console.Error.WriteLine($"usage: --count <bots> [--address {TlsTransport.LocalAddress}] [--prefix bot] [--password bot-pw] [--seconds 60] [--ramp 50]");
     Console.Error.WriteLine("       [--mode walk|fight|cast|items|mixed] [--skill <hex>] [--item-ms 1000] [--server-pid <pid>] [--report <seconds>]");
     return 1;
 }
@@ -303,8 +304,19 @@ internal sealed class BotWorld(ulong self)
     private Vector3? _correction;
     private TimeSpan? _castWait;
 
-    // Where the server last showed this bot.
-    public Vector3? Self { get; private set; }
+    // Where the server last showed this bot (written by the drain task, read by the play loop).
+    private Vector3? _self;
+
+    public Vector3? Self
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _self;
+            }
+        }
+    }
 
     // The inventory revision the next command expects and the bag page shown: the newer of the last command's answer and
     // the last owner state (one sent before the answer carries an older revision). Null before the first owner state.
@@ -352,7 +364,7 @@ internal sealed class BotWorld(ulong self)
             {
                 if (spawn.EntityId == self)
                 {
-                    Self = spawn.Position;
+                    _self = spawn.Position;
                 }
 
                 if (spawn.Kind == EntityKind.Monster && spawn.OwnerId == 0)
@@ -366,7 +378,7 @@ internal sealed class BotWorld(ulong self)
                 var state = update.States[index];
                 if (state.EntityId == self)
                 {
-                    Self = state.Position;
+                    _self = state.Position;
                 }
 
                 if (_monsters.ContainsKey(state.EntityId))
@@ -457,12 +469,11 @@ internal sealed class BotWorld(ulong self)
             var bestDistance = within * within;
             foreach (var (id, monster) in _monsters)
             {
-                var dx = monster.Position.X - from.X;
-                var dz = monster.Position.Z - from.Z;
-                if (monster.Alive && dx * dx + dz * dz < bestDistance)
+                var distance = PristonTale.Simulation.Physics.Planar.DistanceSquared(monster.Position, from);
+                if (monster.Alive && distance < bestDistance)
                 {
                     best = id;
-                    bestDistance = dx * dx + dz * dz;
+                    bestDistance = distance;
                 }
             }
 
@@ -534,23 +545,33 @@ internal sealed record Options(string Address, string Prefix, string Password, i
             values[args[index]] = args[index + 1];
         }
 
+        // A malformed number is a usage error (exit 1), as a missing count is.
+        bool Number(string name, int fallback, out int value) =>
+            int.TryParse(values.GetValueOrDefault(name, fallback.ToString(CultureInfo.InvariantCulture)), NumberStyles.Integer, CultureInfo.InvariantCulture,
+                out value);
+
+        var skillText = values.GetValueOrDefault("--skill", "0x01010002");
+        skillText = skillText.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? skillText[2..] : skillText;
         if (!values.TryGetValue("--count", out var countText) || !int.TryParse(countText, out var count) || count < 1
-            || !Enum.TryParse<BotMode>(values.GetValueOrDefault("--mode", "walk"), ignoreCase: true, out var mode))
+            || !Enum.TryParse<BotMode>(values.GetValueOrDefault("--mode", "walk"), ignoreCase: true, out var mode)
+            || !Number("--seconds", 60, out var seconds) || !Number("--ramp", 50, out var ramp) || !Number("--server-pid", 0, out var serverPid)
+            || !Number("--report", 5, out var report) || !Number("--item-ms", 1000, out var itemMs)
+            || !uint.TryParse(skillText, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var skill))
         {
             return null;
         }
 
         return new Options(
-            values.GetValueOrDefault("--address", "tcp://localhost:10009"),
+            values.GetValueOrDefault("--address", TlsTransport.LocalAddress),
             values.GetValueOrDefault("--prefix", "bot"),
             values.GetValueOrDefault("--password", "bot-pw"),
             count,
-            int.Parse(values.GetValueOrDefault("--seconds", "60"), CultureInfo.InvariantCulture),
-            Math.Max(1, int.Parse(values.GetValueOrDefault("--ramp", "50"), CultureInfo.InvariantCulture)),
+            seconds,
+            Math.Max(1, ramp),
             mode,
-            Convert.ToUInt32(values.GetValueOrDefault("--skill", "0x01010002"), 16),
-            int.Parse(values.GetValueOrDefault("--server-pid", "0"), CultureInfo.InvariantCulture),
-            Math.Max(1, int.Parse(values.GetValueOrDefault("--report", "5"), CultureInfo.InvariantCulture)),
-            Math.Max(50, int.Parse(values.GetValueOrDefault("--item-ms", "1000"), CultureInfo.InvariantCulture)));
+            skill,
+            serverPid,
+            Math.Max(1, report),
+            Math.Max(50, itemMs));
     }
 }

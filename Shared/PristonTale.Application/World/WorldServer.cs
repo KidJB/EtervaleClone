@@ -25,7 +25,7 @@ namespace PristonTale.Application.World;
 
 public sealed partial class WorldServer
 {
-    public const int TickHz = 20;
+    public const int TickHz = ServerTick.Hz;
 
     public const int CommandQueueCapacity = 65536;
 
@@ -37,9 +37,12 @@ public sealed partial class WorldServer
     // Movement reports arrive at about 5 Hz per moving player; the budget bounds one tick's command phase.
     private const int CommandsPerTick = 16384;
     private readonly List<FieldInstance> _activeFields = new();
+    // The tick's inputs every field steps with, and the step itself made once, so the tick's parallel pass allocates no
+    // closure.
+    private FieldStepInputs _stepInputs;
+    private Action<FieldInstance>? _stepField;
     private int _playerCount;
     private bool _membershipChanged;
-    private IReadOnlyList<(int FieldId, int PlayerCount)> _activeCounts = Array.Empty<(int, int)>();
     private readonly Dictionary<int, FieldInstance> _fields = new();
     private readonly Dictionary<ulong, Connection> _connections = new();
     private readonly EntityIdAllocator _ids = new();
@@ -200,7 +203,7 @@ public sealed partial class WorldServer
             // A saved place without a floor (outside the stage) enters at the field's first start point instead.
             if (!field.Terrain.TryPlaceOnFloor(player.Position, out var position))
             {
-                var start = definition.StartPoints.Count > 0 ? definition.StartPoints[0] : definition.Center;
+                var start = definition.Arrival;
                 position = field.Terrain.PlaceOnFloor(new Vector3(start.X, 0f, start.Z));
             }
 
@@ -261,7 +264,7 @@ public sealed partial class WorldServer
                 || !ReferenceEquals(connection.Outbound, outbound)
                 || !_catalog.TryGetFieldByCode(oldFieldId, out var source)
                 || !_catalog.TryGetFieldByCode(newFieldId, out var destination)
-                || !FieldTransition.TryResolve(source, destination, player.Position, player.Level, out var arrival))
+                || !FieldTransition.TryResolve(source, destination, player.Position, requestedPosition, player.Level, out var arrival))
             {
                 return false;
             }
@@ -273,7 +276,7 @@ public sealed partial class WorldServer
             if (arrival.IsWarp)
             {
                 // Warp exits carry an authored height; settle on the floor at or just below it rather than on a roof.
-                player.EnterField(terrain.SettleNear(arrival.Position, FieldTerrain.DropTolerance * 2f), inVillage);
+                player.EnterField(terrain.SettleNear(arrival.Position, FieldTerrain.ArrivalTolerance), inVillage);
             }
             else
             {
@@ -602,11 +605,6 @@ public sealed partial class WorldServer
     // may carry before the share, and its commit must not land past that limit.
     private static bool TakesGoldShare(Connection member) => member.Session?.SaveGate.CurrentCount != 0;
 
-    public IReadOnlyList<(int FieldId, int PlayerCount)> ActiveFieldCounts()
-    {
-        return Volatile.Read(ref _activeCounts);
-    }
-
     private const ulong NoOwner = 0;
 
     // The rows of a transfer committed now; null when no game log is attached.
@@ -718,7 +716,7 @@ public sealed partial class WorldServer
         _activeFields.AddRange(_fields.Values);
         var nowSeconds = _clock.GetUtcNow().ToUnixTimeSeconds();
         // Fields share only immutable catalogs and the thread-safe id allocator, so they step in parallel.
-        var night = WorldClock.IsNight(WorldClock.HoursAt(GameClockMs));
+        var night = GameHours.IsNight(WorldClock.HoursAt(GameClockMs));
         var weather = Weather;
         var bossMinute = _bossSchedule.Minute;
         if (_bossList.Due(localNow, bossMinute))
@@ -727,7 +725,9 @@ public sealed partial class WorldServer
             _bossList = BossList.Build(data.FieldSpawns, data.Monsters, _catalog, localNow, bossMinute);
         }
 
-        Parallel.ForEach(_activeFields, field => StepField(field, dt, serverTick, bossHour, nowSeconds, night, weather, localNow, bossMinute));
+        _stepInputs = new FieldStepInputs(dt, serverTick, bossHour, nowSeconds, night, weather, localNow, bossMinute);
+        Parallel.ForEach(_activeFields, _stepField ??= field => StepField(field, _stepInputs.Dt, _stepInputs.ServerTick, _stepInputs.BossHour,
+            _stepInputs.NowSeconds, _stepInputs.Night, _stepInputs.Weather, _stepInputs.LocalNow, _stepInputs.BossMinute));
         LastPhases = new TickPhases(processed, Stopwatch.GetElapsedTime(started, commandsDone).TotalMilliseconds,
             Stopwatch.GetElapsedTime(commandsDone).TotalMilliseconds);
         ApplyQuestTravels();
@@ -741,16 +741,6 @@ public sealed partial class WorldServer
 
         _membershipChanged = false;
         Volatile.Write(ref _playerCount, _connections.Count);
-        var counts = new List<(int, int)>();
-        foreach (var field in _fields.Values)
-        {
-            if (field.PlayerCount > 0)
-            {
-                counts.Add((field.FieldId, field.PlayerCount));
-            }
-        }
-
-        Volatile.Write(ref _activeCounts, counts.AsReadOnly());
     }
 
     private void StepField(FieldInstance field, float dt, uint serverTick, int? bossHour, long nowSeconds, bool night, WeatherState weather,
@@ -855,3 +845,6 @@ public sealed partial class WorldServer
         }
     }
 }
+
+internal readonly record struct FieldStepInputs(float Dt, uint ServerTick, int? BossHour, long NowSeconds, bool Night, WeatherState Weather,
+    DateTimeOffset LocalNow, int BossMinute);

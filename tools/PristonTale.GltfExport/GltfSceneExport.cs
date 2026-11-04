@@ -46,9 +46,9 @@ internal static class GltfSceneExport
 {
     internal const float TicksPerSecond = GameUnits.FrameTicksPerSecond;
 
-    // Animated stage objects advance two ticks per elapsed millisecond and, after the first pass,
-    // wraps playback into the [160, MaxFrame] range.
-    internal const float StageObjectTicksPerSecond = 2000f;
+    // Animated stage objects advance at the renderer's rate and, after the first pass, wrap playback into the
+    // [160, MaxFrame] range.
+    internal const float StageObjectTicksPerSecond = PristonRenderer.StageObjectTicksPerSecond;
     private const int StageObjectLoopStartTicks = GameUnits.FrameTicks;
 
     private const int SampleStepTicks = GameUnits.FrameTicks;
@@ -68,7 +68,7 @@ internal static class GltfSceneExport
         ExportOptions options)
     {
         var scene = new SceneBuilder();
-        var normals = BuildStageNormals(stage);
+        var normals = PristonStageNormals.Compute(stage);
         var root = options.RootTransform(stage.Bounds).ToAffineNumerics();
         var meshes = new List<StageMesh>();
         var materialMeshes = new Dictionary<MaterialBuilder, StageMesh>();
@@ -94,8 +94,9 @@ internal static class GltfSceneExport
             return currentMesh;
         }
 
-        foreach (var face in stage.Faces)
+        for (var faceIndex = 0; faceIndex < stage.Faces.Count; faceIndex++)
         {
+            var face = stage.Faces[faceIndex];
             if (!face.FitsIn(stage.Vertices.Count))
             {
                 continue;
@@ -118,9 +119,10 @@ internal static class GltfSceneExport
             var textureCoordinates = TextureCoordinatesOf(stage.TexLinks, face.TexLinkIndex);
             var primitive = MeshFor(material).UsePrimitive(material);
 
-            StageVB BuildVertex(int vertexIndex, Vector2 uv)
+            StageVB BuildVertex(int vertexIndex, int corner, Vector2 uv)
             {
                 var vertex = stage.Vertices[vertexIndex];
+                var normal = normals[faceIndex * 3 + corner];
                 var color = vertex.Color;
                 var exportedColor = new System.Numerics.Vector4(
                     color.R / 255f,
@@ -130,15 +132,15 @@ internal static class GltfSceneExport
                 return new StageVB(
                     new VertexPositionNormal(
                         vertex.Position.ToNumerics(),
-                        normals[vertexIndex].ToNumerics()),
+                        (normal == Vector3.Zero ? Vector3.Up : normal).ToNumerics()),
                     new VertexColor1Texture1(exportedColor, ConvertUv(uv, options)));
             }
 
             AddTriangle(
                 primitive,
-                BuildVertex(face.A, textureCoordinates.A),
-                BuildVertex(face.B, textureCoordinates.B),
-                BuildVertex(face.C, textureCoordinates.C),
+                BuildVertex(face.A, 0, textureCoordinates.A),
+                BuildVertex(face.B, 1, textureCoordinates.B),
+                BuildVertex(face.C, 2, textureCoordinates.C),
                 options);
         }
 
@@ -615,13 +617,8 @@ internal static class GltfSceneExport
     {
         var usedNames = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var actorInfo = actor.Info;
-        for (var index = PristonFormatConstants.CharacterMotionBase; index < actorInfo.Motions.Count; index++)
+        foreach (var (index, motion) in actorInfo.UsableMotions())
         {
-            var motion = actorInfo.Motions[index];
-            if (motion.State == 0 || motion.EndFrame <= motion.StartFrame)
-            {
-                continue;
-            }
 
             // Same job filter as PristonMotionSelection: a zero mask on either side matches every class.
             if (motion.JobCodeBit != 0 && jobMask != 0 && (motion.JobCodeBit & jobMask) == 0)
@@ -1853,39 +1850,5 @@ internal static class GltfSceneExport
         }
 
         return result;
-    }
-
-    private static Vector3[] BuildStageNormals(PristonStage stage)
-    {
-        var normals = new Vector3[stage.Vertices.Count];
-        foreach (var face in stage.Faces)
-        {
-            if (!face.FitsIn(stage.Vertices.Count))
-            {
-                continue;
-            }
-
-            var normal = Vector3.Cross(
-                stage.Vertices[face.B].Position - stage.Vertices[face.A].Position,
-                stage.Vertices[face.C].Position - stage.Vertices[face.A].Position);
-            if (normal.LengthSquared() < 1e-6f)
-            {
-                continue;
-            }
-
-            normal.Normalize();
-            normals[face.A] += normal;
-            normals[face.B] += normal;
-            normals[face.C] += normal;
-        }
-
-        for (var index = 0; index < normals.Length; index++)
-        {
-            normals[index] = normals[index].LengthSquared() < 1e-6f
-                ? Vector3.Up
-                : Vector3.Normalize(normals[index]);
-        }
-
-        return normals;
     }
 }

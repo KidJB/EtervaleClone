@@ -4,9 +4,8 @@ using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Protocol.Packets;
 
-// The version of this protocol. A client older than the server's minimum is refused at login.
 // The protocol a client speaks, sent in its login; a server refuses a client older than its Minimum as outdated. A change
-// of any message's layout raises both: 2 is the presence entries of version 2, 3 the compact event lists.
+// of any message's layout raises both.
 public static class ProtocolVersion
 {
     public const uint Current = 3;
@@ -21,14 +20,6 @@ public static class AccountWire
     public const int MaxAccountBytes = 64;
     public const int MaxPasswordBytes = 128;
     public const int MaxNameBytes = 64;
-
-    internal static void ReadVersion(ref PacketReader reader, string what)
-    {
-        if (reader.UInt16() == 0)
-        {
-            throw new InvalidDataException($"{what} has version 0.");
-        }
-    }
 }
 
 // S->C on connect {header, uint16 Version = 1, uint16 0, uint32 Protocol, MinimumProtocol, int32 FullPlayers, text
@@ -54,7 +45,7 @@ public readonly record struct ServerHelloPacket(uint Protocol, uint MinimumProto
     public static ServerHelloPacket Read(ReadOnlySpan<byte> packet)
     {
         var reader = new PacketReader(packet, Size);
-        AccountWire.ReadVersion(ref reader, "Server hello");
+        WireHeader.ReadVersion(ref reader, "Server hello");
         reader.Skip(2);
         var hello = new ServerHelloPacket(reader.UInt32(), reader.UInt32(), reader.Int32());
         return reader.Remaining > 0 ? hello with { ServerName = Utf8Text.Read(ref reader, MaxServerNameBytes, "Server hello") } : hello;
@@ -79,7 +70,7 @@ public readonly record struct LoginPacket(uint Protocol, string Account, string 
     public static LoginPacket Read(ReadOnlySpan<byte> packet)
     {
         var reader = new PacketReader(packet, 8 + 4 + 4 + 4);
-        AccountWire.ReadVersion(ref reader, "Login");
+        WireHeader.ReadVersion(ref reader, "Login");
         reader.Skip(2);
         var protocol = reader.UInt32();
         var account = Utf8Text.Read(ref reader, AccountWire.MaxAccountBytes, "Login");
@@ -87,20 +78,9 @@ public readonly record struct LoginPacket(uint Protocol, string Account, string 
     }
 }
 
-// The answer to a login (LoginResult.Status).
-public static class LoginStatus
-{
-    public const byte Ok = 0;
-    public const byte BadCredentials = 1;
-    public const byte Blocked = 2;
-    public const byte AlreadyLoggedIn = 3;
-    public const byte Busy = 4;
-    public const byte OutdatedClient = 5;
-}
-
-// S->C {header, uint16 Version = 1, uint8 Status (LoginStatus), uint8 0}; a successful login sends the character list
-// first.
-public readonly record struct LoginResultPacket(byte Status)
+// S->C {header, uint16 Version = 1, uint8 Status (LoginFailure, None for a login), uint8 0}; a successful login sends the
+// character list first.
+public readonly record struct LoginResultPacket(LoginFailure Status)
 {
     public const int Size = 8 + 4;
 
@@ -108,7 +88,7 @@ public readonly record struct LoginResultPacket(byte Status)
     {
         var writer = new PacketWriter(destination, EtervaleOpcodes.LoginResult);
         writer.UInt16(AccountWire.CurrentVersion);
-        writer.Byte(Status);
+        writer.Byte((byte)Status);
         writer.Byte(0);
         return writer.Finish();
     }
@@ -116,8 +96,8 @@ public readonly record struct LoginResultPacket(byte Status)
     public static LoginResultPacket Read(ReadOnlySpan<byte> packet)
     {
         var reader = new PacketReader(packet, Size);
-        AccountWire.ReadVersion(ref reader, "Login result");
-        return new LoginResultPacket(reader.Byte());
+        WireHeader.ReadVersion(ref reader, "Login result");
+        return new LoginResultPacket((LoginFailure)reader.Byte());
     }
 }
 
@@ -165,7 +145,7 @@ public sealed record CharacterListEntry(string Name, PlayerClass Class, int Leve
 // change.
 public sealed record CharacterListPacket(IReadOnlyList<CharacterListEntry> Characters)
 {
-    public const int MaxCharacters = 6;
+    public const int MaxCharacters = CharacterSlots.Maximum;
     public const int MaxSize = 8 + 4 + 4 + MaxCharacters * CharacterListEntry.MaxSize;
 
     public int Write(Span<byte> destination)
@@ -189,7 +169,7 @@ public sealed record CharacterListPacket(IReadOnlyList<CharacterListEntry> Chara
     public static CharacterListPacket Read(ReadOnlySpan<byte> packet)
     {
         var reader = new PacketReader(packet, 8 + 4 + 4);
-        AccountWire.ReadVersion(ref reader, "Character list");
+        WireHeader.ReadVersion(ref reader, "Character list");
         reader.Skip(2);
         var count = reader.Int32();
         if (count is < 0 or > MaxCharacters)
@@ -239,7 +219,7 @@ public readonly record struct CharacterCommandPacket(byte Action, PlayerClass Cl
     public static CharacterCommandPacket Read(ReadOnlySpan<byte> packet)
     {
         var reader = new PacketReader(packet, 8 + 4 + 8 + 2);
-        AccountWire.ReadVersion(ref reader, "Character command");
+        WireHeader.ReadVersion(ref reader, "Character command");
         var action = reader.Byte();
         reader.Skip(1);
         if (action is not (CharacterAction.Create or CharacterAction.Delete))
@@ -273,7 +253,7 @@ public readonly record struct CharacterResultPacket(byte Action, bool Ok, int Fa
     public static CharacterResultPacket Read(ReadOnlySpan<byte> packet)
     {
         var reader = new PacketReader(packet, 8 + 4 + 4 + 2);
-        AccountWire.ReadVersion(ref reader, "Character result");
+        WireHeader.ReadVersion(ref reader, "Character result");
         var action = reader.Byte();
         var ok = reader.Byte() != 0;
         var failure = reader.Int32();
@@ -299,7 +279,7 @@ public readonly record struct HeartbeatPacket(uint Counter, long TimeMs) : IFram
     public static HeartbeatPacket Read(ReadOnlySpan<byte> packet)
     {
         var reader = new PacketReader(packet, Size);
-        AccountWire.ReadVersion(ref reader, "Heartbeat");
+        WireHeader.ReadVersion(ref reader, "Heartbeat");
         reader.Skip(2);
         return new HeartbeatPacket(reader.UInt32(), reader.Int64());
     }

@@ -19,7 +19,7 @@ Monster skills are a separate system (see [world.md](world.md)); they share only
 | Path | Responsibility |
 |---|---|
 | [ClassSkillCatalog.cs](../Shared/PristonTale.Simulation/Skills/ClassSkillCatalog.cs) | Loads the embedded class files; `ClassSkillEntry` (definition fields); `SkillJson` options (camel case, string enums, hex codes) |
-| `Shared/PristonTale.Simulation/Skills/Data/Classes/<Class>.json` | One file per `PlayerClass`: 16 skills in skill-window order, definition plus rule. Embedded resources of the Simulation assembly |
+| `Shared/PristonTale.Simulation/Skills/Data/Classes/<Class>.json` | One file per `PlayerClass`: 20 skills in skill-window order, definition plus rule. Embedded resources of the Simulation assembly |
 | [SkillRules.cs](../Shared/PristonTale.Simulation/Skills/SkillRules.cs) | `SkillRule` and its sub-records (damage, buff, passive, summon, charge, companion, counter, burst); `SkillRuleCatalog` and its load-time validation |
 | `Shared/PristonTale.Simulation/Skills/SkillRuleMechanics.cs` | Second half of the rule records: range/damage modes, motion variants, allies, enchant, absorb, reflect, guard, pulse, charm, resurrect; `ForRank`, `HitFrames` |
 | `Shared/PristonTale.Simulation/Skills/Skill.cs` | `Skill` definition, `JobTier`, `SkillCategory`, `SkillMouseUse`; rank-indexed mana and stamina |
@@ -47,21 +47,77 @@ Monster skills are a separate system (see [world.md](world.md)); they share only
 | `Client/PristonTale.Gameplay/UI/Widgets/HudSkillBindings.cs` | Left/right mouse sockets and the action bar's short keys (`HudActionBarSlots`, saved per character; [client.md](client.md#hud-and-windows)) |
 | `Client/PristonTale.Gameplay/UI/Widgets/HudSkillHud.cs` | Bottom-bar sockets with cooldown sweep; continuous-skill bar (keep icons, duration gauge, summon mode tooltip) |
 | `Client/PristonTale.Gameplay/UI/Widgets/HudSkillDetails.cs` | Tooltip numbers per rank, read from the same `SkillRule` |
-| `tests/PristonTale.Tests/Skill*Tests.cs`, `ClassSkillDataTests.cs`, `PassiveSkillTests.cs` | Regression cases; `SkillScenario`/`SkillFixtures` build a one-player field for server tests |
+| `tests/PristonTale.Tests/Skill*Tests.cs`, `<Class>SkillTests.cs`, `ClassSkillDataTests.cs`, `PassiveSkillTests.cs` | Regression cases (by mechanic, or by class for a class's own skills); `SkillScenario`/`SkillFixtures` build a one-player field for server tests |
 
 ## Skill identity and window order
 
 - Code: `group << 24 | tierBit << 16 | slot`, written as a hex string (`"0x01020001"`). `tierBit` is the `JobTier`
-  value (`Job1` 0x1, `Job2` 0x2, `Job3` 0x4, `Job4` 0x8) and must match `tier`; `slot` is 1..4.
+  value (`Job1` 0x1, `Job2` 0x2, `Job3` 0x4, `Job4` 0x8, `Job5` 0x10) and must match `tier`; `slot` is 1..4.
 - Class groups: Mechanician 0x01, Fighter 0x02, Pikeman 0x03, Archer 0x04, Knight 0x05, Atalanta 0x06,
   Priestess 0x07, Magician 0x08, Assassin 0x10, Shaman 0x50.
-- The file name is the `PlayerClass` enum name. The array order is the skill-window order (window index 0..15): it
+- The file name is the `PlayerClass` enum name. The array order is the skill-window order (window index 0..19): it
   drives learning order, price, tier gates, proficiency streaks and HUD placement. It is not always the slot order:
   Mechanician lists `0x01010004` before `0x01010003`.
 - `CharacterClass` takes its skill list from `ClassSkillCatalog.For`, so `character.Class.Skills[index]` is the window
   entry at `index`. A code is unique across all files (load fails otherwise).
-- The eight original classes have a rule for all 16 skills. Assassin and Shaman files hold window definitions only,
-  except Assassin's passive `0x10010003`.
+- The eight original classes, the Assassin and the Shaman have a rule for all 20 skills of their five tiers (the fifth
+  at levels 80, 83, 86, 90). The Assassin's and the Shaman's skill clips are those of their motion tables tagged from 163 and 183 (the class motion table numbers tags per
+  class: first tag + 4 x tier + slot - 1, tier 0 to 4); the Assassin Mastery grants its critical chance with daggers,
+  which the original's empty weapon list never allowed.
+- The Shaman's spells roll base + level x `levelPercent` / 100 + weapon item damage x `weaponTimes` + spirit / the
+  rank's divisor, never critically. Haunt drains a share of its target's maximum life (bosses spared) and returns it
+  up to 40% of the caster's maximum life; Soul Manacle holds a monster (bosses spared, hits do not end it); Chasing
+  Hunt taunts for `tauntTenths`; Migal and Midranda reach the party within 400 and never stack; Mourning of Pray needs
+  one of them on the caster, and party members holding one echo it around themselves with the caster's weapon.
+- The Mechanician's fifth tier: Land Mining strikes up to its rank's count of enemies around the caster (no target
+  needed) with its mine damage raised by its rate plus the attack damage, half more on mechanic monsters; Hyper Sonic
+  speeds the attack only while one of its weapons is held; Rolling Smash strikes four times with a flat then percent
+  attack rating; Power Enhancement raises both ends of the caster's attack damage and half as much of the maximum of
+  the party members within its range, and ends on a Mechanician holding none of its weapons.
+- The Fighter's fifth tier: Down Hit strikes three times with a percent attack rating; Power Dash reaches 190 and
+  stuns the monster it struck for 10 to 37 s, which its hits do not end; Mortal Blow strikes its target with the attack
+  raised by its percent and up to its rank's count of enemies around the caster with its table, once, on the clip's
+  first event; Bloody Berserker adds flat damage to single-target hits and lowers absorption, and it and the Berserker
+  end each other. Down Hit and Mortal Blow shake the camera of the players near the caster (`cameraShake`).
+- The Pikeman's fifth tier: Dancing Reaper is one strong strike; Final Spear strikes up to six enemies around the caster
+  without missing, with a spear rising under each (`targetEffect`); Amplified raises both ends of the attack damage and
+  the attack rating and lowers absorption; Side Spin Attack strikes twice and each landed strike drains 10 to 37% of
+  the monster's maximum life (lowered by its bionic resistance) from a monster above half its life, bosses too but never
+  the undead, giving back up to 40% of the caster's maximum life.
+- The Archer's fifth tier: Evade Shot reaches 300 and its arrow, at the clip's second event, stuns the monster it struck
+  for 4 to 17 s; Thunder Roop shoots twice, as the cast starts and at its event, with a percent attack rating and 20 to
+  65 beyond the bow's reach; Nature Splash and Circle Trap strike every enemy around their target with the attack
+  raised by their rate, Circle Trap slowing them by 10 to 28% for 0.5 to 5 s. Stuns of monster holds (Power Dash,
+  Evade Shot) spare bosses.
+- The Knight's fifth tier: Soul Breaker strikes as the cast starts with a flat attack rating; Crescent Moon strikes
+  every enemy around its target with the attack raised by its rate; Saint Blade strikes as the cast starts and at its
+  first event, the second hit borrowing Grand Cross's attack rating percent by its rank (`borrowedRating`), both raised
+  against the undead; Holy Benedic adds damage against the undead to the caster or a clicked party member, and to the
+  caster and the party members within 200 (an `Ally` rule whose `allies` has a radius reaches them too). The Knight's
+  fifth-tier clips are tagged 99 to 102, past its twentieth tag.
+- The Atalanta's fifth tier: Talaria adds 1 to 4 move speed and lifts the step limit (`MoveSpeedUnbound`) of the caster
+  or a clicked player (any player, no party); Galaxy Coup strikes the enemies around its target that its accuracy,
+  raised by its percent, reaches, with the attack raised by its rate; Summon Arcuda calls the bear (`Arcuda`) for
+  355 s; Snippy Fear throws two javelins beyond the javelin's reach with a relative critical bonus.
+- The Priestess's fifth tier: Spirit Impact strikes the enemies around its target with a spell roll (the Shaman's
+  terms: base, level x 50%, weapon item damage x 2 to 5, spirit / 2 and / 1); Piercing Ice never misses, rolling its
+  table plus the attack damage raised 200 to 830% (`attackPowerPercent`); Summon Ramiel gives evasion and an angel that
+  strikes every 7 to 4 s, and it and Summon Muspell exclude each other; Blessing Krishna raises defence by a percent and
+  absorption. Spells with `spellPower` take the elemental spirits' boost.
+- The Magician's fifth tier: Silraphim strikes the enemies around its target with a spell roll (level x 100%); Vis
+  Tenus's hit shrinks the monster it struck for 10 to 55 s (`lifeCut`, `FieldSkills.Shrink`): it loses 10 to 55% of its
+  maximum life (a monster with no more life dies at once) and 10 to 37% of its damage and draws at half its size, all
+  given back when it ends, bosses spared; the caster waits for it to end (`casterBuff` with `exclusive`); Prima Ignis
+  never misses, rolling its table plus the attack raised 200 to 830%; Third Anima adds 15 to 150 spell power (plus 8 to
+  35 by Spirit Elemental's rank) and takes 5 to 50% of the maximum mana on the caster or a clicked Magician, Priestess
+  or Shaman (`allyClasses`), and it and Spirit Elemental replace each other.
+- The Assassin's fifth tier: Shadow Bomb strikes up to its rank's count of enemies around the caster with its table
+  raised by Land Mining's rate (as the original server raises it) plus the attack damage; Rising Slash, Violent Stab
+  (two hits) and Storm are strong strikes.
+- The Shaman's fifth tier: Creed raises maximum mana and stamina 10 to 28% for 90 to 270 s; Press Of Deity strikes the
+  enemies within 110 to 200 of its target with a spell roll (level x 100%, weapon item damage x 2 to 6), a meteor
+  falling onto the target; Ghostly Nail is an unresisted spell bolt (weapon item damage x 4 to 13); High Regeneration
+  raises maximum life 5 to 32% while learned.
 
 ## Learning (skill master)
 
@@ -71,18 +127,21 @@ Rules in `SkillLearning` and `PlayerCharacter.ApplyProgression`; the command is 
 - The NPC must offer `NpcServiceKind.SkillMaster` and be within reach (`NpcServiceTransactions.CanReach`); the player
   must be alive. Opening the skill master opens the skill window in training mode
   (`HudSkillsPanel.HandleTrainingClick`).
-- Class tier `t` (0..3) opens window indices `< 4 (t + 1)`. A skill needs rank >= 1 in the window entry before it.
+- Class tier `t` (0..4) opens window indices `< 4 (t + 1)`. A skill needs rank >= 1 in the window entry before it.
 - Training from rank `r` to `r + 1` needs level `RequiredLevel + 2r`, rank < 10, ten mana entries, one point, money.
 - Price: `BasePrices[index] + RankPrices[index] x r`, both tables indexed by window position (500..40000 base).
-- Indices 0..11 spend skill points (one per even level from 10); indices 12..15 spend final-tier points
-  (`EliteSkillPoints`, one per even level from 60).
+- Indices 0..11 spend skill points (one per even level from 10); indices 12..19 (fourth and fifth tiers) share the
+  elite points (`EliteSkillPoints`, one per even level from 60).
+- The fifth tier's prices continue the table: base 50,000, 60,000, 70,000, 80,000, plus 10,000, 12,000, 14,000,
+  16,000 per current rank.
 - Ranks and use counters persist with the character (`CharacterStateCodec`); see [persistence.md](persistence.md).
 
 ## Class skill file format
 
 A JSON array (comments and trailing commas allowed) of objects. Each object is parsed twice: as `ClassSkillEntry`
 (definition) and, when `kind` is present, as `SkillRule` from the same object. Names are camel case, enums are strings
-(flags enums take `"A, B"`), skill codes are hex strings or numbers. Unknown properties are ignored silently.
+(flags enums take `"A, B"`), skill codes are hex strings or numbers. An unknown property is refused (`InvalidDataException` naming the file and the
+property).
 
 Conventions: `[10]` is a per-rank table with exactly ten entries (rank 1..10; validation rejects other lengths, `[]`
 means absent); `SkillRule.At` clamps the rank into the table. Distances are world units (wire scales them by 256).
@@ -95,7 +154,7 @@ means absent); `SkillRule.At` clamps the rank into the table. Distances are worl
 | `code` | hex | Skill code (see identity). Non-zero |
 | `name`, `description` | string | Display text; `name` required |
 | `icon` | string | Skill-window button art key (`Skill.IconKey`) |
-| `tier` | `Job1`..`Job4` | Must equal the code's tier bit |
+| `tier` | `Job1`..`Job5` | Must equal the code's tier bit |
 | `category` | `SkillCategory` | `ActiveAttack`, `AreaAttack`, `MultiHit`, `Buff`, `Passive`, `Heal`, `Summon`, `Debuff`; tests require `Passive` iff `kind` is `Passive` |
 | `requiredLevel` | int >= 1 | Level for rank 1 (rank r+1: `+2r`); casting also needs it |
 | `mouse` | `Left`/`Right`/`Both`/`None` | Socket the skill may occupy; `None` is not castable (passives) |
@@ -122,17 +181,22 @@ means absent); `SkillRule.At` clamps the rank into the table. Distances are worl
 - Area options: `mainInArea` (clicked target always added, beyond the cap, no roll), `areaIncludesTarget` (target
   struck even outside the shape), `rollsAccuracy` (dodgers skipped), `areaAccuracy` (a miss keeps its slot),
   `areaCritical`, `mainHit` (damage rule: an extra weapon hit on the clicked target), `pushBy` (knock-back distance and
-  flinch), `pushTo[10]` (push to this distance), `taunt` (targets lock on the caster for the buff duration). Bosses
-  are not pushed or taunted.
+  flinch), `pushTo[10]` (push to this distance), `taunt` (targets lock on the caster for `tauntTenths[10]`, else the
+  caster buff's or the buff's duration), `partyEcho` (party members within the `allies` radius holding one of
+  `requiresEffect` strike the same area around themselves, with their level and spirit and the caster's weapon).
+  `allyClasses`: the classes another player must be to take an `Ally` rule.
+  Bosses are not pushed or taunted.
+- Cast requirement: `requiresEffect` (codes: the cast is refused unless one of them runs on the caster).
 - Accuracy and critical: `attackRating[10]`, `attackRatingPlusLevel`, `attackRatingPercent[10]`, `criticalAdd[10]`,
   `criticalPercent[10]` (relative: crit + crit x pct / 100), `borrowedCritical` {`skill`, `values[10]` indexed by that
-  skill's rank, `divisor`}, `noAccuracy`, `stopAfterMiss`, `noCriticalHits` (1-based hit numbers), `forceFlinch`,
+  skill's rank, `divisor`}, `borrowedRating` {`skill`, `values[10]`, `fromHit`}: attack rating percent from that
+  skill's rank on the hits from `fromHit` (1-based) on, `noAccuracy`, `stopAfterMiss`, `noCriticalHits` (1-based hit numbers), `forceFlinch`,
   `volley[10]` (shots per strike, each rolls accuracy, damage adds up).
 - Damage: `damage` (damage rule, below); `burst` {`afterHit`, `radius`, `percent` (100), `element`}: a burst around the
   caster after that weapon hit; `lifeCost[10]`: weapon skills pay tenths of a percent of max life per landed hit,
   `LifeToMana` converts that percent of max life into the same percent of max mana.
 - Effects: `buff`, `casterBuff` (buff rules, below; `casterBuff` applies on the first hit, for areas only when a target
-  was hit); `healMin[10]`, `healMax[10]` (plus weapon item damage / 3 and spirit / 8 on the minimum, / 6 on the
+  was hit; a weapon attack's harmful `buff` lands on the monster each of its hits struck); `healMin[10]`, `healMax[10]` (plus weapon item damage / 3 and spirit / 8 on the minimum, / 6 on the
   maximum); `allies`, `passive`, `summon`, `charm`, `resurrect` (below).
 - Variants: `modes` (rule fragments, one drawn per cast, such as an element per cast; timing stays the parent's; at most
   four fit the wire's two mode bits); `charge` (below).
@@ -149,13 +213,16 @@ means absent); `SkillRule.At` clamps the rank into the table. Distances are worl
   strike), `castSound`, `impactSound`, `companionSound` (game-data paths under `wav/`), `keepIcon` (buff-bar icon).
 - Presentation per hit and on actors (`SkillRulePresentation.cs`, ignored by the server): `impactSounds` with
   `impactSoundOrder` (`Sequence`: impact n of the cast plays entry n, wrapping; `Random`; `Final`: only the cast's last
-  impact, `SkillImpacts.Count`), played on landed hits instead of `impactSound`; `impactEffects` (impact n plays entry
+  impact, `SkillFormulas.HitCount`), played on landed hits instead of `impactSound`; `impactEffects` (impact n plays entry
   n, the last entry after that); `-` in either list plays nothing at that impact. `statusLook` while the skill's
   status is on an entity: `Frost`, `Poison`, `Distortion` (harmful statuses only), `Vanish`, `Vague`. `rageGlow`
   (red light 0..255 at each impact, fading 70 a second), `shieldModel` (drawn instead of a held shield while the
   status lasts, from the cast's hit on), `weaponGrowth[10]` (percent growth of a red translucent weapon copy during the
   cast), `afterimages` (0..8, trailing copies through the cast), `castShieldBone` and `castShieldGlow[3]` (the held
-  shield moves to that body bone and glows during the cast).
+  shield moves to that body bone and glows during the cast), `weaponOrbit` (two effects, a light and its trail, circling
+  the holder's weapon while the status lasts), `cameraShake` (each impact shakes the camera of the players within 400
+  of the caster by (400 - distance) / 15 units of view distance, `PristonCameraWave`), `targetEffect` (an effect on
+  each enemy an area struck; the server reports each with a `Struck` impact).
 
 ### Damage rule (`damage`, `mainHit`, `damage.main`)
 
@@ -165,17 +232,22 @@ means absent); `SkillRule.At` clamps the rank into the table. Distances are worl
 | `min[10]`, `max[10]` | Weapon hits: added per hit. Bolts and areas: base range. Equal lengths required |
 | `levelDivisor`, `levelDivisorByRank[10]`, `levelOnMax` | Level / divisor added to both ends (max only with `levelOnMax`) |
 | `weaponDivisor`, `weaponFromAttack`, `spiritMinDivisor`, `spiritMaxDivisor` | Magic terms: weapon (or attack) damage / divisor, spirit / divisor |
+| `levelPercent[10]`, `spiritMinDivisorByRank[10]`, `spiritMaxDivisorByRank[10]`, `weaponTimesMin[10]`, `weaponTimesMax[10]` | Spell terms per rank: level x percent / 100 on both ends, spirit / the rank's divisor (0 none), weapon item damage x times |
+| `tablePercent[10]` | Bolts and areas: `min`..`max` alone gain this percent before the attack power and the other terms join them |
 | `strengthMaxDivisor` | Weapon rolls: maximum gains strength / divisor |
 | `attackPower`, `spellPower` | Roll the caster's attack damage with `percent`; tables gain the spell-power percent |
+| `attackPowerPercent[10]` | The attack damage alone gains this percent before it joins the roll |
 | `areaPercent` (100), `mainPercent`, `mainElement`, `main` | Area share per target; extra share and element of the main target; a separate main hit |
 | `randomHits[10]` | Power x a count rolled in `hits / 2 + 1 .. hits` |
 | `element` (`Bionic`), `flatElement`, `resistAddedOnly` | Element; `flatElement` makes `min..max` an add resisted by its own element |
 | `resistanceDivisor` (1) | Target resistance divided by this before it applies |
+| `unresisted` | No element: no element resistance lowers the hit |
 | `noCritical`, `neverMiss` | No critical; weapon hits skip the accuracy roll |
 | `bonusBroods`, `bonusPercent`, `bonusPercentByRank[10]` | Extra percent vs broods (`Normal`, `Undead`, `Mutant`, `Demon`, `Mechanic`); every brood list loads as `MonsterBrood[]` and is matched with `SkillFormulas.MatchesBrood` |
 | `mode` | `Rolled` (default), `MaxLifeShare`, `CurrentLifeShare` (percent of each target's life) |
-| `share[10]`, `chance[10]`, `chanceLevelDivisor`, `shareResistedByBionic` | Share modes: percent, chance (+ level / divisor), bionic resistance |
-| `minLifePercent`, `onlyBroods`, `excludeBroods`, `lifeToCasterCapPercent` | Share filters; drained life returns to the caster up to a cap |
+| `share[10]`, `chance[10]`, `chanceLevelDivisor`, `shareResistedByBionic` | Share modes: percent, chance (+ level / divisor), bionic resistance. A rolled bolt and a weapon attack drain `share` percent of the struck monster's maximum life after each hit (bosses spared unless `drainsBosses`) |
+| `minLifePercent`, `onlyBroods`, `excludeBroods`, `lifeToCasterCapPercent` | Share filters (the drain after a hit reads the life before it); drained life returns to the caster up to a cap |
+| `drainsBosses` | The drain after a hit (a bolt's or a weapon attack's `share`) takes from bosses too |
 
 ### Buff rule (`buff`, `casterBuff`)
 
@@ -190,6 +262,8 @@ means absent); `SkillRule.At` clamps the rank into the table. Distances are worl
 | periodic `percentOfMax`, `nonLethal` | Amount is a percent of the maximum; life damage stops at 1 life and ends the effect |
 | `endsOnHit`, `endsOnAreaAttack`, `endsOnDamage` | Stealth consumed by the next single-target hit; ended by an area attack; stun broken by damage |
 | `weaponBound`, `requiresWeapon` | Modifiers count only with a listed main-hand weapon; effect ends when none is wielded |
+| `sparesBosses` | Boss monsters never take the effect |
+| `lifeCut[10]` | A monster loses this percent of its maximum life while the effect lasts and draws smaller; one with no more life dies |
 | `companion` | Familiar, see below |
 | `counter` {`borrowSkill`, `percent[10]`, `element`, `bonusBroods`, `bonusPercent`} | Strike back when the shield blocks a monster's normal attack |
 | `enchant` {`choices`, `basicOnly`} | Element added to hits; one choice drawn per cast |
@@ -256,7 +330,7 @@ Example (real entry, Mechanician window index 1):
 ## Shared formulas
 
 - Cooldown (`SkillFormulas.CooldownMs`): proficiency `P = min(min(talent / 3 + itemMastery, 50) x 100 + uses, 10000)`
-  (final-tier skills always 10000; `itemMastery` is the worn magic mastery, truncated); mastery `M = clamp(masteryBase + masteryPerRank x rank - P / 100, 1, 70)`;
+  (fourth- and fifth-tier skills always 10000, `IsFullyTrained`; `itemMastery` is the worn magic mastery, truncated); mastery `M = clamp(masteryBase + masteryPerRank x rank - P / 100, 1, 70)`;
   cooldown = `35 x max(1, 35 / max(1, 70 / M)) x 14 ms`, from 0.49 s to 17.15 s.
 - Proficiency (`UsesAfterCast`): every `CastsPerStep[windowIndex] + (rank - 1) / 3` casts add 100 uses (max 10000).
   The cast counter (`WorldPlayer.SkillCasts`) is per session; uses persist.
@@ -310,7 +384,7 @@ Cooldowns live in `WorldPlayer.Cooldowns` (not persisted); `Rebase` carries them
 ## Wire messages
 
 Etervale extension opcodes `SkillCast` (C→S), `SkillCastResult`, `SkillEvents`, `StatusEffects`, `SkillCooldowns`
-(S→C), plus `Skills` (learned ranks), `OwnerStatus` (final-tier points, class tier) and
+(S→C), plus `Skills` (learned ranks), `OwnerStatus` (elite points, class tier) and
 `ProgressionCommand`/`ProgressionResult`. Layouts, flags, phases and status ops are in [protocol.md](protocol.md).
 
 - The client sends only skill code, target id, its position and a command flag; the server re-derives everything.
@@ -329,8 +403,10 @@ Input and cast flow (`GameScene.Skills.cs`, `HudSkillBindings`, `GameplayHud`):
   to the skill and side (one key per skill on a page); pressing the key elsewhere selects the bound skill. `Ctrl` and
   `Alt` suppress the keys. Sockets fall back to the basic attack (`0x11111111`) when a skill is lost.
 - A click with a skill in the clicked socket picks the entity under the cursor: `Enemy` needs a monster, `Ally` takes a
-  picked player or none, `Self`/`None` cast at once. Local pre-checks (rank, cooldown, unmodified mana/stamina) show a
-  notice instead of sending. The avatar walks until within the client's `CastRange - 8`, faces the target and sends.
+  picked player or none, `Self`/`None` cast at once. Local pre-checks (rank, cooldown) show a notice instead of sending;
+  mana and stamina are the server's (`SkillFormulas.ManaCost`/`StaminaCost`, with the cost-reducing effects), refused as
+  `NotEnoughMana`/`NotEnoughStamina`. The avatar walks until within `SkillFormulas.Range` of the owner's attack range,
+  less 8, faces the target and sends.
   An unanswered cast locks the avatar for at most 1500 ms. Refusals map to notices in `OnCastResolved`. When the lock
   ends, the local motion controller returns from `Skill` to `Stand` (`EndSkillMotion`), so the floor is followed again.
 - Charge: an accepted charge skill records its button; releasing it while casting sends `SkillCastCommand.Release`.
@@ -340,7 +416,8 @@ Input and cast flow (`GameScene.Skills.cs`, `HudSkillBindings`, `GameplayHud`):
 
 Presentation (`SkillPresentation`):
 
-- Own events run at once; other entities' events wait `RemoteDelayMs` (150 ms) to match interpolated playback.
+- Own events run at once; another entity's events wait its playback delay (`ISkillSceneHost.PlaybackDelayMsOf`, the
+  snapshot buffer's adaptive 150 to 600 ms) to match its interpolated motion.
 - `Start`: plays the motion plan at a rate that fits the server's `DurationMs` (weapon clips: per loop), spawns
   `castEffect`, plays `castSound`, launches `projectileEffect` at `HitAtMs` over the shared flight time and arc.
 - `Impact`: familiar/counter strikes fly `companionEffect` from above the caster; chain, familiar and ally impacts

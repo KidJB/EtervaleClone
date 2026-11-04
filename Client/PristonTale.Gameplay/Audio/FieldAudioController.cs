@@ -161,6 +161,11 @@ public sealed class FieldAudioController : IDisposable
     internal static int SelectFieldAmbientCode(FieldDef field, float timeOfDay)
     {
         ArgumentNullException.ThrowIfNull(field);
+        if (field.Ambience is { } ambience)
+        {
+            return (int)ambience;
+        }
+
         return field.State switch
         {
             FieldState.Ruin => 3,
@@ -177,20 +182,17 @@ public sealed class FieldAudioController : IDisposable
 
     internal static float ProximityVolume(Vector3 listenerPosition, FieldAmbient ambient)
     {
-        var source = new Vector3(ambient.Position.X, ambient.Position.Y, -ambient.Position.Z);
+        var source = PristonTale.Engine3D.WorldSpace.Mirror(new Vector3(ambient.Position.X, ambient.Position.Y, ambient.Position.Z));
         var distanceSquared = Vector3.DistanceSquared(listenerPosition, source);
         var innerRadiusSquared = (float)ambient.Radius * ambient.Radius;
-        var attenuation = (int)((distanceSquared - innerRadiusSquared) / 1100f);
-        attenuation = Math.Clamp(attenuation, 0, 400);
-
-        var originalVolume = 400 - attenuation;
+        var originalVolume = SoundFalloff.Steps(distanceSquared - innerRadiusSquared);
         if (originalVolume <= 100)
         {
             return 0f;
         }
 
-        var playbackVolume = Math.Min(originalVolume + 100, 399);
-        return playbackVolume / 400f;
+        var playbackVolume = Math.Min(originalVolume + 100, SoundFalloff.FullSteps - 1);
+        return playbackVolume / (float)SoundFalloff.FullSteps;
     }
 
     private static int SelectDungeonAmbientCode(int fieldCode)

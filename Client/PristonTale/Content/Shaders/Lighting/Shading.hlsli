@@ -6,6 +6,9 @@
 
 #include "Brdf.hlsli"
 #include "Octahedral.hlsli"
+#include "CubeFaces.hlsli"
+#include "Environment.hlsli"
+#include "SphericalHarmonics.hlsli"
 
 // Share of a cascade's far end over which it hands over to the next one (dithered), and the last one fades out.
 static const float CascadeBlendBand = 0.12;
@@ -59,10 +62,9 @@ float ShadowLitAt(float2 uv, float reference)
 // The continuous tent of half-width reach around a point of the atlas (in texels, from the atlas origin): reach 2 is
 // the 3x3 tent (four gathers over 4x4 texels, standard deviation 0.82 texel), reach 3 the 5x5 tent (nine gathers over 6x6
 // texels, 1.22). Each texel weighs (reach - |dx|)(reach - |dy|) by its distance to the point, reach^4 in all, so the edge
-// moves continuously, and the result is the same in every frame. A disk turned per pixel and frame left its noise for
-// the temporal anti-aliasing to average, which it cannot where the history is clipped (an animated character's shadow)
-// or absent (MSAA, FXAA, SMAA): the edges crawled. Also returns the depth and count of the texels in front of the
-// reference.
+// moves continuously, and the result is the same in every frame, with no noise left for the temporal anti-aliasing (which
+// cannot average it where the history is clipped or absent). Also returns the depth and count of the texels in front of
+// the reference.
 float ShadowTent(Texture2D<float4> map, SamplerState state, float2 texel, float2 grid, float reference, int reach,
                  out float blockerSum, out float blockers)
 {
@@ -244,25 +246,14 @@ float2 ScreenOcclusion(float2 pixel, float viewDepth)
 }
 
 // The lamps' cube shadows (Lighting/PristonLampShadows.cs): six faces per lamp side by side in its row, each a 90-degree
-// view along a major axis (FaceForward, up FaceUp, as Matrix.CreateLookAt builds it), holding the distance to the lamp
-// over its radius. The 5x5 tent (ShadowTent) softens the edge the same way in every frame; a share of the light stays in
-// the shadow (bounce from the lamp-lit surroundings).
-static const float3 FaceForward[6] = { float3(1, 0, 0), float3(-1, 0, 0), float3(0, 1, 0), float3(0, -1, 0), float3(0, 0, 1), float3(0, 0, -1) };
-static const float3 FaceUp[6] = { float3(0, 1, 0), float3(0, 1, 0), float3(0, 0, -1), float3(0, 0, 1), float3(0, 1, 0), float3(0, 1, 0) };
+// view along a major axis (Lighting/CubeFaces.hlsli), holding the distance to the lamp over its radius. The 5x5 tent
+// (ShadowTent) softens the edge the same way in every frame; a share of the light stays in the shadow (bounce from the
+// lamp-lit surroundings).
 
 float LampShadow(uint row, float3 fromLight, float radius, float nl)
 {
-    float3 a = abs(fromLight);
-    uint face = a.x >= a.y && a.x >= a.z ? (fromLight.x >= 0.0 ? 0 : 1)
-              : a.y >= a.z ? (fromLight.y >= 0.0 ? 2 : 3)
-              : (fromLight.z >= 0.0 ? 4 : 5);
-    float3 forward = FaceForward[face];
-    float3 back = -forward;
-    float3 right = SafeNormalize(cross(FaceUp[face], back));
-    float3 up = cross(back, right);
-    float along = dot(forward, fromLight);
-    float2 ndc = float2(dot(right, fromLight), dot(up, fromLight)) / max(along, 1.0e-3);
-    float2 local = float2(ndc.x, -ndc.y) * 0.5 + 0.5;
+    uint face = CubeFace(fromLight);
+    float2 local = CubeFaceUv(fromLight, face, 1.0e-3);
     float faceSize = LampShadowParams.z;
     float2 texel = LampShadowParams.xy;
     // The tent reaches three texels from the point: keep it inside the face.
@@ -367,34 +358,21 @@ void AddLocalLights(float3 worldPosition, float3 n, float3 v, float3 albedo, flo
 // Irradiance (E / pi) from the sky's spherical harmonics (Passes/Environment.fx), cosine-convolved per band.
 float3 EnvironmentIrradiance(float3 n)
 {
-    float3 e = EnvironmentSh[0].rgb * 0.282095;
-    e += (EnvironmentSh[1].rgb * n.y + EnvironmentSh[2].rgb * n.z + EnvironmentSh[3].rgb * n.x) * (0.488603 * 2.0 / 3.0);
-    e += (EnvironmentSh[4].rgb * (1.092548 * n.x * n.y) + EnvironmentSh[5].rgb * (1.092548 * n.y * n.z)
-        + EnvironmentSh[6].rgb * (0.315392 * (3.0 * n.z * n.z - 1.0)) + EnvironmentSh[7].rgb * (1.092548 * n.x * n.z)
-        + EnvironmentSh[8].rgb * (0.546274 * (n.x * n.x - n.y * n.y))) * 0.25;
-    return max(e, 0.0);
+    float3 c[9];
+    [unroll]
+    for (uint k = 0; k < 9; k++)
+    {
+        c[k] = EnvironmentSh[k].rgb;
+    }
+
+    return max(EvaluateSh(c, n), 0.0);
 }
 
-// One roughness level of the prefiltered atlas: level k is (base / 2^k) square at x = 2 base (1 - 2^-k).
-float3 EnvironmentLevel(float2 octahedral, float level)
-{
-    float base = EnvironmentParams.y;
-    float size = base * exp2(-level);
-    float offset = 2.0 * base - 2.0 * size;
-    float2 pixel = clamp(octahedral * size, 0.5, size - 0.5);
-    return EnvironmentMap.SampleLevel(EnvironmentSampler, (float2(offset, 0.0) + pixel) / float2(EnvironmentParams.z, base), 0).rgb;
-}
-
-// Prefiltered radiance toward r for a perceptual roughness (levels at roughness k / (levels - 1)), in the light model's
-// units (the atlas's scale, EnvironmentSh[9].x).
+// Prefiltered radiance toward r for a perceptual roughness, in the light model's units (the atlas's scale,
+// EnvironmentSh[9].x).
 float3 EnvironmentSpecular(float3 r, float roughness)
 {
-    float level = saturate(roughness) * (EnvironmentParams.w - 1.0);
-    float level0 = floor(level);
-    float level1 = min(level0 + 1.0, EnvironmentParams.w - 1.0);
-    float2 octahedral = OctahedralEncode(r);
-    float3 radiance = lerp(EnvironmentLevel(octahedral, level0), EnvironmentLevel(octahedral, level1), level - level0);
-    return radiance * EnvironmentSh[9].x;
+    return EnvironmentAtlasRadiance(EnvironmentMap, EnvironmentSampler, EnvironmentParams, r, roughness) * EnvironmentSh[9].x;
 }
 
 // Image-based lighting: the sky's irradiance and its prefiltered radiance with the split-sum BRDF (Karis 2013), the
@@ -421,7 +399,7 @@ void AddAmbient(float3 n, float3 v, float3 albedo, float3 f0, float metallic, fl
     float up = n.y * 0.5 + 0.5;
     float3 irradiance = lerp(GroundAmbient, SkyAmbient, up);
     float nv = saturate(dot(n, v));
-    float3 fresnel = f0 + (max(1.0 - roughness, f0) - f0) * pow(1.0 - nv, 5.0);
+    float3 fresnel = F_SchlickRough(f0, nv, roughness);
     float3 reflected = reflect(-v, n);
     float3 environment = lerp(GroundAmbient, SkyAmbient, reflected.y * 0.5 + 0.5);
     lighting.Diffuse += irradiance * albedo * ((1.0 - metallic) * ao);

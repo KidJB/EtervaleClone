@@ -11,6 +11,7 @@ using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Motion;
 using PristonTale.Contracts.Motion;
 using PristonTale.Contracts.World;
+using PristonTale.Simulation.Physics;
 
 namespace PristonTale.Application.World;
 
@@ -38,8 +39,6 @@ public enum PlayerActionState
 
 public sealed class WorldPlayer
 {
-    public const float MeleeRange = MeleeReach.PlayerBaseRange;
-
     public float AttackRange => PlayerAttackReach.For(_character);
 
     // A game master may dash (Shift held while running); its movement budget allows that speed.
@@ -61,8 +60,8 @@ public sealed class WorldPlayer
     // of any height are accepted.
     private const float ReportClimb = 64f;
     // The most each 8-unit step of a report may climb: the client steps up at most GroundTraversal.StepUp (10 units)
-    // every 4 units, so 20, with room for the two sides sampling the ground at different points. Allowing ReportClimb at
-    // every step let one report scale 64 units per step, up any cliff without a wall face.
+    // every 4 units, so 20, with room for the two sides sampling the ground at different points; ReportClimb bounds the
+    // whole report, this each step, so no report scales a cliff without a wall face.
     private const float StepClimb = 24f;
     // Every report is walked in pieces no longer than this, each following the client's wall slide from the floor the
     // last piece stood on, so the rising ground of a ramp is not taken for a wall. A piece may end this far from its
@@ -236,7 +235,7 @@ public sealed class WorldPlayer
     {
         if (facingTarget != Position)
         {
-            Facing = MathF.Atan2(facingTarget.X - Position.X, facingTarget.Z - Position.Z);
+            Facing = Planar.Heading(Position, facingTarget);
         }
 
         Action = PlayerActionState.Cast;
@@ -571,22 +570,17 @@ public sealed class WorldPlayer
         _inVillage = inVillage;
     }
 
-    public float DistanceSqTo(Vector3 worldPos)
-    {
-        float dx = worldPos.X - Position.X;
-        float dz = worldPos.Z - Position.Z;
-        return (dx * dx) + (dz * dz);
-    }
+    public float DistanceSqTo(Vector3 worldPos) => Simulation.Physics.Planar.DistanceSquared(worldPos, Position);
 
     public bool InAttackRange(Vector3 worldPos)
     {
         float range = AttackRange;
-        return DistanceSqTo(worldPos) <= range * range && MathF.Abs(worldPos.Y - Position.Y) <= 64f;
+        return DistanceSqTo(worldPos) <= range * range && MathF.Abs(worldPos.Y - Position.Y) <= MonsterAttackReach.VerticalEntryLimit;
     }
 
     public void BeginSwing(ulong targetId, Vector3 targetPos, float durationMs, float hitAtMs)
     {
-        Facing = MathF.Atan2(targetPos.X - Position.X, targetPos.Z - Position.Z);
+        Facing = Planar.Heading(Position, targetPos);
         Action = PlayerActionState.Swing;
         MoveState = MotionState.Attack;
         _timeline = ActionTimeline.Start(durationMs, hitAtMs);
@@ -742,13 +736,6 @@ public sealed class WorldPlayer
         MoveState = MotionState.Stand;
         Action = PlayerActionState.Idle;
         GuardMsLeft = MathF.Max(0f, guardMs);
-    }
-
-    internal static (float DurationMs, float HitAtMs) SwingTimingFallback(int attackSpeed)
-    {
-        float rate = AnimationRate.AttackRate(attackSpeed);
-        return (MotionTiming.DurationMs(PlayerMotionFallback.SwingFrames, rate),
-                MotionTiming.DurationMs(PlayerMotionFallback.HitFrames, rate));
     }
 
     public EntityView ToView() => new(

@@ -3,15 +3,20 @@ using PristonTale.Engine3D.Formats;
 
 namespace PristonTale.Engine3D.Rendering;
 
-// Smooth normals for a stage, computed over the whole stage before its faces are split by material: the stage file
-// carries no vertex normals, and normals averaged only inside one material broke at every material and UV boundary,
-// so the sun lit neighbouring ground triangles differently. A corner averages the area-weighted normals of the faces
-// that touch its position and lean at most CreaseDegrees from its own face, so ground stays smooth and walls keep their
-// edge with the floor. Faces never drawn (collision-only materials) take no part: a hidden ramp or blocker sharing the
-// ground's vertices bent its normal.
+// Smooth normals for a stage, computed over the whole stage before its faces are split by material (the stage file
+// carries no vertex normals), so the sun lights neighbouring ground triangles alike across material and UV boundaries.
+// A corner averages the area-weighted normals of the faces that touch its position and lean at most CreaseDegrees from
+// its own face, so ground stays smooth and walls keep their edge with the floor. Faces never drawn (collision-only
+// materials) take no part, so a hidden ramp or blocker sharing the ground's vertices does not bend its normal.
 internal static class PristonStageNormals
 {
     public const float CreaseDegrees = 60f;
+
+    // The stage's corner normals over its drawn faces (a face without a material counts as drawn).
+    public static Vector3[] Compute(PristonStage stage) =>
+        Compute(stage.Faces, stage.Vertices.Select(static vertex => vertex.Position).ToArray(),
+            face => face.MaterialIndex < 0 || face.MaterialIndex >= stage.Materials.Count
+                || stage.Materials[face.MaterialIndex] is { IsInvisible: false, HasNoRenderableTexture: false });
 
     // One normal per face corner: index face * 3 + corner (A, B, C), zero for a face that is skipped, degenerate or not
     // drawn.

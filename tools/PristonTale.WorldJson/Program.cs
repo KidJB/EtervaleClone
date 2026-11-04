@@ -42,6 +42,7 @@ var fields = catalog.AllFields.Select(f => new
         dx = w.DestinationX,
         dy = w.DestinationY,
         dz = w.DestinationZ,
+        moreExits = w.MoreExits.Select(e => new { x = e.X, y = e.Y, z = e.Z }).ToArray(),
         limitLevel = w.LimitLevel,
         special = w.SpecialEffect
     }).ToArray()
@@ -49,10 +50,10 @@ var fields = catalog.AllFields.Select(f => new
 
 var world = new
 {
-    // Streaming radii from the original connect/disconnect view ranges (PT global units). Multiply by
-    // the export scale in the runtime. Gate planar mapping to a Y-up engine: (x, -z).
-    streamConnect = 1086.0,
-    streamDisconnect = 1810.0,
+    // Streaming radii: the connect view range and the disconnect range (0x320000 squared world units). Multiply by the
+    // export scale in the runtime. Gate planar mapping to a Y-up engine: (x, -z).
+    streamConnect = (double)ViewRanges.Connect,
+    streamDisconnect = Math.Sqrt(0x320000),
     startField = "village-2",
     camera = new { distance = 420.0, pitch = 0.35, fovDeg = 65.0, targetHeight = 30.0 },
     fields

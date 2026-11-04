@@ -1,9 +1,10 @@
 // Temporal anti-aliasing resolve (PristonTemporalAntiAliasing), on the pre-exposed HDR scene before bloom and exposure.
 // After Karis, "High Quality Temporal Supersampling" (SIGGRAPH 2014), Salvi, "An Excursion in Temporal Supersampling"
 // (GDC 2016) and Pedersen, "Temporal Reprojection Anti-Aliasing in INSIDE" (GDC 2016):
-//  - current sample: Gaussian reconstruction around the unjittered pixel centre from the 3x3 neighbourhood, which also
-//    gives the variance box (YCoCg). A 5-tap cross gave a box too tight for jittered high-frequency texture (stone, gold
-//    trims): the history was clipped nearly every frame and the pixel followed the jitter, a visible shimmer;
+//  - current sample: Gaussian reconstruction around the unjittered pixel centre from the 3x3 neighbourhood (a third of a
+//    pixel wide, so it adds little to the jitter's own blur; the final pass sharpens what the average still softens);
+//    the variance box (YCoCg) comes from the whole neighbourhood, so jittered high-frequency texture (stone, gold trims)
+//    keeps its history instead of following the jitter;
 //  - motion: of the closest surface among the centre and its four diagonals (silhouettes keep their own motion).
 //    Surfaces write their motion (Passes/Surface.fx: skinned actors from their previous bone palette, wind and water from
 //    the previous animation time, everything from the previous view-projection); the sky marker reprojects the view
@@ -44,7 +45,6 @@ SamplerState HistorySampler : register(s3) = sampler_state
     Texture = (History); MinFilter = Linear; MagFilter = Linear; MipFilter = Point; AddressU = Clamp; AddressV = Clamp;
 };
 
-static const float SkyMotion = 3.0;          // motion x at or above: the sky marker (Passes/SkyComposite.fx)
 static const float FoliageWeight = 0.3;
 static const float FoliageGamma = 0.9;
 static const float2 Diagonals[4] = { float2(-1, -1), float2(1, -1), float2(-1, 1), float2(1, 1) };
@@ -198,7 +198,7 @@ ResolveOut PS_Resolve(FullscreenOut i)
         }
     }
 
-    bool sky = motion.x >= SkyMotion;
+    bool sky = motion.x >= SkyMotionThreshold;
     float2 previousUv = sky ? SkyPreviousUv(uv) : uv - motion.xy;
 
     // 3. History.

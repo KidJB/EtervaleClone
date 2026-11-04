@@ -9,11 +9,11 @@ public sealed record CharacterClassDef(
     CharacterVisualSet DefaultVisuals,
     CharacterAttributes BaseAttributes,
     CharacterAttributes GrowthPerLevel,
-    int StatusPointsPerLevel,
-    CharacterFunctionProfile FunctionProfile,
-    IReadOnlyList<EquipmentRef> StartingEquipment)
+    CharacterFunctionProfile FunctionProfile)
 {
-    public uint MotionJobMask => 1u << ((int)Class - 1);
+    public uint MotionJobMask => JobMaskOf(Class);
+
+    public static uint JobMaskOf(PlayerClass playerClass) => 1u << ((int)playerClass - 1);
 
     public JobBitCode JobBitCode => JobBits.Of(Class);
 
@@ -23,11 +23,5 @@ public sealed record CharacterClassDef(
     {
         var levelDelta = Math.Max(0, level - 1);
         return BaseAttributes.Add(GrowthPerLevel.Scale(levelDelta));
-    }
-
-    public int UnallocatedStatusPointsAtLevel(int level)
-    {
-        var levelDelta = Math.Max(0, level - 1);
-        return levelDelta * StatusPointsPerLevel;
     }
 }

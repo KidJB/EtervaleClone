@@ -3,12 +3,18 @@ using PristonTale.Gameplay.UI.Rendering;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.Items.Usable;
+using PristonTale.Contracts.Units;
 
 namespace PristonTale.Gameplay.UI.Inventory;
 
 // The original inventory window and its text, with the original equipment covers and selection colors.
 public sealed class HudInventoryPanel
 {
+    private (OwnedItemView Item, OwnerState State, string Note, string Action, string Hunt) _tipKey;
+    private IReadOnlyList<string> _usableTip;
+    private List<(string Text, Color Color)> _detailTip;
+    private AgingGauge? _gaugeTip;
+
     private readonly HudItemCounts _counts = new();
     // Whether the bag holds a puzzle piece or lucky bag (the board shows) and the puzzle is finished, per revision.
     private (bool Shown, bool Complete) _puzzle;
@@ -179,7 +185,7 @@ public sealed class HudInventoryPanel
 
         painter.Fill(board, Color.FromNonPremultiplied(255, 255, 0, 30));
         var travel = board.Height - 6;
-        var step = (int)(ClockMs / (3000d / 70d)) % (travel * 2);
+        var step = (int)(ClockMs / (3000d / GameUnits.TicksPerSecond)) % (travel * 2);
         var offset = step < travel ? step : travel * 2 - step;
         var line = Color.FromNonPremultiplied(255, 123, 0, 180);
         painter.Fill(new Rectangle(board.X, board.Y + offset, board.Width, 2), line);
@@ -306,15 +312,30 @@ public sealed class HudInventoryPanel
             : "Click: carry  Shift-click: split  Right-click: equip";
         var named = _counts.Named(item);
         var note = Note?.Invoke(item) ?? "";
-        if (usable && note.Length == 0)
+        // The box's lines are made again only when the item, the owner state or the texts around them change, as the trade
+        // and personal shop windows keep theirs.
+        var hunt = Hunt?.Invoke(item);
+        var key = (item, _state, note, action, hunt);
+        if (!_tipKey.Equals(key))
         {
-            HudUsableTooltip.Draw(painter, layout, pointer, named.Name, HudUsableTooltip.Lines(item.CatalogKey), action);
+            _tipKey = key;
+            _usableTip = usable && note.Length == 0 ? HudUsableTooltip.Lines(item.CatalogKey) : null;
+            _detailTip = _usableTip is null ? HudItemDetailTooltip.Lines(named, _state, note, action, hunt) : null;
+            _gaugeTip = _usableTip is null ? HudItemDetailTooltip.Gauge(item, _state) : null;
+        }
+
+        if (_usableTip is not null)
+        {
+            HudUsableTooltip.Draw(painter, layout, pointer, named.Name, _usableTip, action);
             return;
         }
 
-        HudItemDetailTooltip.Draw(painter, layout, pointer, HudItemDetailTooltip.Lines(named, _state, note, action, Hunt?.Invoke(item)),
-            HudItemDetailTooltip.Gauge(item, _state));
+        HudItemDetailTooltip.Draw(painter, layout, pointer, _detailTip, _gaugeTip);
     }
+
+    // Whether the bag items lay out a finished puzzle board.
+    public static bool PuzzleFinished(IEnumerable<OwnedItemView> bag) =>
+        Puzzles.Complete(bag.Select(static item => (item.CatalogKey, item.Anchor)), HudInventoryLayout.Columns);
 
     private void Refresh(OwnerState state)
     {
@@ -324,7 +345,7 @@ public sealed class HudInventoryPanel
             _puzzleRevision = state.InventoryRevision;
             var bag = state.Items.Where(static item => item.InBag).ToList();
             var shown = bag.Any(static item => Puzzles.IsPiece(item.CatalogKey) || item.CatalogKey.Equals(Puzzles.LuckyBagIcon, StringComparison.OrdinalIgnoreCase));
-            _puzzle = (shown, shown && Puzzles.Complete(bag.Select(static item => (item.CatalogKey, item.Anchor)), HudInventoryLayout.Columns));
+            _puzzle = (shown, shown && PuzzleFinished(bag));
         }
 
         if (_money != state.Money)

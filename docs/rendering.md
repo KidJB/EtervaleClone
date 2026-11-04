@@ -88,10 +88,10 @@ Described in Etervale's terms; readers keep every field, including padding, for 
 | Model `.smd`, skeleton `.smb` | `PristonSmdReader.ReadModel` | Header `SMD Model data Ver 0.62` or a binary model layout; objects with parent names, base transform, rotation/position/scale keys and frame ranges; physique bone per vertex. Positions convert as (x, z, -y). |
 | Model info `.inx` | `PristonInxReader` | Mesh, motion and sub-model file names, high/default/low LOD object groups, 512 motion entries of 172 bytes, talk and NPC motions; two layouts differ only in the item-code list width. |
 | Camera path `.cam` | `PristonCameraPath.ReadCam` | Position and rotation keys of the opening cinematic, 160 ticks per frame. |
-| Textures `.bmp`, `.tga`, `.jpg` | `PristonImageDecoder` | BMP (always opaque; a variant stores its first 14 header bytes with i*i added to byte i), TGA (alpha), others through StbImageSharp; a missing extension is retried as `.bmp`, `.tga`, `.jpg`, `.jpeg`. |
+| Textures `.bmp`, `.tga`, `.jpg` | `PristonImageDecoder` | BMP (always opaque; a variant stores its first 14 header bytes with i*i added to byte i), TGA (alpha; true colour stored or run-length, plain or with the same masked header over 18 bytes), others through StbImageSharp; a missing extension is retried as `.bmp`, `.tga`, `.jpg`, `.jpeg`. |
 | Sky manifest | `PristonSkyManifest` | Latin-1 text: profiles in braces, layer lines `FileName: ... FadeDelay: ... RGBA: r g b a`. Profile numbers come from field backdrop codes (`PristonSkyProfiles.Resolve`). |
 
-- Fixed-point coordinates divide by `PristonFormatConstants.FixedScale` = 256. Distances are in Priston units (a map
+- Fixed-point coordinates divide by `GameUnits.FixedScale` = 256. Distances are in Priston units (a map
   cell is 64 units).
 - Animation time is in ticks of 160 per frame. Stage props advance 2000 ticks per second and start one frame in
   (160); actor motions use 160000/33 ticks per second scaled by the motion's playback rate.
@@ -111,7 +111,8 @@ Described in Etervale's terms; readers keep every field, including padding, for 
 - Materials: a TGA or opacity-mapped texture is a cut-out (alpha test at 60/255). Original blend types 2-6 draw late
   (blended queue) unless the material is an opaque cut-out; one layer above the base is carried over (multiply, add or
   sphere-map shine); there is no roughness or metalness in the data (`PristonMaterialAdapter` assigns 0.85 rough
-  dielectric, water 0.12, ice 0.3, shine 0.4).
+  dielectric, water 0.12, shine 0.4). The ice surface flag is slippery floor only: the ice fields set it on snow,
+  footprints and grass-to-snow tiles but not on the grass beside them, so it keeps the ground's 0.85.
 
 ## Scene data
 
@@ -121,7 +122,7 @@ Described in Etervale's terms; readers keep every field, including padding, for 
 - Stage normals: the stage file has none per vertex, so `PristonStageNormals` computes one per face corner over the whole
   stage before the faces are split by material: the area-weighted normals of every face touching the corner's position
   that leans at most 60 degrees (`CreaseDegrees`) from the corner's face. Faces of materials never drawn (invisible or without a texture) take no part, so a collision-only ramp or blocker on the ground's vertices does not bend it. Ground stays smooth across material and UV
-  seams (the sun's N.L no longer breaks along ground triangles) and walls keep their edge with the floor. The normal
+  seams (the sun's N.L is continuous across ground triangles) and walls keep their edge with the floor. The normal
   rides on `PristonCornerVertex.Normal`; corners without one (models) are still averaged over their welded faces, and
   scrolling materials keep per-triangle normals.
 - Actors (`AddActor`) get GPU resources shared per `PristonActor`, a bone palette (at most 64 bones,
@@ -283,8 +284,8 @@ they took the domes.
   as the sky draws, since the flash is too brief for the clouds' history). The clouds drift with a base wind plus the
   weather's and stay in place as the camera moves. Their hemisphere (azimuth by elevation, the elevation's square root
   down the height, so the low sky holds most texels) at 768 x 192, 1024 x 256 or 1536 x 384 marches one texel of each
-  2x2 block in turn each frame, blended 25 % into its history: a texel waits four frames at most and the march's jitter
-  averages over about sixteen. The history follows the clouds: each frame it is read where the cloud at a texel's
+  2x2 block in turn each frame, blended 10 % into its history (`CloudHistory` keeps 90 %): a texel waits four frames at
+  most and the march's jitter averages over about forty. The history follows the clouds: each frame it is read where the cloud at a texel's
   direction (a third of the way up the layer) was seen last frame, moved by the wind's and the camera's motion
   (`CloudMotion`; a jump past 2 km, a warp, starts the clouds over), so a drifting cloud leaves no second, wavering
   edge. The light march's samples are jittered each frame too, so the clouds' shading shows no drifting contour bands.
@@ -293,7 +294,9 @@ they took the domes.
   tile) fades out between 12 and 30 km, where its cells would shimmer, and far clouds fade into the haze over 35 km. The
   sun lights the clouds by day and the moon by night, and at night they keep a glow of their own (the night sky's, the
   moon's and the town's), so a stormy night shows its deck; under a closing sky the far haze takes the deck's grey
-  instead of opening onto the horizon. A cloud with a body hides the stars and the moon as it hides the sun. Off: an
+  instead of opening onto the horizon, the light that reaches the clouds turns grey as their ambient light does, and the
+  whole sky loses 90 % of its hue (`ClosedSkyGrey`), so a rain or a storm at dawn or dusk shows a grey deck and grey
+  fog, not an orange glow. A cloud with a body hides the stars and the moon as it hides the sun. Off: an
   overcast sky turns a flat grey instead.
 - Cloud shadows: the clouds' transmittance toward the sun over 6 km around the camera (256^2), read by the surfaces'
   sun term (`Surface.fx` `CloudShadowAt`, `PristonCloudShadowFrame`) at the clear share of the sky (an overcast sky
@@ -307,7 +310,12 @@ they took the domes.
 
 - Sky: with the classic sky, half the sky clouded shows the rain dome (`FIELD_BACKIMAGE_RAIN`, profile 7) at every
   hour, as the original switched to it, cross-faded like any profile change (`SkyProfileNow`); the realistic sky draws
-  the weather's clouds instead.
+  the weather's clouds instead. The rain dome is an open cylinder whose rim stands about 22 degrees up: a profile whose
+  opaque layers stop below 0.8 radians (`PristonSkyLibrary.OpenTopElevation`) leaves the zenith open, so at load its
+  outermost opaque layer is mirrored up over its rim to the zenith (`CapAbove`: each vertex keeps its direction,
+  distance and texture coordinates, its elevation below the rim becomes as far above it, stretched so the lowest ring
+  meets at the zenith) and drawn right after that layer. The rim's vertices stay in place, so the clouds go on past the
+  rim without a seam instead of the hour's clear colour showing above it.
 - Light (`WeatherLight`, in `BuildFrameLighting`): an overcast or rainy sky is fully clouded, eased in and out over
   6 s; the direct sun keeps the clear share squared (`SunThrough`: none under a full cover, so an overcast day casts no
   shadows), or 70 % of it while a sunshower's break passes the sun (`PristonWeather.SunBreak`); full cloud keeps 70 % of
@@ -342,25 +350,24 @@ they took the domes.
 
 ## Shadows
 
-- **Sun cascades** (`Lighting/PristonShadowCascades.cs`): up to 4 over 9000 units of view depth from 60, practical
-  split (lambda 0.8), each slice enclosed in a sphere, casters up to 4000 units beyond toward the light. A cascade's
-  centre follows its focus by whole texels (`FollowFocus`: the sub-texel part of the focus's travel across the light is
-  kept as a residual), so a still receiver keeps its place in the texel grid while the camera moves, and a turning sun
-  pivots the grid about the focus. Snapping a fixed world anchor (the origin, tens of thousands of units from the towns)
-  instead moved the anchor's rounding phase with every slight turn of the sun, and every shadow edge jumped a fraction of
-  a texel at each refresh, a flicker at the refresh rate with nothing moving. Cascades 0-1 refresh every update, 2 every second, 3 every fourth; a new light direction or a
-  focus jump over 350 units refreshes all. Refresh rate `shadowUpdateRate` (`FixedRateRefreshScheduler`), halved by
-  moonlight. Between refreshes cascades 0-1 still redraw every frame on their current fit, so the characters near the
-  camera cast from their current pose (a caster a refresh old darkens a running character lit from behind). Characters
-  and monsters receive the sun's shadow 40 units further along the light (`ActorShadowBias`), so their own thin
-  low-polygon bodies do not shade themselves in flickering triangles while buildings and trees still shade them. Over a
-  cascade's blend band both cascades are sampled and blended, never one picked per pixel by noise. The filter is a
-  continuous tent (`ShadowTent`): every texel it reaches is weighted by its distance to the point, so an edge slides
-  continuously, and the result is the same in every frame. PCF (the moon): the 5x5 tent, nine gathers. PCSS by day
-  (light radius tangent 0.01): the 3x3 tent (four gathers), whose blocker count two rings of corners three and five
-  texels out extend; a penumbra wider than 1.5 texels (tall casters far above the receiver) blends by 3 texels into a
-  16-tap disk of its radius, turned per pixel. A disk turned per pixel and frame everywhere left its noise to the
-  temporal anti-aliasing, which cannot average it on an animated character's shadow or without TAA: the edges crawled. Casters draw two-sided; the wind/water displacement matches the lit pass.
+- **Sun cascades** (`Lighting/PristonShadowCascades.cs`): up to 4 over 9000 units of view depth from 60, practical split
+  (lambda 0.8), each slice enclosed in a sphere, casters up to 4000 units beyond toward the light. A cascade's centre
+  follows its focus by whole texels (`FollowFocus`: the sub-texel part of the focus's travel across the light is kept as
+  a residual), so a still receiver keeps its place in the texel grid while the camera moves, and a turning sun pivots
+  the grid about the focus, so still shadow edges stay in place. Cascades 0-1 refresh every update, 2 every second, 3
+  every fourth; a new light direction or a focus jump over 350 units refreshes all. Refresh rate `shadowUpdateRate`
+  (`FixedRateRefreshScheduler`), halved by moonlight. Between refreshes cascades 0-1 still redraw every frame on their
+  current fit, so the characters near the camera cast from their current pose (a caster a refresh old darkens a running
+  character lit from behind). Characters and monsters receive the sun's shadow 40 units further along the light
+  (`ActorShadowBias`), so their own thin low-polygon bodies do not shade themselves in flickering triangles while
+  buildings and trees still shade them. Over a cascade's blend band both cascades are sampled and blended, never one
+  picked per pixel by noise. The filter is a continuous tent (`ShadowTent`): every texel it reaches is weighted by its
+  distance to the point, so an edge slides continuously, and the result is the same in every frame. PCF (the moon): the
+  5x5 tent, nine gathers. PCSS by day (light radius tangent 0.01): the 3x3 tent (four gathers), whose blocker count two
+  rings of corners three and five texels out extend; a penumbra wider than 1.5 texels (tall casters far above the
+  receiver) blends by 3 texels into a 16-tap disk of its radius, turned per pixel but not per frame, so the edges hold
+  still on animated characters and without the temporal anti-aliasing. Casters draw two-sided; the wind/water
+  displacement matches the lit pass.
 - **Lamp shadows** (`Lighting/PristonLampShadows.cs`): the `lampShadowCount` lamps nearest the focus (after the
   transient lights) keep a row of six 90-degree cube faces storing distance / radius. A lamp keeps its row while it
   stays near; new rows draw at once, the others on every frame a skinned caster's bounds meet the lamp's sphere (and once
@@ -398,7 +405,9 @@ they took the domes.
 
 - **TAA** (`Post/PristonTemporalAntiAliasing.cs`): Halton (2, 3) jitter of 8 samples; current weight 0.08 at rest to
   0.25 at 8 px/frame; variance clip gamma 1.25 over the 3x3 neighbourhood (a 5-tap cross left jittered stone and
-  gold trims shimmering); depth tolerance 0.06; motion of skinned actors from the previous bone
+  gold trims shimmering); Gaussian reconstruction of the current frame with sharpness 5 (a third of a pixel); the
+  final pass's sharpening gets 0.4 more (capped at 1), since the average of the jittered frames keeps only about two
+  thirds of fine texture contrast; depth tolerance 0.06; motion of skinned actors from the previous bone
   palette (`PristonSkinPalette` keeps the previous pose, stamped per motion frame), of wind and water from the previous
   animation time. Volumetric and AO noise rotate per frame only with TAA.
 - **MSAA:** scene target multisampled (2-4), the back buffer never.
@@ -462,7 +471,6 @@ they took the domes.
 - Light selection is relative to the camera focus (`camera.Target`), not the camera position.
 - Transient lights fill the first local-light slots; with `localLightLimit` 8 a fight can leave no stage lamps.
 - Texture cache keys include the full directory: the same file name in two directories is two textures.
-- Some comments in `Formats/` name functions of the original client; do not copy those names into new code or docs.
 - A tool that renders every frame into a new 1920x1080 render target (created and disposed each frame) loses the
   Vulkan device after a few hundred frames; keep one target and reuse it, as `WeatherCaptureProbe` does.
 

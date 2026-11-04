@@ -1,4 +1,5 @@
 using PristonTale.Simulation.Items;
+using PristonTale.Simulation.Progression;
 
 namespace PristonTale.Simulation.Skills;
 
@@ -16,7 +17,8 @@ public enum JobTier
     Job1 = 0x1,
     Job2 = 0x2,
     Job3 = 0x4,
-    Job4 = 0x8
+    Job4 = 0x8,
+    Job5 = 0x10
 }
 
 public enum SkillCategory
@@ -46,10 +48,6 @@ public sealed class Skill
     public required SkillCategory Category { get; init; }
 
     public int RequiredLevel { get; init; }
-    public int ManaCost { get; init; }
-
-    public bool IsActive => Category is SkillCategory.ActiveAttack or SkillCategory.AreaAttack
-        or SkillCategory.MultiHit or SkillCategory.Debuff;
 
     public int ManaForRank(int rank)
     {
@@ -70,9 +68,9 @@ public sealed class Skill
 
     private void ValidateRank(int rank)
     {
-        if (rank is < 1 or > 10 || ManaByRank.Count != 10)
+        if (rank is < 1 or > SkillLearning.MaxRank || ManaByRank.Count != SkillLearning.MaxRank)
         {
-            throw new ArgumentOutOfRangeException(nameof(rank), "A migrated skill rank must be between 1 and 10.");
+            throw new ArgumentOutOfRangeException(nameof(rank), $"A skill rank must be between 1 and {SkillLearning.MaxRank}.");
         }
     }
 }

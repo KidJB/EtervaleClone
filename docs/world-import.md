@@ -137,7 +137,7 @@ files have no kind key) and its footprint. What a copy of the item is made from 
 | `variant` | Source | Runtime |
 | --- | --- | --- |
 | 0 regular | The catalog entry of the code | `ItemCatalog` |
-| 2 quest | The first file in path order whose `*유니크` is 2 (quest weapons, rank-up rings, Fury of Phantom rewards) | `ItemCatalog.QuestVariants`, handed out by quests ([quests.md](quests.md)) |
+| 2 quest | The first file in path order whose `*유니크` is 2 (quest weapons, rank-up rings, Fury of Phantom rewards) | `ItemCatalog.TryGetQuestVariant`, handed out by quests ([quests.md](quests.md)) |
 | 1 named unique | Each distinct name, the first file in path order, among the files whose `*유니크` has no value (1) and that lost the selection of their code (Vega, Ancient Rage, Bone Crasher...); `variant_ordinal` is its number in `Identities/named-uniques.json` | `ItemCatalog.NamedUniques`; saved items name one by `ItemDefinition.NamedUniqueBase` + the number. They never drop |
 
 Each definition has its own English name, bonuses and random classes.
@@ -375,18 +375,8 @@ fix the file rather than the parser.
 name, code, model path stem, centre, start points, gates, warp gates) plus streaming radii and camera constants for an
 external field-streaming prototype. No database.
 
-`tools/PristonTale.DevAccounts` (`ptdevaccounts`), not in the solution:
-
-| Command | Effect |
-| --- | --- |
-| `create-account <user> <password>` | Creates the account with `PasswordHasher`; existing accounts are left unchanged |
-| `create-bots <prefix> <count> <password>` | Accounts `<prefix>0001`..; count 1-100000; existing ones skipped |
-| `add-char <user> <name> <class> [level]` | Starter character via `CharacterRecordFactory.NewStarter` in its class's town (Ricarten or Pillai), first free of 6 slots; name 3-16 characters and globally unique; class by `PlayerClass` name or number |
-| `list <user>` | Characters by slot |
-
-Options: `--sqlite <path>` (default `data/pristontale.db`, resolved against the repository root), `--conn "<npgsql>"`.
-Without either, the `PT_PG_CONN` environment variable selects PostgreSQL. Both options together is an error. The tool
-migrates before running a command.
+`tools/PristonTale.DevAccounts` (`ptdevaccounts`, not in the solution) creates accounts, bots and characters and sets
+game-master levels; its commands and options are in [tools.md](tools.md).
 
 ## How to
 

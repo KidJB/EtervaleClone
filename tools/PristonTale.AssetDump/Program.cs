@@ -1,8 +1,11 @@
 using System.Text;
 using Microsoft.Xna.Framework;
+using PristonTale.Assets;
 using PristonTale.Engine3D.Formats;
+using PristonTale.Engine3D.Rendering;
 using PristonTale.AssetDump;
 using PristonTale.Contracts.Motion;
+using PristonTale.Contracts.Units;
 
 if (args.Length == 4 && args[0] == "--export-field-textures")
 {
@@ -24,7 +27,7 @@ if (args.Length == 4 && args[0] == "--export-field-textures")
 // the options). Reuses the real Engine3D readers — no GraphicsDevice, no wine prefix.
 //
 // Usage:  ptdump <asset-path> [--materials] [--lights] [--objects] [--normals] [--motions] [--matbounds] [--physique] [--full]
-//   A .bmp/.tga path instead decodes the texture and prints content stats (size/bitcount/alpha/grayscale%).
+//   A .bmp/.tga path instead decodes the texture and prints content stats (size/alpha/grayscale%).
 //   --matbounds : per-material face count + XYZ bounds (locate geometry by material).
 //   --physique  : distinct skinning bone names referenced by vertices.
 //   default          summary + aggregates (counts, bounds, blend-type histogram)
@@ -96,12 +99,12 @@ catch (Exception ex)
 // the leading bytes to tell a stage from a model; the reader itself validates the full prefix.
 static string? DetectSmdKind(string path)
 {
-    Span<byte> head = stackalloc byte[24];
+    Span<byte> head = stackalloc byte[SmdLayout.SignatureSize];
     using var fs = File.OpenRead(path);
     var read = fs.Read(head);
     var name = Encoding.ASCII.GetString(head[..read]);
-    if (name.StartsWith("SMD Stage data", StringComparison.Ordinal)) return "stage";
-    if (name.StartsWith("SMD Model data", StringComparison.Ordinal)) return "model";
+    if (name.StartsWith(SmdLayout.StagePrefix, StringComparison.Ordinal)) return "stage";
+    if (name.StartsWith(SmdLayout.ModelPrefix, StringComparison.Ordinal)) return "model";
     return null;
 }
 
@@ -114,13 +117,12 @@ void DumpStage(PristonStage stage)
     Console.WriteLine($"  vertices  : {stage.Vertices.Count}");
     Console.WriteLine($"  faces     : {stage.Faces.Count}");
     Console.WriteLine($"  texLinks  : {stage.TexLinks.Count}");
-    // Light type breakdown (PristonRenderer: LightNight=0x1, LightLens=0x2, LightDynamic=0x80000).
     int lNight = 0, lLens = 0, lDyn = 0;
     foreach (var l in stage.Lights)
     {
-        if ((l.Type & 0x1) != 0) lNight++;
-        if ((l.Type & 0x2) != 0) lLens++;
-        if ((l.Type & 0x80000) != 0) lDyn++;
+        if (l.Night) lNight++;
+        if (l.Lens) lLens++;
+        if (l.Dynamic) lDyn++;
     }
     Console.WriteLine($"  lights    : {stage.Lights.Count}  (night={lNight} lens={lLens} dynamic={lDyn})");
     int chained = 0; foreach (var tl in stage.TexLinks) if (tl.NextPointer != 0) chained++;
@@ -264,21 +266,11 @@ void DumpInx(PristonModelInfo info)
     Console.WriteLine($"  motionCount  : {info.MotionCount}  (array {info.Motions.Count})");
     Console.WriteLine($"  talkMotions  : {info.TalkMotionCount}  (array {info.TalkMotions.Count})");
 
-    // "Usable" mirrors PristonActorLoader: a real motion at slot >= CharacterMotionBase (10)
-    // with State != 0 and EndFrame > StartFrame.
-    const int characterMotionBase = 10;
-    var usable = new List<(int slot, PristonMotionInfo m)>();
-    for (var i = characterMotionBase; i < info.Motions.Count; i++)
-    {
-        var m = info.Motions[i];
-        if (m.State != 0 && m.EndFrame > m.StartFrame)
-            usable.Add((i, m));
-    }
+    var usable = info.UsableMotions().ToList();
     Console.WriteLine($"  usable motions: {usable.Count}");
 
-    // JobCodeBit gates which class(es) may wear this armour (CharacterEnums.JobBitCode: Mechanician=0x1,
-    // Fighter=0x2, Pikeman=0x4, Archer=0x8, Knight=0x10000, Atalanta=0x20000, Priestess=0x40000,
-    // Magician=0x80000). Reported as the OR of every motion's bits so a body armour's class set is visible.
+    // JobCodeBit gates which classes may wear this armour: bit (class - 1) of PlayerClass (0x1 Fighter, 0x2
+    // Mechanician, ...). Reported as the OR of every motion's bits so a body armour's class set is visible.
     uint jobBits = 0;
     foreach (var m in info.Motions) jobBits |= m.JobCodeBit;
     Console.WriteLine($"  jobCodeBits  : 0x{jobBits:X}");
@@ -295,11 +287,11 @@ void DumpInx(PristonModelInfo info)
             var name = Enum.IsDefined((MotionCode)m.State) ? ((MotionCode)m.State).ToString() : "";
             var events = string.Join(", ", m.EventFrames
                 .Where(e => e != 0)
-                .Select(e => $"{e} → f{m.StartFrame + (e / 160)}"));
+                .Select(e => $"{e} → f{m.StartFrame + (e / GameUnits.FrameTicks)}"));
             Console.WriteLine($"  {slot,-5} 0x{m.State:X4} {m.StartFrame,8} {m.EndFrame,8} {m.Repeat,7}  [{events}]  {name}");
         }
 
-        if (info.NpcMotionRates.Count > characterMotionBase && info.NpcMotionRates[characterMotionBase] != 0)
+        if (info.NpcMotionRates.Count > PristonFormatConstants.CharacterMotionBase && info.NpcMotionRates[PristonFormatConstants.CharacterMotionBase] != 0)
         {
             Section("NPC MOTION RATES");
             foreach (var (slot, _) in usable)
@@ -334,7 +326,7 @@ static void DumpMaterialAggregates(IReadOnlyList<PristonMaterial> mats)
         if (fs != 0) formStateHist[fs] = formStateHist.GetValueOrDefault(fs) + 1;
         // Move (0x1) = wind Z1; MoveX/Z bits = explicit wind axes (see PristonMaterialRuntimeFactory).
         if ((m.SurfaceFlags & (PristonMaterialSurfaceFlags.Move | PristonMaterialSurfaceFlags.MoveX1 | PristonMaterialSurfaceFlags.MoveX2 | PristonMaterialSurfaceFlags.MoveZ1 | PristonMaterialSurfaceFlags.MoveZ2)) != 0) wind++;
-        if (m.BlendType is >= 2 and <= 6) lateBlend++;       // IsLateBlend rule
+        if (PristonBlendType.IsLate(m.BlendType)) lateBlend++;
         if (m.IsInvisible) invisible++;
         if (m.IsWater) water++;
         if (m.IsBlinking) blinking++;
@@ -342,7 +334,7 @@ static void DumpMaterialAggregates(IReadOnlyList<PristonMaterial> mats)
         if (m.RenderLast) renderLast++;
         if (m.TwoSided) twoSided++;
         if (!string.IsNullOrEmpty(m.OpacityName) || m.TextureName.EndsWith(".tga", StringComparison.OrdinalIgnoreCase)) alphaMaybe++;
-        if ((m.MeshState & 0x1) != 0) checkFace++;           // check-face flag (walkable/collision)
+        if ((m.MeshState & StageCollisionReader.CheckFace) != 0) checkFace++;
         if (m.HasAnimatedTexture) animTex++;
     }
     var hist = string.Join(", ", blendHist.Select(kv => $"{BlendName(kv.Key)}({kv.Key})={kv.Value}"));
@@ -351,7 +343,7 @@ static void DumpMaterialAggregates(IReadOnlyList<PristonMaterial> mats)
     Console.WriteLine($"  formstate hist  : {fsHist}   (5 = FS_REFLEX, 4/6..18 = scroll)");
     Console.WriteLine($"  late-blend(2-6) : {lateBlend}   (NOT shadow casters / late pass)");
     Console.WriteLine($"  alpha-test'ish  : {alphaMaybe}   (.tga or opacity map)");
-    Console.WriteLine($"  collision faces : {checkFace}   (MeshState & 0x1)");
+    Console.WriteLine($"  collision faces : {checkFace}   (MeshState & check face)");
     Console.WriteLine($"  flags           : invisible={invisible} water={water} blinking={blinking} " +
                       $"selfIllum={selfIllum} renderLast={renderLast} twoSided={twoSided} animTex={animTex} wind={wind}");
 }
@@ -383,29 +375,25 @@ static void DumpMaterialTable(IReadOnlyList<PristonMaterial> mats)
 static string BlendName(uint b) => b switch
 {
     0 => "NONE",
-    1 => "ALPHA",
-    2 => "COLOR",
-    3 => "SHADOW",
-    4 => "LAMP",
-    5 => "ADDCOLOR",
-    6 => "INVSHADOW",
+    PristonBlendType.Alpha => "ALPHA",
+    PristonBlendType.Color => "COLOR",
+    PristonBlendType.Shadow => "SHADOW",
+    PristonBlendType.Lamp => "LAMP",
+    PristonBlendType.AddColor => "ADDCOLOR",
+    PristonBlendType.InverseShadow => "INVSHADOW",
     _ => "?"
 };
 
-// ---- texture stats (decode like the engine; report content so we can reason about mask vs colour) ----
+// ---- texture stats (decoded by the engine; content that tells a mask from a colour map) ----
 
 static void DumpTextureStats(string path)
 {
-    var bytes = File.ReadAllBytes(path);
-    var ext = Path.GetExtension(path).ToLowerInvariant();
-    int w, h, bpp;
-    (int R, int G, int B, int A)[] px;
-    if (ext == ".tga") px = DecodeTga(bytes, out w, out h, out bpp);
-    else px = DecodeBmp(bytes, out w, out h, out bpp);
+    var image = PristonImageDecoder.Decode(File.ReadAllBytes(path), Path.GetExtension(path));
+    var (w, h, px) = (image.Width, image.Height, image.Pixels);
 
     Header($"TEXTURE  {path}");
-    Console.WriteLine($"  size   : {w} x {h}   bitcount: {bpp}");
-    if (px.Length == 0) { Console.WriteLine("  (could not decode pixels)"); return; }
+    Console.WriteLine($"  size   : {w} x {h}");
+    if (!image.IsValid) { Console.WriteLine("  (could not decode pixels)"); return; }
 
     long sr = 0, sg = 0, sb = 0; int minA = 255, maxA = 0; int gray = 0; int greenDom = 0; int nearBlack = 0;
     foreach (var p in px)
@@ -419,7 +407,7 @@ static void DumpTextureStats(string path)
     }
     int n = px.Length;
     Console.WriteLine($"  avg RGB: ({sr / n}, {sg / n}, {sb / n})");
-    Console.WriteLine($"  alpha  : min={minA} max={maxA}  ({(bpp == 32 ? "has 32-bit alpha channel" : "no native alpha (24/8-bit)")})");
+    Console.WriteLine($"  alpha  : min={minA} max={maxA}  ({(image.HasSourceAlpha ? "alpha from the file" : "no alpha in the file")})");
     Console.WriteLine($"  achromatic(gray) pixels : {gray * 100L / n}%   (high % => a grayscale MASK)");
     Console.WriteLine($"  green-dominant pixels   : {greenDom * 100L / n}%");
     Console.WriteLine($"  near-black pixels       : {nearBlack * 100L / n}%   (typical additive-glow background)");
@@ -428,73 +416,6 @@ static void DumpTextureStats(string path)
     Console.WriteLine("  samples:");
     Sample("centre", w / 2, h / 2); Sample("tl", w / 8, h / 8); Sample("br", w - w / 8, h - h / 8); Sample("midL", 2, h / 2);
 }
-
-static (int, int, int, int)[] DecodeBmp(byte[] source, out int width, out int height, out int bpp)
-{
-    width = height = bpp = 0;
-    var bytes = (byte[])source.Clone();
-    if (bytes.Length > 14 && bytes[0] == 'A' && bytes[1] == '8')
-        for (var i = 0; i < 14; i++) bytes[i] = unchecked((byte)(bytes[i] - i * i)); // PT A8 header deobfuscation
-    if (bytes.Length < 54) return [];
-    int pixelOffset = BitConverter.ToInt32(bytes, 10), dibSize = BitConverter.ToInt32(bytes, 14);
-    width = BitConverter.ToInt32(bytes, 18);
-    var heightRaw = BitConverter.ToInt32(bytes, 22);
-    bpp = BitConverter.ToUInt16(bytes, 28);
-    int compression = BitConverter.ToInt32(bytes, 30), paletteCount = BitConverter.ToInt32(bytes, 46);
-    if (width <= 0 || heightRaw == 0 || compression != 0) { return []; }
-    bool topDown = heightRaw < 0; height = Math.Abs(heightRaw);
-    (int, int, int, int)[] pal = [];
-    if (bpp <= 8)
-    {
-        var colors = paletteCount > 0 ? paletteCount : 1 << bpp; pal = new (int, int, int, int)[colors];
-        var po = 14 + dibSize;
-        for (var i = 0; i < colors; i++) { var p = po + i * 4; pal[i] = (bytes[p + 2], bytes[p + 1], bytes[p], 255); }
-    }
-    var stride = ((width * bpp + 31) / 32) * 4;
-    if (pixelOffset + stride * height > bytes.Length) return [];
-    var outPx = new (int, int, int, int)[width * height];
-    for (var y = 0; y < height; y++)
-    {
-        var sy = topDown ? y : height - 1 - y; var row = pixelOffset + sy * stride;
-        for (var x = 0; x < width; x++)
-            outPx[y * width + x] = bpp switch
-            {
-                32 => (bytes[row + x * 4 + 2], bytes[row + x * 4 + 1], bytes[row + x * 4], bytes[row + x * 4 + 3]),
-                24 => (bytes[row + x * 3 + 2], bytes[row + x * 3 + 1], bytes[row + x * 3], 255),
-                8 => pal[bytes[row + x]],
-                _ => (0, 0, 0, 255),
-            };
-    }
-    return outPx;
-}
-
-static (int, int, int, int)[] DecodeTga(byte[] b, out int width, out int height, out int bpp)
-{
-    width = height = bpp = 0;
-    if (b.Length < 18) return [];
-    int idLen = b[0], colorMapType = b[1], imageType = b[2];
-    width = BitConverter.ToUInt16(b, 12); height = BitConverter.ToUInt16(b, 14); bpp = b[16];
-    bool topDown = (b[17] & 0x20) != 0; bool rle = imageType is 9 or 10;
-    int bytesPp = bpp / 8; int pos = 18 + idLen + (colorMapType == 1 ? BitConverter.ToUInt16(b, 5) * (b[7] / 8) : 0);
-    if (bytesPp is not (3 or 4)) return [];
-    var outPx = new (int, int, int, int)[width * height]; int count = width * height, idx = 0;
-    var tmp = new (int, int, int, int)[count];
-    while (idx < count && pos < b.Length)
-    {
-        if (rle)
-        {
-            int packet = b[pos++]; int run = (packet & 0x7F) + 1;
-            if ((packet & 0x80) != 0) { var p = ReadTgaPx(b, pos, bytesPp); pos += bytesPp; for (var k = 0; k < run && idx < count; k++) tmp[idx++] = p; }
-            else for (var k = 0; k < run && idx < count; k++) { tmp[idx++] = ReadTgaPx(b, pos, bytesPp); pos += bytesPp; }
-        }
-        else { tmp[idx++] = ReadTgaPx(b, pos, bytesPp); pos += bytesPp; }
-    }
-    for (var y = 0; y < height; y++) { var sy = topDown ? y : height - 1 - y; for (var x = 0; x < width; x++) outPx[y * width + x] = tmp[sy * width + x]; }
-    return outPx;
-}
-
-static (int, int, int, int) ReadTgaPx(byte[] b, int p, int bytesPp) =>
-    bytesPp == 4 ? (b[p + 2], b[p + 1], b[p], b[p + 3]) : (b[p + 2], b[p + 1], b[p], 255);
 
 // ---- formatting ---------------------------------------------------------------------------
 

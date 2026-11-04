@@ -11,6 +11,8 @@ using NumVector3 = System.Numerics.Vector3;
 using PristonTale.Contracts.Motion;
 using PristonTale.Contracts.World;
 using PristonTale.Contracts.Skills;
+using PristonTale.Engine3D;
+using PristonTale.Gameplay.UI.Widgets;
 
 namespace PristonTale.Gameplay.World;
 
@@ -19,6 +21,11 @@ namespace PristonTale.Gameplay.World;
 // skill timeline drives motions and effects through SkillPresentation.
 public sealed partial class GameScene : ISkillSceneHost
 {
+    // The refusals a cast meets, from the server or the client's own checks.
+    private const string NotReadyText = "The skill is not ready yet.";
+    private const string NoManaText = "Not enough mana.";
+    private const string NoStaminaText = "Not enough stamina.";
+
     // A cast the server has not answered yet keeps the avatar still for at most this long.
     private const double CastAnswerTimeoutMs = 1500d;
     private const float RangeMargin = 8f;
@@ -130,10 +137,7 @@ public sealed partial class GameScene : ISkillSceneHost
         {
             QueueBlobShadows();
             QueueFootprints();
-            if (_effectLibrary?.Vfx is { } content)
-            {
-                _shots.Draw(_skillFx.Renderer, _skillFx.Library, content);
-            }
+            _shots.Draw(_skillFx.Renderer, _skillFx.Library);
 
             _skillFx.Draw(_camera.View, _camera.Projection, _camera.Position, _renderer.SceneLinearDepth);
         }
@@ -166,9 +170,9 @@ public sealed partial class GameScene : ISkillSceneHost
             _castLockUntilMs = 0d;
             SkillNotice?.Invoke(result.Status switch
             {
-                SkillCastVerdict.Cooldown => "The skill is not ready yet.",
-                SkillCastVerdict.NotEnoughMana => "Not enough mana.",
-                SkillCastVerdict.NotEnoughStamina => "Not enough stamina.",
+                SkillCastVerdict.Cooldown => NotReadyText,
+                SkillCastVerdict.NotEnoughMana => NoManaText,
+                SkillCastVerdict.NotEnoughStamina => NoStaminaText,
                 SkillCastVerdict.OutOfRange => "The target is out of range.",
                 SkillCastVerdict.WeaponNotAllowed => "This skill needs another weapon.",
                 SkillCastVerdict.InVillage => "Skills cannot be used in town.",
@@ -183,7 +187,7 @@ public sealed partial class GameScene : ISkillSceneHost
     private bool TryCastSkillClick(MouseState mouse, bool rightButton)
     {
         var code = rightButton ? RightSkill : LeftSkill;
-        if (code is 0 or 0x11111111 || _player is null || _remote is null || !SkillRuleCatalog.TryGet(code, out var rule))
+        if (code is 0 or HudSkillBindings.BasicAttackId || _player is null || _remote is null || !SkillRuleCatalog.TryGet(code, out var rule))
         {
             return false;
         }
@@ -228,13 +232,7 @@ public sealed partial class GameScene : ISkillSceneHost
 
         if (!_skillFx.Cooldowns.Ready(code, _skillClockMs))
         {
-            SkillNotice?.Invoke("The skill is not ready yet.");
-            return true;
-        }
-
-        if (Owner is { } owner && (owner.Mana < skill.ManaForRank(rank) || owner.Stamina < skill.StaminaForRank(rank)))
-        {
-            SkillNotice?.Invoke(owner.Mana < skill.ManaForRank(rank) ? "Not enough mana." : "Not enough stamina.");
+            SkillNotice?.Invoke(NotReadyText);
             return true;
         }
 
@@ -299,27 +297,16 @@ public sealed partial class GameScene : ISkillSceneHost
         StopPredictedMovement();
         _castLockUntilMs = _skillClockMs + CastAnswerTimeoutMs;
         _hasMoveTarget = false;
-        _reports.Request();
+        ReportMovementNow();
         var planar = _playerBody.PlanarPosition;
-        // Transport is PT-global (x, z); presentation uses (x, -z).
-        var point = new NumVector3(planar.X, _playerBody.Height, -planar.Y);
+        var point = WorldSpace.Mirror(new NumVector3(planar.X, _playerBody.Height, planar.Y));
         SendUpstream(_playChannel.SendSkillCastAsync(++_castSequence, pending.Code, target, point, _presenceCts.Token), "skill cast");
     }
 
     private void CancelPendingCast() => _pendingCast = null;
 
-    // The distance the avatar walks into before casting, as the server measures it (SkillFormulas.Range).
-    private float CastRange(SkillRule rule, int rank)
-    {
-        var weapon = Owner?.AttackRange ?? 50f;
-        var table = rule.At(rule.Range, rank);
-        return rule.RangeMode switch
-        {
-            SkillRangeMode.AtLeastWeapon => MathF.Max(table, weapon),
-            SkillRangeMode.AddWeapon => weapon + table,
-            _ => table > 0 ? table : weapon + (weapon - 50f) * rule.At(rule.ReachPercent, rank) / 100f + rule.At(rule.ReachBonus, rank)
-        };
-    }
+    // The distance the avatar walks into before casting, as the server measures it.
+    private float CastRange(SkillRule rule, int rank) => SkillFormulas.Range(rule, rank, Owner?.AttackRange ?? PristonTale.Simulation.Combat.MeleeReach.PlayerBaseRange);
 
     // Releasing the mouse button of a held charge tells the server; holding through the window charges fully on its own.
     private void UpdateCharge(MouseState mouse)
@@ -462,6 +449,12 @@ public sealed partial class GameScene : ISkillSceneHost
         PlayerActors.SeekMotion(_actorScene, framesFromStart);
         PlayerActors.SetPlaybackRate(_actorScene, rate);
     }
+
+    // The original's skill shake swings the view every third frame.
+    void ISkillSceneHost.ShakeCamera(int factor) => _camera?.Wave(factor, 2);
+
+    double ISkillSceneHost.PlaybackDelayMsOf(ulong entityId) =>
+        _remote?.PlaybackDelayMsOf(entityId) ?? World.Remote.RemoteSnapshotBuffer.BaseDelayMs;
 
     float ISkillSceneHost.AttackRateOf(ulong entityId) =>
         entityId == _remote?.SelfEntityId ? PlayerRateFor(MotionCode.Attack) : _remote?.AttackRateOf(entityId) ?? 1f;

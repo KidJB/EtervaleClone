@@ -26,7 +26,7 @@ public struct VfxVertex : IVertexType
 // Draws every VFX instance into the bound HDR scene target: quads in one growing vertex array, uploaded once per frame
 // to a dynamic buffer with a shared quad index buffer, drawn in runs of (blend, texture). Alpha-blended layers draw
 // first, back to front by instance, then the darkening (shadow) layers, then the order-independent additive light.
-// Effect models draw after the quads through their own mesh draws. Depth is tested, not written.
+// Effect models draw before the quads through their own mesh draws. Depth is tested, not written.
 public sealed partial class VfxRenderer : IDisposable
 {
     private const int MaxQuads = 16384;
@@ -108,19 +108,26 @@ public sealed partial class VfxRenderer : IDisposable
     // A model drawn once with the next draw's effects (a thrown weapon); world places its +Z front.
     public void AddModel(PristonMeshEffect model, Matrix world, VfxBlend blend) => _looseModels.Add(new LooseModel(model, world, blend));
 
+    // Effect models face the opposite way of effect space (their front is +Z): this turns one to face it.
+    private static readonly Matrix ModelFront = Matrix.CreateRotationY(MathHelper.Pi);
+
+    // A model's blend; models draw colour-weighted blends additively, quads keep their own (QuadBlend).
+    private BlendState ModelBlend(VfxBlend blend) => blend switch
+    {
+        VfxBlend.Alpha => BlendState.NonPremultiplied,
+        VfxBlend.Shadow => _shadow,
+        VfxBlend.InvShadow => _inverseShadow,
+        _ => BlendState.Additive
+    };
+
+    private BlendState QuadBlend(VfxBlend blend) => blend is VfxBlend.Color or VfxBlend.AddColor ? _added : ModelBlend(blend);
+
     public void Draw(VfxSystem system, Matrix view, Matrix projection, Vector3 cameraPosition, Texture2D? sceneDepth)
     {
         DrawModels(system, view, projection);
         foreach (var loose in _looseModels)
         {
-            var looseBlend = loose.Blend switch
-            {
-                VfxBlend.Alpha => BlendState.NonPremultiplied,
-                VfxBlend.Shadow => _shadow,
-                VfxBlend.InvShadow => _inverseShadow,
-                _ => BlendState.Additive
-            };
-            loose.Model.Draw(0, Matrix.CreateRotationY(MathHelper.Pi) * loose.World, view, projection, Vector4.One, looseBlend);
+            loose.Model.Draw(0, ModelFront * loose.World, view, projection, Vector4.One, ModelBlend(loose.Blend));
             LastModelCount++;
         }
 
@@ -189,14 +196,7 @@ public sealed partial class VfxRenderer : IDisposable
         _effect.Depth = sceneDepth;
         foreach (var run in _runs)
         {
-            _device.BlendState = run.Blend switch
-            {
-                VfxBlend.Alpha => BlendState.NonPremultiplied,
-                VfxBlend.Shadow => _shadow,
-                VfxBlend.InvShadow => _inverseShadow,
-                VfxBlend.Color or VfxBlend.AddColor => _added,
-                _ => BlendState.Additive
-            };
+            _device.BlendState = QuadBlend(run.Blend);
             _effect.Mode = run.Blend switch
             {
                 VfxBlend.Shadow => PristonVfxEffect.MultiplyMode,
@@ -382,7 +382,7 @@ public sealed partial class VfxRenderer : IDisposable
                 return;
             }
 
-            var parameters = new Vector2(8f, 0f);
+            var parameters = new Vector2(VfxSystem.StripSoftness, 0f);
             _scratch[at] = new VfxVertex { Position = a + side, Color = c0, TexCoord = new Vector2(t0, 0f), Params = parameters };
             _scratch[at + 1] = new VfxVertex { Position = b + side, Color = c1, TexCoord = new Vector2(t1, 0f), Params = parameters };
             _scratch[at + 2] = new VfxVertex { Position = b - side, Color = c1, TexCoord = new Vector2(t1, 1f), Params = parameters };

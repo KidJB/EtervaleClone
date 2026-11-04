@@ -41,8 +41,8 @@ rendering internals, skill presentation and VFX data have their own documents (s
 | `Client/PristonTale.Gameplay/UI/Inventory/` | Inventory window layout, drag/drop and equip commands |
 | `Client/PristonTale.Gameplay/UI/Npc/` | NPC service controller, shop and warehouse windows, store layout, NPC art |
 | `Client/PristonTale.Gameplay/UI/Quests/` | Quest controller, quest dialog and yes/no boxes, quest window, quest texts and art (see [quests.md](quests.md#client)) |
-| `Client/PristonTale.Gameplay/UI/Rendering/` | `HudSprites` (original UI images), `HudIconCache` (item icons), `HudAtlas` (login atlas), `HudCursor` (mouse pointer), `HudPainter`/`HudCanvas` |
-| `Client/PristonTale.Gameplay/Weather/` | `WeatherPresentation`: the server's weather eased in, lightning and thunder timing |
+| `Client/PristonTale.Gameplay/UI/Rendering/` | `HudSprites` (original UI images), `HudIconCache` (item icons), `HudAtlas` (login atlas), `HudCursor` (mouse pointer), `HudPainter`/`HudCanvas`, `HudTextColors` (text colours several windows share) |
+| `Client/PristonTale.Gameplay/Weather/` | `WeatherPresentation`: the server's weather eased in, lightning and thunder timing; `FieldSnow`: the snow skies' falling snow |
 | `Client/PristonTale.Gameplay/Audio/` | `PristonAudioLibrary` (bootstrap sound load), `FieldAudioController` (music, field and positional ambience, the rain loop and thunder), `NpcAudioController`, `TalkSound`, `CombatSounds` and `CharacterSoundBanks` (character, weapon and footstep sounds), `MonsterSoundCues`, `ItemSoundRules` (item sounds) |
 | `Client/PristonTale.Gameplay/Effects/` | Effect glue: `EffectLibrary`, `VfxContent` (effect data from `<assetRoot>/Effect/Vfx`, loaded off the game thread), `SkillPresentation`, `ScriptEffects`, `SkillSoundBank`, `SkillState`, combat text, meteor, monster mesh and return effects ([effects.md](effects.md)) |
 | [`Client/PristonTale.Client.Net/GameServerConnection.cs`](../Client/PristonTale.Client.Net/GameServerConnection.cs) | TCP session: connect, login, characters, world entry, request correlation, heartbeat, receive dispatch |
@@ -60,8 +60,8 @@ rendering internals, skill presentation and VFX data have their own documents (s
 2. `Game1` constructor: HiDef device, `PreferMultiSampling = false` (the renderer owns its multisampled HDR target),
    `IsFixedTimeStep = false`, resizable window, `Content.RootDirectory = "Content"`.
 3. `Game1.LoadContent` creates `PresentationController` and `GameClient(GraphicsDevice, Content, ResolveAssetRoot(),
-   "tcp://localhost:10009", presentation)`. The server address is the `Game1.ServerAddress` constant; there is no
-   setting for it.
+   serverAddress, presentation)`. The address is the settings' `serverAddress` (default `localhost`, port 10009) through
+   `Game1.ResolveServerAddress`; one that does not parse is logged and replaced by `tcp://localhost:10009`.
 4. `GameClient.LoadContent` loads, synchronously on the game thread: the UI font, `HudAtlas.LoadBootstrap`,
    `PristonSkyLibrary.LoadBootstrap`, `EffectLibrary.LoadBootstrap`, `PristonAudioLibrary.LoadBootstrap`. It then
    creates the single `GameServerConnection` (not connected yet), the `ScreenContext` and the first screen,
@@ -98,7 +98,9 @@ OpeningScreen --login ok--> CharacterSelectScreen --enter world ok--> GameplaySc
   succeeded or the connection closed) the controller first calls `ScreenContext.RenewBackend`: `GameClient` installs a
   new `GameServerConnection` and disposes the old one off the game thread.
 - `CharacterSelectScreen`: sub-states `CharacterSelect`, `RaceSelect`, `JobSelect`, `FaceSelect`, `Name`. The roster
-  shows each character in its armour, empty-handed. While a
+  shows each character in its armour, empty-handed. `CharacterSelectCamera` dollies along the original's rail (300 to
+  720 units per sub-state) with its vertical angle of pi / 4.4, whatever the settings' field of view; the stage is lit by
+  an even ambient only, without lamps (`ConfigureLighting`). While a
   `Busy` operation (roster load, roster/job actor preparation, enter, delete, create) runs, input is ignored and
   `PollBusy` checks the task. A successful `EnterWorldAsync` builds an `EnteredCharacter` (class, name, level, face,
   field code, spawn x/z, tier, hair) and requests `GameplayScreen`. The Exit button returns to `OpeningScreen`; the next
@@ -129,7 +131,7 @@ keys, `GameScene.Update`, copy the scene's selected target back to the HUD.
 
 `GameScene.Update` order: NPC audio, equipment presentation, transient effects, field audio, one streaming upload step,
 `DrainPresence`, skills, `UpdatePlayerInput` (picking, prediction, NPC approach, loot, attack approach), hover target
-selection, warps, streaming scan, camera, renderer, movement report, field `OnUpdate` hook.
+selection, warps, streaming scan, camera, renderer, movement report.
 
 `GameplayScreen.Draw` order: `GameplayHud.RenderPortrait` (must be first: it binds its own render target, which discards
 the back buffer), clear, `GameScene.Draw` (renderer, effects, `ComposeScene`), ground loot labels, floating combat text,
@@ -161,12 +163,13 @@ frame.
 ## Network client
 
 `GameServerConnection` implements `IGameBackend` over one TLS connection (`TlsTransport.ConnectAsync`, then
-`FrameConnection`; `Shared/PristonTale.Protocol/Transport`). The address is `tcp://host:port`, optionally with
-`?cert=<sha-256 hex>` to pin the server certificate. Wire details live in [protocol.md](protocol.md).
+`FrameConnection`; `Shared/PristonTale.Protocol/Transport`). The address (`TlsTransport.ParseAddress`) is `host`,
+`host:port` or `tcp://host:port`, port 10009 when left out, optionally with `?cert=<sha-256 hex>` to pin the server
+certificate. Wire details live in [protocol.md](protocol.md).
 
 | Step | Client sends | Completes on |
 |---|---|---|
-| Connect | First `LoginAsync` opens the socket and starts `RunAsync` (receive) and `HeartbeatAsync` (`Heartbeat` every 4 s) | `ServerHello` (minimum protocol, server name for the character screen) |
+| Connect | First `LoginAsync` opens the socket and starts `RunAsync` (receive) and `HeartbeatAsync` (`Heartbeat` every 4 s) | `ServerHello` (minimum protocol, server name) |
 | Login | Encrypted `Login` (protocol version, account, password) | `LoginResult` after the `CharacterList`; a non-zero status, or a `ProtocolVersion.Current` below the hello's minimum, is a denial |
 | Characters | `ListCharactersAsync` returns the list cached at login; create/delete send `CharacterCommand` | `CharacterResult` (a fresh list arrives first on success) |
 | Enter world | `EnterWorld` with the name | `WorldEntry` (id, field, spawn point; a non-zero status is a denial) |
@@ -260,8 +263,11 @@ coordinates; their consumers mirror them with `WorldSpace` instead of negating Z
   quickly, late ones slowly; a jump above 1 s resyncs. Without the extension samples are stamped with arrival time.
 - `RemoteSnapshotBuffer` (per entity, 32 samples) renders at `now - delay`. The delay starts at 150 ms and follows the
   observed sample cadence up to 600 ms. Position, height and facing interpolate linearly; a Walk/Run sample may be
-  extrapolated for 250 ms, then the lead returns to the last sample over 250 ms. A sample more than 256 units from the
-  last or drawn position snaps and drops the history. Motion states apply when render time reaches their sample.
+  extrapolated for 250 ms, then the lead returns to the last sample over 250 ms. The server sends nothing about an
+  entity standing still, so a sample after a silence longer than 750 ms adds a rest: the entity stays at its previous
+  place until one server tick (`ServerTick.IntervalMs`) before the sample, instead of creeping across the silence and
+  leaping at its end; a rest gives no motion state. A sample more than 256 units from the last or drawn position snaps
+  and drops the history. Motion states apply when render time reaches their sample.
 - `RemoteEntityBase` owns no rules: the server owns position and motion. Presentation-only choices: Walk/Run playback
   speed follows the interpolated ground speed; Walk/Run without ground motion shows Stand. Combat events share the
   sample timeline.
@@ -307,7 +313,10 @@ The client owns its own locomotion; the server validates and corrects.
   field code) every 200 ms while moving, every 1000 ms idle, and at once when motion, run mode, target or field
   changes, or when a report is requested (`_reports.Request()`), never twice within 50 ms (the server closes a
   connection over 251 packets in 5 s). The cadence lives in `MovementReportPacer` (`World/MovementReportPacer.cs`); the
-  scene only builds and sends the report. The walk toward a skill target reports only a new destination (`ApproachReportDistance`).
+  scene only builds and sends the report. The walk toward a skill target reports only a new destination (`ApproachReportDistance`);
+  a cast sends the standing position at once, ahead of the cast on the same ordered stream (`ReportMovementNow`,
+  `MovementReportPacer.Taken`), because the server measures the cast's range from the last position it holds and a
+  paced report up to 200 ms old left a walk into range out of it.
 - Server echoes of the self state do not move the avatar. They update HP, move speed, attack rate, the attack-target
   reconcile (`AttackInputController.Reconcile` by sequence) and authoritative motions (Attack, Damage, Dead, Eat,
   the restart after death). The last echoed position is kept as `_serverPlanarPosition` for reach checks (NPC dialog,
@@ -347,7 +356,8 @@ The client owns its own locomotion; the server validates and corrects.
   it opens again only after the player left the stone. Choosing a destination plays the return sparkle and the portal
   sound on the stone, and the request leaves two seconds later, as the original's wing trip does. The
   server learns the new field code from the next report, which a field change sends at once.
-- `ActorMotionController`: `ApplyLocomotion` is ignored while Damage, Dead or Eat freeze locomotion;
+- `ActorMotionController`: `ApplyLocomotion` is ignored while Damage, Dead, Eat, FallStand, FallDamage or Yahoo freeze
+  locomotion (`LocomotionFrozen`) and while falling;
   `ApplyAuthoritative` always wins.
 - NPC click: `NpcApproach` walks the player to 0.65 x `NpcInteraction.Reach`, sends a stop report, and opens the dialog
   only when the server-echoed position is within 0.9 x reach.
@@ -383,6 +393,16 @@ Renderer side of stage publication: [rendering.md](rendering.md).
 | `F9` | `Game1.Update` | Show or hide the diagnostics overlay (frame rate and timing, the screen's status; `GameClient.Diagnostics`) |
 | `Ctrl+F3` / `Ctrl+F5` / `Ctrl+F10` | `GameplayScreen.UpdateDebugKeys` | Add the render stats to the F9 diagnostics / toggle shadows / cycle `PristonDebugView` |
 | `Ctrl+1`..`Ctrl+7` | `GameplayScreen.UpdateMotionKeys` | Force Stand, Walk, Run, Attack, Damage, Dead, Skill on the local avatar |
+| Arrow keys (action field) | `GameScene.UpdateActionKeys` | Walk along x (left, right) and z (up, down), diagonals included; left or right pressed again within 500 ms of letting it go dashes (runs) until released or turned; letting go stops the walk and the attack |
+| `Space` (action field) | same | Attack the nearest monster ahead (within the attack range along x on the side faced, 32 units of the player's line; `RemoteEntityManager.FindAhead`), else pick up the nearest drop within 32 along x and 16 of the line (`GroundLootPresentation.FindNear`); it does not cheer there |
+| `Ctrl` (action field) | same | The right socket skill: at once when it takes no target, else on the nearest monster ahead, or for a skill on allies the nearest player or summon ahead (the caster when none); the basic attack in the socket attacks as `Space` does |
+
+An action field (`FieldState.Action`, [world.md](world.md#fields)) is seen side-on (`GameScene.UpdateCamera`): the
+camera stands at the field's `ActionCamera` height and depth, follows the player along x within its bounds and looks
+along +z at the player's height through a vertical angle of pi / 4.4 (`FieldActionCamera.FieldOfViewRadians`, narrower
+than the follow camera's, so the ground strip fills the bottom of the screen), with no orbit or zoom; every actor, the player's own included, is drawn facing left or
+right (`ActionFieldView.Facing`, `RemoteEntityManager.SideView`). Leaving the field snaps the follow camera back. The mouse
+keeps its usual clicks there.
 
 `GameplayHud.PointerCaptured` (pointer over a HUD element or dragging, or any of the NPC and quest dialogs, message
 boxes, the wing warp map, the Teleport Core list, the warehouse, aging and mixing windows open, as the original stops the
@@ -400,7 +420,7 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   with `HudLayout.ToLogical`.
 - `HudPainter` draws original sprites at the integer scale with point sampling and queues text into a linear-filtered
   pass; call `Flush` before drawing a layer that must cover earlier text.
-- Draw order (`GameplayHud.Draw`): speech bubbles, minimap, target frame, chat window (shrunk while a side window is
+- Draw order (`GameplayHud.Draw`): drop names, name plates, speech bubbles, minimap, target frame, chat window (shrunk while a side window is
   open), status / skills / inventory windows (they share one screen area; opening one closes the others, `OpenOnly`),
   quest window, shop, warehouse, bottom bar, skill sockets, buffs and the quest timer icon, hover text, system menu,
   the skill master's training box, quest dialog or NPC dialog, settings, item overlays, quest yes/no boxes, notices.
@@ -563,18 +583,20 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   training mode (the server refuses another town's master: Ricarten trains the Tempskron, Pillai the Morion); the aging
   NPC also keeps its quest role (the rank-up brew). An NPC with a quest role also gets a quest `Talk`
   (`HudQuestController`); a quest dialog it answers with takes the help box, and its confirmation box is modal.
-- Skill window (`HudSkillsPanel`, `Skil24.bmp`): the titles and skills of the tiers the class has reached only (4, 8,
-  12 or 16 skills; later tiers stay empty frames until the rank-up), the learned skills in colour; in training mode the
-  skills the master can teach now in colour and a skill at rank 10 gray. The arrows at (765, 482) and (12, 482) turn to
-  the empty second page (`Skil25.bmp`, a fifth tier this version has no skills for) and back.
+- Skill window (`HudSkillsPanel`, `Skil24.bmp`): the titles and skills of the first four tiers the class has reached
+  only (4, 8, 12 or 16 skills; later tiers stay empty frames until the rank-up), the learned skills in colour; in
+  training mode the skills the master can teach now in colour and a skill at rank 10 gray. The arrows at (765, 482) and
+  (12, 482), or `P` once the class reached the fifth tier, turn to the second page (`Skil25.bmp`) and back: the fifth
+  tier's title on the first title's place and its four skills (window indices 16-19) on the first tier's boxes, with
+  the basic attack, the points and the training box as on the first page.
 - Training box (`HudSkillsPanel.DrawMasterBox`): while a skill master trains the pupil (no skill being confirmed), the
   item-info frame of 13 by 21 tiles stands at (90, 100) of the screen's top left (`HudSkillTreeLayout.MasterBox`):
   "Train Skill/Magic", then "Select a Skill or Magic / To learn or train" with the skill points (pale yellow) and elite
   skill points (pale green) left, or in red "Not enough Skill Points / to learn or practice" with none (a refusal goes
-  to the notices, not the box). It is drawn before the quest and NPC dialogs, which cover it. Once the tier's skills all have a rank the class change button stands in it at (240, 380)
-  (`HudSkillTreeLayout.ClassChange`): lit while the master offers the next rank-up quest (`ClassChangeOffered` of the
-  quest `Talk`), gray while the level (20, 40, 60) or a running quest holds it back; clicking it asks for the quest's
-  start dialog and ends the training.
+  to the notices, not the box). It is drawn before the quest and NPC dialogs, which cover it. Once the tier's skills all
+  have a rank the class change button stands in it at (240, 380) (`HudSkillTreeLayout.ClassChange`): lit while the
+  master offers the next rank-up quest (`ClassChangeOffered` of the quest `Talk`), gray while the level (20, 40, 60) or
+  a running quest holds it back; clicking it asks for the quest's start dialog and ends the training.
 - A skill clicked at the master asks with the yes/no box (`HudMessageBox`, the skill and its rank's price); Yes or
   Enter trains it (`HudSkillsPanel.AcceptTraining`), as the original's skill box takes Enter, and the chat does not
   open for that Enter; No closes it.
@@ -586,7 +608,7 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
 - The service windows implement `IHudServiceWindow` (`UI/Npc/IHudServiceWindow.cs`): open and slide state, `BlocksWorld`
   (the work windows and the personal shop keep every click from the world, the shop only its area), `Contains`, `Hide`,
   body and overlay draw with one `HudServiceFrame`. `GameplayHud` keeps them in one list (`_serviceWindows`, draw order
-  shop, warehouse, aging, mix, personal shop) for closing, advancing, capturing clicks and drawing; a new service window
+  shop, warehouse, aging, mix, personal shop, trade) for closing, advancing, capturing clicks and drawing; a new service window
   joins that list.
 - Personal shop (`UI/PersonalShops/`, `HudPersonalShopController` with `HudPersonalShopWindow` on the store window,
   `HudSignBox`, art `HudPersonalShopArt`; `GameplayHud.PersonalShops.cs`): the inventory's shop button (98, 572) opens
@@ -739,8 +761,12 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   0.5 s fade-in of the loops. The music and sound options do not mute them, as in the original.
 - `TalkSound.GetSoundCode` hashes the CP949 bytes of an NPC line (ASCII letters uppercased) into the talk file
   code.
-- `FieldAudioController.SelectField` picks music by `FieldDef.BackMusicCode` (3.6 s fade); field ambience depends on the
-  field state and, in forests, the time of day; positional ambience uses the original distance falloff.
+- `FieldAudioController.SelectField` picks music by `FieldDef.BackMusicCode` (3.6 s fade); field ambience is the
+  field's own loop (`FieldDef.Ambience`) when it names one, else depends on the field state and, in forests, the time of
+  day; positional ambience uses the original distance falloff. The original plays no loop in the dungeons after the
+  26th field nor in the action fields; Etervale names one for each: Boss, Fall Game and Heart of Fire the dark
+  sanctuary, Endless Tower 6 to 9 the dungeon, Mine 1 and Sea of Abyss the cave, Ancient Weapons and Stemple the
+  temple, Secret Laboratory the iron works, Crystal Nest and Land of Nurwn the ice wind, Swamp the forest night.
 - `NpcAudioController` plays the dialog line or a motion sound of the NPC at its position relative to the listener.
 - `MusicEnabled`/`SoundEnabled` come from client settings each frame (`ApplySettings`) and apply in the world.
 - Skill sounds: `SkillSoundBank` ([skills.md](skills.md)).
@@ -767,7 +793,12 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   armour or robe wears the body of its catalog ordinal (`ArmorSlots`: ordinals from 26 sit sixteen slots further, so
   DA126-129 wear the 25th-28th bodies, DA301/401 the 29th, DA302-304/402-404 the 30th-32nd and DA131+ the costume
   bodies) from its class row (A, B, C, D, mA, mB, mC, mD, E, mE; 75 slots each); premium costumes (`CA`) keep the class
-  body and wear wings, and an armour missing from `ArmorSlots` keeps the class body.
+  body and wear wings, and an armour missing from `ArmorSlots` keeps the class body. The phantoms and daggers take the
+  motion indices of the Shaman's and the Assassin's own motion files (phantoms 101-129 and 151-153 from 261, daggers
+  from 293). The Assassin holds a dagger in each hand (`Bip weapon01` and `Bip weapon05`, the left copy being the
+  off-hand actor with the weapon's glow) and hangs the two on `Bip in07` and `Bip in08` in a village; the Shaman's
+  phantom hovers behind its back at all times (`Bip in01`, turned 2250 angle units about the bone, moved 10 back and
+  raised 1000 fixed units, `SetActorAttachOffset`).
 - Progression (`GameScene.Progression`): a `LevelUp` combat event plays `vfx.player.levelup` (with the level-up chime) at
   the player, a `SkillLearned` event the skill-learn light (`ItemVfx.Learn`) and sound, for every client near.
 - Item sounds (`ItemSoundRules`, `image/Sinimage/Sound`): an item sounds by catalog family (three characters of its key,
@@ -806,6 +837,14 @@ and updates the weather sound. The loaded fields changing reads the occlusion ma
 renderer's moon follows the server clock (`WorldClock.MoonPhaseAt`, in `FollowServerClock`); the field shown sets the
 aurora (`FieldDef.ShowsAurora`, the ice fields) and the morning mist (`FieldDef.MorningMistStrength`) in
 `SetActiveField`.
+
+Snow belongs to the sky, not to the server's weather: on a field with the snow backdrop (`FieldDef.Snows`: Ice 1, Ice 2
+and Ice Ura; Greedy has its own sky) `FieldSnow` runs the converted `particle.snow` script (`IScriptEffects`) at every
+hour and whatever the `weatherEnabled` setting. Each frame its source moves 40 units ahead of the player's facing and
+117 units above it (`FieldSnow.SourceFor`); born flakes stay where they fall, and leaving the field stops it so the
+last flakes play out. An effect lasts at most `VfxDefinition.MaxDuration`, so a new one starts 10 s before it ends,
+or at once if the effect system dropped it; a script the effect system cannot start yet (its library compiles over the
+first frames after entry) is tried again every second.
 
 ## How to
 

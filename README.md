@@ -12,8 +12,8 @@ How the code works is documented in [docs/](docs/README.md).
 ## Requirements
 
 - .NET 10 SDK.
-- [Game data archive](https://drive.google.com/file/d/1-OGiA510imErGpGq1pFDSCwmP6AKfxB3/view?usp=sharing),
-  **published 2026-10-28 at 15:49 (UTC-03:00)**.
+- [Game data archive](https://drive.google.com/file/d/1oE3oQwQAG8YghbTlqzXhtX23seGhH2pF/view?usp=sharing),
+  **published 2026-11-04 at 15:50 (UTC-03:00)**.
 - For the client: a GPU and driver with Vulkan 1.1 or later. The client uses MonoGame's Native platform on Vulkan
   through the fork in [monogame/](monogame/README.md); shaders compile with DXC on every platform (no Wine).
 - The client's native runtime, built once per machine (see Build): on Windows, Visual Studio 2022 or 2026 with the
@@ -122,9 +122,10 @@ Run the client in another terminal and log in with the account you created:
 dotnet run --project Client/PristonTale -c Release --no-build
 ```
 
-The client connects to `tcp://localhost:10009` over TLS. On its first start the server creates a self-signed
-certificate at `data/server-certificate.pfx` and logs its SHA-256; a client on the same machine accepts it, and a remote
-client (`SmokeClient`, `LoadTest`) pins it with `tcp://host:10009?cert=<sha-256>`. Set `Network:Certificate:Path` (and
+The client connects over TLS to `serverAddress` in `client-settings.json` beside its executable (`localhost` by
+default; `host`, `host:port` or `tcp://host:port`, port 10009 when left out). On its first start the server creates a
+self-signed certificate at `data/server-certificate.pfx` and logs its SHA-256; a client on the same machine accepts it,
+and a remote client (the game, `SmokeClient`, `LoadTest`) pins it with `host:10009?cert=<sha-256>`. Set `Network:Certificate:Path` (and
 `Network:Certificate:Password`) to use a certificate of your own. The server applies pending migrations at startup but does not run the
 importer, so import first. A migration, catalog or stage-collision load failure stops server startup; without assets,
 pass `--Assets:AllowMissingTerrain=true` to run fields without terrain checks.

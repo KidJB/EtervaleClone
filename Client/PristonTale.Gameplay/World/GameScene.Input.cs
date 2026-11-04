@@ -69,6 +69,7 @@ public sealed partial class GameScene
             TryCastSkillClick(mouse, rightButton: true);
         }
 
+        UpdateActionKeys(gameTime);
         UpdateRunMode(mouse);
         if (!WorldClicksBlocked && mouse.LeftButton == ButtonState.Pressed && _lastMouseState.LeftButton == ButtonState.Released)
         {
@@ -258,8 +259,7 @@ public sealed partial class GameScene
         _lootInteraction.Cancel();
         _targetSelection.Trace(entityId);
 
-        var kb = Keyboard.GetState();
-        var automatic = kb.IsKeyDown(Keys.LeftShift) || kb.IsKeyDown(Keys.RightShift);
+        var automatic = ShiftHeld(Keyboard.GetState());
         SendAttackIntent(_attackInput.Press(entityId, automatic, rightButton));
         return true;
     }

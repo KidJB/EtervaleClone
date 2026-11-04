@@ -56,17 +56,28 @@ public static class QuestMonsters
     public const int HeartOfPerum = 48;
     public const int GalluviaValley = 49;
 
+    public const int Spidertrooper = 60;
+    public const int DeadZone = 84;
+    public const int GoblinShaman = 85;
+    public const int Hestian = 87;
+    public const int HyperMachine = 88;
+
     // The event monsters of the original never count for a quest.
     public const int EventMonster = 100;
 
     private static readonly string[] Names =
     [
-        "", "Bargon", "Skeleton Warrior", "Head Cutter", "Armored Bettle", "Skeleton Ranger", "Titan", "Muffin", "Dire Bee", "Typhoon",
+        "", "Bargon", "Skeleton Warrior", "Head Cutter", "Armored Beetle", "Skeleton Ranger", "Titan", "Muffin", "Dire Bee", "Typhoon",
         "Ratoo", "Grotesque", "Iron Fist", "Omega", "D-Machine", "Mountain", "Skeleton Knight", "Solid Snail", "Thorn Crawler", "Mummy",
         "Doom Guard", "Figon", "Stone Giant", "Stone Golem", "Iron Guard", "Avelin", "Avelisk-L", "BeEvil", "Illusion Knight", "Nightmare",
         "Witch", "Heavy Goblin", "Dawlin", "Stygian", "Incubus", "Chain Golem", "Dark Specter", "Metron", "Avelisk Lord", "Dusk",
         "Sadnesst", "Hopy", "Rabie", "NorthGoblin", "Hobgoblin", "Corrupt", "Skeleton", "Cyclops",
-        "Monsters in the Heart of Perum", "Monsters of the Galluvia  Velly"
+        "Monsters in the Heart of Perum", "Monsters of the Galluvia  Velly", "Doral", "Cokris", "Plant Lord", "Bee Dog", "Devilish Tree",
+        "Skeleton Archer", "Crypt", "Mighty Goblin", "Slaughter", "Sand Lem", "Spidertrooper", "Vampiric Machine", "Runic Guardian",
+        "Turtle Cannon", "Incubus Summoner", "Chaoscara", "Hell Hound", "Dark Guard", "Bloody Knight", "Seto", "Revived Mecanician",
+        "Revived Fighter", "Undead King Hopy", "Revived Archer", "Revived Pikeman", "Hobogolem", "Revived Magician", "Revived Atalanta",
+        "Gorgon", "Revived Knight", "Revived Priestess", "Kakoa", "Undead Maple", "Xetan", "Dead Zone", "Goblin Shaman", "Hest", "Hestian",
+        "Hyper Machine"
     ];
 
     public static string NameOf(int code) => code > 0 && code < Names.Length ? Names[code] : "";

@@ -77,6 +77,13 @@ internal static class NpcServiceTransactions
             return new PreparedNpcOperation(original, null, null, shown);
         }
 
+        return Settled(original, storage, command) ?? Apply(session, player, field, command, npc!, service!, items, world);
+    }
+
+    // A durable request already answered: its replay (the same command) or an identity conflict, and a request made
+    // against an older inventory or warehouse. Null when the request can be applied.
+    internal static PreparedNpcOperation? Settled(PlayerCharacter original, WarehouseStorage? storage, NpcServiceCommand command)
+    {
         if (original.ServiceOperations.Find(command.OperationId) is { } applied)
         {
             if (applied.Command != command)
@@ -95,8 +102,17 @@ internal static class NpcServiceTransactions
                 original.InventoryRevision, storage?.Revision ?? 0));
         }
 
-        return Apply(session, player, field, command, npc!, service!, items, world);
+        return null;
     }
+
+    // A shop's sale, repair or repair of everything worn and carried.
+    internal static NpcServiceStatus SellOrRepair(PlayerCharacter candidate, NpcServiceCommand command) => command.Action switch
+    {
+        NpcServiceAction.Sell => NpcShopRules.TrySell(candidate, command.ItemId, command.Count, out _),
+        NpcServiceAction.Repair => NpcShopRules.TryRepair(candidate, command.ItemId, out _),
+        NpcServiceAction.RepairAll => NpcShopRules.TryRepairAll(candidate, out _),
+        _ => NpcServiceStatus.Rejected
+    };
 
     private static PreparedNpcOperation Apply(PlayerSession session, WorldPlayer player, FieldInstance field, NpcServiceCommand command,
         WorldNpc npc, NpcService service, ItemCatalog items, WorldCatalog world)
@@ -108,7 +124,6 @@ internal static class NpcServiceTransactions
         var position = player.Position;
         TeleportArrival? arrival = null;
         ItemWorkResult? work = null;
-        var carryLimit = MoneyLimits.CarryLimit(candidate.Level, candidate.Tier);
         NpcServiceStatus status;
         switch (command.Action)
         {
@@ -117,14 +132,8 @@ internal static class NpcServiceTransactions
                     ? NpcShopRules.TryBuy(candidate, definition, command.Count, command.Anchor, out _)
                     : NpcServiceStatus.Rejected;
                 break;
-            case NpcServiceAction.Sell:
-                status = NpcShopRules.TrySell(candidate, command.ItemId, command.Count, carryLimit, out _);
-                break;
-            case NpcServiceAction.Repair:
-                status = NpcShopRules.TryRepair(candidate, command.ItemId, out _);
-                break;
-            case NpcServiceAction.RepairAll:
-                status = NpcShopRules.TryRepairAll(candidate, out _);
+            case NpcServiceAction.Sell or NpcServiceAction.Repair or NpcServiceAction.RepairAll:
+                status = SellOrRepair(candidate, command);
                 break;
             case NpcServiceAction.Deposit:
                 status = storage!.TryDeposit(candidate, command.ItemId, command.Anchor, command.Covered);
@@ -139,7 +148,7 @@ internal static class NpcServiceTransactions
                 status = storage!.TryDepositGold(candidate, command.Amount);
                 break;
             case NpcServiceAction.WithdrawGold:
-                status = storage!.TryWithdrawGold(candidate, command.Amount, carryLimit);
+                status = storage!.TryWithdrawGold(candidate, command.Amount);
                 break;
             case NpcServiceAction.Teleport:
                 status = TryTeleport(candidate, service, command.Anchor, world, out arrival);
@@ -191,7 +200,7 @@ internal static class NpcServiceTransactions
             return NpcServiceStatus.Rejected;
         }
 
-        if (candidate.Level < target.LimitLevel)
+        if (candidate.Level < target.TravelLevel)
         {
             return NpcServiceStatus.Rejected;
         }
@@ -201,7 +210,7 @@ internal static class NpcServiceTransactions
             return NpcServiceStatus.NotEnoughGold;
         }
 
-        var start = target.StartPoints.Count > 0 ? target.StartPoints[0] : target.Center;
+        var start = target.Arrival;
         arrival = new TeleportArrival(target.FieldCode, new Vector3(start.X, 0f, start.Z));
         return NpcServiceStatus.Ok;
     }
@@ -277,7 +286,7 @@ internal static class NpcServiceTransactions
         var offers = new List<TeleportOffer>();
         foreach (var destination in TeleportRoutes.For(service.Value))
         {
-            var level = world.TryGetFieldByCode(destination.FieldCode, out var field) ? field.LimitLevel : 0;
+            var level = world.TryGetFieldByCode(destination.FieldCode, out var field) ? field.TravelLevel : 0;
             offers.Add(new TeleportOffer(destination.Index, destination.FieldCode, destination.Name, destination.Price, level));
         }
 
@@ -298,7 +307,7 @@ internal static class NpcServiceTransactions
         _ => false
     };
 
-    private static string Describe(NpcServiceStatus status) => status switch
+    internal static string Describe(NpcServiceStatus status, string refusal = "the NPC refused") => status switch
     {
         NpcServiceStatus.NotEnoughGold => "not enough gold",
         NpcServiceStatus.NoSpace => "not enough room",
@@ -306,12 +315,12 @@ internal static class NpcServiceTransactions
         NpcServiceStatus.OverWeight => ItemRuleMessages.OverWeight,
         NpcServiceStatus.WrongPuzzle => "The puzzle is wrong",
         NpcServiceStatus.WrongMaterials => "These materials do not fit this work",
-        _ => "the NPC refused"
+        _ => refusal
     };
 
-    private static NpcServiceOutcome Done(PlayerCharacter character, WarehouseStorage? storage, string message) =>
+    internal static NpcServiceOutcome Done(PlayerCharacter character, WarehouseStorage? storage, string message) =>
         new(true, NpcServiceStatus.Ok, character.InventoryRevision, storage?.Revision ?? 0, message);
 
-    private static PreparedNpcOperation Final(PlayerCharacter original, NpcServiceOutcome outcome) =>
+    internal static PreparedNpcOperation Final(PlayerCharacter original, NpcServiceOutcome outcome) =>
         new(original, null, null, new NpcServiceReply(outcome));
 }

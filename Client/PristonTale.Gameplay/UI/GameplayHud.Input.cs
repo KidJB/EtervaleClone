@@ -21,6 +21,10 @@ namespace PristonTale.Gameplay.UI;
 // Mouse and keyboard: keys, clicks routed to the windows in priority order, menu buttons and toggles, and what the HUD captures.
 public sealed partial class GameplayHud
 {
+    // The bar's buttons and toggles, read every frame for the pointer.
+    private static readonly HudMenuButton[] MenuButtons = Enum.GetValues<HudMenuButton>();
+    private static readonly HudToggle[] Toggles = Enum.GetValues<HudToggle>();
+
     private bool ClickBuff(Point pointer)
     {
         if (Statuses is null || SelfId == 0)
@@ -35,7 +39,7 @@ public sealed partial class GameplayHud
         }
 
         var now = _clock.Elapsed.TotalSeconds;
-        if (code == _lastBuffClicked && now - _lastBuffClickSeconds < 0.4 && PristonTale.Simulation.Skills.SkillRuleCatalog.TryGet(code, out var rule) && rule.Summon is not null)
+        if (code == _lastBuffClicked && now - _lastBuffClickSeconds < PristonTale.Gameplay.UI.Parties.HudPartyWindow.DoubleClickSeconds && PristonTale.Simulation.Skills.SkillRuleCatalog.TryGet(code, out var rule) && rule.Summon is not null)
         {
             _lastBuffClicked = 0;
             SummonModeRequested?.Invoke(code);
@@ -104,6 +108,11 @@ public sealed partial class GameplayHud
         if (Pressed(keyboard, Keys.E))
         {
             _inventory.ToggleBagPage();
+        }
+
+        if (Pressed(keyboard, Keys.P) && _skillSlide.Open)
+        {
+            _skills.TurnPageByKey();
         }
 
         if (Pressed(keyboard, Keys.W))
@@ -488,7 +497,7 @@ public sealed partial class GameplayHud
 
     private static HudMenuButton? ButtonAt(Point design)
     {
-        foreach (var button in Enum.GetValues<HudMenuButton>())
+        foreach (var button in MenuButtons)
         {
             if (HudBar.MenuButton(button).Contains(design))
             {
@@ -501,7 +510,7 @@ public sealed partial class GameplayHud
 
     private static HudToggle? ToggleAt(Point design)
     {
-        foreach (var toggle in Enum.GetValues<HudToggle>())
+        foreach (var toggle in Toggles)
         {
             if (HudBar.Toggle(toggle).Contains(design))
             {

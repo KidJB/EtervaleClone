@@ -2,6 +2,7 @@ using PristonTale.Simulation.Combat;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Simulation.Progression;
 
 namespace PristonTale.Simulation.Skills;
 
@@ -137,11 +138,20 @@ public sealed partial record SkillBuffRule
     public Element? ResistedBy { get; init; }
     // The effect ends when the holder no longer wields one of the skill's weapons.
     public bool RequiresWeapon { get; init; }
+    // Boss monsters never take the effect.
+    public bool SparesBosses { get; init; }
+    // Percent of a monster's maximum life the effect takes while it lasts, the monster drawn smaller (FieldSkills.Shrink).
+    public int[] LifeCut { get; init; } = [];
     public SkillEnchantRule Enchant { get; init; }
     public SkillAbsorbRule Absorb { get; init; }
     public SkillReflectRule Reflect { get; init; }
     public SkillGuardRule Guard { get; init; }
     public SkillPulseRule Pulse { get; init; }
+
+    // The resistance that shortens the effect on its target: the rule's element, else bionic for a bionic-resisted one,
+    // else none.
+    public int ResistanceFrom(in ResistanceBlock resistances) =>
+        ResistedBy is { } element ? (int)resistances[element] : ResistedByBionic ? (int)resistances.Bionic : 0;
 }
 
 public sealed partial record SkillDamageRule
@@ -149,6 +159,8 @@ public sealed partial record SkillDamageRule
     public SkillDamageMode Mode { get; init; } = SkillDamageMode.Rolled;
     // The caster's attack damage (weapon, attributes and modifiers) is rolled and gains Percent.
     public bool AttackPower { get; init; }
+    // The attack damage alone gains this percent per rank before it joins the roll.
+    public int[] AttackPowerPercent { get; init; } = [];
     // The tables gain the caster's spell power percent (an elemental spirit's boost).
     public bool SpellPower { get; init; }
     // Brood bonus per rank, applied after BonusPercent.
@@ -161,7 +173,19 @@ public sealed partial record SkillDamageRule
     public SkillDamageRule Main { get; init; }
     // Element damage added to a weapon hit (Min..Max of the rule), resisted by its own element.
     public Element? FlatElement { get; init; }
-    // Share modes: percent of life per rank; Chance per rank plus level / ChanceLevelDivisor.
+    // Spell scaling per rank: the caster's level x LevelPercent / 100 added to both ends, spirit / the rank's divisor
+    // (0: none; empty tables use SpiritMinDivisor and SpiritMaxDivisor) and the weapon's own damage x WeaponTimes.
+    public int[] LevelPercent { get; init; } = [];
+    public int[] SpiritMinDivisorByRank { get; init; } = [];
+    public int[] SpiritMaxDivisorByRank { get; init; } = [];
+    public int[] WeaponTimesMin { get; init; } = [];
+    public int[] WeaponTimesMax { get; init; } = [];
+    // The Min..Max range alone gains this percent per rank, before the attack power or the other terms join it.
+    public int[] TablePercent { get; init; } = [];
+    // The hit carries no element: no element resistance lowers it.
+    public bool Unresisted { get; init; }
+    // Share modes: percent of life per rank; Chance per rank plus level / ChanceLevelDivisor. A rolled single-target
+    // spell drains Share percent of its target's maximum life after the hit (bosses are spared).
     public int[] Share { get; init; } = [];
     public int[] Chance { get; init; } = [];
     public int ChanceLevelDivisor { get; init; }
@@ -171,6 +195,8 @@ public sealed partial record SkillDamageRule
     public MonsterBrood[] ExcludeBroods { get; init; } = [];
     // The life taken is returned to the caster, at most this percent of the caster's maximum life.
     public int LifeToCasterCapPercent { get; init; }
+    // The drain after a hit takes from bosses too (it spares them otherwise).
+    public bool DrainsBosses { get; init; }
 }
 
 public sealed partial record SkillRule
@@ -195,11 +221,20 @@ public sealed partial record SkillRule
     public uint[] Exclusive { get; init; } = [];
     // These effects end on the caster when the skill is cast.
     public uint[] Replaces { get; init; } = [];
+    // The classes another player must be to take an Ally rule (any when empty).
+    public Contracts.Characters.PlayerClass[] AllyClasses { get; init; } = [];
     public SkillAllyRule Allies { get; init; }
     public SkillCharmRule Charm { get; init; }
     public SkillResurrectRule Resurrect { get; init; }
     // Area skills that always strike their target, even outside the area's shape.
     public bool AreaIncludesTarget { get; init; }
+    // How long a taunt holds per rank in tenths of a second; empty uses the caster buff's or the buff's duration.
+    public int[] TauntTenths { get; init; } = [];
+    // The cast needs one of these effects on the caster.
+    public uint[] RequiresEffect { get; init; } = [];
+    // Area skills: the caster's party members within the ally radius who hold one of RequiresEffect strike the same
+    // area around themselves, with their own level and spirit and the caster's weapon.
+    public bool PartyEcho { get; init; }
 
     // The rule as it plays at this rank: the motion variant of the rank replaces the clip.
     public SkillRule ForRank(int rank)
@@ -240,39 +275,39 @@ public static partial class SkillRuleCatalog
 {
     private static bool MechanicsValid(SkillRule rule)
     {
-        static bool Ranked(int[] table) => table is null || table.Length is 0 or 10;
         var damage = rule.Damage;
         var buff = rule.Buff;
-        return Ranked(rule.Volley) && rule.MotionSpeedPercent is > 0 and <= 400 && rule.MotionSpeedSteps is >= 0 and <= 6
+        return Ranked(rule.Volley) && Ranked(rule.TauntTenths) && rule.RequiresEffect.All(code => code != 0)
+            && (!rule.PartyEcho || rule.Allies is not null && rule.RequiresEffect.Length > 0) && rule.MotionSpeedPercent is > 0 and <= 400 && rule.MotionSpeedSteps is >= 0 and <= 6
             && rule.MaxHits >= 0 && rule.ExtraEvents.All(frame => frame > 0) && rule.Exclusive.All(code => code != 0) && rule.Replaces.All(code => code != 0)
-            && rule.MotionVariants.All(variant => variant.FromRank is >= 1 and <= 10
+            && rule.MotionVariants.All(variant => variant.FromRank is >= 1 and <= SkillLearning.MaxRank
                 && (variant.Motion == SkillMotion.Attack || variant.MotionFrames > 0 && variant.MotionEvents.Length > 0)
                 && variant.MotionEvents.All(frame => frame > 0 && (variant.MotionFrames == 0 || frame <= variant.MotionFrames))
                 && variant.ExtraEvents.All(frame => frame > 0))
             && (rule.Allies is null || Ranked(rule.Allies.Radius) && rule.Allies.OthersPercent is >= 0 and <= 100)
-            && (rule.Charm is null || rule.Charm.Chance.Length == 10 && rule.Charm.LifePercent.Length == 10)
-            && (rule.Resurrect is null || rule.Resurrect.Chance.Length == 10 && rule.Resurrect.Radius > 0)
-            && (rule.Passive is null || rule.Passive.Modifiers.All(modifier => modifier.Values.Length == 10))
+            && (rule.Charm is null || rule.Charm.Chance.Length == SkillLearning.MaxRank && rule.Charm.LifePercent.Length == SkillLearning.MaxRank)
+            && (rule.Resurrect is null || rule.Resurrect.Chance.Length == SkillLearning.MaxRank && rule.Resurrect.Radius > 0)
+            && (rule.Passive is null || rule.Passive.Modifiers.All(modifier => modifier.Values.Length == SkillLearning.MaxRank))
             && (damage is null || DamageValid(damage))
             && (buff is null || BuffValid(buff));
     }
 
     private static bool DamageValid(SkillDamageRule damage)
     {
-        static bool Ranked(int[] table) => table is null || table.Length is 0 or 10;
         return Ranked(damage.BonusPercentByRank) && Ranked(damage.Share) && Ranked(damage.Chance) && damage.ResistanceDivisor >= 1
-            && (damage.Mode == SkillDamageMode.Rolled || damage.Share.Length == 10) && (damage.Main is null || DamageValid(damage.Main));
+            && Ranked(damage.LevelPercent) && Ranked(damage.SpiritMinDivisorByRank) && Ranked(damage.SpiritMaxDivisorByRank)
+            && Ranked(damage.WeaponTimesMin) && Ranked(damage.WeaponTimesMax) && Ranked(damage.TablePercent) && Ranked(damage.AttackPowerPercent)
+            && (damage.Mode == SkillDamageMode.Rolled || damage.Share.Length == SkillLearning.MaxRank) && (damage.Main is null || DamageValid(damage.Main));
     }
 
     private static bool BuffValid(SkillBuffRule buff)
     {
-        static bool Ranked(int[] table) => table is null || table.Length is 0 or 10;
         static bool Choice(SkillEnchantChoice choice) => Ranked(choice.Min) && Ranked(choice.Max) && Ranked(choice.SlowPercent) && Ranked(choice.SlowTenths)
             && choice.Min.Length == choice.Max.Length && choice.SlowPercent.Length == choice.SlowTenths.Length;
-        return (buff.Enchant is null || buff.Enchant.Choices.Length > 0 && buff.Enchant.Choices.All(Choice))
-            && (buff.Absorb is null || buff.Absorb.Percent.Length == 10)
-            && (buff.Reflect is null || buff.Reflect.Percent.Length == 10)
-            && (buff.Guard is null || buff.Guard.HealPercent.Length == 10)
+        return Ranked(buff.LifeCut) && (buff.Enchant is null || buff.Enchant.Choices.Length > 0 && buff.Enchant.Choices.All(Choice))
+            && (buff.Absorb is null || buff.Absorb.Percent.Length == SkillLearning.MaxRank)
+            && (buff.Reflect is null || buff.Reflect.Percent.Length == SkillLearning.MaxRank)
+            && (buff.Guard is null || buff.Guard.HealPercent.Length == SkillLearning.MaxRank)
             && (buff.Companion is null || buff.Companion.Choices.All(Choice))
             && (buff.Pulse is null || buff.Pulse.IntervalMs > 0 && buff.Pulse.DurationTenths > 0);
     }

@@ -128,7 +128,7 @@ public sealed partial class WorldServer
             }
 
             var terrain = GetField(destination.FieldId).Terrain;
-            var position = onFloor ? terrain.PlaceOnFloor(requested) : terrain.SettleNear(requested, FieldTerrain.DropTolerance * 2f);
+            var position = onFloor ? terrain.PlaceOnFloor(requested) : terrain.SettleNear(requested, FieldTerrain.ArrivalTolerance);
             var inVillage = definition.State == FieldState.Village;
             Relocate(connection, destination.FieldId, position, inVillage);
             connection.Player.EnterField(position, inVillage);
@@ -306,12 +306,8 @@ public sealed partial class WorldServer
             }
 
             var character = connection.Player.Character;
-            var target = ExperienceTable.ForLevel(level);
-            // Below the final tier experience stops at level 100, as a monster's award would.
-            if (character.Tier < 3)
-            {
-                target = Math.Min(target, ExperienceTable.ForLevel(100));
-            }
+            // Below the final tier experience stops where a monster's award would (ExperienceLimit).
+            var target = Math.Min(ExperienceTable.ForLevel(level), character.ExperienceLimit);
 
             if (character.Experience < target)
             {
@@ -411,9 +407,13 @@ public sealed partial class WorldServer
             foreach (var item in character.Inventory.Items())
             {
                 var key = item.Definition.CatalogKey;
-                var kind = key.StartsWith("PL", StringComparison.OrdinalIgnoreCase) ? 0
-                    : key.StartsWith("PM", StringComparison.OrdinalIgnoreCase) ? 1
-                    : key.StartsWith("PS", StringComparison.OrdinalIgnoreCase) ? 2 : -1;
+                var kind = PotionDefinition.FamilyOf(key) switch
+                {
+                    PotionResource.Life => 0,
+                    PotionResource.Mana => 1,
+                    PotionResource.Stamina => 2,
+                    _ => -1
+                };
                 if (kind >= 0 && key.Length == 5 && int.TryParse(key.AsSpan(2), out var number) && number is >= 101 and <= 104)
                 {
                     potions[kind, number - 101] += item.Count;

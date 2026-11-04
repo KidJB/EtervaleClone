@@ -53,9 +53,8 @@ public sealed class PristonTextureLoader : IDisposable
     // Decodes one texture on a worker so a later LoadTexture only uploads it.
     public Task PrepareTextureAsync(string directory, string name) => PrepareAsync(directory, name, string.Empty);
 
-    // Yields the bytes uploaded by each texture so the caller can time and budget every step. Splitting a texture
-    // into mip or row slices was measured not to shorten the worst step: a single small DesktopGL SetData already
-    // stalls for several milliseconds, so the cost is per call rather than per byte.
+    // Yields the bytes uploaded by each texture so the caller can time and budget every step. A texture uploads whole:
+    // an upload costs per call rather than per byte, so slicing it would not shorten the worst step.
     internal IEnumerable<long> UploadPreparedTextures(string directory, IEnumerable<PristonMaterial> materials)
     {
         foreach (var request in TextureRequests(materials))
@@ -298,23 +297,19 @@ public sealed class PristonTextureLoader : IDisposable
         if (!image.HasSourceAlpha && !string.IsNullOrWhiteSpace(opacity))
         {
             var alphaPath = ResolvePath(directory, opacity);
-            if (alphaPath.Length > 0 && !string.Equals(path, alphaPath, StringComparison.OrdinalIgnoreCase))
+            var mask = alphaPath.Length > 0 && !string.Equals(path, alphaPath, StringComparison.OrdinalIgnoreCase) ? ReadImage(alphaPath) : null;
+            if (mask is { IsValid: true } && PristonOpacityMask.Applies(path, alphaPath, image.Width, image.Height, mask.Width, mask.Height))
             {
-                var mask = ReadImage(alphaPath);
-                if (mask.IsValid && mask.Width == image.Width && mask.Height == image.Height)
+                for (var index = 0; index < image.Pixels.Length; index++)
                 {
-                    for (var index = 0; index < image.Pixels.Length; index++)
-                    {
-                        var color = image.Pixels[index];
-                        var alpha = mask.Pixels[index];
-                        image.Pixels[index] = new Color(color.R, color.G, color.B, (byte)((alpha.R + alpha.G + alpha.B) / 3));
-                    }
+                    var color = image.Pixels[index];
+                    var alpha = mask.Pixels[index];
+                    image.Pixels[index] = new Color(color.R, color.G, color.B, PristonOpacityMask.Alpha(alpha.R, alpha.G, alpha.B));
                 }
             }
         }
 
-        // Cutout materials are exactly the TGA or opacity-mapped ones (PristonMaterialRuntimeFactory.UsesAlphaTest).
-        var cutout = Path.GetExtension(path).Equals(".tga", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(opacity);
+        var cutout = PristonMaterialRuntimeFactory.IsCutOut(path, opacity);
         var levels = PristonMipChain.Build(image.Pixels, image.Width, image.Height, cutout ? AlphaCutoffByte : (byte)0);
         return new PreparedTexture(image.Width, image.Height, levels);
     }
@@ -329,25 +324,20 @@ public sealed class PristonTextureLoader : IDisposable
         return Path.GetFullPath(directory).Replace('\\', '/') + "|" + name.Replace('\\', '/') + "|" + opacity.Replace('\\', '/');
     }
 
+    // A texture a model names with another extension than the one shipped is looked for under these, in its own folder.
+    private static readonly string[] TextureExtensions = [".bmp", ".tga", ".jpg", ".jpeg"];
+
     internal static string ResolvePath(string directory, string name)
     {
-        var normalized = name.Replace('\\', Path.DirectorySeparatorChar);
-        var resolved = AssetFiles.Resolve(Path.Combine(directory, normalized));
+        var named = AssetFiles.Combine(directory, name);
+        var resolved = AssetFiles.Resolve(named);
         if (File.Exists(resolved))
         {
             return resolved;
         }
 
-        var stem = Path.Combine(directory, Path.GetFileNameWithoutExtension(normalized));
-        foreach (var extension in new[]
-        {
-            ".bmp",
-            ".tga",
-            ".jpg",
-            ".jpeg"
-        }
-
-        )
+        var stem = Path.ChangeExtension(named, null);
+        foreach (var extension in TextureExtensions)
         {
             var candidate = AssetFiles.Resolve(stem + extension);
             if (File.Exists(candidate))

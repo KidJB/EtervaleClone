@@ -11,6 +11,8 @@ public sealed class HudSkillBindings
     public const uint BasicAttackId = 0x11111111;
     public static readonly HudSkillChoice BasicAttack = new(BasicAttackId, "Basic attack", 1, SkillMouseUse.Both);
     private readonly Dictionary<uint, HudSkillChoice> _choices = new() { [BasicAttackId] = BasicAttack };
+    // The F1 to F8 keys: the action bar's first eight, which the skill window marks with their key art.
+    public const int ShortcutCount = 8;
     private KeyboardState _previousKeys;
     private MouseState _previousMouse;
     private uint _pressedSkill;

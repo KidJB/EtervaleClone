@@ -10,6 +10,7 @@ using PristonTale.Contracts.Motion;
 using PristonTale.Contracts.Combat;
 using PristonTale.Contracts.Units;
 using PristonTale.Simulation.World.Npcs;
+using PristonTale.Simulation.Physics;
 
 namespace PristonTale.Application.World;
 
@@ -17,10 +18,14 @@ internal interface IFieldMonsterSkillHost
 {
     bool TryGetPlayer(ulong entityId, [MaybeNullWhen(false)] out WorldPlayer player);
     bool TryGetMonster(ulong entityId, [MaybeNullWhen(false)] out MonsterInstance monster);
-    IEnumerable<MonsterInstance> Monsters { get; }
-    IEnumerable<WorldPlayer> Players { get; }
+    // The field's own collections: walked every tick, their struct enumerators box nothing.
+    Dictionary<ulong, MonsterInstance>.ValueCollection Monsters { get; }
+    Dictionary<ulong, WorldPlayer>.ValueCollection Players { get; }
     IReadOnlyList<PreyCandidate> NearbyPlayers(Vector3 origin, float radius);
     IReadOnlyList<MonsterDefinition> MonsterDefinitions { get; }
+
+    // MonsterCatalog.Family.
+    IReadOnlyList<MonsterDefinition> MonsterFamily(int soundCode);
     MonsterInstance SpawnMonster(MonsterDefinition definition, Vector3 position, float facing, int spawnPointIndex);
     void RemoveMonster(ulong entityId);
     void EmitCombatEvent(in CombatEventView combatEvent);
@@ -109,7 +114,7 @@ internal sealed class FieldMonsterSkills
             return;
         }
 
-        if (monster.AttackIsSkill && monster.Def.SoundCode == CharacterSoundCodes.MagicMaster && _rng.NextExclusive(0, 100) < MagicMasterDrinkPercent)
+        if (monster.AttackIsSkill && monster.Def.SoundCode == CharacterSoundCodes.MagicMaster && _rng.RollPercent() < MagicMasterDrinkPercent)
         {
             // The magic master sometimes drinks a mana potion instead of casting; it restores no life.
             monster.AttackIsSkill = false;
@@ -161,7 +166,7 @@ internal sealed class FieldMonsterSkills
                 if (FindAlly(monster) is { } ally)
                 {
                     monster.AllyTargetId = ally.EntityId;
-                    monster.Facing = MathF.Atan2(ally.Position.X - monster.Position.X, ally.Position.Z - monster.Position.Z);
+                    monster.Facing = Planar.Heading(monster.Position, ally.Position);
                 }
                 else
                 {
@@ -291,7 +296,10 @@ internal sealed class FieldMonsterSkills
         _changes.Clear();
     }
 
-    // Every second life Kelvezu spends calls two Chaos Cara, Mokova two Dark Guards.
+    // Every second life Kelvezu spends calls two Chaos Cara, Mokova two Dark Guards and Hestian two Xetans of level 117,
+    // who fight only her duel's player.
+    private const int HestianXetanLevel = 117;
+
     private void SpendLives(MonsterInstance monster)
     {
         while (monster.LivesSpent > 0)
@@ -302,6 +310,7 @@ internal sealed class FieldMonsterSkills
             {
                 CharacterSoundCodes.Kelvezu => CharacterSoundCodes.ChaosCara,
                 CharacterSoundCodes.Mokova => CharacterSoundCodes.DarkGuard,
+                CharacterSoundCodes.Hestian => CharacterSoundCodes.Xetan,
                 _ => 0
             };
             if (called == 0 || (remaining & 1) != 0)
@@ -312,14 +321,18 @@ internal sealed class FieldMonsterSkills
             for (var count = 0; count < 2; count++)
             {
                 var offset = new Vector3(_rng.Range(0, 199) - ReinforcementScatter, 0f, _rng.Range(0, 199) - ReinforcementScatter);
-                CallReinforcement(monster, called, monster.Position + offset, VirtualLifeReinforcementCap);
+                var level = called == CharacterSoundCodes.Xetan ? HestianXetanLevel : 0;
+                if (CallReinforcement(monster, called, monster.Position + offset, VirtualLifeReinforcementCap, level) is { } reinforcement)
+                {
+                    reinforcement.DuelPlayerId = monster.DuelPlayerId;
+                }
             }
         }
     }
 
-    private MonsterInstance? CallReinforcement(MonsterInstance caller, int soundCode, Vector3 position, int cap)
+    private MonsterInstance? CallReinforcement(MonsterInstance caller, int soundCode, Vector3 position, int cap, int level = 0)
     {
-        if (PointCount(caller) >= cap || Reinforcement(soundCode) is not { } definition)
+        if (PointCount(caller) >= cap || Reinforcement(soundCode, level) is not { } definition)
         {
             return null;
         }
@@ -327,18 +340,19 @@ internal sealed class FieldMonsterSkills
         return _host.SpawnMonster(definition, position, caller.Facing, caller.SpawnPointIndex);
     }
 
-    // The reinforcement of a family: its ordinary definition of the lowest level, then the lowest code.
-    private MonsterDefinition? Reinforcement(int soundCode)
+    // The reinforcement of a family: its ordinary definition of the lowest level, then the lowest code; with a level, the
+    // first of that level.
+    private MonsterDefinition? Reinforcement(int soundCode, int level = 0)
     {
         MonsterDefinition? chosen = null;
-        foreach (var candidate in _host.MonsterDefinitions)
+        foreach (var candidate in _host.MonsterFamily(soundCode))
         {
-            if (candidate.SoundCode != soundCode)
+            if (level > 0 && candidate.Combat.Level != level)
             {
                 continue;
             }
 
-            if (chosen is null || Rank(candidate) < Rank(chosen) || Rank(candidate) == Rank(chosen) && candidate.Code < chosen.Code)
+            if (chosen is null || Rank(candidate) < Rank(chosen))
             {
                 chosen = candidate;
             }
@@ -578,7 +592,7 @@ internal sealed class FieldMonsterSkills
     // Babel's roll for a normal blow: whether it splashes and the percent of the roll its target takes.
     public (int Percent, bool Splash) BeginBlow(MonsterInstance attacker, WorldPlayer target)
     {
-        if (attacker.Def.SoundCode != CharacterSoundCodes.Babel || _rng.NextExclusive(0, 100) >= MonsterSkillRules.BabelSplashChance)
+        if (attacker.Def.SoundCode != CharacterSoundCodes.Babel || _rng.RollPercent() >= MonsterSkillRules.BabelSplashChance)
         {
             return (100, false);
         }
@@ -633,7 +647,7 @@ internal sealed class FieldMonsterSkills
     public static int? BlowOnMonster(CombatRng rng, MonsterInstance attacker, MonsterInstance target, bool skill)
     {
         var combat = attacker.Def.Combat;
-        var attack = new AttackProfile(combat.AttackRatingAccuracy, combat.AttackDamage.Min, combat.AttackDamage.Max, combat.Level, Element.Bionic, 0, 0, 0);
+        var attack = CombatProfileFactory.ForMonsterBasicAttack(combat);
         if (!CombatResolver.RollHit(rng, CombatResolver.HitChance(attack, DefenderProfile.FromMonster(target))))
         {
             return null;
@@ -693,12 +707,7 @@ internal sealed class FieldMonsterSkills
         _ => MonsterStatuses.StunSpec(rider.Status)
     };
 
-    private static bool Near(Vector3 a, Vector3 b, float radius, float height)
-    {
-        var dx = a.X - b.X;
-        var dz = a.Z - b.Z;
-        return MathF.Abs(a.Y - b.Y) < height && dx * dx + dz * dz < radius * radius;
-    }
+    private static bool Near(Vector3 a, Vector3 b, float radius, float height) => MathF.Abs(a.Y - b.Y) < height && Planar.Within(a, b, radius);
 
     // Views show a boss with lives as one bar over all its lives.
     public static (int Life, int Max) ViewLife(MonsterInstance monster) =>

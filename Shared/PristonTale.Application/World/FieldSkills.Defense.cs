@@ -71,8 +71,7 @@ internal sealed partial class FieldSkills : IPlayerSkillCombat
 
             var range = attacker.Def.Combat.AttackDamage;
             var power = _rng.Range(range.Min, Math.Max(range.Min, range.Max)) * SkillFormulas.RankValue(rule.Buff.Reflect.Percent, RankOfEffect(target.EntityId, code)) / 100;
-            var bionic = Math.Clamp((int)attacker.Def.Combat.Resistances.Bionic, -100, 100);
-            power -= power * bionic / 100;
+            power = CombatResolver.ApplyResistance(power, attacker.Def.Combat.Resistances.Bionic);
             power -= power * attacker.Def.Combat.Absorption / 100;
             if (power > 0)
             {
@@ -97,9 +96,7 @@ internal sealed partial class FieldSkills : IPlayerSkillCombat
 
         if (skillAttack)
         {
-            var totals = target.Character.Effects.Totals;
-            var percent = totals.Percent(StatKind.SkillDamageTaken) + totals.Flat(StatKind.SkillDamageTaken);
-            damage = Math.Max(1, damage + damage * percent / 100);
+            damage = ModifierRules.ChangedBy(damage, target.Character.Effects.Totals, StatKind.SkillDamageTaken, 1);
         }
 
         var character = target.Character;
@@ -138,7 +135,7 @@ internal sealed partial class FieldSkills : IPlayerSkillCombat
             return;
         }
 
-        foreach (var (code, rule) in SkillEffects(target, buff => buff.Guard is { } guard && guard.OnBlock == onBlock))
+        foreach (var (code, rule) in SkillEffects(target, onBlock ? GuardsOnBlock : GuardsOnHit))
         {
             var guard = rule.Buff.Guard;
             if (!SkillFormulas.MatchesBrood(guard.Broods, attacker.Def))
@@ -171,7 +168,7 @@ internal sealed partial class FieldSkills : IPlayerSkillCombat
             var rank = RankOfEffect(player.EntityId, code);
             var part = _rng.Range(SkillFormulas.RankValue(choice.Min, rank), Math.Max(SkillFormulas.RankValue(choice.Min, rank), SkillFormulas.RankValue(choice.Max, rank)));
             var resistances = ModifierRules.Resistances(monster.Effects.Totals, monster.Def.Combat.Resistances);
-            part -= part * Math.Clamp((int)resistances[choice.Element], -100, 100) / 100;
+            part = CombatResolver.ApplyResistance(part, resistances[choice.Element]);
             added += part > 0 ? CombatResolver.ApplyAbsorbMonster(part, monster.Def.Combat.Absorption) : 0;
             Slow(player, monster, rule.Code, choice, rank);
         }
@@ -202,18 +199,35 @@ internal sealed partial class FieldSkills : IPlayerSkillCombat
         }
     }
 
-    // The holder's running player-skill effects whose rule's buff matches.
-    private IEnumerable<(uint Code, SkillRule Rule)> SkillEffects(WorldPlayer holder, Func<SkillBuffRule, bool> predicate)
+    private static readonly Func<SkillBuffRule, bool> GuardsOnBlock = static buff => buff.Guard is { OnBlock: true };
+    private static readonly Func<SkillBuffRule, bool> GuardsOnHit = static buff => buff.Guard is { OnBlock: false };
+
+    // The holder's running player-skill effects whose rule's buff matches; walked on the tick for every blow, block and
+    // hit, so it allocates nothing.
+    private static SkillEffectRun SkillEffects(WorldPlayer holder, Func<SkillBuffRule, bool> predicate) => new(holder.Character.Effects.Effects, predicate);
+
+    private struct SkillEffectRun(IReadOnlyList<ActiveEffect> effects, Func<SkillBuffRule, bool> predicate)
     {
-        var effects = holder.Character.Effects.Effects;
-        for (var index = 0; index < effects.Count; index++)
+        private int _index = -1;
+
+        public (uint Code, SkillRule Rule) Current { get; private set; }
+
+        public readonly SkillEffectRun GetEnumerator() => this;
+
+        public bool MoveNext()
         {
-            var effect = effects[index];
-            if (effect.Spec.Source == EffectSourceKind.PlayerSkill && !effect.Permanent && SkillRuleCatalog.TryGet(effect.Code, out var rule)
-                && rule.Buff is { } buff && predicate(buff))
+            while (++_index < effects.Count)
             {
-                yield return (effect.Code, rule);
+                var effect = effects[_index];
+                if (effect.Spec.Source == EffectSourceKind.PlayerSkill && !effect.Permanent && SkillRuleCatalog.TryGet(effect.Code, out var rule)
+                    && rule.Buff is { } buff && predicate(buff))
+                {
+                    Current = (effect.Code, rule);
+                    return true;
+                }
             }
+
+            return false;
         }
     }
 }

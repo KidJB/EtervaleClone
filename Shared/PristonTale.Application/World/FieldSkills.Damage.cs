@@ -6,6 +6,7 @@ using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Contracts.Motion;
+using PristonTale.Simulation.Physics;
 
 namespace PristonTale.Application.World;
 
@@ -58,7 +59,7 @@ internal sealed partial class FieldSkills
         var damage = result.Damage;
         if (damageRule.FlatElement is { } flatElement)
         {
-            var resisted = elemental * Math.Clamp((int)monster.Def.Combat.Resistances[flatElement], -100, 100) / 100;
+            var resisted = elemental - CombatResolver.ApplyResistance(elemental, monster.Def.Combat.Resistances[flatElement]);
             damage = Math.Max(1, damage - resisted);
         }
         else
@@ -81,13 +82,26 @@ internal sealed partial class FieldSkills
 
         var burst = cast.Rule.Burst;
         var origin = caster.Position;
+        var lifeBefore = monster.Life;
         Pay(caster, monster, damage, result.Crit, cast.Rule.ForceFlinch);
+        AfflictStruck(caster, cast, monster);
+        DrainAfterHit(caster, damageRule, rank, monster, lifeBefore);
         if (burst is not null && burst.AfterHit == hit)
         {
             Burst(caster, cast, rule, origin);
         }
 
         return true;
+    }
+
+    // A weapon skill's harmful effect lands on the monster its hit struck (a dash that stuns).
+    private void AfflictStruck(WorldPlayer caster, ActiveCast cast, MonsterInstance monster)
+    {
+        var buff = cast.Rule.Buff;
+        if (buff is { Harmful: true } && monster.IsAlive && Takes(buff, monster) && (buff.LifeCut.Length == 0 || Shrink(caster, monster, buff, cast.Rank)))
+        {
+            ApplyEffect(monster.Effects, monster.EntityId, caster.EntityId, cast.Rule.Code, buff, cast.Rank, ResistanceOf(buff, monster), caster.Character);
+        }
     }
 
     // Several shots in one strike: each rolls accuracy with the skill's rating, the hits add up their own damage rolls.
@@ -116,6 +130,7 @@ internal sealed partial class FieldSkills
         damage = SkillFormulas.WithBroodBonus(damage, rule.Damage, monster.Def, cast.Rank);
         damage = SkillFormulas.WithUndeadBonus(damage, character.Effects.Totals, monster.Def);
         Pay(caster, monster, ModifierRules.ScaleDamage(damage, character.Effects.Totals, monster.Effects.Totals), false);
+        AfflictStruck(caster, cast, monster);
         return true;
     }
 
@@ -154,7 +169,9 @@ internal sealed partial class FieldSkills
         var character = caster.Character;
         var power = SkillFormulas.RollPower(character, rule, rule.Damage, cast.Rank, _rng);
         var damage = SkillFormulas.PowerAgainst(power, rule.Damage, monster.Def, character.Effects.Totals, monster.Effects.Totals, cast.Rank);
+        var lifeBefore = monster.Life;
         Pay(caster, monster, SkillFormulas.WithUndeadBonus(damage, character.Effects.Totals, monster.Def), false);
+        DrainAfterHit(caster, rule.Damage, cast.Rank, monster, lifeBefore);
         return true;
     }
 
@@ -163,9 +180,7 @@ internal sealed partial class FieldSkills
     {
         if (rule.RadiusTargetPad > 0)
         {
-            var dx = aim.X - caster.Position.X;
-            var dz = aim.Z - caster.Position.Z;
-            return MathF.Sqrt(dx * dx + dz * dz) + rule.RadiusTargetPad;
+            return Planar.Distance(aim, caster.Position) + rule.RadiusTargetPad;
         }
 
         if (rule.AreaShape == SkillAreaShape.Box && rule.Radius.Length == 0)
@@ -185,9 +200,7 @@ internal sealed partial class FieldSkills
                 continue;
             }
 
-            var dx = monster.Position.X - center.X;
-            var dz = monster.Position.Z - center.Z;
-            if (dx * dx + dz * dz <= radius * radius)
+            if (Planar.DistanceSquared(monster.Position, center) <= radius * radius)
             {
                 _targets.Add(monster);
                 if (_targets.Count >= limit)
@@ -263,15 +276,8 @@ internal sealed partial class FieldSkills
     // The monster drops its prey and targets the caster for the duration; the target lock keeps it from retargeting.
     private static void Taunt(WorldPlayer caster, MonsterInstance monster, float durationMs)
     {
-        monster.TargetId = caster.EntityId;
-        monster.TargetLockMsLeft = durationMs;
-        monster.Facing = MathF.Atan2(caster.Position.X - monster.Position.X, caster.Position.Z - monster.Position.Z);
-        if (monster.AiState is MonsterAiState.Idle or MonsterAiState.Wander or MonsterAiState.Leash)
-        {
-            monster.AiState = MonsterAiState.Chase;
-            monster.ManoeuvreClipsLeft = 0;
-            monster.SinceDecisionMs = MonsterAiTuning.DecisionIntervalMs;
-        }
+        monster.Facing = Planar.Heading(monster.Position, caster.Position);
+        MonsterAiBrain.ForceTarget(monster, caster.EntityId, durationMs);
     }
 
     // The resistance that shortens a debuff on a monster.
@@ -282,7 +288,6 @@ internal sealed partial class FieldSkills
             return 0;
         }
 
-        var resistances = ModifierRules.Resistances(monster.Effects.Totals, monster.Def.Combat.Resistances);
-        return buff.ResistedBy is { } element ? resistances[element] : buff.ResistedByBionic ? resistances.Bionic : 0;
+        return buff.ResistanceFrom(ModifierRules.Resistances(monster.Effects.Totals, monster.Def.Combat.Resistances));
     }
 }

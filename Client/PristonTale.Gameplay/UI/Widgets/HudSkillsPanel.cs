@@ -9,19 +9,22 @@ using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Gameplay.UI.Widgets;
 
-// The original skill window and its text: Skil24.bmp, the titles and skills of the tiers the class has reached (later
-// tiers stay empty until the rank-up), skill buttons (gray "_" variant when unusable), rank gauges, F1-F8 short keys,
-// the selected-skill hover frame, the empty second page, and for a skill master's pupil the training box: the skill and
-// elite points left (or that there are none) and the class change button.
+// The original skill window and its text: Skil24.bmp with the titles and skills of the first four tiers the class has
+// reached (later tiers stay empty until the rank-up), Skil25.bmp with the fifth tier's title and skills on the first
+// tier's boxes, skill buttons (gray "_" variant when unusable), rank gauges, F1-F8 short keys, the selected-skill hover
+// frame, and for a skill master's pupil the training box: the skill and elite points left (or that there are none) and
+// the class change button.
 public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
 {
     private const int TooltipWidth = 260;
 
     private sealed record Entry(Skill Skill, string Level, string[] Description, string[] Weapons, string Cost, string Mouse,
-        int Rank = 0, string Status = "Unlearned", IReadOnlyList<string> Details = null);
+        int Rank = 0, string Status = "Unlearned", IReadOnlyList<string> Details = null, string Button = "", string GrayButton = "");
 
     private static readonly CharacterClassRegistry Classes = new();
     private readonly List<string> _classSprites = [];
+    // The class's tier titles and skill buttons, made once per class instead of every frame.
+    private readonly string[] _titles = new string[PlayerCharacter.LastTier + 1];
     private Entry[] _entries = [];
     private PlayerClass _class;
     private int _points = -1;
@@ -42,9 +45,8 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
     private string _boxPointsText = "";
     private string _boxElitePointsText = "";
 
-    // The training box and its class change button (gray or lit) are on screen; they take clicks over the scene.
+    // The training box is on screen; it takes clicks over the scene.
     public bool MasterBoxShown { get; private set; }
-    public bool ClassChangeShown { get; private set; }
 
     public bool TrainingPending => _trainingIndex >= 0;
     public void CancelTraining() => _trainingIndex = -1;
@@ -60,9 +62,10 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
         _entries = new Entry[skills.Count];
         var previous = _classSprites.ToArray();
         _classSprites.Clear();
-        for (var tier = 0; tier < 4; tier++)
+        for (var tier = 0; tier < _titles.Length; tier++)
         {
-            _classSprites.Add(HudArt.JobTitle(characterClass, tier));
+            _titles[tier] = HudArt.JobTitle(characterClass, tier);
+            _classSprites.Add(_titles[tier]);
         }
 
         for (var index = 0; index < skills.Count; index++)
@@ -74,8 +77,10 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
                 continue;
             }
 
-            _classSprites.Add(HudArt.SkillButton(characterClass, skill.IconKey, false));
-            _classSprites.Add(HudArt.SkillButton(characterClass, skill.IconKey, true));
+            var button = HudArt.SkillButton(characterClass, skill.IconKey, false);
+            var grayButton = HudArt.SkillButton(characterClass, skill.IconKey, true);
+            _classSprites.Add(button);
+            _classSprites.Add(grayButton);
             var weapons = skill.AllowedWeaponsMask == 0 ? "Any weapon" : string.Join(", ", Enum.GetValues<ItemKind>().Where(skill.AllowsWeapon));
             var mouse = skill.MouseUse switch
             {
@@ -84,11 +89,14 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
                 SkillMouseUse.Both => "Left or right mouse",
                 _ => "Passive skill"
             };
-            var cost = skill.MouseUse == SkillMouseUse.None || skill.ManaByRank.Count < 10 ? "No activation cost"
-                : $"Rank 1: MP {skill.ManaForRank(1)} | SP {skill.StaminaForRank(1)}";
+            var cost = CostLine(skill, 1);
             _entries[index] = new Entry(skill, $"Lv {skill.RequiredLevel}",
                 HudTextLayout.Wrap(font, skill.Description, TooltipWidth - 20, HudPainter.TextScale),
-                HudTextLayout.Wrap(font, "Equipment: " + weapons, TooltipWidth - 20, HudPainter.TextScale), cost, mouse);
+                HudTextLayout.Wrap(font, "Equipment: " + weapons, TooltipWidth - 20, HudPainter.TextScale), cost, mouse)
+            {
+                Button = button,
+                GrayButton = grayButton
+            };
         }
 
         foreach (var path in previous.Except(_classSprites, StringComparer.OrdinalIgnoreCase))
@@ -102,20 +110,15 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
     // The basic attack or a learned active skill under the pointer, for selecting it into a mouse socket or a short key.
     public uint HoveredSkill(Point origin, Point pointer)
     {
-        if (_secondPage)
-        {
-            return 0;
-        }
-
         if (HudSkillTreeLayout.BasicAttack(origin).Contains(pointer))
         {
             return HudSkillBindings.BasicAttackId;
         }
 
-        for (var index = 0; index < Shown; index++)
+        for (var index = PageFirst; index < PageEnd; index++)
         {
             var entry = _entries[index];
-            if (entry.Skill.Code != 0 && entry.Rank > 0 && entry.Skill.MouseUse != SkillMouseUse.None && ClassRow(origin, index).Contains(pointer))
+            if (entry.Skill.Code != 0 && entry.Rank > 0 && entry.Skill.MouseUse != SkillMouseUse.None && Box(origin, index).Contains(pointer))
             {
                 return entry.Skill.Code;
             }
@@ -145,9 +148,9 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
             return;
         }
 
-        for (var index = 0; index < (_secondPage ? 0 : Shown); index++)
+        for (var index = PageFirst; index < PageEnd; index++)
         {
-            if (!ClassRow(origin, index).Contains(pointer))
+            if (!Box(origin, index).Contains(pointer))
             {
                 continue;
             }
@@ -187,13 +190,34 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
             return false;
         }
 
-        _secondPage = !_secondPage;
-        CancelTraining();
+        TurnPage();
         return true;
     }
 
+    // P turns the page once the class reached the fifth tier.
+    public void TurnPageByKey()
+    {
+        if (_shownTier >= PlayerCharacter.LastTier)
+        {
+            TurnPage();
+        }
+    }
+
+    private void TurnPage()
+    {
+        _secondPage = !_secondPage;
+        CancelTraining();
+    }
+
     // The skills the class tier has opened: the first tier's four, then four more with each rank-up.
-    private int Shown => Math.Min(Math.Min(_entries.Length, HudSkillTreeLayout.NodeCount), SkillLearning.OpenedBy(_shownTier));
+    private int Shown => Math.Min(_entries.Length, SkillLearning.OpenedBy(_shownTier));
+
+    // The first page holds the first four tiers' skills, the second the fifth tier's on the first tier's boxes.
+    private int PageFirst => _secondPage ? HudSkillTreeLayout.NodeCount : 0;
+
+    private int PageEnd => _secondPage ? Shown : Math.Min(Shown, HudSkillTreeLayout.NodeCount);
+
+    private Rectangle Box(Point origin, int index) => ClassRow(origin, index - PageFirst);
 
     public void Draw(HudPainter painter, Point origin, Point pointer, OwnerState state, HudSkillBindings bindings, ulong skillMaster, bool pressed,
         bool interactive)
@@ -211,37 +235,43 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
                 painter.Sprite(HudArt.SkillPageBack, back.X + 1, back.Y + 1);
             }
 
-            return;
+            if (_shownTier >= PlayerCharacter.LastTier)
+            {
+                var title = HudSkillTreeLayout.Title(origin, 0);
+                painter.Sprite(_titles[PlayerCharacter.LastTier], title.X, title.Y);
+            }
         }
-
-        painter.Sprite(HudArt.SkillWindow, origin.X, origin.Y + 400);
-        var forward = HudSkillTreeLayout.PageForward(origin);
-        if (interactive && forward.Contains(pointer))
+        else
         {
-            painter.Sprite(HudArt.SkillPageForward, forward.X + 1, forward.Y + 1);
+            painter.Sprite(HudArt.SkillWindow, origin.X, origin.Y + 400);
+            var forward = HudSkillTreeLayout.PageForward(origin);
+            if (interactive && forward.Contains(pointer))
+            {
+                painter.Sprite(HudArt.SkillPageForward, forward.X + 1, forward.Y + 1);
+            }
+
+            for (var tier = 0; tier <= Math.Min(_shownTier, PlayerCharacter.LastTier - 1); tier++)
+            {
+                var title = HudSkillTreeLayout.Title(origin, tier);
+                painter.Sprite(_titles[tier], title.X, title.Y);
+            }
         }
 
-        for (var tier = 0; tier <= Math.Min(_shownTier, LastTier); tier++)
-        {
-            var title = HudSkillTreeLayout.Title(origin, tier);
-            painter.Sprite(HudArt.JobTitle(_class, tier), title.X, title.Y);
-        }
-
-        for (var index = 0; index < Shown; index++)
+        for (var index = PageFirst; index < PageEnd; index++)
         {
             var entry = _entries[index];
-            var node = ClassRow(origin, index);
+            var node = Box(origin, index);
             if (entry.Skill.Code != 0)
             {
                 // A pupil sees in colour what the master can teach now (a skill at rank 10 has nothing left to learn);
                 // elsewhere the learned skills are in colour.
-                var usable = skillMaster != 0 ? entry.Rank < SkillMaxRank && (entry.Rank > 0 || CanTrain(index, state)) : entry.Rank > 0;
-                painter.Sprite(HudArt.SkillButton(_class, entry.Skill.IconKey, !usable), node.X, node.Y);
-                var mastery = HudSkillTreeLayout.MasteryGauge(origin, index);
+                var usable = skillMaster != 0 ? entry.Rank < SkillLearning.MaxRank && (entry.Rank > 0 || CanTrain(index, state)) : entry.Rank > 0;
+                painter.Sprite(usable ? entry.Button : entry.GrayButton, node.X, node.Y);
+                var mastery = HudSkillTreeLayout.MasteryGauge(origin, index - PageFirst);
                 painter.Sprite(entry.Skill.MouseUse == SkillMouseUse.None ? HudArt.SkillGaugePassive : HudArt.SkillGaugeBack, mastery.X, mastery.Y);
 
-                var rank = HudSkillTreeLayout.RankGauge(origin, index);
-                var length = Math.Clamp(entry.Rank, 0, 10) * rank.Height / 10;
+                var rank = HudSkillTreeLayout.RankGauge(origin, index - PageFirst);
+                var length = Math.Clamp(entry.Rank, 0, SkillLearning.MaxRank) * rank.Height / SkillLearning.MaxRank;
                 painter.Sprite(HudArt.SkillGauge, rank.X, rank.Bottom - length, new Rectangle(0, rank.Height - length, rank.Width, length));
                 DrawShortcut(painter, node, entry.Skill.Code, bindings);
             }
@@ -280,17 +310,12 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
         }
     }
 
-    private const int SkillMaxRank = 10;
-    private const int LastTier = 3;
-
     // The training box's lines (their tops), centred in the box, and their colours.
     private const int BoxTitleY = 145;
     private const int BoxFirstLineY = 180;
     private const int BoxSecondLineY = 200;
     private const int BoxPointsY = 230;
     private const int BoxElitePointsY = 255;
-    private static readonly Color BoxTitle = new(222, 231, 255);
-    private static readonly Color BoxPoints = new(247, 243, 193);
     private static readonly Color BoxElitePoints = new(147, 243, 193);
     private static readonly Color BoxShort = new(255, 64, 64);
 
@@ -301,8 +326,7 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
     public void DrawMasterBox(HudPainter painter, OwnerState state, ulong skillMaster, bool classChangeOffered)
     {
         MasterBoxShown = false;
-        ClassChangeShown = false;
-        if (skillMaster == 0 || state is null || _trainingIndex >= 0 || _secondPage)
+        if (skillMaster == 0 || state is null || _trainingIndex >= 0)
         {
             return;
         }
@@ -311,7 +335,7 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
         var box = HudSkillTreeLayout.MasterBox;
         painter.Flush();
         painter.InfoBox(box);
-        painter.TextCentered("Train Skill/Magic", box.Left, box.Right, BoxTitleY, BoxTitle);
+        painter.TextCentered("Train Skill/Magic", box.Left, box.Right, BoxTitleY, HudTextColors.Title);
         if (state.SkillPoints > 0 || state.EliteSkillPoints > 0)
         {
             if (_boxPoints != state.SkillPoints || _boxElitePoints != state.EliteSkillPoints)
@@ -324,7 +348,7 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
 
             painter.TextCentered("Select a Skill or Magic", box.Left, box.Right, BoxFirstLineY);
             painter.TextCentered("To learn or train", box.Left, box.Right, BoxSecondLineY);
-            painter.TextCentered(_boxPointsText, box.Left, box.Right, BoxPointsY, BoxPoints);
+            painter.TextCentered(_boxPointsText, box.Left, box.Right, BoxPointsY, HudTextColors.Highlight);
             painter.TextCentered(_boxElitePointsText, box.Left, box.Right, BoxElitePointsY, BoxElitePoints);
         }
         else
@@ -333,9 +357,8 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
             painter.TextCentered("to learn or practice", box.Left, box.Right, BoxSecondLineY, BoxShort);
         }
 
-        if (classChangeOffered || _shownTier < LastTier && TierLearned())
+        if (classChangeOffered || _shownTier < PlayerCharacter.LastTier && TierLearned())
         {
-            ClassChangeShown = true;
             var button = HudSkillTreeLayout.ClassChange;
             painter.Sprite(classChangeOffered ? HudArt.SelectJob : HudArt.SelectJobGray, button.X, button.Y);
         }
@@ -402,15 +425,11 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
     {
         var width = Math.Max(painter.Measure(title), lines.Max(painter.Measure)) + 24;
         var height = 24 + lines.Length * HudPainter.LineHeight + 8;
-        var size = HudPainter.InfoBoxBounds(0, 0, width, height);
-        var place = layout.PlaceOverlay(new Point(anchor.X - size.Width / 2, anchor.Y - size.Height - 8), size.Width, size.Height);
-        var bounds = HudPainter.InfoBoxBounds(place.X, place.Y, place.Width, place.Height);
-        painter.Flush();
-        painter.InfoBox(bounds);
-        painter.Text(title, bounds.X + 10, bounds.Y + 8, new Color(255, 255, 180));
+        var bounds = painter.TooltipBox(layout, anchor, width, height);
+        painter.Text(title, bounds.X + 10, bounds.Y + 8, HudTextColors.BoxTitle);
         for (var index = 0; index < lines.Length; index++)
         {
-            painter.Text(lines[index], bounds.X + 10, bounds.Y + 26 + index * HudPainter.LineHeight, new Color(220, 220, 220));
+            painter.Text(lines[index], bounds.X + 10, bounds.Y + HudPainter.TooltipLinesY + index * HudPainter.LineHeight, new Color(220, 220, 220));
         }
     }
 
@@ -452,9 +471,8 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
 
             var rank = Rank(state, entry.Skill.Code);
             var shownRank = Math.Max(1, rank);
-            var cost = entry.Skill.Category == SkillCategory.Passive || entry.Skill.ManaByRank.Count < 10 ? "No activation cost"
-                : $"Rank {shownRank}: MP {entry.Skill.ManaForRank(shownRank)} | SP {entry.Skill.StaminaForRank(shownRank)}";
-            var status = rank == 0 ? "Unlearned | Rank 1 preview" : $"Learned rank {rank} / 10";
+            var cost = CostLine(entry.Skill, shownRank);
+            var status = rank == 0 ? "Unlearned | Rank 1 preview" : $"Learned rank {rank} / {SkillLearning.MaxRank}";
             if (rank > 0 && entry.Skill.Category == SkillCategory.Passive)
             {
                 status += " | Passive";
@@ -475,10 +493,17 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
         }
     }
 
+    // The mana and stamina a skill costs at a rank; a passive skill, one never used by mouse, and one without its ranks'
+    // costs has none.
+    private static string CostLine(Skill skill, int rank) =>
+        skill.Category == SkillCategory.Passive || skill.MouseUse == SkillMouseUse.None || skill.ManaByRank.Count != SkillLearning.MaxRank
+            ? "No activation cost"
+            : $"Rank {rank}: MP {skill.ManaForRank(rank)} | SP {skill.StaminaForRank(rank)}";
+
     // Short keys: ShortKey\f<n>.bmp at the skill box left + 9, top - 6.
     private static void DrawShortcut(HudPainter painter, Rectangle node, uint skillCode, HudSkillBindings bindings)
     {
-        for (var index = 0; index < 8; index++)
+        for (var index = 0; index < HudSkillBindings.ShortcutCount; index++)
         {
             if (bindings.Shortcut(index).SkillId == skillCode)
             {

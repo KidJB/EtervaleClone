@@ -8,7 +8,7 @@ namespace PristonTale.Simulation.Characters.Classes;
 public sealed class PikemanClass : CharacterClass
 {
     public static readonly ClassProfile Profile = new(
-        ["Pikeman", "Combatant", "Lancer", "Lancelot"],
+        ["Pikeman", "Combatant", "Lancer", "Lancelot", "Bayiolunt"],
         new MotionFallback(3680, 22, 2560),
         static weapon => weapon.Definition.Kind == ItemKind.Pole,
         CastingWeapon: null,
@@ -16,13 +16,15 @@ public sealed class PikemanClass : CharacterClass
         QuestWeapon: "WP109",
         BeginnerWeapon: "WP102",
         QuestWeaponHunt.Melee,
-        QuestItems.EmperorRing);
+        QuestItems.EmperorRing,
+        CharacterBrood.Tempskron,
+        Female: false);
 
     public PikemanClass()
         : base(BuildDefinition(
             PlayerClass.Pikeman,
             "Pikeman",
-            CharacterBrood.Tempskron,
+            Profile.Brood,
             bodyInx: "char\\tmABCD\\C001.inx",
             headInx: "char\\tmABCD\\tmh-c01.inx",
             armorTableIndex: 2,

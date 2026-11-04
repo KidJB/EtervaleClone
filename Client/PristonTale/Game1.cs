@@ -11,13 +11,13 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using PristonTale.Gameplay.Screens;
 using PristonTale.Gameplay.Screens.Framework;
+using PristonTale.Assets;
+using PristonTale.Protocol.Transport;
 
 namespace PristonTale;
 
 public class Game1 : Game
 {
-    private const string ServerAddress = "tcp://localhost:10009";
-
     private readonly GraphicsDeviceManager _graphics;
     private GameClient _client;
 
@@ -56,29 +56,30 @@ public class Game1 : Game
     protected override void LoadContent()
     {
         _presentationController = new PresentationController(_presentation, _settingsStore, _graphics, Window);
-        _client = new GameClient(GraphicsDevice, Content, ResolveAssetRoot(), ServerAddress, _presentation);
+        _client = new GameClient(GraphicsDevice, Content, ResolveAssetRoot(), ResolveServerAddress(_presentation.Requested.ServerAddress), _presentation);
         _client.LoadContent();
         Window.TextInput += (_, args) => _client.TypeCharacter(args.Character);
         ConsoleClientLog.Instance.Info($"[Presentation] GPU={GraphicsDevice.Adapter.DeviceName}; variable timestep; VSync={_presentation.VerticalSync}; maxFps={_presentation.Requested.MaxFps} (0=unlimited).");
     }
 
-    private static string ResolveAssetRoot()
+    // The assets beside the game or in an ancestor folder (AssetFiles.FindAssetsRoot); the game's own folder otherwise, so
+    // a missing asset is reported where the files are expected.
+    private static string ResolveAssetRoot() => AssetFiles.FindAssetsRoot() ?? Path.Combine(AppContext.BaseDirectory, "assets");
+
+    // The settings' server; an address that does not parse is logged and the client uses the server on this machine.
+    private static string ResolveServerAddress(string configured)
     {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        try
         {
-            var candidate = Path.Combine(dir.FullName, "assets");
-            if (Directory.Exists(candidate))
-            {
-                return candidate;
-            }
+            var address = TlsTransport.ParseAddress(configured);
+            ConsoleClientLog.Instance.Info($"[Network] Server {address.Host}:{address.Port}.");
+            return address.AbsoluteUri;
         }
-        return Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            "..",
-            "assets");
+        catch (ArgumentException exception)
+        {
+            ConsoleClientLog.Instance.Error($"[Settings] serverAddress: {exception.Message} Using {TlsTransport.LocalAddress}.");
+            return TlsTransport.LocalAddress;
+        }
     }
 
     protected override void Update(GameTime gameTime)
@@ -118,7 +119,7 @@ public class Game1 : Game
 
         _client.Update(gameTime, IsActive);
         UpdateDiagnostics();
-        _lastKeyboardState = Keyboard.GetState();
+        _lastKeyboardState = keyboard;
         base.Update(gameTime);
         _timing.RecordUpdate(Stopwatch.GetTimestamp() - started, GC.GetAllocatedBytesForCurrentThread() - allocated);
     }

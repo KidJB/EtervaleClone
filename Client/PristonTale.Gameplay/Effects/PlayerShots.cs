@@ -6,6 +6,7 @@ using PristonTale.Engine3D.Rendering;
 using PristonTale.Simulation.Items;
 using PristonTale.Contracts.Motion;
 using PristonTale.Contracts.Units;
+using System.Runtime.InteropServices;
 
 namespace PristonTale.Gameplay.Effects;
 
@@ -29,7 +30,7 @@ public sealed class PlayerShots
     private const float SparksPerFrame = 3.5f;
 
     private readonly Dictionary<ulong, ulong> _targets = new();
-    private readonly Dictionary<ulong, (PristonMotionInfo Motion, float Ticks)> _clips = new();
+    private readonly Dictionary<ulong, ClipEventCursor> _clips = new();
     private readonly List<Shot> _shots = new();
     private readonly List<Spark> _sparks = new();
     private readonly HashSet<ulong> _seen = new();
@@ -63,24 +64,17 @@ public sealed class PlayerShots
         in HeldItemGlow glow, Vector3 attackerPosition, bool staffCaster, Func<ulong, Vector3?> targetOf)
     {
         _seen.Add(attackerId);
-        var start = (float)motion.StartFrame * GameUnits.FrameTicks;
-        var previous = _clips.TryGetValue(attackerId, out var last) && ReferenceEquals(last.Motion, motion) && ticks >= last.Ticks ? last.Ticks : start;
-        _clips[attackerId] = (motion, ticks);
-        if (motion.State != (uint)MotionCode.Attack || motion.EventFrames.Count == 0 || weaponKey.Length < 3)
-        {
-            return;
-        }
-
-        var at = start + motion.EventFrames[0];
-        if (motion.EventFrames[0] == 0 || at <= previous || at > ticks || !_targets.TryGetValue(attackerId, out var targetId)
+        ref var clip = ref CollectionsMarshal.GetValueRefOrAddDefault(_clips, attackerId, out _);
+        clip.Advance(motion, ticks);
+        if (motion.State != (uint)MotionCode.Attack || weaponKey.Length < 3 || !clip.Passed(0) || !_targets.TryGetValue(attackerId, out var targetId)
             || targetOf(targetId) is not { } target)
         {
             return;
         }
 
-        var family = ItemCodes.FamilyOf(weaponKey);
+        var kind = ItemEquipmentMetadata.KindOf(weaponKey);
         var chest = target + Vector3.Up * 24f;
-        if (family == "WM1")
+        if (kind == ItemKind.Staff)
         {
             if (staffCaster)
             {
@@ -90,7 +84,7 @@ public sealed class PlayerShots
             return;
         }
 
-        if (family is not ("WS1" or "WT1"))
+        if (kind is not (ItemKind.Bow or ItemKind.ThrowingWeapon))
         {
             return;
         }
@@ -102,13 +96,15 @@ public sealed class PlayerShots
             return;
         }
 
-        var javelin = family == "WT1";
+        var javelin = kind == ItemKind.ThrowingWeapon;
         if (javelin && !World.Remote.EquipmentVisuals.HasModel(weaponKey))
         {
             return;
         }
 
-        var model = javelin ? World.Remote.EquipmentVisuals.MeshPath(weaponKey) : ArrowModel;
+        // The flying model is built when the shot leaves (once per model, cached by the content), never in Draw; a shot
+        // without one still flies, strikes and sheds its sparks.
+        var model = Content?.LoadModel(javelin ? World.Remote.EquipmentVisuals.MeshPath(weaponKey) : ArrowModel);
         _shots.Add(new Shot(attackerId, targetId, model, javelin, from, Vector3.Normalize(direction) * (javelin ? JavelinStep : ArrowStep),
             glow.Glows ? GlowColor(glow) : null));
     }
@@ -162,12 +158,15 @@ public sealed class PlayerShots
         }
     }
 
+    // The effect content the flying models come from; null until the effect library is loaded.
+    public VfxContent Content { get; set; }
+
     // Queues the flying weapons and the sparks for the next effect draw.
-    public void Draw(VfxRenderer renderer, VfxLibrary library, VfxContent content)
+    public void Draw(VfxRenderer renderer, VfxLibrary library)
     {
         foreach (var shot in _shots)
         {
-            if (content.LoadModel(shot.Model) is not { } model)
+            if (shot.Model is not { } model)
             {
                 continue;
             }
@@ -239,11 +238,11 @@ public sealed class PlayerShots
 
     private static Vector3 GlowColor(in HeldItemGlow glow) => new((glow.R >> 1) + 128, (glow.G >> 1) + 128, (glow.B >> 1) + 128);
 
-    private sealed class Shot(ulong attackerId, ulong targetId, string model, bool javelin, Vector3 position, Vector3 velocity, Vector3? spark)
+    private sealed class Shot(ulong attackerId, ulong targetId, PristonMeshEffect model, bool javelin, Vector3 position, Vector3 velocity, Vector3? spark)
     {
         public ulong AttackerId { get; } = attackerId;
         public ulong TargetId { get; } = targetId;
-        public string Model { get; } = model;
+        public PristonMeshEffect Model { get; } = model;
         public bool Javelin { get; } = javelin;
         public Vector3 Position { get; set; } = position;
         public Vector3 Velocity { get; } = velocity;

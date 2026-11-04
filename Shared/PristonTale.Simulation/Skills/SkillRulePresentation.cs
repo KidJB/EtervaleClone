@@ -49,6 +49,13 @@ public sealed partial record SkillRule
     // (0..255 per channel).
     public string CastShieldBone { get; init; } = "";
     public int[] CastShieldGlow { get; init; } = [];
+    // Two effects (a light and its trail) circling the held weapon on either side while the status lasts.
+    public string[] WeaponOrbit { get; init; } = [];
+    // Each impact shakes the camera of the players within CameraShakeReach of the caster, by (reach - distance) / 15.
+    public bool CameraShake { get; init; }
+    public const int CameraShakeReach = 400;
+    // An effect on each enemy an area struck; the server reports each with a Struck impact.
+    public string TargetEffect { get; init; } = "";
 }
 
 public static partial class SkillRuleCatalog
@@ -56,15 +63,6 @@ public static partial class SkillRuleCatalog
     private static bool PresentationValid(SkillRule rule) =>
         rule.ImpactSounds.All(static sound => sound.Length > 0) && rule.RageGlow is >= 0 and <= 255 && Ranked(rule.WeaponGrowth)
         && rule.WeaponGrowth.All(static percent => percent >= 0) && rule.Afterimages is >= 0 and <= 8 && Enum.IsDefined(rule.StatusLook)
-        && Enum.IsDefined(rule.ImpactSoundOrder) && rule.CastShieldGlow.Length is 0 or 3;
-}
-
-public static class SkillImpacts
-{
-    // Impacts one cast of the rank has: one per loop of a weapon clip, one per hit frame of a skill clip.
-    public static int Count(SkillRule rule, int rank)
-    {
-        var plan = SkillFormulas.Plan(rule, rank);
-        return plan.Motion == SkillMotion.Attack ? Math.Max(1, rule.At(rule.Loops, rank)) : Math.Max(1, plan.Events.Length);
-    }
+        && Enum.IsDefined(rule.ImpactSoundOrder) && rule.CastShieldGlow.Length is 0 or 3
+        && (rule.WeaponOrbit.Length == 0 || rule.WeaponOrbit.Length == 2 && rule.WeaponOrbit.All(static name => name.Length > 0));
 }

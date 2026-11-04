@@ -5,6 +5,7 @@ using PristonTale.Gameplay.Effects;
 using PristonTale.Simulation.Items;
 using PristonTale.Assets;
 using PristonTale.Contracts.Characters;
+using PristonTale.Simulation.Characters;
 
 namespace PristonTale.Gameplay.Audio;
 
@@ -132,8 +133,7 @@ public sealed class CombatSounds : IDisposable
 
     public void Dispose() => _bank.Dispose();
 
-    internal static float Volume(Vector3 source, Vector3 listener) =>
-        (400 - Math.Clamp((int)(Vector3.DistanceSquared(source, listener) / 1100f), 0, 400)) / 400f;
+    internal static float Volume(Vector3 source, Vector3 listener) => SoundFalloff.Volume(source, listener);
 
     // The original's weapon sound code: axes, swords (the first three are small blades), spears, claws, bows, staves (cast
     // by magicians and priestesses, struck by others), hammers and throwing weapons; anything else punches.
@@ -144,17 +144,17 @@ public sealed class CombatSounds : IDisposable
             return 14;
         }
 
-        return ItemCodes.FamilyOf(weaponKey) switch
+        return ItemEquipmentMetadata.KindOf(weaponKey) switch
         {
-            "WA1" => twoHanded ? 2 : 1,
-            "WS2" when ItemCodes.Ordinal(code) <= 3 => 15,
-            "WS2" => twoHanded ? 4 : 3,
-            "WP1" => twoHanded ? 6 : 5,
-            "WC1" => 7,
-            "WS1" => 8,
-            "WM1" when playerClass is PlayerClass.Magician or PlayerClass.Priestess => twoHanded ? 18 : 17,
-            "WM1" or "WH1" => twoHanded ? 10 : 9,
-            "WT1" => 11,
+            ItemKind.Axe => twoHanded ? 2 : 1,
+            ItemKind.Sword when ItemCodes.Ordinal(code) <= 3 => 15,
+            ItemKind.Sword => twoHanded ? 4 : 3,
+            ItemKind.Pole => twoHanded ? 6 : 5,
+            ItemKind.Claw => 7,
+            ItemKind.Bow => 8,
+            ItemKind.Staff when ClassProfiles.CastsWithStaff(playerClass) => twoHanded ? 18 : 17,
+            ItemKind.Staff or ItemKind.Hammer => twoHanded ? 10 : 9,
+            ItemKind.ThrowingWeapon => 11,
             _ => 14
         };
     }

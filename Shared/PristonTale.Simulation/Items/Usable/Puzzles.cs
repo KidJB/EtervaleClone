@@ -24,6 +24,8 @@ public static class Puzzles
     public static IReadOnlyList<string> Pieces { get; } =
         ["PZ101", "PZ102", "PZ103", "PZ104", "PZ105", "PZ106", "PZ107", "PZ108", "PZ201", "PZ202", "PZ203", "PZ204", "PZ205", "PZ206", "PZ207", "PZ208"];
 
+    public const int PiecesPerSet = 8;
+
     // Each piece's top-left cell on the board (column, row), pieces 1 to 8.
     private static readonly (int Column, int Row)[] Cells = [(8, 0), (10, 0), (8, 1), (9, 1), (9, 2), (11, 1), (8, 3), (10, 3)];
 
@@ -61,12 +63,24 @@ public static class Puzzles
         return anchor == row * inventoryWidth + column;
     }
 
-    // Whether the revealed pieces of one set lie each in its board cell (keys and anchors of the carried items).
-    public static bool Complete(IEnumerable<(string CatalogKey, int Anchor)> items, int inventoryWidth)
+    // The anchors of a finished board: the eight revealed pieces of one set, each in its board cell, from the keys and
+    // anchors of the carried items; empty when no set is finished.
+    public static IReadOnlyList<int> Board(IEnumerable<(string CatalogKey, int Anchor)> items, int inventoryWidth)
     {
-        var placed = items.Where(item => InPlace(item.CatalogKey, item.Anchor, inventoryWidth)).Select(static item => item.CatalogKey).ToList();
-        return Enumerable.Range(1, 2).Any(set => placed.Count(key => Set(key) == set) == 8);
+        var placed = items.Where(item => InPlace(item.CatalogKey, item.Anchor, inventoryWidth)).ToList();
+        for (var set = 1; set <= 2; set++)
+        {
+            var anchors = placed.Where(item => Set(item.CatalogKey) == set).Select(static item => item.Anchor).Distinct().ToList();
+            if (anchors.Count == PiecesPerSet)
+            {
+                return anchors;
+            }
+        }
+
+        return [];
     }
+
+    public static bool Complete(IEnumerable<(string CatalogKey, int Anchor)> items, int inventoryWidth) => Board(items, inventoryWidth).Count == PiecesPerSet;
 
     // The value of a set of exchanged pieces, or 0 when a piece repeats or is not a piece.
     public static int Value(IEnumerable<string> catalogKeys)

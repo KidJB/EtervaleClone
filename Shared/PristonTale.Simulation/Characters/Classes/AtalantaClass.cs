@@ -8,7 +8,7 @@ namespace PristonTale.Simulation.Characters.Classes;
 public sealed class AtalantaClass : CharacterClass
 {
     public static readonly ClassProfile Profile = new(
-        ["Atalanta", "Valkyrie", "Brunhild", "Valhalla"],
+        ["Atalanta", "Valkyrie", "Brunhild", "Valhalla", "Queen of Valhalla"],
         new MotionFallback(3200, 24, 2400),
         static weapon => weapon.Definition.Kind == ItemKind.ThrowingWeapon,
         CastingWeapon: null,
@@ -16,13 +16,15 @@ public sealed class AtalantaClass : CharacterClass
         QuestWeapon: "WT109",
         BeginnerWeapon: "WT102",
         QuestWeaponHunt.Ranged,
-        QuestItems.FocusRing);
+        QuestItems.FocusRing,
+        CharacterBrood.Morion,
+        Female: true);
 
     public AtalantaClass()
         : base(BuildDefinition(
             PlayerClass.Atalanta,
             "Atalanta",
-            CharacterBrood.Morion,
+            Profile.Brood,
             bodyInx: "char\\tmABCD\\mB001.inx",
             headInx: "char\\tmABCD\\Mfh-B01.inx",
             armorTableIndex: 5,

@@ -6,6 +6,7 @@ using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.World.Monsters.Skills;
 using PristonTale.Contracts.Units;
 using PristonTale.Simulation.World.Npcs;
+using PristonTale.Contracts.Motion;
 
 namespace PristonTale.Gameplay.Effects;
 
@@ -69,15 +70,16 @@ public sealed class MonsterPresentation
     public const int AttackEvents = 2;
     public const int SkillEvents = 4;
 
-    private const int AttackState = 0x100;
-    private const int SkillState = 0x150;
-    private const int DeadState = 0x120;
+    private const int AttackState = (int)MotionCode.Attack;
+    private const int SkillState = (int)MotionCode.Skill;
+    private const int DeadState = (int)MotionCode.Dead;
     private const int MinigSound = 0x1030;
 
     // A corpse darkens from DimStartTicks after its death clip starts, by half a light unit a tick, up to DimMost at
     // DimFullTicks; the bodies of light (Figon, Stygian Lord, Guardian Saint, the fire elemental, Chaos Cara) fade by two
     // alpha units a tick until they are gone. Light and alpha units are 1/256 of a full light and of opaque.
     private const float DimStartTicks = 200f;
+    private const float DimPerTick = 0.5f;
     private const float DimFullTicks = 400f;
     private const float DimMost = 100f;
     private const float FadePerTick = 2f;
@@ -213,28 +215,22 @@ public sealed class MonsterPresentation
             return;
         }
 
-        var start = (float)motion.StartFrame * GameUnits.FrameTicks;
-        var restarted = !ReferenceEquals(motion, tracked.Motion) || ticks < tracked.Ticks;
-        var previous = restarted ? start : tracked.Ticks;
-        if (restarted)
+        if (tracked.Clip.Advance(motion, ticks))
         {
-            tracked.Motion = motion;
             OnClipStart(tracked, motion, monster);
         }
 
-        tracked.Ticks = ticks;
         var state = (int)motion.State;
         var events = state == SkillState ? SkillEvents : state == AttackState ? AttackEvents : 0;
         for (var index = 0; index < events && index < motion.EventFrames.Count; index++)
         {
-            var frame = motion.EventFrames[index];
-            if (frame == 0 || frame > (motion.EndFrame - motion.StartFrame) * 160u)
+            // An event past the clip's end never plays.
+            if (motion.EventFrames[index] > (motion.EndFrame - motion.StartFrame) * (uint)GameUnits.FrameTicks)
             {
                 continue;
             }
 
-            var at = start + frame;
-            if (at > previous && at <= ticks)
+            if (tracked.Clip.Passed(index))
             {
                 Spawn(tracked.Family, state == SkillState ? "skill.hit" : "attack.hit", (char)motion.KeyCode, index + 1, monster, Target(monster.EntityId));
             }
@@ -267,7 +263,7 @@ public sealed class MonsterPresentation
 
     // The light a corpse has lost, as a share of a full light, this many ticks after its death clip started.
     public static float CorpseDim(float ticks) =>
-        ticks >= DimFullTicks ? DimMost / Units : ticks > DimStartTicks ? (ticks - DimStartTicks) / 2f / Units : 0f;
+        ticks >= DimFullTicks ? DimMost / Units : ticks > DimStartTicks ? (ticks - DimStartTicks) * DimPerTick / Units : 0f;
 
     // The opacity left to a corpse: a body of light fades out, every other corpse stays.
     public static float CorpseFade(int soundCode, float ticks) => FadesOnDeath(soundCode) ? Math.Max(0f, 1f - FadePerTick * ticks / Units) : 1f;
@@ -279,7 +275,7 @@ public sealed class MonsterPresentation
     private void StepAnger(Tracked tracked, ulong entityId, int state, float seconds)
     {
         var frames = seconds * GameUnits.TicksPerSecond;
-        tracked.Anger = Math.Clamp(tracked.Anger + (state is AttackState or 0x110 ? 2f : -1f) * frames, 0f, 100f);
+        tracked.Anger = Math.Clamp(tracked.Anger + (state is AttackState or (int)MotionCode.Damage ? 2f : -1f) * frames, 0f, 100f);
         _scene.SetEntityTint(entityId, new Vector3(tracked.Anger / 256f, -tracked.Anger / 512f, 0f));
     }
 
@@ -291,8 +287,25 @@ public sealed class MonsterPresentation
         return name is null ? null : _effects.Spawn(name, monster.EntityId, target, monster.Position, -monster.Facing);
     }
 
-    // Lookup order: <trigger>.k<key>.e<n>, <trigger>.k<key>, <trigger>.e<n>, <trigger>.
+    // Lookup order: <trigger>.k<key>.e<n>, <trigger>.k<key>, <trigger>.e<n>, <trigger>. Asked on every clip start and
+    // event frame of every drawn monster, so each combination's answer is kept and its names are built only once; a
+    // combination without an effect is asked again once more definitions have registered.
     public string Resolve(string family, string trigger, char key, int eventNumber)
+    {
+        var combination = (family, trigger, key, eventNumber);
+        if (_resolved.TryGetValue(combination, out var known) && (known.Name is not null || known.Definitions == _effects.DefinitionCount))
+        {
+            return known.Name;
+        }
+
+        var name = ResolveNames(family, trigger, key, eventNumber);
+        _resolved[combination] = (name, _effects.DefinitionCount);
+        return name;
+    }
+
+    private readonly Dictionary<(string Family, string Trigger, char Key, int EventNumber), (string Name, int Definitions)> _resolved = new();
+
+    private string ResolveNames(string family, string trigger, char key, int eventNumber)
     {
         var stem = $"vfx.monster.{family}.{trigger}";
         if (key > ' ')
@@ -420,9 +433,9 @@ public sealed class MonsterPresentation
     // Holders of a monster stun cannot move, attack or cast.
     public static bool Stunned(IReadOnlyList<StatusEntry> statuses)
     {
-        foreach (var entry in statuses)
+        for (var index = 0; index < statuses.Count; index++)
         {
-            if ((entry.Control & ControlFlags.Stun) != 0)
+            if ((statuses[index].Control & ControlFlags.Stun) != 0)
             {
                 return true;
             }
@@ -434,8 +447,7 @@ public sealed class MonsterPresentation
     private sealed class Tracked
     {
         public string Family = "";
-        public PristonMotionInfo Motion;
-        public float Ticks;
+        public ClipEventCursor Clip;
         public IMonsterEffect Aura;
         public int AuraTried = -1;
         public bool DeathShown;

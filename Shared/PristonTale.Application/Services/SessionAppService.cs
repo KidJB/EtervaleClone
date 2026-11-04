@@ -160,13 +160,7 @@ public sealed class SessionAppService
             return saved;
         }
 
-        if (field.StartPoints.Count > 0)
-        {
-            var start = field.StartPoints[0];
-            return new Vector3(start.X, 0f, start.Z);
-        }
-
-        return new Vector3(field.Center.X, 0f, field.Center.Z);
+        return new Vector3(field.Arrival.X, 0f, field.Arrival.Z);
     }
 
     public Task<bool> SaveCharacterAsync(string sessionToken, CancellationToken ct = default) => SaveAsync(sessionToken, null, ct);
@@ -229,18 +223,12 @@ public sealed class SessionAppService
     {
         if (_host is null)
         {
-            return rejected("invalid session");
+            return rejected(DurableFailures.Message(DurableFailure.NoSession));
         }
 
         using var lease = await _durable.AdmitAsync(_sessions, token, ct);
         return await lease.RunAsync(prepare, commit, prepared => prepared.Outcome,
-            failure => rejected(failure switch
-            {
-                DurableFailure.NoSession => "invalid session",
-                DurableFailure.Busy => "save or character operation pending; retry",
-                DurableFailure.StorageFailed => "storage rejected operation; character unchanged",
-                _ => "character is not playing"
-            }),
+            failure => rejected(DurableFailures.Message(failure)),
             // An item or gold thrown to the ground is stored before it lands there, so no crash keeps it in the bag and on
             // the ground; any other change is stored in the background.
             async (session, prepared) => await _characters.UpdateAsync(session.Stamp(prepared.Snapshot!), CancellationToken.None)

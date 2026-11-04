@@ -8,6 +8,7 @@ using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Contracts.Skills;
+using PristonTale.Simulation.Physics;
 
 namespace PristonTale.Application.World;
 
@@ -17,8 +18,9 @@ internal interface IFieldSkillHost
     FieldTerrain Terrain { get; }
     bool TryGetPlayer(ulong entityId, [MaybeNullWhen(false)] out WorldPlayer player);
     bool TryGetMonster(ulong entityId, [MaybeNullWhen(false)] out MonsterInstance monster);
-    IEnumerable<MonsterInstance> Monsters { get; }
-    IEnumerable<WorldPlayer> Players { get; }
+    // The field's own collections: walked every tick, their struct enumerators box nothing.
+    Dictionary<ulong, MonsterInstance>.ValueCollection Monsters { get; }
+    Dictionary<ulong, WorldPlayer>.ValueCollection Players { get; }
     (float DurationMs, float HitAtMs) PlayerSwingTiming(WorldPlayer player);
     void EmitCombatEvent(in CombatEventView combatEvent);
     KillPayout? ApplyPlayerDamage(WorldPlayer player, MonsterInstance monster, int damage, bool crit, bool forceFlinch = false, ulong sourceEntityId = 0);
@@ -271,7 +273,7 @@ internal sealed partial class FieldSkills
         }
 
         var end = CurrentAim(cast);
-        var distance = Vector2.Distance(new Vector2(caster.Position.X, caster.Position.Z), new Vector2(end.X, end.Z));
+        var distance = Planar.Distance(caster.Position, end);
         var flightMs = (long)SkillProjectile.FlightMs(distance);
         if (flightMs <= 0)
         {
@@ -317,12 +319,17 @@ internal sealed partial class FieldSkills
                 break;
             case SkillKind.Area:
                 targetCount = AreaHit(caster, cast, rule, aim);
+                if (rule.PartyEcho)
+                {
+                    targetCount += PartyEcho(caster, cast, rule);
+                }
+
                 break;
             case SkillKind.SelfBuff:
                 targetCount = ApplySupport(caster, cast, rule, nowMs);
                 break;
             case SkillKind.Debuff:
-                if (_host.TryGetMonster(cast.TargetId, out var monster) && monster.IsAlive && !monster.IsSummon)
+                if (_host.TryGetMonster(cast.TargetId, out var monster) && monster.IsAlive && !monster.IsSummon && Takes(rule.Buff, monster))
                 {
                     ApplyEffect(monster.Effects, monster.EntityId, caster.EntityId, cast.Rule.Code, rule.Buff, rank, ResistanceOf(rule.Buff, monster),
                         caster.Character);
@@ -459,7 +466,8 @@ internal sealed partial class FieldSkills
                     return SupportBlocked(player, rule) ? SkillCastVerdict.AlreadyActive : SkillCastVerdict.Accepted;
                 }
 
-                if (!_host.TryGetPlayer(request.TargetId, out var ally) || ally.IsDead || rule.Allies is { Party: true } && !player.SharesPartyWith(ally))
+                if (!_host.TryGetPlayer(request.TargetId, out var ally) || ally.IsDead || rule.Allies is { Party: true } && !player.SharesPartyWith(ally)
+                    || rule.AllyClasses.Length > 0 && !rule.AllyClasses.Contains(ally.Character.Class.Class))
                 {
                     return SkillCastVerdict.InvalidTarget;
                 }

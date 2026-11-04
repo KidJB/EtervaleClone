@@ -209,23 +209,20 @@ public sealed partial class PristonRenderer
             return false;
         }
 
-        var objects = actor.Instance.Actor.Skeleton.Objects;
-        for (int index = 0; index < objects.Count; index++)
+        var index = actor.Instance.Actor.Skeleton.ObjectIndex(boneName);
+        if (index < 0)
         {
-            if (objects[index].Name.Equals(boneName, StringComparison.OrdinalIgnoreCase))
-            {
-                var bones = actor.SampleSkeleton();
-                if (index >= bones.Length)
-                {
-                    return false;
-                }
-
-                world = bones[index] * actor.World;
-                return true;
-            }
+            return false;
         }
 
-        return false;
+        var bones = actor.SampleSkeleton();
+        if (index >= bones.Length)
+        {
+            return false;
+        }
+
+        world = bones[index] * actor.World;
+        return true;
     }
 
     // cheerBoneName: the bone the child hangs from while the parent plays Yahoo (a weapon put on the back), or null.
@@ -243,17 +240,24 @@ public sealed partial class PristonRenderer
         UpdateActor(item);
     }
 
-    private static int FindAttachBone(ActorRuntime owner, string boneName)
+    // Places an attached actor off its bone: the offset in the bone's frame, then the lift upward.
+    public void SetActorAttachOffset(ActorHandle child, Matrix offset, float lift)
     {
-        for (int index = 0; index < owner.Instance.Actor.Skeleton.Objects.Count; index++)
+        if (!TryResolveActor(child, out var item) || !TryResolveActor(item.Parent, out var owner))
         {
-            if (owner.Instance.Actor.Skeleton.Objects[index].Name.Equals(boneName, StringComparison.OrdinalIgnoreCase))
-            {
-                return index;
-            }
+            throw new ArgumentException("Invalid equipment attachment handle.");
         }
 
-        throw new InvalidDataException($"Equipment bone '{boneName}' is missing from '{owner.Instance.Actor.Skeleton.Path}'.");
+        item.AttachOffset = offset;
+        item.AttachLift = lift;
+        item.World = AttachedWorld(item, owner);
+        UpdateActor(item);
+    }
+
+    private static int FindAttachBone(ActorRuntime owner, string boneName)
+    {
+        var index = owner.Instance.Actor.Skeleton.ObjectIndex(boneName);
+        return index >= 0 ? index : throw new InvalidDataException($"Equipment bone '{boneName}' is missing from '{owner.Instance.Actor.Skeleton.Path}'.");
     }
 
     private bool TryResolveActor(ActorHandle handle, out ActorRuntime runtime)

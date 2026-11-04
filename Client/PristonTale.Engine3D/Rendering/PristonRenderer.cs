@@ -19,11 +19,14 @@ public sealed partial class PristonRenderer : IDisposable
     private static readonly ConditionalWeakTable<PristonActor, PreparedActorGeometry> PreparedActorGeometries = new();
 
     // The original game advances stage-object animation by two ticks per millisecond.
-    private const float StageObjectFrameRate = 2000f;
+    // Animated stage objects advance two clip ticks per millisecond.
+    internal const float StageObjectTicksPerSecond = 2000f;
+    // The sky dome follows the camera up to 150000 fixed-point units, at an eighth of its height.
+    private const float SkyCameraCeiling = 150000f / GameUnits.FixedScale;
+    private const float SkyCameraHeightDivisor = 8f;
 
     private static readonly bool ShadowDiagnostics =
         Environment.GetEnvironmentVariable("PRISTON_SHADOW_DIAG") == "1";
-    // PlaybackRate supplies the rules-layer frame step / 80 ratio for speed-scaled motions.
     private const int MinimumShadowMapSize = 1024;
     private const float ShadowTeleportRefreshDistance = 350f;
     private const uint TexFormScroll = 4;
@@ -78,15 +81,11 @@ public sealed partial class PristonRenderer : IDisposable
     private uint _renderTime => _renderClock.Milliseconds;
     private bool _disposed;
     private readonly PristonDayNightCycle _dayNight = new();
-    private const int LightNight = 0x00001;
-    private const int LightLens = 0x00002;
-    private const int LightDynamic = 0x80000;
 
     // Stage lamps (Shaders/Lighting/Shading.hlsli): the illuminance at the reference distance (150 units), in units of the
     // authored level over the night reference (PristonPhotometry), falling off with the inverse square; the authored range
     // is where the light is windowed to zero.
     private const float LampLevelScale = 2f;
-    private const float LampRangeStretch = 1f;
     // Self-illumination at night: the luminance (cd/m^2) of an emissive albedo of 1; by day it shows at its authored
     // display level instead (EmissionScale is the larger of the two).
     private const float EmissiveLuminance = 40f;
@@ -98,7 +97,7 @@ public sealed partial class PristonRenderer : IDisposable
     private float _lampRangeScale = 1f;
     private float _glowIntensity = 1f;
     private float _glowScale = 1f;
-    private readonly List<PristonPointLight> _activeLights = new(MaxActiveLights);
+    private readonly List<PristonPointLight> _activeLights = new(PristonShaderLibrary.MaxLocalLightCount);
     public Lighting.PristonTransientLights TransientLights { get; } = new();
     private readonly List<PristonPointLight> _tunedCandidates = [];
     private readonly List<PristonPointLight> _frameGlowLights = [];
@@ -144,7 +143,10 @@ public sealed partial class PristonRenderer : IDisposable
     private readonly PristonSkyCapture _skyCapture;
     private Vector3 _towardSun = Vector3.Up;
     private Vector3 _fogSunColour;
-    private float _sunElevation;
+    // The sine of the sun's elevation; above SunLightsSine (just under the horizon) the sun still lights and shadows.
+    private float _sunSine;
+    private const float SunLightsSine = -0.05f;
+    private bool SunLights => _sunSine > SunLightsSine;
     private float _lampFactor;
     private PristonFrameExposure _exposure = PristonFrameExposure.Neutral;
     private PristonPostSettings _postSettings = PristonPostSettings.From(new ClientSettings());
@@ -197,7 +199,7 @@ public sealed partial class PristonRenderer : IDisposable
     {
         if (_shadowMap?.Width != settings.ShadowMapSize)
         {
-            // Release first so a size change never holds both maps (an 8192² R32F + D24 pair is ~512 MiB).
+            // Release first so a size change never holds both maps (an 8192² Depth32Float map is 256 MiB).
             _shadowMap?.Dispose();
             _shadowMap = null;
             _shadowMap = CreateShadowTarget(settings.ShadowMapSize);
@@ -217,12 +219,12 @@ public sealed partial class PristonRenderer : IDisposable
         RealisticSky = settings.RealisticSky;
         CloudQuality = settings.CloudQuality;
         _fullShadowRefresh = true;
-        _multiSampleCount = settings.AntiAliasing == AntiAliasingMode.Msaa ? Math.Clamp(settings.MultiSampleCount, 2, 4) : 0;
+        _multiSampleCount = settings.AntiAliasing == AntiAliasingMode.Msaa ? Math.Clamp(settings.MultiSampleCount, 2, ClientSettings.MostMultiSamples) : 0;
         ShadowsEnabled = settings.ShadowsEnabled;
         DistanceFog = PristonDistanceFog.For(settings.DistanceFog);
         DebugView = settings.DebugView;
         ExposureCompensation = settings.ExposureCompensation;
-        _maxLocalLights = Math.Clamp(settings.LocalLightLimit, 1, MaxActiveLights);
+        _maxLocalLights = Math.Clamp(settings.LocalLightLimit, 1, PristonShaderLibrary.MaxLocalLightCount);
         _postSettings = PristonPostSettings.From(settings);
         _log.Info(
             $"[Rendering] quality={settings.Quality}; sun shadow={_shadowMap.Width} in {_cascades.Count} cascade(s) of {_cascades.TileSize} " +
@@ -417,7 +419,7 @@ public sealed partial class PristonRenderer : IDisposable
         {
             foreach (var model in stage.AnimatedModels)
             {
-                model.Advance(dt * StageObjectFrameRate);
+                model.Advance(dt * StageObjectTicksPerSecond);
             }
 
             foreach (var group in stage.AnimatedGroups)
@@ -543,7 +545,7 @@ public sealed partial class PristonRenderer : IDisposable
         var sunShadowsEnabled = ShadowsEnabled && lighting.Sun.DiffuseColor != Vector3.Zero && !Underground;
         InvalidateShadowAfterTeleport(camera.Target);
         // The moon's shadows move with the actors only: half the refresh rate is enough for its soft, dim light.
-        var shadowRate = _sunElevation > -0.05f || _shadowUpdateRate == 0 ? _shadowUpdateRate : Math.Max(_shadowUpdateRate / 2, 30);
+        var shadowRate = SunLights || _shadowUpdateRate == 0 ? _shadowUpdateRate : Math.Max(_shadowUpdateRate / 2, 30);
         var sunShadowUpdated = _sunShadowRefresh.ShouldRefresh(_renderTime, shadowRate, sunShadowsEnabled);
         var sunShadowRedraw = sunShadowUpdated;
         if (sunShadowUpdated)
@@ -562,14 +564,14 @@ public sealed partial class PristonRenderer : IDisposable
         }
 
         var lightViewProjection = Matrix.Identity;
-        _lampShadowRedraw = ShadowsEnabled && _lampFactor > 0.01f
+        _lampShadowRedraw = ShadowsEnabled && PristonDayNightCycle.LampsLit(_lampFactor)
             ? _lampShadows.Assign(lighting.PointLights, lighting.TransientLightCount, _lampHasCasters ??= LampHasCasters)
             : 0;
-        var lampShadows = _lampShadows.Atlas is not null && ShadowsEnabled && _lampFactor > 0.01f
+        var lampShadows = _lampShadows.Atlas is not null && ShadowsEnabled && PristonDayNightCycle.LampsLit(_lampFactor)
             ? new PristonLampShadowFrame(_lampShadows.Atlas, _lampShadows.Rows, _lampShadows.FaceSize, _lampShadows.Lamps)
             : default;
         var displayScale = _exposure.DisplayScale;
-        var skyRadiance = SrgbToLinear((BackgroundColor ?? SkyColor).ToVector3()) / displayScale;
+        var skyRadiance = PristonColorSpace.SrgbToLinear((BackgroundColor ?? SkyColor).ToVector3()) / displayScale;
         var projection = camera.Projection;
         var jitterPixels = Vector2.Zero;
         var jitterClip = Vector2.Zero;
@@ -639,7 +641,7 @@ public sealed partial class PristonRenderer : IDisposable
         _stateCache.BeginFrame();
         _stateCache.InvalidateDeviceState();
         var skyVisible = Sky != null && !Underground && DebugView != PristonDebugView.Overdraw;
-        var skyPosition = new Vector3(0f, MathF.Min(camera.Position.Y, 150000f / 256f) / 8f, 0f);
+        var skyPosition = new Vector3(0f, MathF.Min(camera.Position.Y, SkyCameraCeiling) / SkyCameraHeightDivisor, 0f);
         if (skyVisible)
         {
             UpdatePhysicalSky(camera.Position, displayScale);
@@ -695,7 +697,7 @@ public sealed partial class PristonRenderer : IDisposable
             DrawPrepass(_renderQueueBuilder.Queue);
             Profiler.End(RenderSection.Prepass);
             // Contact shadows of the sun only, as for the shafts.
-            var contact = _contactShadows && sunShadowsEnabled && _sunElevation > -0.05f;
+            var contact = _contactShadows && sunShadowsEnabled && SunLights;
             if (_ambientOcclusion || contact)
             {
                 Profiler.Begin(RenderSection.AmbientOcclusion);
@@ -777,7 +779,7 @@ public sealed partial class PristonRenderer : IDisposable
         _glowRenderer.Draw(frame, _frameGlowLights, _lampFactor);
         Profiler.End(RenderSection.Glow);
         // Shafts of the sun only: the moon's are too faint to pay for.
-        if (_prepassDrawn && _volumetricLight && sunShadowsEnabled && _sunElevation > -0.05f)
+        if (_prepassDrawn && _volumetricLight && sunShadowsEnabled && SunLights)
         {
             Profiler.Begin(RenderSection.Volumetric);
             // The march stops where the distance fog starts, which covers the medium beyond.
@@ -793,7 +795,7 @@ public sealed partial class PristonRenderer : IDisposable
                 lighting.Sun.DiffuseColor,
                 DistanceFog.Enabled ? MathF.Min(DistanceFog.StartDistance, PristonVolumetricLight.MaxDistance) : PristonVolumetricLight.MaxDistance,
                 _motionFrame,
-                _sceneTargets.Bind,
+                _sceneTargets.BindAction,
                 VolumetricDensityScale);
             Profiler.End(RenderSection.Volumetric);
             _stateCache.InvalidateDeviceState();
@@ -875,13 +877,7 @@ public sealed partial class PristonRenderer : IDisposable
     // Samples of the HDR scene target as created (0 without MSAA).
     public int EffectiveMultiSampleCount => _sceneTargets.EffectiveMultiSampleCount;
 
-    private static Vector3 SrgbToLinear(Vector3 colour) => new(SrgbToLinear(colour.X), SrgbToLinear(colour.Y), SrgbToLinear(colour.Z));
-
-    private static float SrgbToLinear(float value) =>
-        value <= 0.04045f ? value / 12.92f : MathF.Pow((value + 0.055f) / 1.055f, 2.4f);
-
-    private const int MaxActiveLights = 32;
-    private int _maxLocalLights = MaxActiveLights;
+    private int _maxLocalLights = PristonShaderLibrary.MaxLocalLightCount;
     // The gameplay colour add (hover and target highlight) becomes a rim of this strength rather than added light.
     private const float SelectionRimScale = 0.6f;
 
@@ -1044,6 +1040,9 @@ public sealed partial class PristonRenderer : IDisposable
         public ActorHandle Parent { get; set; } = ActorHandle.None;
         public int ParentBone { get; set; }
         public int CheerBone { get; set; } = -1;
+        // Applied in the bone's frame before it, and the lift raises the result.
+        public Matrix AttachOffset { get; set; } = Matrix.Identity;
+        public float AttachLift { get; set; }
         public ActorGpuResource GpuResource { get; set; }
 
         public bool Alive { get; set; } = true;
@@ -1198,7 +1197,7 @@ public sealed partial class PristonRenderer : IDisposable
         private static int StartTicks(PristonMotionInfo motion) => (int)motion.StartFrame * GameUnits.FrameTicks;
 
         private static int EndTicks(PristonMotionInfo motion, int fallback) =>
-            motion.EndFrame > motion.StartFrame ? (int)motion.EndFrame * 160 : fallback;
+            motion.EndFrame > motion.StartFrame ? (int)motion.EndFrame * GameUnits.FrameTicks : fallback;
 
         // Only one-shots driven by gameplay return to Stand; unlisted motions hold their final pose.
         private static bool ReturnsToStand(PristonMotionInfo motion)

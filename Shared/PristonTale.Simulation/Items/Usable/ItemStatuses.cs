@@ -6,12 +6,31 @@ public static class ItemStatuses
 {
     public const uint PremiumKeepBase = 0xF0000110;
 
-    private const string Keep = "image/Sinimage/skill/keep/";
 
     // A crystal pet shows its crystal's inventory sprite, every crystal's lying in the Event folder.
     private const string CrystalIcons = "image/Sinimage/Items/Event/it";
 
     public static uint PremiumKeepCode(PremiumEffectKind kind) => PremiumKeepBase + (uint)kind;
+
+    // A premium timer's name, as the timer column and the game master's replies show it; the boosters and the skill
+    // delay item go by their keep icon's name.
+    public static string PremiumName(PremiumEffectKind kind) => kind switch
+    {
+        PremiumEffectKind.ThirdEyes => "Third Eyes",
+        PremiumEffectKind.ExperienceUp => "EXP Increase Potion",
+        PremiumEffectKind.VampiricCuspid => "Vampiric Cuspid",
+        PremiumEffectKind.ManaRecharging => "Mana Recharging Potion",
+        PremiumEffectKind.MightOfAwell => "Might of Awell",
+        PremiumEffectKind.ManaReduce => "Mana Reduce Potion",
+        PremiumEffectKind.PhoenixPet => "Phoenix",
+        PremiumEffectKind.HelpPetTerry => "Terry",
+        PremiumEffectKind.HelpPetNepsys => "Nepsys",
+        PremiumEffectKind.HelpPetIo => "Io",
+        PremiumEffectKind.HelpPetMute => "Mute",
+        PremiumEffectKind.VampiricCuspidEx => "Super Vampiric Cuspid",
+        PremiumEffectKind.StaminaReduce => "Stamina Reduce Potion",
+        _ => Name(PremiumKeepCode(kind)) ?? ""
+    };
 
     public static bool TryGetPremiumKeep(uint code, out PremiumEffectKind kind)
     {
@@ -41,7 +60,7 @@ public static class ItemStatuses
             return CrystalIcons + crystal.CatalogKey + ".bmp";
         }
 
-        return TryGetPremiumKeep(code, out var kind) ? Keep + kind switch
+        return TryGetPremiumKeep(code, out var kind) ? KeepIcons.Folder + kind switch
         {
             PremiumEffectKind.LifeBooster => "Booster_01.tga",
             PremiumEffectKind.ManaBooster => "Booster_02.tga",

@@ -9,6 +9,7 @@ using PristonTale.Simulation.Items;
 using PristonTale.Simulation.World.Loot;
 using PristonTale.Contracts.Motion;
 using PristonTale.Engine3D;
+using PristonTale.Contracts.Units;
 
 namespace PristonTale.Gameplay.World.Remote;
 
@@ -142,8 +143,8 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
     // about X so it lies flat instead of standing on its tip.
     internal static Matrix Orientation(GroundDropView drop)
     {
-        int turn = (int)MathF.Round(drop.Position.X * 256f) + (int)MathF.Round(drop.Position.Z * 256f) >> 2 & 4095;
-        var yaw = Matrix.CreateRotationY(turn * MathHelper.TwoPi / 4096f);
+        int turn = (int)MathF.Round(drop.Position.X * GameUnits.FixedScale) + (int)MathF.Round(drop.Position.Z * GameUnits.FixedScale) >> 2;
+        var yaw = Matrix.CreateRotationY(GameUnits.FromAngle(turn));
         return IsWeapon(drop) ? Matrix.CreateRotationX(MathHelper.PiOver2) * yaw : yaw;
     }
 
@@ -188,6 +189,26 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
 
         position = default;
         return false;
+    }
+
+    // The drop nearest along x within reach of the origin and within depth of its z.
+    public bool FindNear(Vector3 origin, float reach, float depth, out Guid id, out Vector3 position)
+    {
+        id = Guid.Empty;
+        position = default;
+        var nearest = reach;
+        foreach (var entry in _entries.Values)
+        {
+            var across = MathF.Abs(entry.Position.X - origin.X);
+            if (entry.FloorFound && MathF.Abs(entry.Position.Z - origin.Z) < depth && across < nearest)
+            {
+                nearest = across;
+                id = entry.Drop.Id;
+                position = entry.Position;
+            }
+        }
+
+        return id != Guid.Empty;
     }
 
     public bool Pick(Point cursor, Ray ray, out Guid id, out Vector3 position, bool showAllLabels = false)
@@ -271,7 +292,7 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
         }
 
         float depth = -Vector3.Transform(entry.Position, camera.View).Z;
-        if (!hovered && (depth < 32 || depth >= 768))
+        if (!hovered && (depth < 32 || depth >= UI.Rendering.HudNameColors.OverheadDepth))
         {
             return false;
         }

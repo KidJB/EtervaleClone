@@ -119,7 +119,7 @@ static const float MesopicHalf = 0.04;
 float3 MesopicVision(float3 c, float inversePreExposure, float3 tint)
 {
     float x = dot(c, float3(0.4124, 0.3576, 0.1805));
-    float y = dot(c, float3(0.2126, 0.7152, 0.0722));
+    float y = Luminance(c);
     float z = dot(c, float3(0.0193, 0.1192, 0.9505));
     float scotopic = max(y * (1.33 * (1.0 + (y + z) / max(x, 1.0e-6)) - 1.68), 0.0) / ScotopicWhite;
     float rods = MesopicHalf / (MesopicHalf + y * inversePreExposure);
@@ -194,7 +194,8 @@ float3 SharpenedScene(float2 uv, float exposure)
     float3 lo = min(centre, min(min(up, left), min(right, down)));
     float3 hi = max(centre, max(max(up, left), max(right, down)));
     float3 amplitude = sqrt(saturate(min(lo, 1.0 - hi) / max(hi, 1.0e-5)));
-    float3 w = amplitude * (-0.2 * saturate(ScreenParams.w));
+    // CAS's peak weight runs from -1/8 to -1/5 over the sharpness; 0 turns the pass off above.
+    float3 w = amplitude * lerp(-0.125, -0.2, saturate(ScreenParams.w));
     float3 r = clamp((centre + (up + left + right + down) * w) / (1.0 + 4.0 * w), 0.0, 0.999);
     return r / (1.0 - r) / max(exposure, 1.0e-6);
 }

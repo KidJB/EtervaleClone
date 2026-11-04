@@ -26,6 +26,7 @@ internal static class BinaryProtocolTests
         yield return ("TLS connections deliver frames in order, coalesce sends and check the server certificate", ConnectionAsync);
         yield return ("a connection counts its backlog until the stream takes it, and a batch of sends leaves in one write", BacklogAsync);
         yield return ("a connection whose backlog stops draining closes as stalled", StallAsync);
+        yield return ("a server address takes a host, host:port or tcp:// form, the game port when none is given", ServerAddressAsync);
     }
 
     private static Task MalformedAsync()
@@ -60,6 +61,8 @@ internal static class BinaryProtocolTests
         var length = VarInt.Write(maximum, ulong.MaxValue);
         var at = 0;
         Assert.True(length == 10 && VarInt.Read(maximum, ref at) == ulong.MaxValue, "the largest value did not round-trip");
+        Assert.True(VarInt.UnZigZag(VarInt.ZigZag(int.MinValue)) == int.MinValue, "the smallest zigzag value did not round-trip");
+        Assert.Throws<InvalidDataException>(() => VarInt.UnZigZag((ulong)uint.MaxValue + 1), "a zigzag value wider than 32 bits was truncated");
         return Task.CompletedTask;
     }
 
@@ -97,7 +100,7 @@ internal static class BinaryProtocolTests
         Assert.True(ServerHelloPacket.Read(buffer.AsSpan(0, hello.Write(buffer))) == hello, "server hello round trip changed fields");
         var login = new LoginPacket(ProtocolVersion.Current, "conta", "sênha✓");
         Assert.True(LoginPacket.Read(buffer.AsSpan(0, login.Write(buffer))) == login, "login round trip changed the account or password");
-        Assert.True(LoginResultPacket.Read(buffer.AsSpan(0, new LoginResultPacket(LoginStatus.Busy).Write(buffer))).Status == LoginStatus.Busy,
+        Assert.True(LoginResultPacket.Read(buffer.AsSpan(0, new LoginResultPacket(Contracts.Sessions.LoginFailure.Busy).Write(buffer))).Status == Contracts.Sessions.LoginFailure.Busy,
             "login result lost its status");
 
         var entry = new CharacterListEntry("Álvaro", PlayerClass.Knight, 42, 1, 2, 1, 0x01010300, 0x02010100, 0, true);
@@ -239,6 +242,26 @@ internal static class BinaryProtocolTests
 
         async Task<FrameConnection> AcceptAsync() =>
             await TlsTransport.AcceptAsync(await listener.AcceptAsync(timeout.Token), context, TlsTransport.DefaultHandshakeTimeout, timeout.Token);
+    }
+
+    private static Task ServerAddressAsync()
+    {
+        var host = TlsTransport.ParseAddress(" play.example.com ");
+        Assert.True(host.Host == "play.example.com" && host.Port == TlsTransport.DefaultPort, $"a bare host became {host}");
+        var ip = TlsTransport.ParseAddress("203.0.113.7:10037");
+        Assert.True(ip.Host == "203.0.113.7" && ip.Port == 10037, $"an IP with its port became {ip}");
+        var local = TlsTransport.ParseAddress(TlsTransport.LocalAddress);
+        Assert.True(local.Host == "localhost" && local.Port == TlsTransport.DefaultPort, $"the local address became {local}");
+        var pin = new string('a', SHA256.HashSizeInBytes * 2);
+        var pinned = TlsTransport.ParseAddress($"[::1]?cert={pin}");
+        Assert.True(pinned.Port == TlsTransport.DefaultPort && pinned.Query == $"?cert={pin}", $"an IPv6 address with a pin became {pinned}");
+        Assert.True(TlsTransport.ParseAddress(pinned.AbsoluteUri) == pinned, "a parsed address did not parse to itself");
+        foreach (var invalid in new[] { "", "http://play.example.com", "play.example.com:0", "play.example.com:99999", "play.example.com?cert=zz", $"host?cert={pin}00" })
+        {
+            Assert.Throws<ArgumentException>(() => TlsTransport.ParseAddress(invalid), $"\"{invalid}\" was accepted as a server address");
+        }
+
+        return Task.CompletedTask;
     }
 
     private static async Task BacklogAsync()

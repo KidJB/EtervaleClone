@@ -10,6 +10,8 @@ using PristonTale.Simulation.Quests;
 using PristonTale.Simulation.World.Loot;
 using PristonTale.Contracts.Motion;
 using PristonTale.Contracts.World;
+using PristonTale.Simulation.Physics;
+using PristonTale.Simulation.World;
 
 namespace PristonTale.Server.Net;
 
@@ -20,10 +22,10 @@ namespace PristonTale.Server.Net;
 // ahead of its spawn, and lets the near ring update faster than the far ring.
 internal sealed partial class PresenceEncoder : IEventHandleWriter
 {
-    // Squared view ranges in world units: connect 0x120000, high detail 0x48000, ground items 0xC8000.
-    public static readonly float ViewRadius = MathF.Sqrt(0x120000);
-    private static readonly float ForgetRadius = ViewRadius * 1.15f;
-    private static readonly float NearRadius = MathF.Sqrt(0x48000);
+    // The view ranges: connect and high detail (ViewRanges), ground items 0xC8000 squared world units.
+    public static readonly float ViewRadius = ViewRanges.Connect;
+    private static readonly float ForgetRadius = ViewRadius * VisibleSet.KeepBand;
+    private static readonly float NearRadius = ViewRanges.Near;
     private static readonly float ItemRadius = MathF.Sqrt(0xC8000);
     // 5 Hz inside the high-detail range and 2 Hz out to the connect range; the original relayed players at about 2.2 Hz and monsters at 1.1 Hz.
     private const uint NearIntervalTicks = 4;
@@ -33,7 +35,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
     // Like the original per-receiver user limit, a crowd cannot exceed a per-receiver movement budget (about 40 KiB/s at 20 Hz).
     // Spawns and discrete changes always go out; position-only updates are ranked by how overdue they are.
     private const int MovementBudgetBytes = 2048;
-    private const ushort TickIntervalMs = 1000 / WorldServer.TickHz;
+    private const ushort TickIntervalMs = ServerTick.IntervalMs;
 
     private readonly ulong _self;
     private readonly WorldDataHolder _data;
@@ -135,17 +137,6 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
             lock (_gate)
             {
                 return _known.TryGetValue(_self, out var known) ? known.Position : null;
-            }
-        }
-    }
-
-    public int? Field
-    {
-        get
-        {
-            lock (_gate)
-            {
-                return _field;
             }
         }
     }
@@ -287,9 +278,10 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
             _related.Add(targetIndex);
         }
 
-        foreach (var member in snapshot.Party?.Members ?? [])
+        var members = snapshot.Party?.Members ?? [];
+        for (var index = 0; index < members.Count; index++)
         {
-            if (grid.TryGetIndex(member.EntityId, out var memberIndex))
+            if (grid.TryGetIndex(members[index].EntityId, out var memberIndex))
             {
                 _related.Add(memberIndex);
             }
@@ -318,7 +310,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         WriteVisible(ref group, connection, _visible, snapshot, self.Position, tick, field);
 
         var budget = MovementBudgetBytes;
-        foreach (var (index, _, near) in _pending.Ordered())
+        foreach (var (index, _) in _pending.Ordered())
         {
             var size = MotionSize(index);
             if (budget < size)
@@ -417,8 +409,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
                 {
                     var item = view.PartnerItems[index];
                     details[index] = ItemWireMapping.Detail(item);
-                    items[index] = new StoreItemEntry(item.InstanceId, item.Code, (byte)item.Kind, item.Count, item.Anchor, (short)item.Width,
-                        (short)item.Height, item.Name);
+                    items[index] = ItemWireMapping.StoreItem(item);
                 }
 
                 var own = new TradeEntryWire[view.Own.Entries.Count];
@@ -567,7 +558,9 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
 
     // In a crowd denser than the visible cap, only the neighbourhood that holds the nearest MaxVisible entities (and the
     // keep band around it) is collected: a square of half size h holding at least that many puts all of them within
-    // h times the square root of two.
+    // h times the square root of two (SquareCornerReach, rounded up).
+    private const float SquareCornerReach = 1.42f;
+
     private static float CrowdRadius(EntityGrid grid, Vector3 center)
     {
         if (grid.Count <= MaxVisible * 2)
@@ -575,11 +568,11 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
             return ForgetRadius;
         }
 
-        for (var half = EntityGrid.CellSize * 1.5f; half * 1.42f * 1.15f < ForgetRadius; half *= 1.6f)
+        for (var half = EntityGrid.CellSize * 1.5f; half * SquareCornerReach * VisibleSet.KeepBand < ForgetRadius; half *= 1.6f)
         {
             if (grid.CountInSquare(center, half) >= MaxVisible * 2)
             {
-                return half * 1.42f * 1.15f;
+                return half * SquareCornerReach * VisibleSet.KeepBand;
             }
         }
 
@@ -592,14 +585,14 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         foreach (var (index, _) in visible.Entries)
         {
             ref readonly var view = ref snapshot.Entities[index];
-            var distanceSq = PlanarDistanceSq(view.Position, center);
+            var distanceSq = Planar.DistanceSquared(view.Position, center);
             var near = distanceSq <= NearRadius * NearRadius;
             if (WriteEntity(ref group, connection, index, tick, field, near) is { } age)
             {
                 // Overdue ratio: the wanted interval grows with distance, and every waiting entity keeps gaining
-                // priority, so a crowd is served round-robin like the classic server's rotating send cursor.
+                // priority, so a crowd is served round-robin.
                 var wanted = NearIntervalTicks + MathF.Sqrt(distanceSq) / 50f;
-                _pending.Add(index, age / wanted, near);
+                _pending.Add(index, age / wanted);
             }
         }
     }
@@ -612,7 +605,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
             return;
         }
 
-        var distanceSq = PlanarDistanceSq(view.Position, center);
+        var distanceSq = Planar.DistanceSquared(view.Position, center);
         if (distanceSq > ForgetRadius * ForgetRadius || distanceSq > ViewRadius * ViewRadius && !_known.ContainsKey(view.EntityId))
         {
             return;
@@ -978,13 +971,16 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
             }
         }
 
-        foreach (var entity in withSpawned ? _spawned : [])
+        if (withSpawned)
         {
-            foreach (var running in snapshot.ActiveStatuses.For(entity))
+            foreach (var entity in _spawned)
             {
-                if (running.RemainingAt(snapshot.FieldNowMs) > 0 && !PublishedWith(snapshot.StatusEvents, running.Status))
+                foreach (var running in snapshot.ActiveStatuses.For(entity))
                 {
-                    _statusEvents.Add(WireMapping.Status(running.At(snapshot.FieldNowMs)));
+                    if (running.RemainingAt(snapshot.FieldNowMs) > 0 && !PublishedWith(snapshot.StatusEvents, running.Status))
+                    {
+                        _statusEvents.Add(WireMapping.Status(running.At(snapshot.FieldNowMs)));
+                    }
                 }
             }
         }
@@ -1041,7 +1037,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         _newDrops.Clear();
         foreach (var drop in snapshot.GroundDrops)
         {
-            if (!drop.Public && drop.OwnerId != _self || PlanarDistanceSq(drop.View.Position, selfPosition) > ItemRadius * ItemRadius)
+            if (!drop.Public && drop.OwnerId != _self || Planar.DistanceSquared(drop.View.Position, selfPosition) > ItemRadius * ItemRadius)
             {
                 continue;
             }
@@ -1103,12 +1099,10 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         {
             _inventoryRevision = owner.InventoryRevision;
             ItemWireMapping.SendDetails(owner, connection, _scratch);
-            var items = owner.Items.Select(WireMapping.Item).ToArray();
-            var parts = Math.Max(1, (items.Length + InventoryPartPacket.MaxItemsPerPart - 1) / InventoryPartPacket.MaxItemsPerPart);
-            for (var part = 0; part < parts; part++)
+            var parts = ItemWireMapping.Parts(owner.Items.Select(WireMapping.Item).ToArray(), InventoryPartPacket.MaxItemsPerPart);
+            for (var part = 0; part < parts.Length; part++)
             {
-                var slice = items.Skip(part * InventoryPartPacket.MaxItemsPerPart).Take(InventoryPartPacket.MaxItemsPerPart).ToArray();
-                var packet = new InventoryPartPacket(owner.InventoryRevision, part, parts, slice);
+                var packet = new InventoryPartPacket(owner.InventoryRevision, part, parts.Length, parts[part]);
                 connection.Send(_scratch.AsSpan(0, packet.Write(_scratch)));
             }
         }
@@ -1152,13 +1146,6 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
                     appearance.PetSkin, appearance.PetName)),
             view.OwnerId,
             view.ModelScale);
-    }
-
-    private static float PlanarDistanceSq(Vector3 a, Vector3 b)
-    {
-        var dx = a.X - b.X;
-        var dz = a.Z - b.Z;
-        return dx * dx + dz * dz;
     }
 
     // What this receiver last got about an entity, only the fields its diff compares (a crowd keeps one per pair); Pass

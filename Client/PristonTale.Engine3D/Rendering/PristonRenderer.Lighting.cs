@@ -53,13 +53,12 @@ public sealed partial class PristonRenderer
         {
             var radius = l.Range > 1f ? l.Range : 600f;
             var light = new PristonPointLight(l.Position, radius, l.Color, 1f);
-            var isLens = (l.Type & LightLens) != 0;
-            if ((l.Type & LightNight) != 0) nNight++;
-            if (isLens) nLens++;
-            if ((l.Type & LightDynamic) != 0) nDynamic++;
+            if (l.Night) nNight++;
+            if (l.Lens) nLens++;
+            if (l.Dynamic) nDynamic++;
 
-            if (isLens) glow.Add(light);
-            if (!isLens || (l.Type & LightDynamic) != 0) ground.Add(light);
+            if (l.Lens) glow.Add(light);
+            if (!l.Lens || l.Dynamic) ground.Add(light);
         }
 
         // Only LENS lights receive coronas; dungeon flames use their animated emitters.
@@ -101,7 +100,7 @@ public sealed partial class PristonRenderer
         SkyColor = new Color(skyColor);
         _lampFactor = lampFactor;
         _towardSun = sky.TowardSun;
-        _sunElevation = Underground ? -1f : sky.SunElevation;
+        _sunSine = Underground ? -1f : sky.SunSine;
         _exposure = PristonFrameExposure.ForIlluminance(metered, Underground, ExposureCompensation, EmissiveLuminance);
         var radianceScale = _exposure.PreExposure / MathF.PI;
         var sunColor = sunIlluminance * radianceScale;
@@ -131,7 +130,7 @@ public sealed partial class PristonRenderer
 
     private void SelectActiveLights(Vector3 focusPoint, float lampFactor)
     {
-        if (lampFactor <= 0.01f)
+        if (!PristonDayNightCycle.LampsLit(lampFactor))
             return;
 
         _tunedCandidates.Clear();
@@ -200,7 +199,7 @@ public sealed partial class PristonRenderer
     private static PristonPointLight TuneLight(PristonPointLight light, RenderStageHandle stage, float lampFactor) =>
         light with
         {
-            Radius = light.Radius * stage.LampRangeScale * LampRangeStretch,
+            Radius = light.Radius * stage.LampRangeScale,
             Intensity = light.Intensity * stage.LampIntensity * lampFactor
         };
 }

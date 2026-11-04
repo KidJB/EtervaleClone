@@ -2,6 +2,7 @@ using System.Text.Json;
 using PristonTale.Simulation.Combat;
 using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Simulation.Progression;
 
 namespace PristonTale.Simulation.Skills;
 
@@ -125,7 +126,7 @@ public sealed partial record SkillDamageRule
     public int SpiritMaxDivisor { get; init; }
 
     // A spell: its power grows with the caster's spirit or spell power, so the target's magic resistance applies to it.
-    public bool Magic => SpellPower || SpiritMinDivisor > 0 || SpiritMaxDivisor > 0;
+    public bool Magic => SpellPower || SpiritMinDivisor > 0 || SpiritMaxDivisor > 0 || SpiritMinDivisorByRank.Length > 0 || SpiritMaxDivisorByRank.Length > 0;
 
     // Areas: percent of the rolled power each target in the area receives, plus MainPercent more for the main target.
     public int AreaPercent { get; init; } = 100;
@@ -216,6 +217,15 @@ public sealed record SkillBorrowedCritical
     public uint Skill { get; init; }
     public int[] Values { get; init; } = [];
     public int Divisor { get; init; } = 1;
+}
+
+// Attack rating percent a weapon skill's hits from FromHit on (1-based) borrow from another learned skill: Values indexed
+// by that skill's rank (none while it is not learned).
+public sealed record SkillBorrowedRating
+{
+    public uint Skill { get; init; }
+    public int[] Values { get; init; } = [];
+    public int FromHit { get; init; } = 1;
 }
 
 // A burst around the caster that follows one hit of a weapon skill: the hit's rolled attack damage with the skill's
@@ -336,6 +346,7 @@ public sealed partial record SkillRule
     // Relative critical chance increase: critical + critical x percent / 100.
     public int[] CriticalPercent { get; init; } = [];
     public SkillBorrowedCritical BorrowedCritical { get; init; }
+    public SkillBorrowedRating BorrowedRating { get; init; }
     public SkillBurstRule Burst { get; init; }
     public SkillChargeRule Charge { get; init; }
     // Areas: a weapon hit with this damage rule on the clicked target besides the area share; accuracy rolled per area
@@ -379,15 +390,7 @@ public sealed partial record SkillRule
     public string CompanionEffect { get; init; } = "";
     public string CompanionSound { get; init; } = "";
 
-    public int At(int[] table, int rank)
-    {
-        if (table is null || table.Length == 0)
-        {
-            return 0;
-        }
-
-        return table[Math.Clamp(rank, 1, table.Length) - 1];
-    }
+    public int At(int[] table, int rank) => SkillFormulas.At(table, rank);
 }
 
 public static partial class SkillRuleCatalog
@@ -402,7 +405,7 @@ public static partial class SkillRuleCatalog
 
     private static IReadOnlyDictionary<uint, SkillRule> Rules => ClassSkillCatalog.Rules;
 
-    private static bool Ranked(int[] table) => table is null || table.Length is 0 or 10;
+    private static bool Ranked(int[] table) => table is null || table.Length is 0 or SkillLearning.MaxRank;
 
     private static bool ValidSummon(SkillSummonRule summon) => summon is not null && summon.Monster.Length > 0 && summon.LifetimeMs > 0
         && Ranked(summon.DamageMin) && Ranked(summon.DamageMax) && Ranked(summon.AttackRating) && Ranked(summon.Defence) && Ranked(summon.Life)
@@ -411,7 +414,7 @@ public static partial class SkillRuleCatalog
     internal static void Validate(SkillRule rule)
     {
         var ok = rule.Code != 0 && rule.Name.Length > 0 && rule.MasteryBase >= 0 && rule.MasteryPerRank >= 0 && WellFormed(rule)
-            && (rule.HitFramesByRank.Length == 0 || rule.HitFramesByRank.Length == 10 && rule.HitFramesByRank.All(row => row.Length > 0
+            && (rule.HitFramesByRank.Length == 0 || rule.HitFramesByRank.Length == SkillLearning.MaxRank && rule.HitFramesByRank.All(row => row.Length > 0
                 && row.All(frame => frame > 0 && (rule.MotionFrames == 0 || frame <= rule.MotionFrames))))
             && rule.Modes.All(WellFormed) && (rule.Charge is null || ValidCharge(rule));
         if (!ok || !MechanicsValid(rule) || !PresentationValid(rule))
@@ -421,10 +424,10 @@ public static partial class SkillRuleCatalog
 
         var castable = rule.Kind != SkillKind.Passive;
         if (!Complete(rule) || rule.Modes.Any(mode => !Complete(mode))
-            || rule.Kind == SkillKind.Passive && (rule.Passive is null || rule.Passive.Values.Length != 10 && rule.Passive.Modifiers.Length == 0)
+            || rule.Kind == SkillKind.Passive && (rule.Passive is null || rule.Passive.Values.Length != SkillLearning.MaxRank && rule.Passive.Modifiers.Length == 0)
             || rule.Kind == SkillKind.Summon && !ValidSummon(rule.Summon)
             || rule.Kind == SkillKind.Charm && (rule.Charm is null || rule.Buff is null) || rule.Kind == SkillKind.Resurrect && rule.Resurrect is null
-            || rule.Kind == SkillKind.Heal && (rule.HealMin.Length != 10 || rule.HealMax.Length != 10)
+            || rule.Kind == SkillKind.Heal && (rule.HealMin.Length != SkillLearning.MaxRank || rule.HealMax.Length != SkillLearning.MaxRank)
             || castable && rule.Motion == SkillMotion.Skill && (rule.MotionFrames == 0 || rule.MotionEvents.Length == 0))
         {
             throw new InvalidDataException($"Skill rule {rule.Code:X8} ({rule.Name}) lacks the data its kind needs.");
@@ -440,27 +443,28 @@ public static partial class SkillRuleCatalog
         && rule.MotionRatePercent is > 0 and <= 400
         && rule.MotionEvents.All(frame => frame > 0 && (rule.MotionFrames == 0 || frame <= rule.MotionFrames))
         && WellFormed(rule.Damage) && WellFormed(rule.MainHit) && WellFormed(rule.Buff) && WellFormed(rule.CasterBuff)
-        && (rule.BorrowedCritical is null || rule.BorrowedCritical.Values.Length == 10 && rule.BorrowedCritical.Divisor > 0);
+        && (rule.BorrowedCritical is null || rule.BorrowedCritical.Values.Length == SkillLearning.MaxRank && rule.BorrowedCritical.Divisor > 0)
+        && (rule.BorrowedRating is null || rule.BorrowedRating.Values.Length == SkillLearning.MaxRank && rule.BorrowedRating.FromHit >= 1);
 
     private static bool WellFormed(SkillDamageRule damage) => damage is null || Ranked(damage.Percent) && Ranked(damage.PercentAfter)
         && Ranked(damage.Min) && Ranked(damage.Max) && Ranked(damage.RandomHits) && Ranked(damage.LevelDivisorByRank) && Ranked(damage.BonusPercentByRank)
         && damage.Min.Length == damage.Max.Length;
 
-    private static bool WellFormed(SkillBuffRule buff) => buff is null || buff.DurationTenths.Length == 10 && buff.DurationTenths.All(value => value > 0)
-        && buff.Modifiers.All(modifier => modifier.Values.Length == 10 && Ranked(modifier.ValuesMax))
-        && buff.Periodic.All(entry => entry.IntervalMs > 0f && entry.Min.Length == 10 && entry.Max.Length == 10)
-        && (buff.Companion is null || buff.Companion.IntervalMs.Length == 10 && buff.Companion.IntervalMs.All(value => value > 0)
+    private static bool WellFormed(SkillBuffRule buff) => buff is null || buff.DurationTenths.Length == SkillLearning.MaxRank && buff.DurationTenths.All(value => value > 0)
+        && buff.Modifiers.All(modifier => modifier.Values.Length == SkillLearning.MaxRank && Ranked(modifier.ValuesMax))
+        && buff.Periodic.All(entry => entry.IntervalMs > 0f && entry.Min.Length == SkillLearning.MaxRank && entry.Max.Length == SkillLearning.MaxRank)
+        && (buff.Companion is null || buff.Companion.IntervalMs.Length == SkillLearning.MaxRank && buff.Companion.IntervalMs.All(value => value > 0)
             && (buff.Companion.BorrowSkill != 0
-                ? buff.Companion.Percent.Length == 10
-                : buff.Companion.Choices.Length > 0 || buff.Companion.Min.Length == 10 && buff.Companion.Max.Length == 10)
+                ? buff.Companion.Percent.Length == SkillLearning.MaxRank
+                : buff.Companion.Choices.Length > 0 || buff.Companion.Min.Length == SkillLearning.MaxRank && buff.Companion.Max.Length == SkillLearning.MaxRank)
             && (buff.Companion.OwnerTarget || buff.Companion.Radius > 0))
-        && (buff.Counter is null || buff.Counter.BorrowSkill != 0 && buff.Counter.Percent.Length == 10);
+        && (buff.Counter is null || buff.Counter.BorrowSkill != 0 && buff.Counter.Percent.Length == SkillLearning.MaxRank);
 
     // The data a rule's kind resolves with: damage for attacks, an area for areas, an effect for buffs.
     private static bool Complete(SkillRule rule)
     {
-        var areaSized = rule.Radius.Length == 10 || rule.RadiusTargetPad > 0
-            || rule.AreaShape == SkillAreaShape.Box && (rule.ReachPercent.Length == 10 || rule.ReachBonus.Length == 10);
+        var areaSized = rule.Radius.Length == SkillLearning.MaxRank || rule.RadiusTargetPad > 0
+            || rule.AreaShape == SkillAreaShape.Box && (rule.ReachPercent.Length == SkillLearning.MaxRank || rule.ReachBonus.Length == SkillLearning.MaxRank);
         return rule.Kind switch
         {
             SkillKind.SelfBuff or SkillKind.Debuff => rule.Buff is not null,
@@ -473,7 +477,7 @@ public static partial class SkillRuleCatalog
     private static bool ValidCharge(SkillRule rule)
     {
         var charge = rule.Charge;
-        return charge.StartFrame > 0 && charge.FullFrame > charge.StartFrame && charge.ReleaseSpeed > 0 && rule.MotionSpeedByRank.Length == 10
+        return charge.StartFrame > 0 && charge.FullFrame > charge.StartFrame && charge.ReleaseSpeed > 0 && rule.MotionSpeedByRank.Length == SkillLearning.MaxRank
             && rule.MotionEvents.Any(frame => frame >= charge.FullFrame) && (charge.Full is null || WellFormed(charge.Full) && Complete(charge.Full));
     }
 }

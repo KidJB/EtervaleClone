@@ -29,8 +29,9 @@ FluentMigrator migrations, the schema, and the SQLite and PostgreSQL providers. 
 | `.../WorldData/` | Read-side catalog records and [WorldDataFactory](../Persistence/PristonTale.Persistence.Abstractions/WorldData/WorldDataFactory.cs) |
 | `.../Security/PasswordHasher.cs` | PBKDF2-SHA256 hashes: `pbkdf2-sha256$<iterations>$<salt b64>$<key b64>` |
 | `Persistence/PristonTale.Persistence/Repositories/` | `Dapper*Repository` implementations shared by both providers |
-| `Persistence/PristonTale.Persistence/Migrations/` | `M013Baseline`, `M014PortraitData`, `M015NpcServices`, `M016QuestData`, `M019GameMasters`, `M021MonsterSkillData`, `M022MonsterExperience64`, `M023ItemFootprints`, `M024WorldDataFields`, `M026Contacts`, `M027CatalogIdentities`, `M028WorldCatalog`, `M029NpcPlacementFacts`, `M030CharacterSaveSequence`, `M031GameLogs`, `M032StarterGifts`, `M033HelpPet`, `FluentMigratorDatabaseMigrator` |
-| `Persistence/PristonTale.Persistence.Sqlite/` | `AddPristonSqlite`, connection factory (WAL), Dapper type handlers, path resolution |
+| `Persistence/PristonTale.Persistence/PersistenceServiceCollectionExtensions.cs` | `AddPristonRepositories`: the repositories and the migration runner both providers register, given the provider's migration processor |
+| `Persistence/PristonTale.Persistence/Migrations/` | `M013Baseline`, `M014PortraitData`, `M015NpcServices`, `M016QuestData`, `M019GameMasters`, `M021MonsterSkillData`, `M022MonsterExperience64`, `M023ItemFootprints`, `M024WorldDataFields`, `M026Contacts`, `M027CatalogIdentities`, `M028WorldCatalog`, `M029NpcPlacementFacts`, `M030CharacterSaveSequence`, `M031GameLogs`, `M032StarterGifts`, `M033HelpPet`, `M034StarterOffHand`, `M035FieldOrder`, `FluentMigratorDatabaseMigrator` |
+| `Persistence/PristonTale.Persistence.Sqlite/` | `AddPristonSqlite`, connection factory (WAL), Dapper type handlers |
 | `Persistence/PristonTale.Persistence.Postgres/` | `AddPristonPostgres`, `NpgsqlDataSource` factory, `jsonb` handler for `JsonText` |
 | `docker-compose.yml` | Local PostgreSQL 17 for development |
 
@@ -117,8 +118,8 @@ and its account warehouse are always written together, so a gold or item move be
 
 | Column | Shape | Limits on restore |
 | --- | --- | --- |
-| `inventory` | `SavedItems` v1: items with `Anchor` (grid cell), `Slot = null`, plus `Revision`, inventory `Operations`, `ServiceOperations`, `ShopPurchases`; the item in the hand has `Held = true` and `Anchor = -1` (written only when set) | 72 items |
-| `equipment` | `SavedItems` v1: items with `Slot` set and `Anchor = -1` | 72 items |
+| `inventory` | `SavedItems` v1: items with `Anchor` (grid cell), `Slot = null`, plus `Revision`, inventory `Operations`, `ServiceOperations`, `ShopPurchases`; the item in the hand has `Held = true` and `Anchor = -1` (written only when set) | `CharacterStateCodec.MaxSavedItems` (166: both bag pages, belt, special item box, hand) |
+| `equipment` | `SavedItems` v1: items with `Slot` set and `Anchor = -1` | `CharacterStateCodec.MaxSavedItems` |
 | `skills` | `SavedSkills` v1: points, elite points, `(Code, Rank, Uses)`, progression `Revision` and `Operations` | 128 skills, points >= 0 |
 | `warehouses.items` | `SavedItems` v1 with anchors in the warehouse grid | `WarehouseStorage.MaxItems` |
 | `premium` | `SavedPremium` v1 (`PremiumStateCodec.cs`): premium timers `(Kind, Value, DurationSeconds, ExpiresAtSeconds)` with Unix-second expiry, item-use `Operations`, `GravityScrolls`, head mode (1-2 big head, 3 soccer ball) and expiry, `SavedAtSeconds` (the last tick's clock); `{}` is empty | 17 timers; expired timers and heads are dropped on restore; boosters and skill delay move their expiry by the time since `SavedAtSeconds` |
@@ -164,7 +165,9 @@ FluentMigrator scans `PristonTale.Persistence` for `[Migration(n)]` classes. Ver
 | 32 | `M032StarterGifts` | `characters.starter_gifts_received` (int, default 5): the starter gifts a character received; characters stored before count as served |
 | 33 | `M033HelpPet` | `characters.help_pet` (int16, default 0) and `help_pet_hidden` (bool, default false): the beginner's helper pet and whether the player hid it |
 | 34 | `M034StarterOffHand` | The off-hand became the third starter gift: a `starter_gifts_received` of 3 or more rises by one, so a served character stays served |
-| 35 | `M035PetSkins` | `characters.pet_skins` (int64, default 0: the pet skins unlocked, a bit per `PetSkins` id; the account's set is every one of its rows joined at login) and `pet_out` (int16, default 0: the skin out) |
+| 35 | `M035FieldOrder` | The action field took code 39: field codes 39-44 rise by one in `characters.field_id`, `item_transfers.field_id` and `fields.field_code`, the highest first |
+| 36 | `M036PetSkins` | `characters.pet_skins` (int64, default 0: the pet skins unlocked, a bit per `PetSkins` id; the account's set is every one of its rows joined at login) and `pet_out` (int16, default 0: the skin out) |
+| 37 | `M037PetName` | `characters.pet_name` (text up to 64 characters, default empty: the name the player gave its pet, empty showing the skin's name) |
 
 Upgrade path: databases from the earlier migration set at version 12 upgrade in place. Databases at
 versions 1-11 make `M013Baseline` throw; bring them to 12 with the previous release or back up and recreate them.
@@ -278,7 +281,7 @@ These tables keep what the catalog tables cannot express. They are rewritten on 
 | JSON columns | `TEXT` | `jsonb` (converted in `M013Baseline`) |
 | Type handlers | `SqliteTypeMapping`: bool as 0/1, int16/int32 sent as int64, float sent as double, `JsonText` as string, `DateTime` read as UTC | `JsonTextNpgsqlHandler` only |
 | Registration | `SqliteTypeMapping.EnsureRegistered()` runs from both the DI extension and `SqliteConnectionFactory` | In `AddPristonPostgres` |
-| Path | Server and DevAccounts resolve relative paths against the directory holding `PristonTale.sln` (`SqliteDatabasePath.Resolve`); the parent directory is created | Connection string |
+| Path | Server and DevAccounts resolve relative paths against the directory holding `PristonTale.sln` (`DataPath.Resolve`); the parent directory is created | Connection string |
 
 SQLite writes `-wal` and `-shm` files next to the database while in use; copy all three, or stop every process
 first, when copying a database.

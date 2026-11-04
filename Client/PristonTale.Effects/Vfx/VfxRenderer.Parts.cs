@@ -155,7 +155,7 @@ public sealed partial class VfxRenderer
             return;
         }
 
-        var parameters = new Vector2(8f, 0f);
+        var parameters = new Vector2(VfxSystem.StripSoftness, 0f);
         _scratch[at] = new VfxVertex { Position = a, Color = first, TexCoord = new Vector2(0f, v0), Params = parameters };
         _scratch[at + 1] = new VfxVertex { Position = b, Color = first, TexCoord = new Vector2(1f, v0), Params = parameters };
         _scratch[at + 2] = new VfxVertex { Position = c, Color = second, TexCoord = new Vector2(1f, v1), Params = parameters };
@@ -203,19 +203,11 @@ public sealed partial class VfxRenderer
                         facing = Matrix.CreateWorld(Vector3.Zero, forward, MathF.Abs(forward.Y) > 0.999f ? Vector3.Forward : Vector3.Up);
                     }
 
-                    // Effect models face the opposite way of effect space (their front is +Z).
-                    world = scale * rotation * Matrix.CreateRotationY(MathHelper.Pi) * facing * Matrix.CreateTranslation(part.Position);
+                    world = scale * rotation * ModelFront * facing * Matrix.CreateTranslation(part.Position);
                 }
 
                 var frame = (int)state.ModelFrame(part) % Math.Max(1, model.FrameCount);
-                var blend = compiled.Blend switch
-                {
-                    VfxBlend.Alpha => BlendState.NonPremultiplied,
-                    VfxBlend.Shadow => _shadow,
-                    VfxBlend.InvShadow => _inverseShadow,
-                    _ => BlendState.Additive
-                };
-                model.Draw(frame, world, view, projection, Decode(color), blend);
+                model.Draw(frame, world, view, projection, Decode(color), ModelBlend(compiled.Blend));
                 LastModelCount++;
             }
         }

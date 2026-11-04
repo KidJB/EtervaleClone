@@ -104,9 +104,10 @@ internal static class NpcServiceTests
             Assert.True(store.Has(NpcServiceKind.Shop) && store.Shop.MiscItemCodes.Single() == PotionCode, "runtime shop differs from the stock");
             // Every definition file is an NPC; unregistered files take the next ids in path order, and one without an English
             // name is keyed by its id.
-            var guard = definitions.Single(definition => definition.Code == 170);
-            var placed = definitions.Single(definition => definition.Code == 171);
-            Assert.True(definitions.Count == 3 && guard.Name == "NPC 170" && placed.Name == "NPC 171" && store.Code == 172,
+            var next = IdentityRegistry.Npcs().LastId + 1;
+            var guard = definitions.Single(definition => definition.Code == next);
+            var placed = definitions.Single(definition => definition.Code == next + 1);
+            Assert.True(definitions.Count == 3 && guard.Name == $"NPC {next}" && placed.Name == $"NPC {next + 1}" && store.Code == next + 2,
                 $"the NPC files were keyed {string.Join(", ", definitions.Select(static definition => $"{definition.Code} {definition.Name}"))}");
             Assert.True(report.Warnings.Count(static warning => warning.StartsWith("Identities/npcs.json lacks", StringComparison.Ordinal)) == 3,
                 "the import did not list the NPCs to register");
@@ -125,18 +126,18 @@ internal static class NpcServiceTests
                 "placements that disagree were not reported, or a disagreement the file overrides was");
             Assert.True(report.Warnings.Contains("npc Guard1.npc: 1 *대화 line(s) without an English translation (EnglishNames.Dialog) are not shown"),
                 "an untranslated line was not reported");
-            Assert.True(await connection.ExecuteScalarAsync<int>("SELECT npc_id FROM field_npcs WHERE stage = 'village-2'") == 171,
+            Assert.True(await connection.ExecuteScalarAsync<int>("SELECT npc_id FROM field_npcs WHERE stage = 'village-2'") == next + 1,
                 "the placement does not name the file it places");
             var exported = Path.Combine(directory, "placements.json");
             NpcPlacementExport.Write(source, exported);
             using (var placements = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(exported)))
             {
                 var row = placements.RootElement.EnumerateArray().Single();
-                Assert.True(row.GetProperty("NpcId").GetInt32() == 171 && row.GetProperty("NpcKey").GetString() == placed.Name,
+                Assert.True(row.GetProperty("NpcId").GetInt32() == next + 1 && row.GetProperty("NpcKey").GetString() == placed.Name,
                     "the placement export keys an NPC differently from the import");
             }
 
-            Assert.True(await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM npc_dialog_lines WHERE npc_id = 172 AND language = 'en'") == 2,
+            Assert.True(await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM npc_dialog_lines WHERE npc_id = @Id AND language = 'en'", new { Id = next + 2 }) == 2,
                 "the English dialog lines were not stored");
         }
         finally
@@ -157,7 +158,8 @@ internal static class NpcServiceTests
         Assert.True(NpcShopRules.WornValue(60, 0, 36) == 16, "zero durability must count as one");
         var potions = new ItemInstance(Potion() with { MaxStack = 20 }, 7);
         Assert.True(NpcShopRules.SellPrice(potions, 7) == 35 && NpcShopRules.SellPrice(potions, 3) == 15, "stack sell price differs");
-        Assert.True(MoneyLimits.CarryLimit(5, 0) == 200_000 && MoneyLimits.CarryLimit(20, 0) == 2_200_000 && MoneyLimits.CarryLimit(80, 3) == 100_000_000,
+        Assert.True(MoneyLimits.CarryLimit(5, 0) == 200_000 && MoneyLimits.CarryLimit(20, 0) == 2_200_000 && MoneyLimits.CarryLimit(80, 3) == 500_000_000
+            && MoneyLimits.CarryLimit(90, 4) == 700_000_000,
             "carry limit differs");
 
         var character = new CharacterClassRegistry().CreatePlayer(PlayerClass.Fighter, "Rules");
@@ -375,7 +377,7 @@ internal static class NpcServiceTests
 
     private static async Task TeleportAsync()
     {
-        var catalog = new WorldCatalog(new WorldCatalog().AllFields.Select(field => field.FieldCode == 12 ? field with { LimitLevel = 70 } : field));
+        var catalog = new WorldCatalog(new WorldCatalog().AllFields.Select(field => field.FieldCode == 12 ? field with { TravelLevel = 70 } : field));
         var fixture = await Fixture.CreateAsync(1000, [new NpcService(NpcServiceKind.Teleporter, 1)], catalog);
         var (world, npc, session, service) = (fixture.World, fixture.NpcId, fixture.Session, fixture.Npc);
         var open = await WorldPump.RunAsync(world, service.RequestAsync(session.SessionToken, new NpcServiceCommand(Guid.NewGuid(), npc, NpcServiceKind.Teleporter,

@@ -8,7 +8,7 @@ namespace PristonTale.Simulation.Characters.Classes;
 public sealed class PriestessClass : CharacterClass
 {
     public static readonly ClassProfile Profile = new(
-        ["Priestess", "Saintess", "Bishop", "Celestial"],
+        ["Priestess", "Saintess", "Bishop", "Celestial", "Arc Angel"],
         new MotionFallback(3200, 20, 3040),
         static weapon => weapon.Definition.Kind == ItemKind.Staff,
         CastingWeapon: ItemKind.Staff,
@@ -16,13 +16,15 @@ public sealed class PriestessClass : CharacterClass
         QuestWeapon: "WM109",
         BeginnerWeapon: "WM101",
         QuestWeaponHunt.Field,
-        QuestItems.ArcaneRing);
+        QuestItems.ArcaneRing,
+        CharacterBrood.Morion,
+        Female: true);
 
     public PriestessClass()
         : base(BuildDefinition(
             PlayerClass.Priestess,
             "Priestess",
-            CharacterBrood.Morion,
+            Profile.Brood,
             bodyInx: "char\\tmABCD\\mC001.inx",
             headInx: "char\\tmABCD\\Mfh-C01.inx",
             armorTableIndex: 6,

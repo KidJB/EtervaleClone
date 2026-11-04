@@ -22,7 +22,6 @@ progression, regeneration and movement rates. `World/`, `Physics/` and `Skills/`
 | --- | --- |
 | `PristonTale.Simulation.csproj` | net10.0, references only `PristonTale.Geometry`; embeds `Skills/Data/Classes/*.json` |
 | `SimulationCore.cs` | Description constant only |
-| `Actors/ActorDefinitions.cs` | `PlayerCompositionFactory` and bone socket names; not referenced by other projects |
 | `Characters/CharacterEnums.cs` | `CharacterBrood`, `JobBitCode`, `EquipmentSlot` (`PlayerClass` is in Contracts) |
 | `Characters/JobBits.cs` | The one map between `PlayerClass` and its `JobBitCode`, both ways |
 | `Characters/CharacterStats.cs` | `CharacterAttributes` (five attributes), `CharacterFunctionProfile` (formula selectors) |
@@ -36,7 +35,6 @@ progression, regeneration and movement rates. `World/`, `Physics/` and `Skills/`
 | `Characters/StarterGifts.cs` | The starter gifts of a new character: the class's weapon, armour and off-hand and the crystals, created perfect with the class's specialization, their pace and chat line |
 | `Characters/OwnerState.cs` | `OwnerState.Capture`: the owner-only character snapshot sent to the client |
 | `Characters/CharacterHead*.cs`, `CharacterVisuals.cs` | Head/face/hair model path resolution per class and tier; `CharacterVisualSet` |
-| `Characters/CharacterSlots.cs` | Characters per account (6) |
 | `Items/Item.cs` | `ItemKind`, `ItemStatBlock`, `ItemDefinition`, `ItemInstance` |
 | `Items/ItemTemplate.cs`, `ItemRoll.cs` | Authored value ranges of a kind; the values of one copy (`ItemRoll`, `ItemSpecBonus`) |
 | `Items/ItemRoller.cs` | Shop (lowest) form and drop rolls, class specialization and its requirement shift |
@@ -64,7 +62,6 @@ progression, regeneration and movement rates. `World/`, `Physics/` and `Skills/`
 | `Combat/Elements.cs` | `Element` and `ResistanceBlock` |
 | `Combat/PlayerAttackReach.cs`, `MeleeReach.cs` | Player attack range (melee 50, ranged from the weapon) |
 | `Combat/MonsterAttackReach.cs`, `MonsterOffensiveSkill.cs` | Monster basic-attack reach and offensive-skill areas |
-| `Combat/CombatAntiCheat.cs` | Attack rate/power/monotonic checks; currently not called by any project |
 | [`Modifiers/ModifierTypes.cs`](../Shared/PristonTale.Simulation/Modifiers/ModifierTypes.cs) | `StatKind`, `StatModifier`, `EffectSourceKind`, `ControlFlags`, `StackRule`, `PeriodicEffect` |
 | `Modifiers/EffectContainer.cs` | `EffectSpec`, `ActiveEffect`, `EffectContainer`, `ModifierTotals` |
 | `Modifiers/ModifierRules.cs` | How totals change derived stats, damage, resistances, dealt/taken scaling |
@@ -78,7 +75,9 @@ progression, regeneration and movement rates. `World/`, `Physics/` and `Skills/`
   computed in `float` and cast (`DerivedStats.Compute`); keep the cast points when editing.
 - World distances are in original world units (the same units as `PristonTale.Geometry` and field data).
 - Fixed point: `Locomotion` and `AnimationRate` use 8-bit fixed point (256 = 1.0) and the original 70 Hz tick.
-  `Locomotion.BaseTranslation(moveSpeed) = 250 + 10 * (clamp(moveSpeed, 1, 9) - 1)` per tick; walk in the field is
+  `Locomotion.BaseTranslation(stepLevel) = 250 + 10 * (max(stepLevel, 1) - 1)` per tick, where the derived `MoveSpeed`
+  is the step level: the move speed held to 9, or one above the move speed while `MoveSpeedUnbound` lifts the limit
+  (Talaria, `Locomotion.StepLevel`); walk in the field is
   `* 180 >> 8`, run is `* 460 >> 8`, walk in a village uses the base; units/s = perTick / 256 * 70.
 - `AnimationRate.AttackSpeedMainFrame(stat) = 256 + 32 * clamp(stat - 6, 0, 6)`; `AttackRate` adds the
   `AttackMotionSpeed` percent, then frame step `(80 * speed) >> 8`, normalised by 80. `MoveRate` caps the per-tick
@@ -108,8 +107,10 @@ progression, regeneration and movement rates. `World/`, `Physics/` and `Skills/`
 and declares the class's `ClassProfile` (`Characters/ClassProfile.cs`, looked up with `ClassProfiles.Of(class)` or
 `CharacterClassDef.Profile`): the four tier titles, the fallback motion timing (`PlayerMotionFallback`), the favoured
 weapon (`WeaponDamage`'s level / 6 bonus), the casting weapon that attacks at range (`PlayerAttackReach`), the
-requirement shift of items specialised for it (`ItemRoller`), and the quest weapon, beginner weapon, hunt and rank-up
-ring (`QuestClasses`). A per-class fact belongs in the profile, not in a switch over `PlayerClass`.
+requirement shift of items specialised for it (`ItemRoller`), the quest weapon, beginner weapon, hunt and rank-up ring
+(`QuestClasses`), the realm (the definition's `Brood` and the town of `DeathPenalty.TownField`) and whether its
+characters are female (the female-only armors and the chocolates). A per-class fact belongs in the profile, not in a
+switch over `PlayerClass`.
 The class also loads its skill window from `ClassSkillCatalog.For(class)` (see [skills.md](skills.md)).
 
 | Class | Id | `JobBitCode` | Brood | Str/Spi/Tal/Agi/Hlt | Sight | Life/Mana/Sta/Melee/Ranged/Magic fn |
@@ -129,10 +130,12 @@ The class also loads its skill window from `ClassSkillCatalog.For(class)` (see [
   `CharacterClassDef.MotionJobMask = 1 << (Class - 1)` is used for animation tables. Do not mix them. A class's
   `JobBitCode` comes from `JobBits.Of`; nothing else maps a class to its bit.
 - `GrowthPerLevel` is empty for every class: attributes grow only through allocated status points (5 per level).
-- `Tier` (0..3) is the class rank. It opens skill-window rows, selects head models (`CharacterHead`) and gates
-  experience above level 100. Nothing in this project changes it; it is restored from persistence.
+- `Tier` (0..4, `PlayerCharacter.LastTier`) is the class rank. It opens skill-window rows, selects head models
+  (`CharacterHead`) and gates experience above level 100 (below `UncappedTier` 3). It changes only through the rank-up
+  quests (see [quests.md](quests.md)).
 - Head models: `CharacterHead.Resolve` builds `char/tmABCD/<prefix><variant 01..13><suffix>.inx` from the per-class,
-  per-tier pattern in `CharacterHeadModels`. Assassin and Shaman tiers 1-3 have only the three creation faces;
+  per-tier pattern in `CharacterHeadModels` (the fifth tier's heads end in `d`; the Priestess's 6 to 9 are spelled
+  `006`..`009`). Assassin and Shaman tiers 1-4 have only the three creation faces;
   `Apply` falls back to the face index instead of inventing a file name.
 
 ## Character aggregate
@@ -142,7 +145,7 @@ a transaction candidate) is the only writer.
 
 | Member group | Contract |
 | --- | --- |
-| `Level`, `Experience`, `Money`, point counters, `Tier` | Loaded by `RestoreProgress` (non-negative, tier 0..3) |
+| `Level`, `Experience`, `Money`, point counters, `Tier` | Loaded by `RestoreProgress` (non-negative, tier 0..4) |
 | `Life`, `Mana`, `Stamina` | Plain settable pools; clamped to maxima by every recompute and by `Equip` |
 | `Attributes` | Base plus allocated points; equipment never changes them |
 | `Derived` | Cached `DerivedStats`; reading it recomputes when `Effects.Revision` changed |
@@ -194,7 +197,7 @@ Level `L`, attributes `Str Spi Tal Agi Hlt`; float arithmetic, truncated at the 
 | Defence | `Agi/2 + Tal/4 + L*1.4 + items.Defence` |
 | Absorption | `trunc(Defence/100 + L/10 + items.Absorb + (Str+Tal)/40) + 1 + min(2, items.AbsorbItems/2)` (truncated defence) |
 | MaxWeight | `(int)(Str*2 + Hlt*1.5 + L*3 + 60)` |
-| MoveSpeed | `trunc((Tal + Hlt + L + 60) / 150 - carried/MaxWeight + items.MoveSpeed) + 1` |
+| MoveSpeed | `trunc((Tal + Hlt + L + 60) / 150 - carried/MaxWeight + items.MoveSpeed) + 1`; after the modifiers, the step level (`Locomotion.StepLevel`) |
 | MaxLife fn 1 / 2 | `L*2.1 + Hlt*2.4 + Str*0.8 - 10` / `L*2.1 + Hlt*2.2 + Str*0.6 - 5` |
 | MaxLife fn 3 / 4 / 5 | `L*1.8 + Hlt*2.1 + Str*0.3` / `L*1.5 + Hlt*2.1` / `L*1.5 + Hlt*1.9` |
 | MaxMana fn 1 / 2 / 3 | `L*1.5+Spi*3.8` / `L*0.9+Spi*2.7` / `L*0.6+Spi*2.2` |
@@ -391,9 +394,9 @@ totals.
 - `Inventory()` is the 12x6 carried grid (72 cells); `Inventory(width, height)` builds any grid up to 32x32 (the
   warehouse and the shops use the 9x9 `StoreGrid`). Cell index = `y * Width + x`; an item is stored only at its top-left
   anchor and its footprint (`GridWidth x GridHeight`) is tracked in one `uint` bit row per grid row.
-- `TryAdd` first tops up compatible stacks, then places new stacks first-fit by anchor index; it plans everything
-  before mutating and fails without change. Compatible stacks need a stackable, equal definition and identical
-  upgrade, durability and roll.
+- `TryAdd` first tops up compatible stacks, then places new stacks in the first free space down each column from the
+  left; it plans everything before mutating and fails without change. Compatible stacks need a stackable, equal
+  definition and identical upgrade, durability and roll.
 - `TryPlace`, `TryMove`, `TrySplit` (new instance id), `TryMerge`, `TryJoin` (a whole stack onto a compatible one),
   `TrySwap`, `TryExchange` (take an item out and put a replacement at a given cell, or at the same anchor or first fit;
   `CanExchange` checks it without changing anything), `TakeAt`, `TakeFrom` (`ItemInstance.Split` for part of a stack),
@@ -500,9 +503,10 @@ totals.
 - `LevelUp`: +5 status points; +1 skill point at even levels from 10; +1 final-tier (elite) point at even levels from
   60; pools refilled; `OnLevelUp` and `LeveledUp` raised.
 - `TryAllocateAttribute` spends status points one attribute at a time (overflow-checked).
-- `SkillLearning` (skill master): the class window has 16 skills in order; tier `t` opens the first `4 * (t + 1)`.
-  A skill trains when it has ten ranks of costs, rank < 10, its point kind is available (indices 12-15 spend elite
-  points, the rest skill points), `level >= RequiredLevel + 2 * rank`, and the previous window skill has a rank.
+- `SkillLearning` (skill master): the class window has 20 skills in order; tier `t` opens the first `4 * (t + 1)`.
+  A skill trains when it has ten ranks of costs, rank < 10, its point kind is available (indices 12-19, the fourth and
+  fifth tiers, share the elite points, the rest spend skill points), `level >= RequiredLevel + 2 * rank`, and the
+  previous window skill has a rank.
   Price = `BasePrices[index] + RankPrices[index] * currentRank`. `ApplyProgression` requires a non-zero
   `NpcEntityId`; proximity to the master is checked by the Application.
 
@@ -579,7 +583,6 @@ server steps it per player in `FieldSkills.StepEffects` and resets it on death. 
 - `Compatible` stacking uses record equality of `ItemDefinition`; two catalogs with equal data compare equal.
 - `ItemEquipmentMetadata` is a data table; edit entries, not structure. Its families are looked up by the
   three-character prefix first, then by the first two characters (`DA` covers every body armour and robe family).
-- `CombatAntiCheat` and `PlayerCompositionFactory` are not used by any project; do not assume they are enforced.
 - Requirements and price live in the copy's roll (a specialization shifts them); read `ItemInstance.Roll`, not the
   definition, for anything about a particular copy.
 

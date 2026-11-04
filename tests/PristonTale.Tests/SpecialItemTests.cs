@@ -10,6 +10,7 @@ using PristonTale.Simulation.Combat;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.Items.Usable;
 using PristonTale.Simulation.Modifiers;
+using PristonTale.Simulation.Skills;
 using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Loot;
 using PristonTale.Simulation.World.Monsters;
@@ -57,8 +58,9 @@ internal static class SpecialItemTests
             "materials, the passive scroll and unrouted orbs are not usable");
         Assert.True(ForceOrbs.TryGet("FO112", out var enigma) && enigma.Damage == 140 && enigma.Percent == 20 && enigma.DurationSeconds == 3600
             && ForceOrbs.TryGet("FO127", out var murky) && murky.Magic && murky.MinimumLevel == 60 && murky.Icon.EndsWith("FOS_027.tga"), "force orb tables");
-        Assert.True(TeleportCoreDestinations.All.Count == 33 && TeleportCoreDestinations.PageCount == 4
-            && TeleportCoreDestinations.All[32].RequiredLevel == 102 && new WorldCatalog().TryGetFieldByCode(TeleportCoreDestinations.All[32].FieldCode, out _),
+        Assert.True(TeleportCoreDestinations.All.Count == 37 && TeleportCoreDestinations.PageCount == 4
+            && TeleportCoreDestinations.All[33].RequiredLevel == 105 && TeleportCoreDestinations.All[36].RequiredLevel == 112
+            && new WorldCatalog().TryGetFieldByCode(TeleportCoreDestinations.All[36].FieldCode, out _),
             "teleport core table");
         foreach (var destination in TeleportCoreDestinations.All)
         {
@@ -91,11 +93,16 @@ internal static class SpecialItemTests
         Assert.True(PremiumRules.VampiricLife(100, 300, 1) == 8 && PremiumRules.VampiricExLife(100, 300, 1) == 10, "single target life");
         Assert.True(PremiumRules.VampiricLife(100, 300, 5) == 49 && PremiumRules.VampiricExLife(100, 300, 5) == 75, "area life");
         Assert.True(PremiumRules.ManaRecharge(65, 0, 1) == 6, "mana recharge");
+        var caster = new CharacterClassRegistry().CreatePlayer(PlayerClass.Magician, "Mana", 80);
+        var spell = caster.Class.Skills.First(static skill => skill.ManaByRank.Count > 0 && skill.ManaByRank[0] >= 10);
+        var full = spell.ManaForRank(1);
+        caster.Premium.Start(PremiumEffectKind.ManaReduce, 30, 3600, 0);
+        PremiumEffects.Sync(caster);
+        Assert.True(SkillFormulas.ManaCost(spell, 1, caster.Effects.Totals) == full - full * 30 / 100, "mana reduce");
+        caster.Premium.Start(PremiumEffectKind.HelpPetTerry, 0, 3600, 0);
+        PremiumEffects.Sync(caster);
+        Assert.True(SkillFormulas.ManaCost(spell, 1, caster.Effects.Totals) == full - full * 50 / 100, "terry mana share");
         var timers = new PremiumTimers();
-        timers.Start(PremiumEffectKind.ManaReduce, 30, 3600, 0);
-        Assert.True(PremiumRules.ManaCost(100, timers) == 70, "mana reduce");
-        timers.Start(PremiumEffectKind.HelpPetTerry, 0, 3600, 0);
-        Assert.True(PremiumRules.ManaCost(100, timers) == 50, "terry mana share");
         timers.Start(PremiumEffectKind.StaminaReduce, 30, 3600, 0);
         Assert.True(PremiumRules.StaminaCost(41, timers) == 29, "stamina reduce");
         timers.Start(PremiumEffectKind.ExperienceUp, 50, 3600, 0);

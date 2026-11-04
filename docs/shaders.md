@@ -16,8 +16,8 @@ conventions and the C# classes that own each effect. The frame graph that runs t
 | Path | Responsibility |
 |---|---|
 | `Client/PristonTale/Content/Content.mgcb` | Content project: `/platform:DesktopVK`, `/profile:HiDef`, one `#begin` block per effect with `SpirvEffectProcessor`; `Surface.fx` is built twice. |
-| `Shaders/Core/` | `Common.hlsli` (constants, `SafeNormalize`, half-float cap, `SkyDepth` written for sky pixels and `SkyDepthThreshold` beyond which a view depth is sky; passes never declare their own; `InterleavedGradientNoise`, the one per-pixel jitter), `Color.hlsli` (exact sRGB curves, PBR Neutral, `DisplayEncode`), `Frame.hlsli` (`FRAME_CONSTANTS`), `Fullscreen.hlsli` (full-screen triangle). |
-| `Shaders/Lighting/` | `Octahedral.hlsli` (direction mapping), `Brdf.hlsli` (GGX, height-correlated Smith visibility, Schlick, specular anti-aliasing), `LightingDecl.hlsli` (`LIGHTING_CONSTANTS`, `LIGHTING_RESOURCES`), `Shading.hlsli` (cascaded sun shadows PCF/PCSS, lamp cube shadows, screen-space occlusion, tiled local lights, image-based and hemispherical ambient, specular occlusion). |
+| `Shaders/Core/` | `Common.hlsli` (constants, `SafeNormalize`, half-float cap, `SkyDepth` written for sky pixels and `SkyDepthThreshold` beyond which a view depth is sky, the sky's motion marker `SkyMotionMarker` and its test `SkyMotionThreshold`; passes never declare their own; `InterleavedGradientNoise`, the one per-pixel jitter; `Luminance`; `CameraRay`, the view ray of a screen uv; `HenyeyGreenstein`), `Color.hlsli` (exact sRGB curves, PBR Neutral, `DisplayEncode`), `Frame.hlsli` (`FRAME_CONSTANTS`), `Fullscreen.hlsli` (full-screen triangle). |
+| `Shaders/Lighting/` | `Octahedral.hlsli` (direction mapping), `CubeFaces.hlsli` (the six cube view faces, a direction's face and its place on it, the table of `PristonCubeFaces`), `Environment.hlsli` (the prefiltered environment atlas lookup, for the lit passes and the reflections), `SphericalHarmonics.hlsli` (bands 0-2 and their cosine-convolved irradiance), `Brdf.hlsli` (GGX, height-correlated Smith visibility, Schlick, specular anti-aliasing), `LightingDecl.hlsli` (`LIGHTING_CONSTANTS`, `LIGHTING_RESOURCES`), `Shading.hlsli` (cascaded sun shadows PCF/PCSS, lamp cube shadows, screen-space occlusion, tiled local lights, image-based and hemispherical ambient, specular occlusion). |
 | `Shaders/Atmosphere/` | `FogDecl.hlsli`, `Fog.hlsli`: distance fog toward the captured sky with a forward-scattering sun term. |
 | `Shaders/Materials/` | `MaterialDecl.hlsli` (`MATERIAL_CONSTANTS`, `MATERIAL_RESOURCES`, shading model and layer mode codes), `Material.hlsli` (`SampleSurface`: base colour, second layer, alpha test, visible-face normal). |
 | `Shaders/Vertex/` | `SkinningDecl.hlsli` + `Skinning.hlsli` (rigid one-bone skinning, current and previous pose, `MAX_BONES 64`), `VertexAnimationDecl.hlsli` + `VertexAnimation.hlsli` (water ripple and wind). |
@@ -55,7 +55,7 @@ Each `.fx` in `Passes/` builds to `Effects/<Name>` (the asset name the C# owner 
 Both stages use one cbuffer at `b0`: vertex `SurfaceVertexConstants` (view-projection, caster matrices, UV scrolls,
 `DrawOpacity`, `DrawLight`, previous view-projection, `MotionParams` and `ActorParams`, then skinning or
 vertex-animation constants); pixel `SurfacePixelConstants` (`FRAME_CONSTANTS`, `FOG_CONSTANTS`, `LIGHTING_CONSTANTS`,
-`MATERIAL_CONSTANTS`, in that order). Actor looks: `ActorParams` (skinned only) holds the wobble amplitude and phase and
+`MATERIAL_CONSTANTS`, then `OutlineColor` and `CloudShadowParams`, in that order). Actor looks: `ActorParams` (skinned only) holds the wobble amplitude and phase and
 whether the second layer is an overlay read on uv0; `ActorReceiver` (material constants) marks a character or monster,
 whose self-illumination stays at the display level and which takes no lamp shadows; `ActorTint` (material constants) adds `albedo x rgb / Exposure` to
 the radiance (clamped at 0) and multiplies the output alpha by `a` after the alpha test.
@@ -69,6 +69,7 @@ the radiance (clamped at 0) and multiplies the output alpha by `a` after the alp
 | t5 | Lamp cube-shadow atlas |
 | t6 | Tile light masks (`StructuredBuffer<uint>`) |
 | t7 / t8 / t9 | Prefiltered environment atlas, SH irradiance (`StructuredBuffer<float4>`, entry 9 holds the atlas scale and fill), split-sum BRDF table |
+| t10 | The clouds' shadow map (`CloudShadowMap`, linear, clamp) |
 
 Material codes (`MaterialDecl.hlsli`, mirrored by `PristonMaterialDescription.cs`): `ShadingModel` 0 lit
 (metallic-roughness), 1 emissive (self-illuminated or additive: the albedo is emitted radiance), 2 colour factor

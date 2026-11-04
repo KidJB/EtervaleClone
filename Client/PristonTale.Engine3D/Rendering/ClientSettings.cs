@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using PristonTale.Engine3D.Diagnostics;
+using PristonTale.Engine3D.Rendering.Lighting;
 
 namespace PristonTale.Engine3D.Rendering;
 
@@ -13,9 +14,14 @@ public enum WindowMode
 
 public sealed record ClientSettings
 {
+    // MSAA takes 2 or 4 samples.
+    public const int MostMultiSamples = 4;
+
     public const int CurrentVersion = 1;
 
     public int Version { get; init; } = CurrentVersion;
+    // The game server: host, host:port or tcp://host:port, optionally with ?cert=<sha-256 hex> (TlsTransport.ParseAddress).
+    public string ServerAddress { get; init; } = "localhost";
     public int Monitor { get; init; } = -1;
     public int WindowWidth { get; init; } = 1280;
     public int WindowHeight { get; init; } = 720;
@@ -80,9 +86,9 @@ public sealed record ClientSettings
     public bool ColorGrading { get; init; } = true;
     public string ColorGradingLut { get; init; } = string.Empty;
     // Contrast-adaptive sharpening of the final image, 0..1.
-    public float Sharpening { get; init; } = 0.35f;
+    public float Sharpening { get; init; } = 0.6f;
     // Stage lamps and combat lights shaded per pixel: 8, 16 or 32, the nearest to the camera focus.
-    public int LocalLightLimit { get; init; } = 32;
+    public int LocalLightLimit { get; init; } = PristonShaderLibrary.MaxLocalLightCount;
     // Cascades of the sun's shadow map (1-4) in an atlas of ShadowMapSize, and their filter.
     public int ShadowCascades { get; init; } = 4;
     public ShadowFilterMode ShadowFilter { get; init; } = ShadowFilterMode.Pcss;
@@ -95,6 +101,7 @@ public sealed record ClientSettings
         var defaults = new ClientSettings();
         var valid = this with
         {
+            ServerAddress = string.IsNullOrWhiteSpace(ServerAddress) ? defaults.ServerAddress : ServerAddress,
             Monitor = Monitor >= -1 ? Monitor : defaults.Monitor,
             WindowWidth = WindowWidth is >= 800 and <= 16384 ? WindowWidth : defaults.WindowWidth,
             WindowHeight = WindowHeight is >= 600 and <= 16384 ? WindowHeight : defaults.WindowHeight,
@@ -103,7 +110,7 @@ public sealed record ClientSettings
             MaxFps = IsValidFps(MaxFps) ? MaxFps : defaults.MaxFps,
             BackgroundMaxFps = IsValidFps(BackgroundMaxFps) ? BackgroundMaxFps : defaults.BackgroundMaxFps,
             UiScale = float.IsFinite(UiScale) && UiScale is >= 0.75f and <= 1.5f ? UiScale : defaults.UiScale,
-            MultiSampleCount = MultiSampleCount is 0 or 2 or 4 or 8 ? MultiSampleCount : defaults.MultiSampleCount,
+            MultiSampleCount = MultiSampleCount is 0 or 2 or MostMultiSamples ? MultiSampleCount : defaults.MultiSampleCount,
             ShadowMapSize = ShadowMapSize is 1024 or 2048 or 4096 or 8192 ? ShadowMapSize : defaults.ShadowMapSize,
             LampShadowTileSize = LampShadowTileSize is 256 or 512 or 1024 ? LampShadowTileSize : defaults.LampShadowTileSize,
             ShadowUpdateRate = ShadowUpdateRate is 0 or 30 or 60 or 120 ? ShadowUpdateRate : defaults.ShadowUpdateRate,
@@ -119,10 +126,10 @@ public sealed record ClientSettings
             Bloom = Enum.IsDefined(Bloom) ? Bloom : defaults.Bloom,
             ColorGradingLut = ColorGradingLut ?? defaults.ColorGradingLut,
             Sharpening = float.IsFinite(Sharpening) && Sharpening is >= 0f and <= 1f ? Sharpening : defaults.Sharpening,
-            LocalLightLimit = LocalLightLimit is 8 or 16 or 32 ? LocalLightLimit : defaults.LocalLightLimit,
-            ShadowCascades = ShadowCascades is >= 1 and <= 4 ? ShadowCascades : defaults.ShadowCascades,
+            LocalLightLimit = LocalLightLimit is 8 or 16 or PristonShaderLibrary.MaxLocalLightCount ? LocalLightLimit : defaults.LocalLightLimit,
+            ShadowCascades = ShadowCascades is >= 1 and <= PristonShadowCascades.MaxCascades ? ShadowCascades : defaults.ShadowCascades,
             ShadowFilter = Enum.IsDefined(ShadowFilter) ? ShadowFilter : defaults.ShadowFilter,
-            LampShadowCount = LampShadowCount is 0 or 2 or 4 ? LampShadowCount : defaults.LampShadowCount
+            LampShadowCount = LampShadowCount is 0 or 2 or PristonLampShadows.MaxLamps ? LampShadowCount : defaults.LampShadowCount
         };
 
         if (valid != this)
@@ -179,7 +186,7 @@ public sealed record ClientSettings
             Bloom = BloomQuality.High,
             AutoExposure = true,
             ColorGrading = true,
-            Sharpening = 0.2f
+            Sharpening = 0.4f
         },
         GraphicsQuality.High => this with
         {
@@ -201,7 +208,7 @@ public sealed record ClientSettings
             Bloom = BloomQuality.High,
             AutoExposure = true,
             ColorGrading = true,
-            Sharpening = 0.35f
+            Sharpening = 0.6f
         },
         GraphicsQuality.Ultra => this with
         {
@@ -223,7 +230,7 @@ public sealed record ClientSettings
             Bloom = BloomQuality.High,
             AutoExposure = true,
             ColorGrading = true,
-            Sharpening = 0.35f
+            Sharpening = 0.6f
         },
         _ => this with { Quality = GraphicsQuality.Custom }
     };

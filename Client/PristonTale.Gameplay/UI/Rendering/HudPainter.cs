@@ -44,8 +44,6 @@ public sealed class HudPainter : IDisposable
         _textShift = MathF.Round(CapTop - _capCropping * TextScale);
     }
 
-    public HudSprites Sprites => _sprites;
-
     public void Begin(HudLayout layout)
     {
         _text.Clear();
@@ -176,13 +174,7 @@ public sealed class HudPainter : IDisposable
     }
 
     // Text at its own scale of the UI font (smaller labels over the scene), its y the top of the capitals as for Text.
-    public void Text(string value, int x, int y, Color color, float scale)
-    {
-        if (!string.IsNullOrEmpty(value))
-        {
-            _text.Add(new TextRun(value, new Vector2(x, y + MathF.Round(CapTop - _capCropping * scale)), color, false, Vector2.One, scale));
-        }
-    }
+    public void Text(string value, int x, int y, Color color, float scale) => ScaledText(value, x, y, color, false, scale);
 
     public void TextCentered(string value, int left, int right, int y, Color? color = null, bool shadow = true) =>
         TextCentered(value, left, right, y, color ?? Color.White, shadow, Point.Zero);
@@ -200,8 +192,16 @@ public sealed class HudPainter : IDisposable
     {
         if (!string.IsNullOrEmpty(value))
         {
-            var x = left + (right - left - MeasureAt(value, scale)) / 2;
-            _text.Add(new TextRun(value, new Vector2(x, y + MathF.Round(CapTop - _capCropping * scale)), Color.White, true, Vector2.One, scale));
+            ScaledText(value, left + (right - left - MeasureAt(value, scale)) / 2, y, Color.White, true, scale);
+        }
+    }
+
+    // Text at its own scale, y the top of its capitals.
+    private void ScaledText(string value, int x, int y, Color color, bool shadow, float scale)
+    {
+        if (!string.IsNullOrEmpty(value))
+        {
+            _text.Add(new TextRun(value, new Vector2(x, y + MathF.Round(CapTop - _capCropping * scale)), color, shadow, Vector2.One, scale));
         }
     }
 
@@ -213,8 +213,6 @@ public sealed class HudPainter : IDisposable
     public int Measure(string value) => MeasureAt(value, TextScale);
 
     public int MeasureAt(string value, float scale) => string.IsNullOrEmpty(value) ? 0 : (int)MathF.Ceiling(_font.MeasureString(value).X * scale);
-
-    public int TextHeightAt(float scale) => (int)MathF.Ceiling(_font.LineSpacing * scale);
 
     // The capitals' height and the descenders' depth below the baseline at a scale, in pixels: text drawn at y has the top
     // of its capitals at y + CapTop. The line spacing also holds the gap to the next line, so a box sized by it leaves
@@ -385,6 +383,26 @@ public sealed class HudPainter : IDisposable
 
     public static Rectangle HelpBoxBounds(int x, int y, int sizeW, int sizeH) => new(x, y, Math.Max(2, sizeW) * 32 + 64, Math.Max(2, sizeH) * 32 + 32);
 
+    // A tooltip: an info box of this content size centred over the anchor, 8 pixels clear of it and kept on screen, drawn
+    // now; returns its bounds. Its name line sits TooltipNameY below the top and its lines start TooltipLinesY below it.
+    public const int TooltipNameY = 9;
+    public const int TooltipLinesY = 26;
+
+    public Rectangle TooltipBox(HudLayout layout, Point anchor, int width, int height)
+    {
+        var size = InfoBoxBounds(0, 0, width, height);
+        var placed = layout.PlaceOverlay(new Point(anchor.X - size.Width / 2, anchor.Y - size.Height - 8), size.Width, size.Height);
+        var bounds = InfoBoxBounds(placed.X, placed.Y, placed.Width, placed.Height);
+        Flush();
+        InfoBox(bounds);
+        return bounds;
+    }
+
+    // A help box's title plate, centred at its top, and its OK button, centred at its bottom.
+    public static Rectangle HelpBoxTitle(int x, int y, int sizeW) => new(x + (sizeW * 32 + 64) / 2 - 76, y + 14, 152, 28);
+
+    public static Rectangle HelpBoxOk(int x, int y, int sizeW, int sizeH) => new(x + (sizeW * 32 + 64) / 2 - 24 + 9, y + sizeH * 32 - 2 + 4, 32, 16);
+
     // The box behind a name over the scene (monsters, NPCs, drops): the speech bubble's dark fill and gold rim with
     // rounded corners. Nine slices of a 20-pixel texture: fixed corners, stretched edges and centre.
     public void NameBox(Rectangle bounds, bool highlighted = false)
@@ -414,9 +432,29 @@ public sealed class HudPainter : IDisposable
         }
     }
 
-    // The name box's content sits under a 4-pixel top border and over a 2-pixel bottom one.
+    // The name box's content sits under a 4-pixel top border and over a 2-pixel bottom one, with NameBoxSide pixels of
+    // frame each side of the text.
     public const int NameBoxTop = 4;
     public const int NameBoxBorders = 6;
+    public const int NameBoxSide = 9;
+
+    // A name box's line height at this text scale and where its first line's text starts below the box's top.
+    public (int Line, int TextTop) NameBoxText(float scale, int padY)
+    {
+        var (line, pad) = NameBoxLineAt(scale, padY);
+        return (line, (int)(NameBoxTop + pad - CapTop));
+    }
+
+    // A name box around text this wide and this many lines tall.
+    public static Point NameBoxExtent(int textWidth, int line, int lines) => new(textWidth + 2 * NameBoxSide, line * lines + NameBoxBorders);
+
+    // The box drawn between the batches of text around it.
+    public void DrawNameBox(Rectangle bounds, bool highlighted = false)
+    {
+        Flush();
+        NameBox(bounds, highlighted);
+        Flush();
+    }
     private const int NameBoxSize = 20;
     private const int NameBoxCorner = 8;
     private const float NameBoxRadius = 7f;

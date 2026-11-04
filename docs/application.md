@@ -37,7 +37,7 @@ into it is described in [server.md](server.md); skill resolution details are in 
 | [`World/WorldServer.cs`](../Shared/PristonTale.Application/World/WorldServer.cs) | Command queue, tick, field registry, connections, prepare/commit entry points |
 | `World/WorldServer.Npc.cs` | NPC interaction, NPC service check/prepare/commit, teleport arrival |
 | `World/WorldServer.Quests.cs`, `World/FieldInstance.Quests.cs`, `World/QuestTransactions.cs`, `World/PlayerQuestState.cs` | Quest prepare/commit, upkeep requests, quest travel; kill credit, quest drops, timers and arena duels on the field |
-| `World/WorldServerOptions.cs` | `ExperienceMultiplier`, `ExperienceEventPercent`, `ClockOffsetMinutes`, `CrystalEvent`, `ItemEvents`, `Aging`, `MaxPendingCommandsPerPlayer`, `GiveStarterGifts`; `WorldBusyException` |
+| `World/WorldServerOptions.cs` | `ExperienceMultiplier`, `ExperienceEventPercent`, `ClockOffsetMinutes`, `CrystalEvent`, `ItemEvents`, `Aging`, `Mixing`, `Weather`, `WeatherCycleMinutes`, `MaxPendingCommandsPerPlayer`, `GiveStarterGifts`, `CheckpointSeconds`; `WorldBusyException` |
 | `World/WorldServer.StarterGifts.cs`, `Services/StarterGiftAppService.cs` | The starter gifts of new characters: their offers on the tick, prepare and commit, the durable operation and its chat line ([Starter gifts](#starter-gifts)) |
 | `Settings/` | `ServerSettings`, `ServerSettingCatalog` (every row of the settings table), `ServerSettingsAppService` (read, apply, write) |
 | [`World/FieldInstance.cs`](../Shared/PristonTale.Application/World/FieldInstance.cs) | One live field: players, monsters, NPCs, spawner, AI, collision index, step order, views |
@@ -64,7 +64,6 @@ into it is described in [server.md](server.md); skill resolution details are in 
 | `World/WorldServer.Movement.cs` | Movement reports queued as values (`TryReportMovement`) with an `IMovementVerdictSink` |
 | `World/PlayerSkillCooldowns.cs` | Cooldowns on the field clock, rebased on field change, revisioned for snapshots |
 | `World/WorldData*.cs`, `FieldTerrainCatalog.cs` | Catalogs loaded at startup (`WorldDataAppService.BuildAsync`), held in volatile holders |
-| `World/WorldStatusReadModel.cs`, `ServerStatus.cs` | Lock-free player and per-field counts for status reporting |
 | `World/EntityIdAllocator.cs` | Thread-safe, monotonic 64-bit monster/NPC/summon ids from `2^32` |
 
 The project references only `PristonTale.Simulation` and `PristonTale.Persistence.Abstractions`, and exposes internals
@@ -77,7 +76,7 @@ to `PristonTale.Tests`. No sockets, packets, SQL or MonoGame.
 | `AuthAppService.LoginAsync` | Empty input, unknown account, wrong password: `BadCredentials` (-2); blocked: `LoginDenied` (-24). Values are wire codes. Success returns a token. |
 | `CharacterAppService.ListCharactersAsync` | Summaries with armour/weapon/off-hand catalog keys and `InVillage`; throws `InvalidDataException` on corrupt saved equipment |
 | `CharacterAppService.CreateCharacterAsync` | Trimmed name 3-16, defined class, valid face, unique name, `CharacterSlots.Maximum` per account, first free slot, starter record in its class's town (`DeathPenalty.TownField`: Ricarten for the Tempskron classes and the assassin, Pillai for the Morion classes) |
-| `CharacterAppService.DeleteCharacterAsync` / `NameExistsAsync` | Account-scoped delete by name; global name check. |
+| `CharacterAppService.DeleteCharacterAsync` | Account-scoped delete by name. |
 | `SessionAppService.EnterWorldAsync` | Load record, validate field and class, claim the character, `CharacterStateCodec.Restore`, clamp resources, resolve spawn, mark ready |
 | `SessionAppService.SaveCharacterAsync` | Waits for `SaveGate`; captures on the tick while playing, else from the session; `ICharacterSaves.SaveAsync`, which completes once storage (or, at shutdown, the journal) has it. |
 | `SessionAppService.ApplyInventoryAsync` / `ApplyProgressionAsync` | Durable operations, see [Durable operations](#durable-operations). |
@@ -133,10 +132,10 @@ captured through its town restart (`WorldServer.CaptureLeftAsync`).
 
 ### Tick loop
 
-`WorldTickService` (server) calls `WorldServer.Tick(1/20 s, ++tick)` at `WorldServer.TickHz` (20) on a thread of its
-own, on an absolute timeline (`TickSchedule`): tick n is due n periods after the start, the ticks owed after a late one
-run back to back, and a stall of more than 5 ticks is skipped and counted. `Tick` ignores non-finite or non-positive
-`dt`, then:
+`WorldTickService` (server) calls `WorldServer.Tick(1/20 s, ++tick)` at `WorldServer.TickHz` (`ServerTick.Hz` in
+Contracts, 20, whose interval the client also reads) on a thread of its own, on an absolute timeline (`TickSchedule`):
+tick n is due n periods after the start, the ticks owed after a late one run back to back, and a stall of more than 5
+ticks is skipped and counted. `Tick` ignores non-finite or non-positive `dt`, then:
 
 1. Command phase: drains up to `CommandsPerTick` (16384) queued commands on the calling thread.
 2. Boss clock: `BossSpawnSchedule.TryBeginPass` on the injected `TimeProvider` yields at most one hour value per pass,
@@ -199,7 +198,7 @@ Persistence never runs on the tick. Durable work is split: the tick prepares a c
 | `CastSkillAsync(field, entity, SkillCastRequest)` | player | `SkillCastOutcome` (cast, release, summon mode) |
 | `InteractNpcAsync(session, npcId)` | player | `NpcInteraction` (offers + one random dialog line) |
 | `PositionOfAsync(entity)` | player | current position or null |
-| `PlayerCount`, `ActiveFieldCounts()` | none (volatile) | read model values |
+| `PlayerCount` | none (volatile) | the players connected, for the login gate and the reports |
 
 Durable entry points (`Prepare*Async`, `Commit*Async`, `CheckNpcServiceAsync`, `CaptureForSaveAsync`) are called by
 `SessionAppService` and `NpcAppService`, not by the edge directly.
@@ -215,16 +214,19 @@ Durable entry points (`Prepare*Async`, `Commit*Async`, `CheckNpcServiceAsync`, `
 `FieldInstance.Step(dt, bossHour)` order:
 
 1. Advance the clock, clear events, `FieldSkills.BeginTick` (moves cast start events queued by commands into this
-   tick), rebuild the prey view (players; live summons as target-only).
+   tick), rebuild the prey view (players; live summons as target-only); the night pass (`StepNight`: night creatures,
+   nightmare fields, event NPCs).
 2. Spawner: maintain population and despawns for wild monsters; scheduled bosses when the hour pass is due.
-3. Rebuild the collision index; step wild monsters (AI brain, swing-begin events, `MoveMonster`, hit resolution).
-4. Step summons, then NPC wander with entity collision and terrain step.
+3. Rebuild the collision index; step wild monsters (AI brain, swing-begin events, `MoveMonster`, hit resolution); apply
+   the monsters' shape changes and event forms.
+4. Step summons, expire soul-stone monsters, then NPC wander with entity collision and terrain step.
 5. Per player: the time down when dead (`TickDead`); else action tick (swing hit), potion tick and pending potion start, attack
    lock (`StepPlayerAttack`), stale-motion expiry.
 6. `FieldSkills.Step` (cast timelines, projectiles, familiars, pulses, effect timers, regeneration), then place skill
    kill payouts as loot; `FieldPremium.Step` expires premium timers, returns vampiric life and mana per attack and runs
    the premium pets ([special-items.md](special-items.md)).
-7. Corpse timers, ground loot expiry.
+7. Corpse timers, the aging counters (`StepAging`), the quest timers and duels (`StepQuests`), ground loot expiry, then
+   the status book takes the tick's status events and prunes the absent.
 
 ### Players (`WorldPlayer`)
 
@@ -645,7 +647,6 @@ refused ([chat-and-gm.md](chat-and-gm.md)). The recent players are the client's
 - Statuses: the field keeps the last published `Add`/`Refresh` of every running status (`FieldStatusBook`), removes
   them on `Remove`, when the entity leaves (`TransferPlayer` carries a player's statuses to the new field on its clock)
   and when they run out (pruned every 5 s), so an encoder can send them to a viewer that starts seeing the entity.
-- `IServerStatusReadModel` (`WorldStatusReadModel`) reads volatile counts without touching the tick.
 
 ## How to
 

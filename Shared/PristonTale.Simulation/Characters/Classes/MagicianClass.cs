@@ -8,7 +8,7 @@ namespace PristonTale.Simulation.Characters.Classes;
 public sealed class MagicianClass : CharacterClass
 {
     public static readonly ClassProfile Profile = new(
-        ["Magician", "Wizard", "RoyalWizard", "ArchMage"],
+        ["Magician", "Wizard", "RoyalWizard", "ArchMage", "Elemental Master"],
         new MotionFallback(3360, 22, 3040),
         static weapon => weapon.Definition.Kind == ItemKind.Staff,
         CastingWeapon: ItemKind.Staff,
@@ -16,13 +16,15 @@ public sealed class MagicianClass : CharacterClass
         QuestWeapon: "WM109",
         BeginnerWeapon: "WM101",
         QuestWeaponHunt.Field,
-        QuestItems.ArcaneRing);
+        QuestItems.ArcaneRing,
+        CharacterBrood.Morion,
+        Female: false);
 
     public MagicianClass()
         : base(BuildDefinition(
             PlayerClass.Magician,
             "Magician",
-            CharacterBrood.Morion,
+            Profile.Brood,
             bodyInx: "char\\tmABCD\\mD001.inx",
             headInx: "char\\tmABCD\\Mmh-D01.inx",
             armorTableIndex: 7,

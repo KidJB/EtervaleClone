@@ -52,8 +52,6 @@ public sealed class FieldSpawner
     // A game master's event: until UntilMs, each regular spawn becomes one of this monster with Permille/1000 chance.
     public SpawnEvent EventMonster { get; set; }
 
-    public int SpawnPointCount => _data.SpawnPoints.Count;
-
     public int ActiveSpawnPointCount => _data.SpawnPoints.Count(static point => point.Active);
 
     public int MaxConcurrentMonsters => _data.MaxConcurrentMonsters;
@@ -124,12 +122,14 @@ public sealed class FieldSpawner
         _pointCooldownUntilMs[pointIndex] = nowMs + _data.PerPointCooldownMs;
     }
 
-    public IReadOnlyList<MonsterInstance> MaintainDespawns(float dtMs, IReadOnlyList<MonsterInstance> live, IPlayerProximity proximity)
+    // Fills expired (the caller's list, cleared first) with the monsters whose idle time ran out.
+    public void MaintainDespawns(float dtMs, IReadOnlyList<MonsterInstance> live, IPlayerProximity proximity, List<MonsterInstance> expired)
     {
         ArgumentNullException.ThrowIfNull(live);
         ArgumentNullException.ThrowIfNull(proximity);
+        ArgumentNullException.ThrowIfNull(expired);
 
-        List<MonsterInstance> expired = null;
+        expired.Clear();
         for (int i = 0; i < live.Count; i++)
         {
             MonsterInstance m = live[i];
@@ -147,11 +147,9 @@ public sealed class FieldSpawner
             m.IdleDespawnMsLeft -= dtMs;
             if (m.IdleDespawnMsLeft <= 0f)
             {
-                (expired ??= new List<MonsterInstance>()).Add(m);
+                expired.Add(m);
             }
         }
-
-        return (IReadOnlyList<MonsterInstance>)expired ?? Array.Empty<MonsterInstance>();
     }
 
     // The field's next boss pass, named after the boss's monster; null for a field without bosses.
@@ -328,7 +326,10 @@ public sealed class FieldSpawner
         return new Vector3(center.X + MathF.Cos(angle) * radius, center.Y, center.Z + MathF.Sin(angle) * radius);
     }
 
-    private float RandomFacing() => _rng.NextUnit() * MathF.Tau;
+    private float RandomFacing() => RandomFacing(_rng);
+
+    // A spawned monster's facing: any direction, in radians.
+    public static float RandomFacing(ISimRng rng) => rng.NextUnit() * MathF.Tau;
 
     private static int CountAlive(IReadOnlyList<MonsterInstance> live)
     {

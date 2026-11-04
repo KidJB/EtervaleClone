@@ -15,12 +15,11 @@ public sealed record WingGateDestination(int Index, int FieldCode, string Name, 
 // fee. The traveller lands on the exit of the destination's stone.
 public static class WingGates
 {
+    // A warp gate's special effect: a delayed warp with the return sparkle, or a wing warp stone.
+    public const int DelayedEffect = 1;
     public const int StoneEffect = 2;
     public const int FreeReach = 2;
     public const int FreeDestinations = 2;
-
-    // A stone answers within its width plus this tolerance, as a warp gate does.
-    public const float StoneTolerance = 64f;
 
     public const string MapArt = "image/Sinimage/help/WG_map.tga";
     public const string IconArt = "image/Sinimage/help/WG_icon.tga";
@@ -47,7 +46,7 @@ public static class WingGates
         new(ItemCodes.Parse("QW101"), "Metal Wing", 4, 100),
         new(ItemCodes.Parse("QW102"), "Silver Wing", 5, 300),
         new(ItemCodes.Parse("QW103"), "Gold Wing", 6, 500),
-        new(ItemCodes.Parse("QW104"), "Dia Wing", 7, 1000),
+        new(ItemCodes.Parse("QW104"), "Diamond Wing", 7, 1000),
         new(ItemCodes.Parse("QW105"), "Chaos Wing", 8, 2000),
         new(ItemCodes.Parse("QW106"), "Extreme Wing", 9, 4000)
     ];
@@ -106,7 +105,7 @@ public static class WingGates
         WingGateStatus.NotAtStone => "Stand on the warp gate first",
         WingGateStatus.NotReached => "Your wing does not reach this gate",
         WingGateStatus.LevelTooLow => "Your level is too low",
-        WingGateStatus.NotEnoughGold => "Not enough gold",
+        WingGateStatus.NotEnoughGold => ItemRuleMessages.NotEnoughGold,
         WingGateStatus.Busy => "Another action is pending; try again",
         WingGateStatus.StorageFailed => "Storage rejected the operation; character unchanged",
         _ => "The warp gate refused"
@@ -117,7 +116,7 @@ public static class WingGates
     {
         foreach (var warp in field.WarpGates)
         {
-            var radius = MathF.Max(warp.Width, 48f) + StoneTolerance;
+            var radius = warp.ServerReach;
             var delta = new Vector2(position.X - warp.X, position.Z - warp.Z);
             if (IsStone(warp) && delta.LengthSquared() <= radius * radius)
             {
@@ -139,7 +138,7 @@ public static class WingGates
             }
         }
 
-        var start = field.StartPoints.Count > 0 ? field.StartPoints[0] : field.Center;
+        var start = field.Arrival;
         return new Vector3(start.X, 0f, start.Z);
     }
 }

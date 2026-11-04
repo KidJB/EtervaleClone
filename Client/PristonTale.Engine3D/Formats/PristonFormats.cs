@@ -1,4 +1,5 @@
 using Microsoft.Xna.Framework;
+using PristonTale.Assets;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Contracts.Motion;
 
@@ -6,10 +7,7 @@ namespace PristonTale.Engine3D.Formats;
 
 public static class PristonFormatConstants
 {
-    public const string StageHeader = "SMD Stage data Ver 0.72";
-    public const string ModelHeader = "SMD Model data Ver 0.62";
     public const int MotionInfoCount = 512;
-    public const int MotionInfoSize = 172;
     public const int TalkMotionInfoCount = 30;
     public const int NpcMotionInfoCount = 30;
     public const int MotionRateSelectionCount = 100;
@@ -80,7 +78,7 @@ public sealed record PristonStageLayoutMetadata(
 
 public sealed class PristonStageAreaIndex
 {
-    public const int Width = 256;
+    public const int Width = SmdLayout.AreaWidth;
     public const int CellCount = Width * Width;
 
     private readonly int[] _offsets;
@@ -194,8 +192,7 @@ public sealed record PristonMaterial(
                 var name = StageTextureName(stage);
                 if (StageState(stage) == 1
                     || string.IsNullOrWhiteSpace(name)
-                    || !string.IsNullOrWhiteSpace(StageOpacityName(stage))
-                    || name.EndsWith(".tga", StringComparison.OrdinalIgnoreCase))
+                    || PristonMaterialRuntimeFactory.IsCutOut(name, StageOpacityName(stage)))
                 {
                     break;
                 }
@@ -278,7 +275,18 @@ public sealed record PristonStageFace(int A, int B, int C, int MaterialIndex, in
 // three signed colour shorts. It is preserved so no byte of the serialized structure is discarded.
 public sealed record PristonStageLight(int Type, Vector3 Position, float Range, Vector3 Color)
 {
+    private const int NightFlag = 0x00001;
+    private const int LensFlag = 0x00002;
+    private const int DynamicFlag = 0x80000;
+
     public short AlignmentPadding16 { get; init; }
+
+    public bool Night => (Type & NightFlag) != 0;
+
+    // A lens light is drawn as a glow; it lights the ground only when it is also dynamic.
+    public bool Lens => (Type & LensFlag) != 0;
+
+    public bool Dynamic => (Type & DynamicFlag) != 0;
 }
 
 public sealed record PristonStage(
@@ -397,6 +405,36 @@ public sealed record PristonModel(
     public PristonSourceTrailerMetadata SourceTrailer { get; init; }
     public bool IsAnimated => Objects.Any(o => o.IsAnimated);
     public int LastFrame => Objects.Count == 0 ? 0 : Objects.Max(o => o.LastFrame);
+
+    // A bone or object is found by name, case-insensitively; the first object of a name wins.
+    public int ObjectIndex(string name)
+    {
+        for (var index = 0; index < Objects.Count; index++)
+        {
+            if (Objects[index].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    // ObjectIndex for every named object at once.
+    public Dictionary<string, int> ObjectIndexByName()
+    {
+        var byName = new Dictionary<string, int>(Objects.Count, StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < Objects.Count; index++)
+        {
+            var name = Objects[index].Name;
+            if (name.Length > 0)
+            {
+                byName.TryAdd(name, index);
+            }
+        }
+
+        return byName;
+    }
 }
 
 public sealed record PristonMotionInfo(
@@ -420,6 +458,9 @@ public sealed record PristonMotionInfo(
     public uint RawEndFrame { get; init; }
     public bool StartFrameDecoded { get; init; }
     public bool EndFrameDecoded { get; init; }
+
+    // A real clip: it has a state and at least one frame.
+    public bool IsUsable => State != 0 && EndFrame > StartFrame;
 }
 
 public sealed record PristonModelGroup(
@@ -442,6 +483,20 @@ public sealed record PristonModelInfo(
     IReadOnlyList<PristonMotionInfo> TalkMotions,
     uint TalkMotionCount)
 {
+    // The usable clips of the character motion table (from slot CharacterMotionBase), with their slots.
+    public IEnumerable<(int Slot, PristonMotionInfo Motion)> UsableMotions()
+    {
+        for (var slot = PristonFormatConstants.CharacterMotionBase; slot < Motions.Count; slot++)
+        {
+            if (Motions[slot].IsUsable)
+            {
+                yield return (slot, Motions[slot]);
+            }
+        }
+    }
+
+    public bool HasUsableMotions => UsableMotions().Any();
+
     public uint FileTypeKeyword { get; init; }
 
     public uint LinkFileKeyword { get; init; }

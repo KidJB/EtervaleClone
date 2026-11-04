@@ -3,7 +3,7 @@ using PristonTale.Simulation.World.Npcs;
 
 namespace PristonTale.Simulation.World.Monsters.Skills;
 
-// Life a monster wins back: potions it drinks, the virtual lives of three bosses and Babel's regeneration.
+// Life a monster wins back: potions it drinks, the virtual lives of four bosses and Babel's regeneration.
 public static class MonsterLifeRules
 {
     // Below 30 % life a monster with potions drinks one when a clip ends; the drink restores half its life when the eating
@@ -11,13 +11,15 @@ public static class MonsterLifeRules
     public const int PotionThresholdPercent = 30;
     public const int PotionHealDivisor = 2;
 
-    // Valento, Kelvezu and Mokova carry their potion count as lives: at 10 % life or less one is spent and life refills.
+    // Valento, Kelvezu, Mokova and Hestian carry their potion count as lives: at 10 % life or less one is spent and life
+    // refills.
     public const int VirtualLifeThresholdPercent = 10;
 
     public static bool HasVirtualLives(MonsterDefinition definition) =>
-        definition.SoundCode is CharacterSoundCodes.DeathKnight or CharacterSoundCodes.Kelvezu or CharacterSoundCodes.Mokova;
+        definition.SoundCode is CharacterSoundCodes.DeathKnight or CharacterSoundCodes.Kelvezu or CharacterSoundCodes.Mokova
+            or CharacterSoundCodes.Hestian;
 
-    // Potions or lives a new monster carries: lives for the three bosses, otherwise rand[1, count] potions with the
+    // Potions or lives a new monster carries: lives for the four bosses, otherwise rand[1, count] potions with the
     // definition's percent chance.
     public static void Prepare(MonsterInstance monster, ISimRng rng)
     {
@@ -36,13 +38,12 @@ public static class MonsterLifeRules
             return;
         }
 
-        monster.Potions = rng.NextExclusive(0, 100) < monster.Def.PotionPercent ? rng.NextExclusive(0, count) + 1 : 0;
+        monster.Potions = rng.RollPercent() < monster.Def.PotionPercent ? rng.NextExclusive(0, count) + 1 : 0;
     }
 
     public static bool WantsPotion(MonsterInstance monster)
     {
-        var max = monster.Def.Combat.MaxLife;
-        return monster.Potions > 0 && monster.DuelPlayerId == 0 && max > 0 && monster.Life * 100L / max < PotionThresholdPercent;
+        return monster.Potions > 0 && monster.DuelPlayerId == 0 && monster.LifePercent < PotionThresholdPercent;
     }
 
     public static int PotionHeal(MonsterDefinition definition) => definition.Combat.MaxLife / PotionHealDivisor;
@@ -50,23 +51,20 @@ public static class MonsterLifeRules
     // Spends a virtual life when the remaining life falls to 10 % or less; returns true when one was spent.
     public static bool TrySpendVirtualLife(MonsterInstance monster)
     {
-        var max = monster.Def.Combat.MaxLife;
-        if (monster.VirtualLives <= 0 || max <= 0 || monster.Life * 100L / max > VirtualLifeThresholdPercent)
+        if (monster.VirtualLives <= 0 || monster.LifePercent is not { } percent || percent > VirtualLifeThresholdPercent)
         {
             return false;
         }
 
         monster.VirtualLives--;
-        monster.Life = max;
+        monster.Life = monster.Def.Combat.MaxLife;
         return true;
     }
 
     // The life bar of a boss with lives: each life is 100 points of the bar, the current life its percent.
     public static (int Life, int Max) DisplayLife(MonsterInstance monster)
     {
-        var max = monster.Def.Combat.MaxLife;
-        var percent = max > 0 ? (int)(monster.Life * 100L / max) : 0;
-        var life = monster.VirtualLives * 100 + percent;
+        var life = monster.VirtualLives * 100 + (monster.LifePercent ?? 0);
         if (life <= 0 && monster.Life > 0)
         {
             life = 1;

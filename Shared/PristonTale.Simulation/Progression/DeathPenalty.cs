@@ -107,9 +107,11 @@ public static class DeathPenalty
     // The inventory anchor of a carried Resurrection Scroll, or -1.
     public static int ScrollAnchor(PlayerCharacter character)
     {
-        foreach (var (anchor, item) in character.Inventory.Occupied())
+        // Asked every tick for a dead player: the bag is walked by index, without an iterator.
+        var inventory = character.Inventory;
+        for (var anchor = 0; anchor < inventory.Capacity; anchor++)
         {
-            if (item.Definition.CatalogKey == ResurrectionScroll)
+            if (inventory[anchor]?.Definition.CatalogKey == ResurrectionScroll)
             {
                 return anchor;
             }
@@ -118,8 +120,8 @@ public static class DeathPenalty
         return -1;
     }
 
-    // The town of a class, where a new character starts and a player stands up: Ricarten for the Tempskron classes and
-    // the assassin, Pillai for the Morion classes.
+    // The town of a class, where a new character starts and a player stands up: Ricarten for the Tempskron classes,
+    // Pillai for the Morion classes.
     public static int TownField(PlayerClass playerClass) =>
-        (int)playerClass <= (int)PlayerClass.Pikeman || playerClass == PlayerClass.Assassin ? FieldCodes.Ricarten : FieldCodes.Pillai;
+        ClassProfiles.Of(playerClass).Brood == CharacterBrood.Tempskron ? FieldCodes.Ricarten : FieldCodes.Pillai;
 }

@@ -18,12 +18,14 @@ using PristonTale.Persistence.Postgres;
 using PristonTale.Persistence.Sqlite;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.World.Loot;
+using PristonTale.Protocol.Transport;
+using PristonTale.Assets;
 
 namespace PristonTale.Server.Hosting;
 
 public static class HostingExtensions
 {
-    public const int DefaultGamePort = 10009;
+    public const int DefaultGamePort = TlsTransport.DefaultPort;
 
     public static HostApplicationBuilder AddPristonServer(this HostApplicationBuilder builder)
     {
@@ -50,7 +52,7 @@ public static class HostingExtensions
         if (string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
         {
             var databasePath = builder.Configuration["Database:SqlitePath"] ?? Path.Combine("data", "pristontale.db");
-            builder.Services.AddPristonSqlite(SqliteDatabasePath.Resolve(databasePath));
+            builder.Services.AddPristonSqlite(DataPath.Resolve(databasePath));
         }
         else if (string.Equals(provider, "Postgres", StringComparison.OrdinalIgnoreCase))
         {
@@ -102,8 +104,6 @@ public static class HostingExtensions
         builder.Services.AddHostedService<GameTcpServer>();
         builder.Services.AddHostedService<PristonTale.Server.World.QuestUpkeepService>();
         builder.Services.AddHostedService<PristonTale.Server.World.StarterGiftService>();
-
-        builder.Services.AddSingleton<IServerStatusReadModel, WorldStatusReadModel>();
 
         return builder;
     }

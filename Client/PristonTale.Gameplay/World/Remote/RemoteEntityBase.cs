@@ -7,6 +7,7 @@ using PristonTale.Simulation.Characters;
 using PristonTale.Contracts.Motion;
 using PristonTale.Contracts.World;
 using PristonTale.Contracts.Combat;
+using PristonTale.Simulation.World.Ai;
 
 namespace PristonTale.Gameplay.World.Remote;
 
@@ -15,9 +16,9 @@ namespace PristonTale.Gameplay.World.Remote;
 // interpolated ground speed, and a Walk/Run state with no ground motion is shown as Stand.
 public abstract class RemoteEntityBase
 {
-    // MonsterLocomotion: 70 u/s per step, one extra step when running. Learned speeds cover faster templates.
-    private const float ModelWalkSpeed = 70f;
-    private const float ModelRunSpeed = 140f;
+    // MonsterLocomotion's ordinary walk (one step) and run (two). Learned speeds cover faster templates.
+    private const float ModelWalkSpeed = MonsterLocomotion.BaseUnitsPerSecond;
+    private const float ModelRunSpeed = MonsterLocomotion.BaseUnitsPerSecond * 2;
     private const float LearnedSpeedLimit = 3f;
     private const float MinLocomotionScale = 0.5f;
     private const float MaxLocomotionScale = 2f;
@@ -27,6 +28,9 @@ public abstract class RemoteEntityBase
     private const int MaxPendingEvents = 32;
 
     private readonly RemoteSnapshotBuffer _track;
+
+    // How far behind the server's timeline the entity is drawn (its snapshot buffer's adaptive delay).
+    public double PlaybackDelayMs => _track.DelayMs;
     private readonly Queue<(double TimeMs, CombatEventInfo Event)> _events = new();
     private readonly ActorMotionController _controller = new();
     private Vector3 _renderPosition;
@@ -103,6 +107,9 @@ public abstract class RemoteEntityBase
 
     public bool IsDead => _controller.IsDead;
 
+    // Drawn facing left or right only (an action field).
+    public bool SideView { get; set; }
+
     public void SetTarget(double timeMs, Vector3 position, float facing, MotionState moveState, int life)
     {
         _ = _track.Add(new RemoteSample(timeMs, position, facing, moveState, life), _renderPosition);
@@ -118,7 +125,7 @@ public abstract class RemoteEntityBase
         LearnSpeed(pose);
         UpdateStall(elapsedMs);
         _renderPosition = pose.Position;
-        _renderFacing = pose.Facing;
+        _renderFacing = SideView ? ActionFieldView.Facing(pose.Facing) : pose.Facing;
         ApplyWorld(Matrix.CreateRotationY(_renderFacing) * Matrix.CreateTranslation(_renderPosition));
 
         if (_pendingMotion.Kind != MotionCommandKind.None)

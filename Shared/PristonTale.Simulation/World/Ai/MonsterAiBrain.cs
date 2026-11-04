@@ -5,6 +5,8 @@ using PristonTale.Simulation.World.Monsters;
 using PristonTale.Simulation.World.Monsters.Skills;
 using PristonTale.Contracts.Motion;
 using PristonTale.Contracts.Units;
+using PristonTale.Simulation.Physics;
+using PristonTale.Simulation.Characters;
 
 namespace PristonTale.Simulation.World.Ai;
 
@@ -336,7 +338,7 @@ public sealed class MonsterAiBrain
         }
 
         float elapsed = MathF.Min(dt, remainingMs);
-        var forward = new Vector3(MathF.Sin(m.Facing), 0f, MathF.Cos(m.Facing));
+        var forward = Planar.Forward(m.Facing);
         m.MoveTarget = m.Position + forward * 10000f;
         IntegrateToward(m, m.MoveTarget, run: false, elapsed);
         m.SpawnWalkElapsedMs += elapsed;
@@ -380,7 +382,7 @@ public sealed class MonsterAiBrain
         m.ProbeClips++;
         if (m.ProbeClips >= MonsterAiTuning.ProgressProbeClips)
         {
-            bool stuck = PlanarDistanceSq(m.Position, m.ProgressProbePosition) < t.StuckDistanceSq;
+            bool stuck = Planar.DistanceSquared(m.Position, m.ProgressProbePosition) < t.StuckDistanceSq;
             m.ProgressProbePosition = m.Position;
             m.ProbeClips = 0;
             bool queued = m.CrowdedSinceProbe;
@@ -402,7 +404,7 @@ public sealed class MonsterAiBrain
         }
 
         // Soft leash: head home for six clips, keeping the target; the chase may resume afterwards.
-        if (m.Motion.IsMoving() && PlanarDistanceSq(m.Position, m.HomeAnchor) > t.LeashSq)
+        if (m.Motion.IsMoving() && Planar.DistanceSquared(m.Position, m.HomeAnchor) > t.LeashSq)
         {
             BeginManoeuvre(m, HeadingTo(m, m.HomeAnchor), MonsterAiTuning.LeashManoeuvreClips, m.Motion);
         }
@@ -448,7 +450,7 @@ public sealed class MonsterAiBrain
         SetAction(m, attack);
         m.SecondHitAtMs = MonsterSkillRules.StrikesTwice(m.Def) ? attack.HitAtMs + MonsterSkillRules.BabelSecondHitMs : 0f;
         int rating = m.Def.Skill.SkillRatingPercent;
-        m.AttackIsSkill = tuning.CanCastOffensiveSkill && _rng.NextExclusive(0, 100) < rating;
+        m.AttackIsSkill = tuning.CanCastOffensiveSkill && _rng.RollPercent() < rating;
         m.SkillImpactPending = false;
         if (m.AttackIsSkill)
         {
@@ -639,7 +641,7 @@ public sealed class MonsterAiBrain
             return;
         }
 
-        if (rng.NextExclusive(0, 100) >= monster.Def.Combat.DamageStunPercent)
+        if (rng.RollPercent() >= monster.Def.Combat.DamageStunPercent)
         {
             return;
         }
@@ -672,72 +674,54 @@ public sealed class MonsterAiBrain
             return;
         }
 
-        boss.TargetId = attackerEntityId;
-        boss.TargetLockMsLeft = MonsterAiTuning.BossTargetLockMs;
-        if (boss.AiState is MonsterAiState.Idle or MonsterAiState.Wander or MonsterAiState.Leash)
+        if (ForceTarget(boss, attackerEntityId, MonsterAiTuning.BossTargetLockMs) && boss.Motion != MotionState.Damage)
         {
-            boss.AiState = MonsterAiState.Chase;
-            boss.ManoeuvreClipsLeft = 0;
-            if (boss.Motion != MotionState.Damage)
-            {
-                boss.Motion = MotionState.Stand;
-            }
-
-            boss.SinceDecisionMs = MonsterAiTuning.DecisionIntervalMs;
+            boss.Motion = MotionState.Stand;
         }
+    }
+
+    // Locks the monster on a target for lockMs (it does not retarget meanwhile); an idle, wandering or leashing monster
+    // turns to chase it at once. True when it started chasing.
+    public static bool ForceTarget(MonsterInstance monster, ulong targetId, float lockMs)
+    {
+        monster.TargetId = targetId;
+        monster.TargetLockMsLeft = lockMs;
+        if (monster.AiState is not (MonsterAiState.Idle or MonsterAiState.Wander or MonsterAiState.Leash))
+        {
+            return false;
+        }
+
+        monster.AiState = MonsterAiState.Chase;
+        monster.ManoeuvreClipsLeft = 0;
+        monster.SinceDecisionMs = MonsterAiTuning.DecisionIntervalMs;
+        return true;
     }
 
     private static void IntegrateToward(MonsterInstance m, Vector3 target, bool run, float dtMs)
     {
-        float dx = target.X - m.Position.X;
-        float dz = target.Z - m.Position.Z;
-        float distSq = (dx * dx) + (dz * dz);
-        if (distSq < 1e-4f)
+        var step = DestinationMovement.Advance(new Vector2(m.Position.X, m.Position.Z), new Vector2(target.X, target.Z),
+            MonsterLocomotion.UnitsPerSecond(m.Def, run), dtMs / 1000f);
+        if (step.Direction != Vector2.Zero)
         {
-            return;
+            m.Facing = MathF.Atan2(step.Direction.X, step.Direction.Y);
         }
 
-        float unitsPerSec = MonsterLocomotion.UnitsPerSecond(m.Def, run);
-
-        float dist = MathF.Sqrt(distSq);
-        float step = unitsPerSec * (dtMs / 1000f);
-        m.Facing = MathF.Atan2(dx, dz);
-
-        if (step >= dist)
-        {
-            m.Position = new Vector3(target.X, m.Position.Y, target.Z);
-            return;
-        }
-
-        float nx = m.Position.X + (dx / dist * step);
-        float nz = m.Position.Z + (dz / dist * step);
-        m.Position = new Vector3(nx, m.Position.Y, nz);
+        m.Position = new Vector3(step.Position.X, m.Position.Y, step.Position.Y);
     }
 
     // Manoeuvres keep the yaw heading chosen when they began; walls are slid by the host.
     private static void IntegrateHeading(MonsterInstance m, float heading, bool run, float dtMs)
     {
         float step = MonsterLocomotion.UnitsPerSecond(m.Def, run) * (dtMs / 1000f);
-        var direction = new Vector3(MathF.Sin(heading), 0f, MathF.Cos(heading));
+        var direction = Planar.Forward(heading);
         m.Facing = heading;
         m.MoveTarget = m.Position + direction * 10000f;
         m.Position += direction * step;
     }
 
-    private static float HeadingTo(MonsterInstance m, Vector3 point)
-    {
-        float dx = point.X - m.Position.X;
-        float dz = point.Z - m.Position.Z;
-        return (dx * dx) + (dz * dz) < 1e-4f ? m.Facing : MathF.Atan2(dx, dz);
-    }
+    private static float HeadingTo(MonsterInstance m, Vector3 point) =>
+        DestinationMovement.HasArrived(new Vector2(m.Position.X, m.Position.Z), new Vector2(point.X, point.Z)) ? m.Facing : Planar.Heading(m.Position, point);
 
     private static void FaceToward(MonsterInstance m, Vector3 target)
-        => m.Facing = MathF.Atan2(target.X - m.Position.X, target.Z - m.Position.Z);
-
-    private static float PlanarDistanceSq(Vector3 a, Vector3 b)
-    {
-        float dx = a.X - b.X;
-        float dz = a.Z - b.Z;
-        return (dx * dx) + (dz * dz);
-    }
+        => m.Facing = Planar.Heading(m.Position, target);
 }

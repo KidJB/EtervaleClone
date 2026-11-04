@@ -11,13 +11,13 @@ namespace PristonTale.Engine3D.Rendering;
 // roughness or metalness, so each kind of surface gets a fixed, plausible value.
 internal static class PristonMaterialAdapter
 {
-    // Skin, cloth, hair, leather, wood and stone: rough dielectrics. Only water, ice and the authored shine are smoother;
-    // nothing original is metallic (the assets carry no metalness).
+    // Skin, cloth, hair, leather, wood, stone and snow: rough dielectrics. Only water and the authored shine are smoother;
+    // nothing original is metallic (the assets carry no metalness). The ice surface flag is slippery floor for gameplay,
+    // set on snow and grass-to-snow tiles alike, so it does not change the look.
     public const float DefaultRoughness = 0.85f;
     public const float DielectricReflectance = 0.04f;
     public const float WaterRoughness = 0.12f;
     public const float WaterReflectance = 0.02f;
-    public const float IceRoughness = 0.3f;
     public const float ShineRoughness = 0.4f;
     public const float EmissiveStrength = 1f;
     // Thin, two-sided cut-outs (foliage) let this share of the sun through when lit from behind.
@@ -39,10 +39,6 @@ internal static class PristonMaterialAdapter
         {
             roughness = WaterRoughness;
             reflectance = WaterReflectance;
-        }
-        else if ((material.SurfaceFlags & PristonMaterialSurfaceFlags.Ice) != 0)
-        {
-            roughness = IceRoughness;
         }
         else if (layerMode == PristonLayerMode.Reflection)
         {
@@ -112,4 +108,7 @@ internal static class PristonBlendType
     // A colour-weighted, darkening or additive mode (everything but plain alpha): drawn with the blended surfaces, never
     // as a cut-out.
     public static bool IsLate(uint blendType) => blendType is >= Color and <= InverseShadow;
+
+    // No blend or plain alpha: the surface covers what is behind it by its own alpha.
+    public static bool Covers(uint blendType) => blendType <= Alpha;
 }

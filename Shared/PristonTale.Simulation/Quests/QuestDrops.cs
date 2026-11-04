@@ -25,9 +25,11 @@ public static class QuestDrops
     public static bool PassesSource(PlayerCharacter character, uint code, QuestDropSource source) =>
         source != QuestDropSource.MainTable || character.Tier == 0 || character.Tier == 1 && code == QuestItems.Vamp;
 
-    // The royal amulet drops 21 times in 100, and only before the final tier; every other event item drops on every kill.
+    // The royal amulet drops 21 times in 100, and only before the fourth tier; every other event item drops on every kill.
     public static bool EventItemDrops(ISimRng rng, uint code, int creditedTier) =>
-        code != QuestItems.RoyalAmulet || creditedTier < 3 && rng.NextExclusive(0, 100) <= 20;
+        code != QuestItems.RoyalAmulet || creditedTier < RoyalAmuletTiers && rng.RollPercent() <= 20;
+
+    private const int RoyalAmuletTiers = 3;
 
     // Quest items reach the pack only while a running quest wants them, one copy (or the counted number) at a time.
     public static bool Accepts(QuestContext context, uint code, int monsterCode)
@@ -127,6 +129,12 @@ public static class QuestDrops
         {
             QuestInventory.Remove(character, QuestItems.Vamp);
         }
+
+        if (active.Code != RankUpByHestian.Code)
+        {
+            QuestInventory.Remove(character, QuestItems.MoonStone);
+            QuestInventory.Remove(character, QuestItems.GemOfHestian);
+        }
     }
 
     // Whether an upkeep has work besides pending drops; checked by the tick every few seconds and after kills and deaths.
@@ -155,9 +163,15 @@ public static class QuestDrops
             return true;
         }
 
-        if (character.Tier >= 1 && FirstRankUpItems.Any(code => QuestInventory.Has(character, code)))
+        if (character.Tier >= 1)
         {
-            return true;
+            foreach (var code in FirstRankUpItems)
+            {
+                if (QuestInventory.Has(character, code))
+                {
+                    return true;
+                }
+            }
         }
 
         return character.Tier >= 2 && active.Code != QuestCode.RankUpQuestWeapon && QuestInventory.Has(character, QuestItems.Vamp);
@@ -181,6 +195,7 @@ public static class QuestTick
         ElementaryQuests.OnKill(context, monsterCode);
         FuryOfPhantomQuest.OnKill(context);
         RankUpByMasterTrial.OnKill(context, monsterCode);
+        RankUpByHestian.OnKill(context, monsterCode);
         return RankUpByQuestWeapon.OnKill(context, monsterCode);
     }
 
@@ -200,6 +215,7 @@ public static class QuestTick
         }
 
         RankUpByMasterTrial.StepTimer(context, elapsedMs);
+        RankUpByHestian.StepTimer(context, elapsedMs);
         RankUpByQuestWeapon.CheckLevelSkip(context);
     }
 }

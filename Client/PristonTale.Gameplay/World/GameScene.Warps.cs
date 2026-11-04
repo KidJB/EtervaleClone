@@ -104,7 +104,7 @@ public sealed partial class GameScene
 
             if (OnGate(warp))
             {
-                if (warp.SpecialEffect == 1)
+                if (warp.SpecialEffect == WingGates.DelayedEffect)
                 {
                     BeginSpecialWarp(warp);
                     return;
@@ -124,7 +124,7 @@ public sealed partial class GameScene
     private bool OnGate(FieldWarpGate warp)
     {
         var center = WorldSpace.Planar(warp.X, warp.Z);
-        var radius = MathF.Max(warp.Width, 48f);
+        var radius = warp.Radius;
         var playerFeet = _playerBody.Height + GroundTraversal.VisualOffset;
         var withinHeight = warp.Y == 0 || MathF.Abs(playerFeet - warp.Y) < warp.Height;
         return withinHeight && Vector2.DistanceSquared(_playerBody.PlanarPosition, center) <= radius * radius;
@@ -155,7 +155,7 @@ public sealed partial class GameScene
     private bool Warp(FieldWarpGate warp)
     {
         var destDef = _worldCatalog.GetField(warp.DestinationFieldId);
-        var dest = _fields.FirstOrDefault(field => field.Definition.Id == destDef.Id);
+        var dest = FindLoaded(destDef.Id);
         if (dest is null)
         {
             RequestField(destDef);
@@ -172,14 +172,16 @@ public sealed partial class GameScene
 
         SetActiveField(dest);
         _hasMoveTarget = false;
-        _playerBody.PlanarPosition = new Vector2(warp.DestinationX, -warp.DestinationZ);
+        // The client picks the exit of a gate with several; the server keeps the exit the report arrives at.
+        var exit = warp.Exit(Random.Shared.Next(warp.ExitCount));
+        _playerBody.PlanarPosition = WorldSpace.Planar(exit.X, exit.Z);
         // The authored destination height is near the floor, not on it: stand on the floor nearest it.
-        _playerBody.Height = warp.DestinationY - GroundTraversal.VisualOffset;
-        PlaceAtHeight(_playerBody, warp.DestinationY);
+        _playerBody.Height = exit.Y - GroundTraversal.VisualOffset;
+        PlaceAtHeight(_playerBody, exit.Y);
         EndFall(landed: false);
         ApplyPlayerWorld();
         _camera = new PristonCamera(_playerBody.Position, _playerForward, ToCameraSettings(destDef.Camera));
-        _log.Info($"[Warp] -> {destDef.Id} at ({warp.DestinationX},{warp.DestinationZ}).");
+        _log.Info($"[Warp] -> {destDef.Id} at ({exit.X},{exit.Z}).");
         return true;
     }
 
@@ -201,7 +203,7 @@ public sealed partial class GameScene
         var changedField = false;
         if (_activeField?.Definition.FieldCode != warp.FieldId && _worldCatalog.TryGetFieldByCode(warp.FieldId, out var field))
         {
-            var loaded = _fields.FirstOrDefault(candidate => candidate.Definition.Id == field.Id);
+            var loaded = FindLoaded(field.Id);
             if (loaded is null)
             {
                 // Held until the field is loaded; the player stays put meanwhile.
@@ -220,7 +222,7 @@ public sealed partial class GameScene
 
         var authoritative = new Vector2(warp.Position.X, warp.Position.Z);
         var difference = authoritative - _playerBody.PlanarPosition;
-        if (!warp.Forced && changedField && difference.LengthSquared() <= 200f * 200f)
+        if (!warp.Forced && changedField && difference.LengthSquared() <= WarpCorrection * WarpCorrection)
         {
             // The unforced warp confirming a field the player is already at (a restart moved it across, a seamless border):
             // only the height, which may still be the old field's; snapping the place would pull back a player who has
@@ -231,7 +233,7 @@ public sealed partial class GameScene
             return;
         }
 
-        if (warp.Forced || difference.LengthSquared() > 200f * 200f)
+        if (warp.Forced || difference.LengthSquared() > WarpCorrection * WarpCorrection)
         {
             _log.Info($"[Movement] correction {difference.Length():F1} units; field={warp.FieldId}, forced={warp.Forced}.");
             StopPredictedMovement();

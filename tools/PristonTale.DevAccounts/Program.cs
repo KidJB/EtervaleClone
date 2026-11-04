@@ -9,13 +9,13 @@ using PristonTale.Persistence.Sqlite;
 using PristonTale.Simulation.Characters;
 using PristonTale.Contracts.Characters;
 using PristonTale.Simulation.World;
+using PristonTale.Assets;
 
 // Dev CLI to seed accounts + characters into the same database as the online server.
 // Reuses the real persistence layer (PasswordHasher, repositories, CharacterRecordFactory) so seeded data
 // is identical to what the server would create. The schema is ensured idempotently via DatabaseMigrator.
 
 const string DefaultSqlitePath = "data/pristontale.db";
-const int MaxSlots = 6;
 
 var argv = new List<string>(args);
 var requestedConnection = TakeOption(argv, "--conn");
@@ -43,7 +43,7 @@ if (connection is not null)
 }
 else
 {
-    services.AddPristonSqlite(SqliteDatabasePath.Resolve(sqlitePath));
+    services.AddPristonSqlite(DataPath.Resolve(sqlitePath));
 }
 services.AddSingleton<CharacterClassRegistry>();
 await using var provider = services.BuildServiceProvider();
@@ -132,6 +132,8 @@ async Task<int> CreateBots(List<string> a)
         }
 
         var name = $"Lt{prefix}{index:D4}";
+        if (!CharacterNames.IsValidLength(name))
+            return Usage($"bot name '{name}' is not {CharacterNames.MinLength}–{CharacterNames.MaxLength} characters; use a shorter prefix");
         if (!placed || (await characters.ListByAccountAsync(account.Id)).Count > 0 || await characters.NameExistsAsync(name))
             continue;
         var position = spacing <= 0f
@@ -161,16 +163,13 @@ async Task<int> AddCharacter(List<string> a)
     var account = await accounts.FindByUserIdAsync(user);
     if (account is null)
         return Usage($"no account '{user}' — run create-account first");
-    if (name.Length is < 3 or > 16)
-        return Usage("character name must be 3–16 characters");
+    if (!CharacterNames.IsValidLength(name))
+        return Usage($"character name must be {CharacterNames.MinLength}–{CharacterNames.MaxLength} characters");
     if (await characters.NameExistsAsync(name))
         return Usage($"character name '{name}' is already taken");
 
-    var used = await characters.UsedSlotsAsync(account.Id);
-    if (used.Count >= MaxSlots)
-        return Usage($"account '{user}' has no free character slots (max {MaxSlots})");
-    short slot = 0;
-    while (used.Contains(slot)) slot++;
+    if (CharacterSlots.FirstFree(await characters.UsedSlotsAsync(account.Id)) is not { } slot)
+        return Usage($"account '{user}' has no free character slots (max {CharacterSlots.Maximum})");
 
     var record = CharacterRecordFactory.NewStarter(classes, account.Id, name, slot, playerClass, PristonTale.Simulation.Progression.DeathPenalty.TownField(playerClass), level: level);
     var created = await characters.CreateAsync(record);

@@ -3,6 +3,7 @@ using PristonTale.Simulation.Combat;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.Modifiers;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Simulation.Progression;
 
 namespace PristonTale.Simulation.Skills;
 
@@ -39,6 +40,32 @@ public static partial class SkillFormulas
         return false;
     }
 
+    // True when the rule needs no effect, or one of its required effects is on the player.
+    public static bool HoldsRequiredEffect(PlayerCharacter player, SkillRule rule)
+    {
+        foreach (var code in rule.RequiresEffect)
+        {
+            if (player.Effects.TryGet(code, out _))
+            {
+                return true;
+            }
+        }
+
+        return rule.RequiresEffect.Length == 0;
+    }
+
+    // How long a taunt holds the struck monster: the rule's own table, else the caster buff's or the buff's duration.
+    public static float TauntDurationMs(SkillRule rule, int rank, SkillBuffRule buff)
+    {
+        if (rule.TauntTenths.Length > 0)
+        {
+            return At(rule.TauntTenths, rank) * TenthMs;
+        }
+
+        var held = rule.CasterBuff ?? buff;
+        return held is null ? 0f : BuffDurationMs(held, rank, 0);
+    }
+
     public static bool MatchesBrood(MonsterBrood[] broods, MonsterDefinition target) => target is not null && Array.IndexOf(broods, target.Brood) >= 0;
 
 
@@ -50,7 +77,7 @@ public static partial class SkillFormulas
         var value = WithBroodBonus(power, damage, target, rank);
         var resistances = ModifierRules.Resistances(defender, target.Combat.Resistances);
         var resistance = resistances[damage.Element] / Math.Max(1, damage.ResistanceDivisor);
-        value -= value * Math.Clamp(resistance, -100, 100) / 100;
+        value = CombatResolver.ApplyResistance(value, resistance);
         value = CombatResolver.ApplyAbsorbMonster(value, target.Combat.Absorption + defender.Flat(StatKind.Absorption));
         return ModifierRules.ScaleDamage(value, attacker, defender);
     }
@@ -62,39 +89,30 @@ public static partial class SkillFormulas
         return percent <= 0 || damage <= 0 || target?.Brood != MonsterBrood.Undead ? damage : damage + damage * percent / 100;
     }
 
-    // The buff's duration on a target: bionic or the rule's element resistance shortens resisted effects.
-    public static float BuffDurationMs(SkillRule rule, int rank, in ResistanceBlock resistances)
-    {
-        var buff = rule.Buff;
-        var ms = rule.At(buff.DurationTenths, rank) * TenthMs;
-        var resistance = buff.ResistedBy is { } element ? resistances[element] : buff.ResistedByBionic ? resistances.Bionic : 0;
-        return ms * (100 - Math.Clamp((int)resistance, 0, 100)) / 100f;
-    }
-
     // The table value of a rank-indexed array, 0 outside 1..10.
-    public static int RankValue(int[] table, int rank) => table is { Length: 10 } && rank is >= 1 and <= 10 ? table[rank - 1] : 0;
+    public static int RankValue(int[] table, int rank) => table is { Length: 10 } && rank is >= 1 and <= SkillLearning.MaxRank ? table[rank - 1] : 0;
 
     // A share skill's chance (with the level term, lowered by bionic resistance) and its percent of life.
     public static int ShareChance(SkillDamageRule damage, int rank, int casterLevel, int bionicResistance)
     {
-        if (damage.Chance.Length != 10)
+        if (damage.Chance.Length != SkillLearning.MaxRank)
         {
             return 100;
         }
 
         var chance = RankValue(damage.Chance, rank) + (damage.ChanceLevelDivisor > 0 ? casterLevel / damage.ChanceLevelDivisor : 0);
-        return chance - chance * Math.Clamp(bionicResistance, -100, 100) / 100;
+        return CombatResolver.ApplyResistance(chance, bionicResistance);
     }
 
     public static int SharePercent(SkillDamageRule damage, int rank, int bionicResistance)
     {
         var share = RankValue(damage.Share, rank);
-        return damage.ShareResistedByBionic ? share - share * Math.Clamp(bionicResistance, -100, 100) / 100 : share;
+        return damage.ShareResistedByBionic ? CombatResolver.ApplyResistance(share, bionicResistance) : share;
     }
 
     // The charm's success chance on a monster: the table lowered by its bionic resistance.
     public static int CharmChance(SkillRule rule, int rank, int bionicResistance) =>
-        RankValue(rule.Charm.Chance, rank) * (100 - Math.Clamp(bionicResistance, 0, 100)) / 100;
+        CombatResolver.Shortened(RankValue(rule.Charm.Chance, rank), bionicResistance);
 
     // A companion strike's damage range at this rank for the drawn choice, with the weapon and spirit terms.
     public static (int Min, int Max) CompanionDamage(SkillCompanionRule companion, SkillEnchantChoice choice, int rank, PlayerCharacter caster)
@@ -116,5 +134,5 @@ public static partial class SkillFormulas
 
     // Duration of an enchant's or a companion's slow on a monster: ice resistance shortens it.
     public static float SlowDurationMs(SkillEnchantChoice choice, int rank, int iceResistance) =>
-        RankValue(choice.SlowTenths, rank) * TenthMs * (100 - Math.Clamp(iceResistance, 0, 100)) / 100f;
+        CombatResolver.Shortened(RankValue(choice.SlowTenths, rank) * TenthMs, iceResistance);
 }

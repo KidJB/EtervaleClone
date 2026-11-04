@@ -9,6 +9,8 @@ public readonly record struct HudLayout(int Scale, int Width, int Height, int Vi
     public const int DesignWidth = 800;
     public const int DesignHeight = 600;
 
+    public static HudLayout Of(Microsoft.Xna.Framework.Graphics.Viewport viewport) => Create(viewport.Width, viewport.Height);
+
     public static HudLayout Create(int viewportWidth, int viewportHeight)
     {
         viewportWidth = Math.Max(1, viewportWidth);
@@ -43,5 +45,6 @@ public readonly record struct HudLayout(int Scale, int Width, int Height, int Vi
         return new Rectangle(x, y, width, height);
     }
 
-    private static int FloorDivide(int value, int divisor) => value >= 0 ? value / divisor : -((-value + divisor - 1) / divisor);
+    // value / divisor rounded down, for negative values too.
+    internal static int FloorDivide(int value, int divisor) => value >= 0 ? value / divisor : -((-value + divisor - 1) / divisor);
 }

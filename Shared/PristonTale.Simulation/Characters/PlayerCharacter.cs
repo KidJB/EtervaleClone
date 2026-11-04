@@ -42,6 +42,14 @@ public sealed partial class PlayerCharacter
     public int EliteSkillPoints { get; private set; }
     public short Tier { get; private set; }
 
+    // The class's tiers run from 0 to LastTier (each rank-up moves one up). Below UncappedTier, experience stops at the
+    // start of CappedLevel: an award that would pass it is discarded whole.
+    public const int LastTier = 4;
+    public const int UncappedTier = 3;
+    private const int CappedLevel = 100;
+
+    public ulong ExperienceLimit => Tier < UncappedTier ? ExperienceTable.ForLevel(CappedLevel) : ExperienceTable.Ceiling;
+
     public int StarterGiftsReceived { get; private set; } = StarterGifts.Count;
 
     public void RestoreStarterGifts(int received) =>
@@ -139,7 +147,7 @@ public sealed partial class PlayerCharacter
 
     public void RestoreProgress(ulong experience, long money, int statPoints = 0, short tier = 0, int skillPoints = 0, int eliteSkillPoints = 0)
     {
-        if (money < 0 || statPoints < 0 || skillPoints < 0 || eliteSkillPoints < 0 || tier < 0 || tier > 3)
+        if (money < 0 || statPoints < 0 || skillPoints < 0 || eliteSkillPoints < 0 || tier < 0 || tier > LastTier)
         {
             throw new ArgumentOutOfRangeException(nameof(experience));
         }
@@ -159,8 +167,7 @@ public sealed partial class PlayerCharacter
             return 0;
         }
 
-        // Experience saturates below the unsigned maximum (no wrap); below the third rank-up an award that would pass the
-        // level 100 threshold is discarded whole.
+        // Experience saturates below the unsigned maximum (no wrap); an award past ExperienceLimit is discarded whole.
         const ulong ceiling = ExperienceTable.Ceiling;
         if (Experience >= ceiling)
         {
@@ -168,7 +175,7 @@ public sealed partial class PlayerCharacter
         }
 
         var next = amount > ceiling - Experience ? ceiling : Experience + amount;
-        if (Tier < 3 && next > ExperienceTable.ForLevel(100))
+        if (next > ExperienceLimit)
         {
             return 0;
         }
@@ -298,6 +305,12 @@ public sealed partial class PlayerCharacter
     public event Action<PlayerCharacter, int> LeveledUp;
     public event Action<PlayerCharacter, EquipmentSlot, ItemInstance> Equipped;
 
+    // Each level brings StatusPointsPerLevel status points; every even level from SkillPointsFromLevel brings a skill
+    // point, and from ElitePointsFromLevel an elite skill point too.
+    public const int StatusPointsPerLevel = 5;
+    public const int SkillPointsFromLevel = 10;
+    public const int ElitePointsFromLevel = 60;
+
     public void LevelUp()
     {
         if (Level >= ExperienceTable.MaximumLevel)
@@ -306,13 +319,13 @@ public sealed partial class PlayerCharacter
         }
 
         Level++;
-        StatPoints += 5 + QuestRewards.LevelUpBonusStatPoints(Level, Quests.LevelLog);
-        if (Level >= 10 && Level % 2 == 0)
+        StatPoints += StatusPointsPerLevel + QuestRewards.LevelUpBonusStatPoints(Level, Quests.LevelLog);
+        if (Level >= SkillPointsFromLevel && Level % 2 == 0)
         {
             SkillPoints++;
         }
 
-        if (Level >= 60 && Level % 2 == 0)
+        if (Level >= ElitePointsFromLevel && Level % 2 == 0)
         {
             EliteSkillPoints++;
         }
@@ -502,7 +515,7 @@ public sealed partial class PlayerCharacter
     // Sets the attributes and the unallocated points of a stat reset; the total of both must not change.
     public void RedistributeAttributes(CharacterAttributes attributes, int statPoints)
     {
-        if (attributes is null || statPoints < 0 || Sum(attributes) + statPoints != Sum(Attributes) + StatPoints)
+        if (attributes is null || statPoints < 0 || attributes.Total + statPoints != Attributes.Total + StatPoints)
         {
             throw new ArgumentException("A stat reset must keep the total of attributes and points.");
         }
@@ -512,13 +525,14 @@ public sealed partial class PlayerCharacter
         Recompute();
     }
 
-    private static long Sum(CharacterAttributes a) => (long)a.Strength + a.Spirit + a.Talent + a.Agility + a.Health;
 
     // Item kinds in the main and the off hand (bit per kind), for effects bound to a weapon or a shield.
+    private static readonly EquipmentSlot[] HandSlots = [EquipmentSlot.Weapon, EquipmentSlot.OffHand];
+
     private uint HeldKinds()
     {
         var held = 0u;
-        foreach (var slot in new[] { EquipmentSlot.Weapon, EquipmentSlot.OffHand })
+        foreach (var slot in HandSlots)
         {
             if (GetEquipped(slot) is { } item && Enum.IsDefined(item.Definition.Kind))
             {
@@ -744,13 +758,13 @@ public sealed partial class PlayerCharacter
                 break;
             case ProgressionAction.LearnSkill:
                 if (command.Amount != 0 || command.Attribute != CharacterAttribute.Strength || command.NpcEntityId == 0
-                    || !SkillLearning.TryQuote(this, command.SkillCode, out var price, out var finalTier))
+                    || !SkillLearning.TryQuote(this, command.SkillCode, out var price, out var elite))
                 {
                     return false;
                 }
 
                 Money -= price;
-                if (finalTier)
+                if (elite)
                 {
                     EliteSkillPoints--;
                 }
@@ -794,7 +808,7 @@ public sealed partial class PlayerCharacter
     // tick changed meanwhile.
     public void ApplyQuestProgress(short tier, int statPoints, int skillPoints, int eliteSkillPoints)
     {
-        if (tier < Tier || tier > 3 || StatPoints + (long)statPoints < 0 || SkillPoints + (long)skillPoints < 0 || EliteSkillPoints + (long)eliteSkillPoints < 0)
+        if (tier < Tier || tier > LastTier || StatPoints + (long)statPoints < 0 || SkillPoints + (long)skillPoints < 0 || EliteSkillPoints + (long)eliteSkillPoints < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(tier));
         }
@@ -806,14 +820,14 @@ public sealed partial class PlayerCharacter
     }
 
     // The free redistribution a rank-up offers: every learned rank returns to its pool (the first twelve window skills to
-    // the skill points, the final tier's to its own points) and the proficiency is forgotten.
+    // the skill points, the fourth and fifth tiers' to the elite points) and the proficiency is forgotten.
     public void ResetLearnedSkills()
     {
         var skills = Class.Skills;
         for (var index = 0; index < skills.Count; index++)
         {
             var rank = Skills.RankOf(skills[index].Code);
-            if (SkillLearning.UsesFinalTierPoints(index))
+            if (SkillLearning.UsesElitePoints(index))
             {
                 EliteSkillPoints += rank;
             }

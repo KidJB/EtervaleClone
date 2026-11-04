@@ -1,11 +1,13 @@
 using System.Numerics;
 using PristonTale.Simulation.World.Monsters;
+using PristonTale.Simulation.Physics;
+using PristonTale.Simulation.World.Ai;
 
 namespace PristonTale.Simulation.Combat;
 
 public static class MonsterOffensiveSkill
 {
-    private const double ConnectedDistanceSquared = 0x120000;
+    private const double ConnectedDistanceSquared = World.ViewRanges.ConnectSquared;
 
     public static Vector3 AreaCenter(Vector3 origin, float facing, MonsterSkillStats skill)
     {
@@ -14,7 +16,7 @@ public static class MonsterOffensiveSkill
             return origin;
         }
 
-        var forward = new Vector3(MathF.Sin(facing), 0f, MathF.Cos(facing));
+        var forward = Planar.Forward(facing);
         return origin + forward * skill.SkillDistance;
     }
 
@@ -36,14 +38,14 @@ public static class MonsterOffensiveSkill
         double dy = (double)target.Y - origin.Y;
         double dz = (double)target.Z - origin.Z;
         double distanceSquared = dx * dx + dy * dy + dz * dz;
-        if (Math.Abs(dy) >= 140 || distanceSquared >= ConnectedDistanceSquared)
+        if (Math.Abs(dy) >= MonsterAiTuning.VerticalAggroGate || distanceSquared >= ConnectedDistanceSquared)
         {
             return false;
         }
 
         if (skill.SkillRange == 0)
         {
-            // Explicit bounded single-target reach. Do not preserve the original packet's act=1 distance bypass.
+            // A bounded single-target reach: a skill never reaches a target beyond it, whatever the request asks.
             return distanceSquared < MonsterAttackReach.RangedImpactDistanceSquared;
         }
 

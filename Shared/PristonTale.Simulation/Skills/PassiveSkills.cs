@@ -1,6 +1,7 @@
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Combat;
 using PristonTale.Simulation.Items;
+using PristonTale.Simulation.Progression;
 
 namespace PristonTale.Simulation.Skills;
 
@@ -57,10 +58,7 @@ public static class PassiveSkills
             return default;
         }
 
-        var percent = Sum(character, PassiveEffect.WeaponDamagePercent, weapon);
-        var stats = weapon.TotalStats;
-        // Float division before the multiplication, each end truncated; the percentage scales the weapon's own damage.
-        return ((int)(percent / 100f * stats.DamageMin), (int)(percent / 100f * stats.DamageMax));
+        return WeaponDamage.PercentOfWeapon(weapon, Sum(character, PassiveEffect.WeaponDamagePercent, weapon));
     }
 
     public static int CriticalChance(PlayerCharacter character) => Sum(character, PassiveEffect.CriticalChance, Weapon(character));
@@ -134,7 +132,7 @@ public static class PassiveSkills
             var entries = new List<(SkillRule, int)>();
             foreach (var (code, rank) in skills.Ranks)
             {
-                if (rank > 0 && SkillRuleCatalog.TryGet(code, out var rule) && rule.Passive is { Values.Length: 10 })
+                if (rank > 0 && SkillRuleCatalog.TryGet(code, out var rule) && rule.Passive is { Values.Length: SkillLearning.MaxRank })
                 {
                     entries.Add((rule, rule.At(rule.Passive.Values, rank)));
                 }

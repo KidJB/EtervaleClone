@@ -7,7 +7,8 @@ namespace PristonTale.Protocol.Packets;
 
 internal static class DescriptionWire
 {
-    // Version 2 appended the player's shop sign, version 3 the pet skin out, version 4 the pet's name.
+    // Version 2 carries the player's shop sign after the fields of version 1, version 3 the pet skin out and version 4 the
+    // pet's name.
     public const ushort Version = 4;
     public const int MaxNameBytes = 64;
     public const int MaxModelBytes = 160;

@@ -66,9 +66,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
     private readonly byte[] _scratch = new byte[FrameCodec.MaxFrameSize];
     private readonly object _sendGate = new();
     private string? _token;
-    private string? _account;
     private PlayerSession? _session;
-    private IReadOnlyList<CharacterSummary> _characters = [];
     private WorldPlayer? _player;
     private WorldOutbox? _outbox;
     private PresenceEncoder? _encoder;
@@ -308,7 +306,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
                     SendLarge(new LeaveWorldPacket(Saved: await ClosePlayAsync()).Write, LeaveWorldPacket.Size);
                     break;
                 default:
-                    // The original dispatcher also ignores codes it does not handle (PlayerInfo2, network-quality reports, ...).
+                    // A code without a handler is ignored, not answered.
                     break;
             }
         }
@@ -406,18 +404,17 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         }
 
         Volatile.Write(ref _token, outcome.SessionToken);
-        _account = request.Account;
         _session = session;
         SendLoginResult(LoginFailure.None);
     }
 
     private void SendLoginResult(LoginFailure failure) =>
-        SendLarge(new LoginResultPacket((byte)failure).Write, LoginResultPacket.Size);
+        SendLarge(new LoginResultPacket(failure).Write, LoginResultPacket.Size);
 
     private async Task SendCharacterListAsync(string token)
     {
-        _characters = await _services.Characters.ListCharactersAsync(token);
-        var list = new CharacterListPacket(_characters.Take(CharacterListPacket.MaxCharacters).Select(WireMapping.Entry).ToArray());
+        var characters = await _services.Characters.ListCharactersAsync(token);
+        var list = new CharacterListPacket(characters.Take(CharacterListPacket.MaxCharacters).Select(WireMapping.Entry).ToArray());
         SendLarge(list.Write, CharacterListPacket.MaxSize);
     }
 

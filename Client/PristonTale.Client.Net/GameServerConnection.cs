@@ -25,14 +25,13 @@ using PristonTale.Contracts.Characters;
 
 namespace PristonTale.Client.Net;
 
-// Client side of the original Priston flow over one TCP connection. The original protocol has no request ids, so
-// login, character and world-entry requests run one at a time and complete on their reply opcodes; inventory and
-// progression commands and NPC service requests correlate by operation id and NPC clicks by NPC entityId.
+// Client side of Etervale's protocol over one TCP connection. Login, character and world-entry requests run one at a
+// time and complete on their reply opcodes; inventory and progression commands and NPC service requests correlate by
+// operation id and NPC clicks by NPC entityId.
 public sealed class GameServerConnection : IGameBackend
 {
-    // Client version of the English retail build; the server's VERSION reply sets the minimum.
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(4);
-    private static readonly TimeSpan DescriptionRetryInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan DescriptionRetryInterval = TimeSpan.FromMilliseconds(Online.PresenceDecoder.DescriptionRetryMs);
 
     private readonly string _host;
     private readonly int _port;
@@ -72,18 +71,12 @@ public sealed class GameServerConnection : IGameBackend
     private WorldEntryPacket? _entered;
     private uint _minimumProtocol;
 
-    public string ServerName { get; private set; } = "";
     private string _account = "";
     private bool _disposed;
 
     public GameServerConnection(string address)
     {
-        var uri = new Uri(address, UriKind.Absolute);
-        if (uri.Scheme != "tcp" || uri.Host.Length == 0 || uri.Port < 1)
-        {
-            throw new ArgumentException("Expected a tcp://host:port server address.", nameof(address));
-        }
-
+        var uri = TlsTransport.ParseAddress(address);
         _host = uri.Host;
         _port = uri.Port;
         _certificatePolicy = ServerCertificatePolicy.FromAddress(uri);
@@ -505,7 +498,6 @@ public sealed class GameServerConnection : IGameBackend
             {
                 var hello = ServerHelloPacket.Read(packet);
                 _minimumProtocol = hello.MinimumProtocol;
-                ServerName = hello.ServerName;
                 break;
             }
             case EtervaleOpcodes.LoginResult:
@@ -690,9 +682,9 @@ public sealed class GameServerConnection : IGameBackend
             return;
         }
 
-        if (result.Status != LoginStatus.Ok)
+        if (result.Status != LoginFailure.None)
         {
-            login.Completion.TrySetResult(LoginOutcome.Denied((LoginFailure)result.Status));
+            login.Completion.TrySetResult(LoginOutcome.Denied(result.Status));
             return;
         }
 

@@ -21,7 +21,7 @@ How the tick calls these rules belongs to [application.md](application.md).
 |---|---|
 | [`WorldDefinitions.cs`](../Shared/PristonTale.Simulation/World/WorldDefinitions.cs) | `FieldDef`, its records (gates, warp gates, ambients, lighting, camera, day/night), `FieldState`, `WorldCatalog` |
 | `World/Fields/*.cs` | One static `Definition` per field, grouped by region (`DungeonFields`, `IceFields`...); `FieldSpawnData` records |
-| `World/FieldCodes.cs` | The field codes rules name (home towns, office room, inner ice field, Bellatra, quest arena, castle, boss field); the definitions and every rule use these, never a bare code |
+| `World/FieldCodes.cs` | The field codes rules name (home towns, the teleporter's hunting grounds, the quest weapon's hunting fields, office room, inner ice field, Bellatra, quest arena, castle, boss field); the definitions and every rule use these, never a bare code |
 | `World/FieldBackdrops.cs` | Sky backdrop texture keys (day, glow, night) shared by fields |
 | [`World/FieldTerrain.cs`](../Shared/PristonTale.Simulation/World/FieldTerrain.cs) | Ground queries for one field: place on floor, step, wall crossing, wall slide, body sweep |
 | `World/MonsterStepping.cs` | Server monster step: full step, then two side probes; `IStepOccupancy` |
@@ -43,6 +43,7 @@ How the tick calls these rules belongs to [application.md](application.md).
 | `Physics/EntityCollision.cs` | Circle-vs-circle blocking between bodies (players, monsters, NPCs) along a swept segment |
 | `Physics/EntityCollisionRadii.cs`, `EntityNeighbour.cs` | Body radii (by `EntityKind`) and neighbour records |
 | `Physics/SpatialIndex.cs` | XZ hash grid of entity positions with deterministic query order |
+| `Physics/Planar.cs` | Distances on the ground plane (x, z), the one measure of reach, range and proximity |
 | [`Assets/StageCollisionReader.cs`](../Shared/PristonTale.Assets/StageCollisionReader.cs) | Reads collision triangles from a stage `.smd` |
 | `Geometry/CollisionMesh.cs` | Immutable triangle grid: floor height, floor raycast, segment trace |
 | `Assets/AssetFiles.cs` | Case-insensitive asset path resolution and assets root discovery |
@@ -73,19 +74,33 @@ spawning and despawning; the monster skill area test uses the same value.
 
 `FieldDef` is a code-defined record, one static `Definition` per field in `World/Fields/`. `WorldCatalog()` lists every
 field; `WorldCatalog(IEnumerable<FieldDef>)` builds test catalogs. Lookups by `Id` (string, the stage base name such as
-`village-2`) and by `FieldCode` (int). The server keys live fields by `FieldCode`; both must be unique. All 45 fields of
-the original are there, the game room (`office`, 16, without a map) and Bellatra's second stage (`sod-2`, 44) included.
+`village-2`) and by `FieldCode` (int). The server keys live fields by `FieldCode`; both must be unique. Codes follow the
+original's order: 0-38, then the side-scrolling action field (`fall_game` 39), the Endless Tower's first and second
+floors (`dun-7` 40, `dun-8` 41), the Cursed Temple's third floor (`dun-6` 42), the Endless Tower's third floor (`dun-9`
+43), the Ice Mine (`mine-1` 44), Bellatra's second stage (`sod-2` 45), the Secret Laboratory (`Slab` 46), the second
+action field (`swamp` 47), the Ancient Weapons (`ancientW` 48), the Sea of Abyss (`SeaA` 49), its temple (`Stemple` 50),
+the Heart of Fire (`HeartOfFire` 51), the Crystal Nest (`CrystalNest` 52) and the Land of Nurwn (`LandofNurwn` 53). The
+game room (`office`, 16) has no map.
+
+The deep fields hang off older ones by warp gates: Desert 3 to the Secret Laboratory (no level), on to the Ancient
+Weapons (110) and its four gates to the Land of Nurwn (132); Lost Island to the Sea of Abyss (112) and its two gates to
+Stemple (116); Kelvezu's Lair to the Heart of Fire (125, three exits); the Ice Mine to the Crystal Nest (130). The Crystal
+Nest and the Land of Nurwn have no way out. No monsters are authored for Stemple, the Heart of Fire, the Crystal Nest or
+the Land of Nurwn. The action fields are reached by no gate; a kill in `fall_game` drops its event item GF102 at 150 in
+10000 (`ItemEventDrops`), with no event running.
 
 | Member | Use |
 |---|---|
 | `StageSmd` | Asset-relative stage path with Windows separators; source of collision and of the importer's join key |
 | `StageObjectSmds` | Animated stage props; client only |
-| `State` (`FieldState`) | `Village` sets the player's in-village flag on entry; `Dungeon` sets `Underground` (no sky) |
+| `State` (`FieldState`) | `Village` sets the player's in-village flag on entry; `Dungeon` sets `Underground` (no sky); `Action` is a side-scrolling field (no minimap; controls in [client.md](client.md#input)) |
+| `ActionCamera` | An action field's camera: fixed-point height (the camera rises 80 units above it), depth `Z` and the `LeftX`-`RightX` range it follows the player along x; it looks along +z |
 | `Center`, `StartPoints` | `StartPoints[0]` is the NPC teleport arrival; a field restart stands up at the start point nearest to the fall, a town restart at a random one; `Center` is the fallback |
 | `Gates` | Seamless boundaries to an adjacent field (`DestinationFieldId`, X/Z, angle) |
-| `WarpGates` | Portals: trigger X/Z/Y and Width/Height, destination field and X/Z/Y, `LimitLevel`, `SpecialEffect` (1: a delayed warp with the return sparkle; 2: a wing warp stone, its destination point the stone's exit in its own field; see [Wing warp gates](#wing-warp-gates)) |
-| `LimitLevel` | Minimum character level to enter (gates, warps and teleports): Desert 3 (11) 55, Greedy Lake (34) 70, Iron 1 (27) 80, Iron 2 (28) 85, Eura (29), Ice 1 (31) and Ice 2 (35) 90, the Lost Temple (38) and both floors of the Endless Tower (39, 40) 100 |
-| `Ambients`, `Lighting`, `Camera`, `DayNight`, `Backdrop`, `BackMusicCode`, `OnLoaded`, `OnUpdate` | Client presentation |
+| `WarpGates` | Portals: trigger X/Z/Y and Width/Height, destination field and X/Z/Y, `MoreExits` (further destination points: the traveller comes out at one of them, picked at random; Cursed Temple 1F to 2F, 2F to 3F and back, Ancient Prison 3F to 2F, Endless Tower 2F to 3F, Kelvezu's Lair to the Heart of Fire, Stemple to the Sea of Abyss), `LimitLevel`, `SpecialEffect` (1: a delayed warp with the return sparkle; 2: a wing warp stone, its destination point the stone's exit in its own field; see [Wing warp gates](#wing-warp-gates)) |
+| `LimitLevel` | Minimum character level to walk in through a gate: Desert 3 (11) 55, Greedy Lake (34) 70, Iron 1 (27) 80, Iron 2 (28) 85, Eura (29), Ice 1 (31) and Ice 2 (35) 90, the Lost Temple (38) and the Endless Tower's first two floors (40, 41) 100, the deep fields 46-53 108 to 132 |
+| `TravelLevel` | Minimum level to be sent there by a wing stone or a teleporter: `LimitLevel` unless the field sets its own: Forbidden Land (12) 55, Ancient Prison 1F-3F (13-15) 40, 50, 60, the office (16) 1000, Cursed Temple 1F-3F (22, 23, 42) 70, 75, 80, the caves (24-26) 55, 55, 65, Kelvezu's Lair (36) 90, Lost Island (37) 95, Endless Tower 3F (43) 102, Ice Mine (44) 105 |
+| `Ambients`, `Lighting`, `Camera`, `DayNight`, `Backdrop`, `BackMusicCode` | Client presentation |
 | `FieldEvent` | `Nightmare` (Navisko): see Night and day |
 | `HazeReduction`, `SightCells` | The share of the distance haze the field clears (Ricarten 0.2) and the 64-unit cells of sight added before it starts (Ice Ura 1); client presentation |
 | `ServerCode` | Authored label; no runtime rule reads it |
@@ -97,14 +112,15 @@ adjacent stages.
 ### Field transitions
 
 `FieldTransition.TryResolve` (in `Shared/PristonTale.Application/World/`) authorizes a field change from the player's
-server position; the requested position is never trusted. Rules:
+server position; the requested position only chooses among a warp's authored exits. Rules:
 
-- Refused for an invalid origin, the same field, or `level < destination.LimitLevel`.
-- Warp: a source warp gate to the destination, not a wing warp stone, `level >= warp.LimitLevel`, origin within
-  `max(Width, 48) + 64` planar units of the trigger. Arrival is the warp's authored destination point, settled on the
-  floor within 64 units.
-- Gate: a gate between the two fields (either direction) within 1810 planar units of the origin. The player keeps the
-  position.
+- Refused for an invalid origin or the same field.
+- Warp: a source warp gate to the destination, not a wing warp stone, `level >= warp.LimitLevel` (the destination's
+  `LimitLevel` is not asked), origin within `FieldWarpGate.ServerReach` (`max(Width, 48) + 64`) planar units of the
+  trigger. The client picks one of the gate's exits at random and arrives there; the server takes the exit nearest the
+  reported position, settled on the floor within 64 units.
+- Gate: `level >= destination.LimitLevel` and a gate between the two fields (either direction) within 1810 planar units
+  of the origin. The player keeps the position.
 
 ## Stage collision
 
@@ -149,7 +165,7 @@ height. Constants: `StepUp = 10`, `BodyProbeHeight = 30`, `DropTolerance = 32`.
 | `CrossesWall(a, b)` | Segment from `a` to `b` (at `a`'s height), both raised 30 units, hits any collision triangle. |
 | `TryStep(a, b)` | No wall crossing and a floor within `StepUp` above `a.Y`; falls are allowed. NPC steps use it. |
 | `TryBodyStep(a, b, halfWidth, stepUp)` | Centre path leads by `halfWidth`; both flanks swept. A flank may end nearer a wall only if it started nearer. |
-| `Slide(a, b)` | Replica of the client wall slide: stop 0.5 units before a wall, project the rest along it, three tries; faces as flat as floors do not stop it. |
+| `Slide(a, b)` | The client's wall slide (`Physics/WallSlide`, shared with `GameScene.MoveWithCollision`): stop 0.5 units before a wall (the client stops its body radius short), project the rest along it, three tries; faces as flat as floors do not stop it. |
 
 ### Loading
 
@@ -204,7 +220,7 @@ first `Order`; `Query` returns candidates sorted by `Order`, which keeps neighbo
   radius; `Ai.Iq` enables running; `Ai.GroupSize` the spawn group. `Ai.MoveSpeed` is only sent to clients for
   presentation; `Ai.MoveRange`, `Ai.Nature` and `Ai.ActiveHour` are imported but no rule reads them.
 - `SoundCode` is the original sound family code and doubles as a behaviour key (see Pitfalls).
-- `PotionCount`/`PotionPercent`: potions a spawn may carry (Valento, Kelvezu and Mokova use the count as lives, see
+- `PotionCount`/`PotionPercent`: potions a spawn may carry (Valento, Kelvezu, Mokova and Hestian use the count as lives, see
   Monster skills). `Skill` keeps curse-only skills (no damage, no area, a rating and a curse code).
 - `MonsterCatalog.TryFindKey(key)` matches the key case-insensitively; `TryFind(name)` (game-master commands, skill
   summons) matches the key, else the display name, and returns the lowest code (an event form shares its key).
@@ -309,7 +325,7 @@ least 4 frames):
 | Cold Eye, Frozen / Frost, Valento | skill | `IceSlow` 4 s / 6 s at 200/256, ice resisted |
 | Stingray (skill), King Bat (every blow) | skill, blow | `Poison` 5 s, poison resisted: 1 life per 2 frames (paid 7 per 14 frames), never the last |
 | Bloody Knight, Chimera | skill | `Stun` 3 s: no walking (reports are ignored), swings or casts |
-| Chaos Cara | skill with a clip key other than J | mana loss equal to the power roll |
+| Chaos Cara, Hestian | skill with a clip key other than J | mana loss equal to the power roll |
 | Succubus family above level 75 | every blow | 6 % of the maximum stamina (below level 80) or mana |
 | Fire, lightning, ice tower crystal | skill | power resisted by fire; `LightningStun` 3 s unless stunned; `IceSlow` 4 s |
 
@@ -325,9 +341,10 @@ Boss and special rules:
   half its damage roll, and then a target farther than 200 units takes 70 %. While hunting a player it regenerates once
   per clip that runs 120 frames: a table row per player within 260 units beyond six (at most nine), 1800..2800, or
   2300..3300 below 20 % life.
-- Valento, Kelvezu, Mokova: `PotionCount` lives; at 10 % life or less one is spent and life refills (a lethal blow
-  included). On every even number of lives left after a spend, Kelvezu calls two Chaos Cara and Mokova two Dark Guards
-  within ±100 units, at most 8 monsters on the boss's spawn point. Views show one bar of `(lives + 1) x 100` points.
+- Valento, Kelvezu, Mokova, Hestian: `PotionCount` lives; at 10 % life or less one is spent and life refills (a lethal
+  blow included). On every even number of lives left after a spend, Kelvezu calls two Chaos Cara, Mokova two Dark Guards
+  and Hestian two Xetans of level 117 (her duel's player's) within ±100 units, at most 8 monsters on the boss's spawn
+  point. Views show one bar of `(lives + 1) x 100` points.
   Reinforcements and bees are the family's ordinary definition of the lowest level.
 - Potions: a spawn carries `rand[1, PotionCount]` potions with `PotionPercent` chance; below 30 % life at a clip end it
   drinks one (`Eat` clip) and heals half its life when the clip ends (`PotionApplied` event). Quest duel opponents keep
@@ -341,8 +358,8 @@ Boss and special rules:
   `SkillRange`, double on a summon it fought.
 - Ratoo's skill ends the stuns of the monsters within 200 units (height 80).
 - Against other monsters (a wild boss on a summon, or a player's summoned boss on a wild monster), Babel, Chaos Cara,
-  Valento, Mokova and Kelvezu deal 8 times their roll and Kelvezu's blow kills; the Guardian Saint's skill strikes every
-  monster within its `SkillRange`. Valento drops a summon farther than 120 units.
+  Valento, Mokova, Kelvezu and Hestian deal 8 times their roll and Kelvezu's blow kills; the Guardian Saint's skill
+  strikes every monster within its `SkillRange`. Valento drops a summon farther than 120 units.
 
 Clients play each swing's clip from the `SwingBegin` slot and draw its effects from the clip itself
 ([effects.md](effects.md#monster-effects)).
@@ -513,7 +530,7 @@ Shop rules (`NpcShopRules`):
   `MoneyLimits.CarryLimit(level, tier)`.
 - Repair: `(price - worn) / 8` for items below max durability; requires gold strictly greater than the cost.
 - Carry limit: 200,000 up to level 10; tier 0 `max(200,000, level * 200,000 - 1,800,000)`; tier 1 10M; tier 2 50M;
-  higher 100M.
+  tier 3 500M; tier 4 700M.
 
 Warehouse (`WarehouseStorage`, one per account): 9×9 grid, at most 100 items, weight 1000, gold 100,000,000.
 `CanStore` keeps out what the original does: what `BoundItems.CanHandOver` refuses (the bound items and the SP1 and CH1
@@ -526,7 +543,7 @@ or the client's view was stale), the covered one going to the moved item's cell 
 
 Teleport routes (`TeleportRoutes`): route 0 means route 1. Route 1: index 1 field 0 "Mushroom Cave" 100 gold, 2 field 18
 "Beehive Cave" 100, 3 field 7 "Cursed Land" 500, 4 field 12 "Forbidden Land" 1000. The destination field's
-`LimitLevel` applies; arrival is its first start point (or `Center`) placed on the floor. The cave destinations are the
+`TravelLevel` applies; arrival is its first start point (or `Center`) placed on the floor. The cave destinations are the
 fields that hold the cave entrances: field 0 (`fore-3`) has the warp gate to `Tcave`, field 18 (`forever-fall-03`) the
 one to `Mcave`.
 
@@ -596,25 +613,27 @@ Ruinen Village (6), Navisko (9), Forbidden Land (12), Eura (29), Land of Chaos (
 
 - Stepping on a stone opens the wing warp map. Its destinations, in order: Ricarten, Pillai, Land of Dusk, Bamboo
   Forest, Ruinen Village, Navisko Town, Forbidden Land (level 55), Eura Village (90), Land of Chaos (95); the
-  destination field's own `LimitLevel` applies as well.
+  destination field's `TravelLevel` applies as well.
 - Reach: without a wing the first two; with a wing in the pack the best one counts: Metal (`QW101`) 4, Silver 5,
   Gold 6, Dia 7, Chaos 8, Extreme (`QW106`) 9.
 - Fee: Ricarten, Pillai and the field the player stands in are free; elsewhere the wing's fee: 100, 300, 500, 1000,
   2000, 4000 gold from Metal to Extreme. It counts as teleport spending in the currency report.
-- The server checks that the living player stands within `max(Width, 48) + 64` planar units of a stone of its field,
-  the reach, the level and the gold. The candidate pays the fee and is stored at the destination, then the commit
-  takes the gold and moves the player (`Arrive`, also within the same field) to the destination stone's exit (its
-  first start point when it has no stone).
+- The server checks that the living player stands within `FieldWarpGate.ServerReach` (`max(Width, 48) + 64`) planar
+  units of a stone of its field, the reach, the level and the gold. The candidate pays the fee and is stored at the
+  destination, then the commit takes the gold and moves the player (`Arrive`, also within the same field) to the
+  destination stone's exit (its first start point when it has no stone).
 - Bless Castle's stone has no map entry: the castle destination belongs to the castle's owner clan, and there is no
   castle ownership yet.
 
 `CharacterSoundCodes` names every sound family code a rule or sound reads (NPCs, castle objects, and the monsters
 with rules of their own); `CharacterSoundCodes.Resolve(key)` maps the authored sound keyword of a monster or NPC to its
 sound family code. The
-importer stores it; the client audio library and the AI rules key on it. The 54 keywords of monsters newer than the
-original sound table (Greedy, Hestian, the invaders, the lizards, the mine and laboratory monsters...) have Etervale's
-own codes from 0x6000, one per sound folder; MapleFairy, MapleTree, Furia, Lucifer, KhanDoor, LizardDoor, Sakura and
-Soldier_D have no sound folder and stay silent.
+importer stores it; the client audio library and the AI rules key on it. The keywords of monsters newer than the
+original sound table (Greedy, Hestian, the invaders, the lizards, the mine and laboratory monsters, Soldier_D, and the
+ChinaPT client's later monsters Adevayo to Ziddane, whose folders come from that client) have Etervale's own codes from
+0x6000, one per sound folder; Furia, the red gladiator's keyword, names the Fury's sounds. MapleFairy, MapleTree,
+Lucifer, KhanDoor, LizardDoor and Sakura have no sound folder in any client and stay silent. Hopy's and DeadZone's
+files name their sounds (HOPT, DeadZone) as the later servers do.
 
 ## Driving surface (Application)
 

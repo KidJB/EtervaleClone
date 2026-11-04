@@ -44,18 +44,16 @@ public static class EntityCollision
         return ((oldPos + desiredPos) * 0.5f, MathF.Sqrt(deltaX * deltaX + deltaZ * deltaZ) * 0.5f + radius);
     }
 
-    public static bool IsBlocked(Vector3 oldPos, Vector3 desiredPos, Vector3 accepted) => accepted == oldPos && desiredPos != oldPos;
-
     private static bool Blocks(Vector3 oldPos, Vector3 desiredPos, float radius, Vector3 center)
     {
         // Preserve escape from an existing overlap. Test the whole segment for new overlaps so a long
         // presentation frame cannot jump completely through an NPC/monster and land outside its circle.
-        if (Overlaps(oldPos, center, radius))
+        if (Planar.Overlaps(oldPos, center, radius))
         {
             return false;
         }
 
-        if (Overlaps(desiredPos, center, radius))
+        if (Planar.Overlaps(desiredPos, center, radius))
         {
             return true;
         }
@@ -95,10 +93,4 @@ public static class EntityCollision
         return dx * dx + dz * dz < radius * radius;
     }
 
-    private static bool Overlaps(Vector3 a, Vector3 b, float radius)
-    {
-        var dx = a.X - b.X;
-        var dz = a.Z - b.Z;
-        return MathF.Abs(a.Y - b.Y) < radius && dx * dx + dz * dz < radius * radius;
-    }
 }

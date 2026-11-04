@@ -23,9 +23,9 @@ using PristonTale.Contracts.Characters;
 namespace PristonTale.Gameplay.UI;
 
 // The original in-game interface in its draw order: speech bubbles, the chat window, status, skill, inventory, quest and
-// party windows behind the bottom bar, then item overlays, help boxes and message boxes. The system menu entries other
-// than Settings have no server support and are drawn without behaviour. Refusals show in the notice strip; confirmations
-// and server lines go to the chat.
+// party windows behind the bottom bar, then item overlays, help boxes and message boxes. The system menu opens the
+// settings, the help window or the game's exit. Refusals show in the notice strip; confirmations and server lines go to
+// the chat.
 public sealed partial class GameplayHud : IDisposable
 {
     private readonly ScreenContext _context;
@@ -67,6 +67,8 @@ public sealed partial class GameplayHud : IDisposable
     private readonly HudQuestWindow _questWindow = new();
     private QuestView _questView;
     private double _questViewMs;
+    // The quest weapon's hunt line for its item box, made when the quest view changes.
+    private string _weaponHunt = "";
     private int _questCompletions;
     private int _questDialogs;
     private readonly HudSettingsPanel _settings;
@@ -87,13 +89,20 @@ public sealed partial class GameplayHud : IDisposable
     private readonly HudPremiumKeeps _premiumKeeps = new();
     private readonly HudPuzzleExchange _puzzle = new();
     private readonly HudCrystalDismiss _crystalDismiss = new();
-    private readonly HudRestartPanel _restart = new();
+    private readonly HudRestartPanel _restart;
     private readonly HudWingGate _wingGate;
     private int _itemUseCompletions;
     private int _wingGateCompletions;
     private int _shopsOpened;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly HudQuestBoxGlow _questBoxGlow = new();
+    // Delegates the frame passes, made once: the speakers' name colour, a typing box's key test (on this frame's keys)
+    // and the painter's glyph and width tests.
+    private Func<ulong, Color> _nameColor;
+    private Func<Keys, bool> _typedKey;
+    private KeyboardState _typingKeyboard;
+    private Func<char, bool> _canDraw;
+    private Func<string, int> _measure;
     private KeyboardState _previousKeyboard;
     private MouseState _previousMouse;
     private OwnerState _state;
@@ -146,6 +155,7 @@ public sealed partial class GameplayHud : IDisposable
         _actionBar = new HudActionBar(_bindings);
         _actionBarStore = new HudActionBarStore(HudActionBarStore.DefaultDirectory, context.Log);
         _bindings.ItemRequested += UseShortcutItem;
+        _restart = new HudRestartPanel(context.Log);
         _premium = new HudPremiumTimers(_sprites);
         _sprites.Request(HudTeleportCore.Art);
         _wingGate = new HudWingGate(context.Log);
@@ -174,9 +184,7 @@ public sealed partial class GameplayHud : IDisposable
         _services.Succeeded = ServiceSucceeded;
         _storedPlacement = StoredPlacement;
         _inventoryPanel.Note = InventoryNote;
-        _inventoryPanel.Hunt = item => item.Code == QuestClasses.QuestWeapon(_class) && _questView is { Code: RankUpByQuestWeapon.Code } view
-            ? RankUpByQuestWeapon.HuntLine(QuestClasses.WeaponHunt(_class), view.WeaponStage, view.WeaponKillsLeft)
-            : "";
+        _inventoryPanel.Hunt = item => item.Code == QuestClasses.QuestWeapon(_class) ? _weaponHunt : "";
         _inventoryPanel.Withheld = id => _aging.Holds(id) || _mix.Holds(id) || _personalShop.Holds(id) || _trade.Holds(id);
         _inventory.ShopRequested = OpenOwnShop;
         _sprites.Request(HudChatWindow.Art);
@@ -266,8 +274,8 @@ public sealed partial class GameplayHud : IDisposable
     internal uint RightSkillId => _bindings.RightSkillId;
     public HudSkillBindings Bindings => _bindings;
 
-    // Cooldowns and active effects of the local player, and the clock they are kept on (GameScene.Skills).
-    // The client's view of statuses and cooldowns from the server's skill messages.
+    // The local player's statuses and cooldowns from the server's skill messages, and the clock they are kept on
+    // (GameScene.Skills).
     public PristonTale.Gameplay.Effects.StatusBook Statuses { get; set; }
     public PristonTale.Gameplay.Effects.SkillCooldownBook Cooldowns { get; set; }
     public double SkillClockMs { get; set; }
@@ -292,8 +300,6 @@ public sealed partial class GameplayHud : IDisposable
     private uint _lastBuffClicked;
     private double _lastBuffClickSeconds;
 
-    public void ShowNotice(string message) => _notice.Show(message);
-
     // The quest fanfare (the drink sound): a quest started, moved on or ended, or a carried item set into the closed
     // special item box.
     public event Action QuestFanfare;
@@ -302,9 +308,6 @@ public sealed partial class GameplayHud : IDisposable
 
     // An item lifted, set, bought, sold, stored or taken back, by catalog key, for its sound.
     public event Action<string> ItemSound;
-
-    public HudQuestController Quests => _quests;
-    public HudQuestWindow QuestWindow => _questWindow;
 
     // The quest part of each presence update (the journal, quest notices and dialogs the world opened).
     public void ObserveQuests(PristonTale.Client.Net.Presence.PresenceUpdate update) => _quests.Observe(update);
@@ -452,7 +455,7 @@ public sealed partial class GameplayHud : IDisposable
         ApplyQuests();
         ApplyServices(state);
         _personalShop.SignShown = SelfId != 0 && ShopSigns.ContainsKey(SelfId);
-        _personalShop.Update(state);
+        _personalShop.Update(state, _clock.Elapsed.TotalMilliseconds);
         if (_npc.ReadyToOpen)
         {
             _skillMaster = 0;
@@ -527,11 +530,13 @@ public sealed partial class GameplayHud : IDisposable
         var boxTyping = _countBox.IsOpen || _personalShop.SignOpen;
         if (_countBox.IsOpen)
         {
-            _countBox.Type(typedText, key => Pressed(keyboard, key));
+            _typingKeyboard = keyboard;
+            _countBox.Type(typedText, _typedKey ??= key => Pressed(_typingKeyboard, key));
         }
         else if (_personalShop.SignOpen)
         {
-            _personalShop.Type(typedText, key => Pressed(keyboard, key), _painter.CanDraw, _painter.Measure);
+            _typingKeyboard = keyboard;
+            _personalShop.Type(typedText, _typedKey ??= key => Pressed(_typingKeyboard, key), _canDraw ??= _painter.CanDraw, _measure ??= _painter.Measure);
         }
         else if (_crystalDismiss.Confirming && !_chat.Window.Focused && Pressed(keyboard, Keys.Enter))
         {
@@ -658,7 +663,7 @@ public sealed partial class GameplayHud : IDisposable
         _dropNames.Draw(_painter, layout, GroundLabels, GroundLabelPlaced);
         Combat.DrawNamePlates(_painter, layout, Overhead, HoveredId, TracedId, _context.Presentation.Requested.ClassicNamePlates);
         _chat.Bubbles.Signs = ShopSigns;
-        _chat.Bubbles.Draw(_painter, layout, _clock.Elapsed.TotalMilliseconds, Overhead, id => _chat.NameColor(id, TargetId), TargetId);
+        _chat.Bubbles.Draw(_painter, layout, _clock.Elapsed.TotalMilliseconds, Overhead, _nameColor ??= id => _chat.NameColor(id, TargetId), TargetId);
         if (_helpPet.Bubble is { } petLine && HelperPet.Point is { } petPoint)
         {
             _chat.Bubbles.DrawAt(_painter, layout, petLine, petPoint);
@@ -757,14 +762,8 @@ public sealed partial class GameplayHud : IDisposable
         _helpPet.Draw(_painter, pointer);
         DrawHelp(pointer);
 
-        if (_skillSlide.FullyOpen)
-        {
-            _skills.DrawMasterBox(_painter, _state, _skillMaster, _skillMaster != 0 && _quests.ClassChangeNpc == _skillMaster);
-        }
-        else
-        {
-            _skills.DrawMasterBox(_painter, _state, 0, false);
-        }
+        var trainer = _skillSlide.FullyOpen ? _skillMaster : 0;
+        _skills.DrawMasterBox(_painter, _state, trainer, trainer != 0 && _quests.ClassChangeNpc == trainer);
 
         // The quest dialog takes the help box from the NPC dialog; its yes/no box replaces both, as the classic client closed
         // the help box before asking.
@@ -911,11 +910,7 @@ public sealed partial class GameplayHud : IDisposable
             _actionBar.Anchor.X, _actionBar.Anchor.Y, _bindings.Slots.Page, _bindings.Slots.Save(), _minimap.Offset.X, _minimap.Offset.Y));
     }
 
-    private HudLayout Layout()
-    {
-        var viewport = _context.GraphicsDevice.Viewport;
-        return HudLayout.Create(viewport.Width, viewport.Height);
-    }
+    private HudLayout Layout() => HudLayout.Of(_context.GraphicsDevice.Viewport);
 
     private static Point PanelOrigin(HudLayout layout, HudSlide slide) => HudInventoryLayout.Origin(layout, slide.Offset);
 
