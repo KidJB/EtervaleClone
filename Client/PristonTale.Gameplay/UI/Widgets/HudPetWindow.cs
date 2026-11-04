@@ -26,14 +26,39 @@ public sealed class HudPetWindow
     private static readonly string[] Names = PetSkins.All.Select(static skin => skin.Name).ToArray();
     private static readonly int Rows = (PetSkins.All.Count + Columns - 1) / Columns;
 
+    // The pet's new name while the player types it (PetNames: letters, digits and spaces the HUD font draws).
+    private readonly TextInputField _name = new() { MaxLength = PetNames.MaxLength, Accepts = static ch => char.IsLetterOrDigit(ch) || ch == ' ' };
+    private PetCollectionInfo _shownFor;
+    private string _shownOwner;
+    private string _nameLine = "";
+
     public bool Open { get; private set; }
+
+    // The rename box has the keyboard: neither the chat nor a game key sees what is typed.
+    public bool Naming => Open && _name.Focused;
 
     // A "/pet" line to send, set by a click and taken by the HUD.
     public string Request { get; private set; }
 
     public void Toggle() => Open = !Open;
 
-    public void Close() => Open = false;
+    public void Close()
+    {
+        Open = false;
+        _name.Focused = false;
+    }
+
+    public void CancelNaming() => _name.Focused = false;
+
+    // The typed characters while naming: Enter (or OK) sends "/petname <name>" (an empty name clears it).
+    public void Type(ReadOnlySpan<char> typed, double elapsedSeconds, Func<Microsoft.Xna.Framework.Input.Keys, bool> pressed)
+    {
+        _name.Update(typed, elapsedSeconds);
+        if (pressed(Microsoft.Xna.Framework.Input.Keys.Enter))
+        {
+            SubmitName();
+        }
+    }
 
     public string TakeRequest()
     {
@@ -63,6 +88,12 @@ public sealed class HudPetWindow
 
     public static Rectangle CloseMark(Rectangle window) => new(window.Right - 16, window.Y + 4, 12, 12);
 
+    public static Rectangle Rename(Rectangle window) => new(PutAway(window).Right + 8, window.Bottom - Footer, 64, 18);
+
+    public static Rectangle NameBox(Rectangle window) => new(Rename(window).Right + 8, window.Bottom - Footer, window.Right - Padding - 44 - Rename(window).Right - 8, 18);
+
+    public static Rectangle Accept(Rectangle window) => new(window.Right - Padding - 36, window.Bottom - Footer, 36, 18);
+
     public bool Captures(HudLayout layout, Rectangle minimapArea, Point pointer, bool minimapShown) =>
         minimapShown && Button(minimapArea).Contains(pointer) || Open && Window(layout).Contains(pointer);
 
@@ -84,6 +115,15 @@ public sealed class HudPetWindow
         if (CloseMark(window).Contains(pointer))
         {
             Close();
+        }
+        else if (Rename(window).Contains(pointer) && pets.Out != 0)
+        {
+            _name.Clear();
+            _name.Focused = !_name.Focused;
+        }
+        else if (Naming && Accept(window).Contains(pointer))
+        {
+            SubmitName();
         }
         else if (PutAway(window).Contains(pointer) && pets.Out != 0)
         {
@@ -111,7 +151,7 @@ public sealed class HudPetWindow
         painter.TextCentered("P", button.X, button.Right, button.Y - 1, TitleColor);
     }
 
-    public void Draw(HudPainter painter, HudLayout layout, PetCollectionInfo pets, HudItemIcons icons, Point pointer)
+    public void Draw(HudPainter painter, HudLayout layout, PetCollectionInfo pets, string ownerName, HudItemIcons icons, Point pointer)
     {
         if (!Open)
         {
@@ -121,6 +161,7 @@ public sealed class HudPetWindow
         var window = Window(layout);
         painter.ColorBox(window, 8, 6, 6, 220);
         painter.Text("Pets", window.X + Padding, window.Y + 3, TitleColor);
+        painter.Text(NameLine(pets, ownerName), window.X + Padding + 44, window.Y + 3, Unlocked);
         painter.TextCentered("x", CloseMark(window).X, CloseMark(window).Right, window.Y + 3, TitleColor);
         for (var index = 0; index < PetSkins.All.Count; index++)
         {
@@ -142,7 +183,41 @@ public sealed class HudPetWindow
         var putAway = PutAway(window);
         painter.ColorBox(putAway, 40, 34, 26, pets.Out != 0 && putAway.Contains(pointer) ? 240 : 200);
         painter.TextCentered("Put away", putAway.X, putAway.Right, putAway.Y, pets.Out != 0 ? Unlocked : Locked);
-        painter.Text("Click a pet to send it out.", putAway.Right + 8, putAway.Y, Locked);
+        var rename = Rename(window);
+        painter.ColorBox(rename, 40, 34, 26, pets.Out != 0 && rename.Contains(pointer) || Naming ? 240 : 200);
+        painter.TextCentered("Rename", rename.X, rename.Right, rename.Y, pets.Out != 0 ? Unlocked : Locked);
+        if (!Naming)
+        {
+            painter.Text("Click a pet to send it out.", rename.Right + 8, rename.Y, Locked);
+            return;
+        }
+
+        var box = NameBox(window);
+        painter.ColorBox(box, 0, 0, 0, 230);
+        Frame(painter, box, OutFrame);
+        painter.Text(_name.CaretVisible ? _name.Text + "_" : _name.Text, box.X + 4, box.Y, Unlocked);
+        var accept = Accept(window);
+        painter.ColorBox(accept, 40, 34, 26, accept.Contains(pointer) ? 240 : 200);
+        painter.TextCentered("OK", accept.X, accept.Right, accept.Y, Unlocked);
+    }
+
+    // "Name: <name>" of the pet out, formatted again only when the collection changes.
+    private string NameLine(PetCollectionInfo pets, string ownerName)
+    {
+        if (!ReferenceEquals(pets, _shownFor) || !string.Equals(ownerName, _shownOwner, StringComparison.Ordinal))
+        {
+            _shownFor = pets;
+            _shownOwner = ownerName;
+            _nameLine = PetSkins.Get(pets.Out) is not null ? $"Name: {PetNames.Shown(pets.Name, ownerName)}" : "No pet out";
+        }
+
+        return _nameLine;
+    }
+
+    private void SubmitName()
+    {
+        Request = $"{PetNames.Command} {_name.Text.Trim()}".TrimEnd();
+        _name.Focused = false;
     }
 
     private static void Frame(HudPainter painter, Rectangle bounds, Color color)

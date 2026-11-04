@@ -567,7 +567,9 @@ added to the imported catalog by `WorldDataAppService`, `ItemKind.Misc`) drops f
 already unlocked so the item is kept. `/pet <id>` sends an unlocked skin's pet out and `/pet off` puts it away
 (`PetCommand`, `WorldServer.SendPetOutAsync`); the client's pet window sends them. The pet out is part of the player's
 looks (`PlayerAppearanceView.PetSkin`, description version 3) and the owner's collection travels as `PetCollection`
-(protocol.md). A pet out fetches gold and potions as a helper pet does (Ground loot).
+(protocol.md). `/petname <name>` names the pet (`PetNames`: up to 16 letters, digits and spaces, stored in `pet_name`;
+`/petname` alone clears it), and the name travels in the looks (version 4) and the collection; an unnamed pet shows
+"<owner>'s Pet". A pet out fetches gold and potions as a helper pet does (Ground loot).
 
 ## Beginner's helper pet
 

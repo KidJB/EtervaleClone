@@ -78,6 +78,27 @@ public sealed partial class GameScene
         return new HudHelperPetView(kind, position is { } at && _camera is not null ? Project(at + Vector3.Up * BubbleAbovePet) : null);
     }
 
+    private readonly List<(Vector3 Anchor, string Text)> _petLabelAnchors = new();
+
+    // Fills the caller's list (cleared first) with the names over the pets in view, projected as speech bubbles are.
+    public void CollectPetLabels(List<(HudOverheadPoint Point, string Text)> labels)
+    {
+        labels.Clear();
+        if (_camera is null || _skinPets is null)
+        {
+            return;
+        }
+
+        _skinPets.CollectLabels(_petLabelAnchors);
+        foreach (var (anchor, text) in _petLabelAnchors)
+        {
+            if (Project(anchor) is { } point)
+            {
+                labels.Add((point, text));
+            }
+        }
+    }
+
     private HudOverheadPoint? Project(Vector3 anchor)
     {
         var depth = -Vector3.Transform(anchor, _camera.View).Z;

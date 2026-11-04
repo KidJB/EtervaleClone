@@ -71,7 +71,7 @@ public sealed partial class GameScene
         {
             PetCollection = collection;
             // The local player's own pet follows its collection, which the server sends at every change.
-            _skinPets?.Set(SelfEntityId, collection.Out);
+            _skinPets?.Set(SelfEntityId, collection.Out, PetNames.Shown(collection.Name, _player?.Name ?? ""));
         }
         ObserveOwnHead(update);
         _forceOrbs?.Observe(update, _itemAnchor ??= ItemAnchor, _skillClockMs);

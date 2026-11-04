@@ -20,6 +20,8 @@ public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader lo
     private const float Follow = 0.1f;
     private const float WalkingDistance = 6f;
     private const float JumpDistance = 600f;
+    // The name hangs this far above the pet's feet at full size (scaled with the skin, as its model is).
+    private const float LabelHeight = 70f;
 
     private readonly Dictionary<int, Task<PristonActor>> _models = new();
     private readonly Dictionary<ulong, Pet> _pets = new();
@@ -32,24 +34,26 @@ public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader lo
         {
             if (spawn.Player is { } player)
             {
-                Set(spawn.EntityId, player.PetSkin);
+                Set(spawn.EntityId, player.PetSkin, PetNames.Shown(player.PetName, player.Name));
             }
         }
 
         foreach (var removed in update.Removed)
         {
-            Set(removed, 0);
+            Set(removed, 0, "");
         }
     }
 
     public bool Has(ulong ownerId) => _pets.ContainsKey(ownerId);
 
-    public void Set(ulong ownerId, int skin)
+    // label: the name shown over the pet (PetNames.Shown); a new name alone keeps the pet where it is.
+    public void Set(ulong ownerId, int skin, string label)
     {
         if (_pets.TryGetValue(ownerId, out var pet))
         {
             if (pet.Skin.Id == skin)
             {
+                pet.Label = label;
                 return;
             }
 
@@ -59,7 +63,7 @@ public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader lo
 
         if (PetSkins.Get(skin) is { } chosen)
         {
-            _pets[ownerId] = new Pet(chosen);
+            _pets[ownerId] = new Pet(chosen) { Label = label };
             Prepare(chosen);
         }
     }
@@ -119,6 +123,19 @@ public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader lo
         }
     }
 
+    // Fills the caller's list (cleared first) with each drawn pet's name and the point above its head, without allocating.
+    public void CollectLabels(List<(Vector3 Anchor, string Text)> labels)
+    {
+        labels.Clear();
+        foreach (var pet in _pets.Values)
+        {
+            if (pet.HasActor && pet.Label.Length > 0)
+            {
+                labels.Add((pet.Position + Vector3.Up * (LabelHeight * pet.Skin.Scale), pet.Label));
+            }
+        }
+    }
+
     public void Dispose()
     {
         foreach (var pet in _pets.Values)
@@ -169,6 +186,7 @@ public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader lo
         public bool Walking { get; set; }
         public Vector3 Position { get; set; }
         public float Facing { get; set; }
+        public string Label { get; set; } = "";
 
         public void Remove(IActorScene scene)
         {

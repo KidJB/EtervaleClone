@@ -510,9 +510,13 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   close it.
   Under it a pet button (or `J`) opens the pet collection (`HudPetWindow`): every pet skin in a grid of five, unlocked
   ones lit (the helper pet item's icon) and the one out framed; a click on an unlocked skin sends `/pet <id>` through the
-  chat (on the pet out, `/pet off`), and "Put away" sends `/pet off`. The server's `PetCollection` (`GameScene.PetCollection`)
+  chat (on the pet out, `/pet off`), and "Put away" sends `/pet off`. The header shows the pet out's name (`PetNames.Shown`); "Rename" opens a
+  name box (`TextInputField` taking letters, digits and spaces) that holds the keyboard: Enter or OK sends
+  `/petname <name>` (an empty name clears it) and Escape leaves the box before it closes the window. The server's `PetCollection` (`GameScene.PetCollection`)
   answers. Each player's pet out walks beside it (`SkinPetPresentation`): the skin's monster model at its scale, closing a
-  tenth of the way to its place behind and beside its owner per 70 Hz frame, walking while it moves.
+  tenth of the way to its place behind and beside its owner per 70 Hz frame, walking while it moves. Its name hangs over
+  it (`SkinPetPresentation.CollectLabels`, projected by `GameScene.CollectPetLabels`, drawn by the HUD within the speech
+  bubbles' `MaxDepth`): the name its owner gave it, or "<owner>'s Pet" (`PetNames.Shown`).
 - Bottom bar gauges (`HudBar`): life, mana and stamina (`Bar_Life`, `Bar_Mana`, `Bar_Stamina`, 94, 94 and 76 pixels)
   and the experience (`sinGage/Bar_Exp.bmp`, 6 x 86 at (485, 508), Menu-1's slot right of the mana under its "NL." label)
   fill from the bottom up; the experience is the level's share. Pointed at, each shows its value; the experience reads

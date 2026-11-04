@@ -11,6 +11,9 @@ public sealed class TextInputField
     public bool Masked { get; init; }
     public int MaxLength { get; init; } = 20;
 
+    // The characters the field takes; by default letters, digits, '.', '-' and '_' (DefaultAccepts).
+    public Func<char, bool> Accepts { get; init; } = DefaultAccepts;
+
     public string Text => _text.ToString();
     public string DisplayText => Masked ? new string('*', _text.Length) : _text.ToString();
     public bool CaretVisible => Focused && _caretSeconds % 1.0 < 0.5;
@@ -18,7 +21,7 @@ public sealed class TextInputField
     public void Clear() => _text.Clear();
 
     // The characters the window typed since the last frame (TypedText): the system's own key repeat makes a held
-    // Backspace ('\b') or letter repeat, as in any text box. Letters, digits, '.', '-' and '_' are taken.
+    // Backspace ('\b') or letter repeat, as in any text box. The characters Accepts allows are taken.
     public void Update(ReadOnlySpan<char> typed, double dtSeconds)
     {
         _caretSeconds += dtSeconds;
@@ -39,5 +42,5 @@ public sealed class TextInputField
         }
     }
 
-    private static bool Accepts(char ch) => char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_';
+    public static bool DefaultAccepts(char ch) => char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_';
 }

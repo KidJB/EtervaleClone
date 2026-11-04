@@ -144,6 +144,7 @@ public sealed class GameplayScreen : GameScreen
         _hud.BossSpots = _scene.BossSpots;
         _hud.BossList = _scene.BossList;
         _hud.PetCollection = _scene.PetCollection;
+        _scene.CollectPetLabels(_hud.PetLabels);
         _hud.InCastleField = field?.State == Simulation.World.FieldState.Castle;
         _hud.InTown = field?.State == Simulation.World.FieldState.Village;
         _hud.ShopSigns = _scene.ShopSigns;

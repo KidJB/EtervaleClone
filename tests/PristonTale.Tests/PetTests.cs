@@ -14,6 +14,7 @@ internal static class PetTests
         yield return ("a character unlocks a skin once, sends out only unlocked skins and joins its account's skins", CharacterAsync);
         yield return ("the pet command sends a skin out or puts the pet away and refuses anything else", CommandAsync);
         yield return ("the pet collection and the pet skin in a player's looks travel on the wire; older looks read without a pet", WireAsync);
+        yield return ("the pet window's rename box types a name of letters, digits and spaces and sends it as /petname on Enter", RenameAsync);
     }
 
     private static Task TableAsync()
@@ -85,11 +86,40 @@ internal static class PetTests
         Assert.True(PetCommand.TryParse("/pet 4", out var skin) && skin == 4, "/pet 4 was not read");
         Assert.True(PetCommand.TryParse("/PET off", out skin) && skin == 0 && PetCommand.TryParse("/pet 0", out skin) && skin == 0, "/pet off was not read");
         Assert.True(PetCommand.Out(7) == "/pet 7" && PetCommand.Out(0) == "/pet off", "the window's commands are wrong");
+        Assert.True(PetNames.Shown("", "TestKnight") == "TestKnight's Pet" && PetNames.Shown("Rex", "TestKnight") == "Rex",
+            "an unnamed pet does not show its owner's name, or a named one not its own");
         foreach (var text in new[] { "/pet", "/pet -1", "/pet 64", "/pet two", "/pets 1", "/pet 1 2", "hello" })
         {
             Assert.True(!PetCommand.TryParse(text, out _), $"'{text}' was read as a pet command");
         }
 
+        return Task.CompletedTask;
+    }
+
+    private static Task RenameAsync()
+    {
+        var window = new PristonTale.Gameplay.UI.Widgets.HudPetWindow();
+        var layout = PristonTale.Gameplay.UI.HudLayout.Create(800, 600);
+        var map = new Microsoft.Xna.Framework.Rectangle(656, 410, 128, 144);
+        var pets = new PristonTale.Client.Net.Presence.PetCollectionInfo(PetSkins.Bit(1), 1);
+        window.Toggle();
+        var frame = PristonTale.Gameplay.UI.Widgets.HudPetWindow.Window(layout);
+        var rename = PristonTale.Gameplay.UI.Widgets.HudPetWindow.Rename(frame).Center;
+        Assert.True(window.Click(layout, map, rename, true, pets) && window.Naming, "Rename did not open the name box");
+
+        static bool Never(Microsoft.Xna.Framework.Input.Keys key) => false;
+        static bool Enter(Microsoft.Xna.Framework.Input.Keys key) => key == Microsoft.Xna.Framework.Input.Keys.Enter;
+        window.Type("Fluffy! 2", 0.1, Never);
+        Assert.True(window.TakeRequest() is null && window.Naming, "the name was sent before Enter");
+        window.Type("", 0.1, Enter);
+        Assert.True(window.TakeRequest() == "/petname Fluffy 2" && !window.Naming, "Enter did not send the typed name without the refused '!'");
+
+        // An empty name clears it; without a pet out, Rename does nothing.
+        window.Click(layout, map, rename, true, pets);
+        window.Type("", 0.1, Enter);
+        Assert.True(window.TakeRequest() == "/petname", "an empty name did not clear the name");
+        window.Click(layout, map, rename, true, pets with { Out = 0 });
+        Assert.True(!window.Naming, "Rename opened without a pet out");
         return Task.CompletedTask;
     }
 

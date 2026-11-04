@@ -229,6 +229,9 @@ public sealed partial class GameplayHud : IDisposable
     // The local player's pet collection, for the pet window.
     public PristonTale.Client.Net.Presence.PetCollectionInfo PetCollection { get; set; } = new(0, 0);
 
+    // The names over the pets in view, filled by the scene each frame (GameScene.CollectPetLabels).
+    public List<(HudOverheadPoint Point, string Text)> PetLabels { get; } = new();
+
     // Every scheduled boss of the world, for the boss list beside the minimap.
     public IReadOnlyList<PristonTale.Client.Net.Presence.BossListInfo> BossList
     {
@@ -368,6 +371,13 @@ public sealed partial class GameplayHud : IDisposable
         if (_bossList.Open)
         {
             _bossList.Close();
+            return true;
+        }
+
+        // Escape leaves the rename box first, then closes the window.
+        if (_petWindow.Naming)
+        {
+            _petWindow.CancelNaming();
             return true;
         }
 
@@ -527,7 +537,7 @@ public sealed partial class GameplayHud : IDisposable
         var clickTaken = clicked && Captures(layout, pointer, design);
         var typedText = _context.TypedText.Drain();
         // A count box or the shop's sign box takes the keyboard: neither the chat nor a game key sees what is typed there.
-        var boxTyping = _countBox.IsOpen || _personalShop.SignOpen;
+        var boxTyping = _countBox.IsOpen || _personalShop.SignOpen || _petWindow.Naming;
         if (_countBox.IsOpen)
         {
             _typingKeyboard = keyboard;
@@ -537,6 +547,15 @@ public sealed partial class GameplayHud : IDisposable
         {
             _typingKeyboard = keyboard;
             _personalShop.Type(typedText, _typedKey ??= key => Pressed(_typingKeyboard, key), _canDraw ??= _painter.CanDraw, _measure ??= _painter.Measure);
+        }
+        else if (_petWindow.Naming)
+        {
+            _typingKeyboard = keyboard;
+            _petWindow.Type(typedText, elapsedSeconds, _typedKey ??= key => Pressed(_typingKeyboard, key));
+            if (_petWindow.TakeRequest() is { } command)
+            {
+                _ = _chat.Send?.Invoke(command, false);
+            }
         }
         else if (_crystalDismiss.Confirming && !_chat.Window.Focused && Pressed(keyboard, Keys.Enter))
         {
@@ -662,6 +681,7 @@ public sealed partial class GameplayHud : IDisposable
         _painter.Begin(layout);
         _dropNames.Draw(_painter, layout, GroundLabels, GroundLabelPlaced);
         Combat.DrawNamePlates(_painter, layout, Overhead, HoveredId, TracedId, _context.Presentation.Requested.ClassicNamePlates);
+        DrawPetLabels(layout);
         _chat.Bubbles.Signs = ShopSigns;
         _chat.Bubbles.Draw(_painter, layout, _clock.Elapsed.TotalMilliseconds, Overhead, _nameColor ??= id => _chat.NameColor(id, TargetId), TargetId);
         if (_helpPet.Bubble is { } petLine && HelperPet.Point is { } petPoint)
@@ -858,7 +878,7 @@ public sealed partial class GameplayHud : IDisposable
         _tradeRequest.Draw(_painter, pointer, _clock.Elapsed.TotalMilliseconds);
         _restart.Draw(_painter, layout, pointer, RestartOffer?.FieldOpen == true, InCastleField);
         _painter.Flush();
-        _petWindow.Draw(_painter, layout, PetCollection, _icons, pointer);
+        _petWindow.Draw(_painter, layout, PetCollection, CharacterName, _icons, pointer);
         _painter.Flush();
         DrawMinimapName(layout, pointer);
         _actionBar.DrawOverlay(_painter, layout, _state, _icons, _skillHud, pointer);
@@ -866,6 +886,22 @@ public sealed partial class GameplayHud : IDisposable
         _notice.Draw(_painter, layout);
         _painter.End();
     }
+
+    // Each pet's name centred over it, within the distance speech bubbles show at.
+    private void DrawPetLabels(HudLayout layout)
+    {
+        var scale = Math.Max(1, layout.Scale);
+        foreach (var (point, text) in PetLabels)
+        {
+            if (point.Depth <= HudChatBubbles.MaxDepth)
+            {
+                var x = (int)(point.Screen.X / scale);
+                _painter.TextCentered(text, x - 200, x + 200, (int)(point.Screen.Y / scale) - HudPainter.LineHeight, PetLabelColor);
+            }
+        }
+    }
+
+    private static readonly Color PetLabelColor = new(180, 240, 180);
 
     // An item shortcut's key: one of the item is used as a right click on it would.
     private void UseShortcutItem(string catalogKey)

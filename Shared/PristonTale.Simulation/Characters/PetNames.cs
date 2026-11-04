@@ -1,7 +1,7 @@
 namespace PristonTale.Simulation.Characters;
 
-// A pet's name: letters, digits and single spaces, at most MaxLength characters; empty for no name (the pet then shows its
-// skin's name). "/petname <name>" names the character's pet and "/petname" alone clears the name.
+// A pet's name: letters, digits and single spaces, at most MaxLength characters; empty for no name (the pet then shows
+// "<owner>'s Pet"). "/petname <name>" names the character's pet and "/petname" alone clears the name.
 public static class PetNames
 {
     public const int MaxLength = Contracts.Characters.PetNameLimits.MaxLength;
@@ -47,6 +47,6 @@ public static class PetNames
         return true;
     }
 
-    // What shows over a pet: its name, or its skin's name without one.
-    public static string Shown(string name, PetSkin skin) => string.IsNullOrEmpty(name) ? skin?.Name ?? "" : name;
+    // What shows over a pet: its name, or "<owner>'s Pet" without one.
+    public static string Shown(string name, string ownerName) => string.IsNullOrEmpty(name) ? $"{ownerName}'s Pet" : name;
 }
