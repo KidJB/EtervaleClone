@@ -55,6 +55,7 @@ internal static class GmItemCommands
     {
         var code = context.Word();
         var specName = context.Word();
+        var aging = AgingLevel(context.Word());
         var job = SpecJobCode(specName);
         if (job < 0)
         {
@@ -76,9 +77,27 @@ internal static class GmItemCommands
             return;
         }
 
-        var dropped = await context.Commands.World.DropAsync(context.Issuer.EntityId, _ => ItemRoller.CreatePerfect(definition, 1, specBit), 0);
-        context.Reply(dropped ? Format("Perfect {0} created ({1})", code, className) : Format("No field to drop {0} on", code));
+        // An item the aging table takes no game-master aging for drops perfect but unaged, and the reply says so.
+        var ageable = aging > 0 && Simulation.Items.Aging.AgingRules.GameMasterAges(definition.CatalogKey, definition.Kind, definition.UniqueItem);
+        var dropped = await context.Commands.World.DropAsync(context.Issuer.EntityId, _ =>
+        {
+            var item = ItemRoller.CreatePerfect(definition, 1, specBit);
+            if (ageable)
+            {
+                Simulation.Items.Aging.AgingRules.AgeTo(item, aging);
+            }
+
+            return item;
+        }, 0);
+        context.Reply(!dropped ? Format("No field to drop {0} on", code)
+            : ageable ? Format("Perfect +{2} {0} created ({1})", code, className, aging)
+            : aging > 0 ? Format("Perfect {0} created ({1}); it cannot be aged", code, className)
+            : Format("Perfect {0} created ({1})", code, className));
     }
+
+    // "+N" after /@get_perf's class: the aging level 1 to AgingRules.MaxLevel to age the perfect copy to; 0 without one.
+    private static int AgingLevel(string word) =>
+        word.Length > 1 && word[0] == '+' ? Math.Clamp(ChatCommandText.ToNumber(word[1..]), 0, Simulation.Items.Aging.AgingRules.MaxLevel) : 0;
 
     // An item copy by code, or by a double-quoted name (which also finds unique items), dropped at the game master.
     public static async Task Create(GmCommandContext context)

@@ -281,6 +281,24 @@ internal static class GameMasterCommandTests
             "the created items and gold were not dropped at the game master");
         await fixture.SayAsync(gm, "/@get_perf WA101 MS");
         Assert.True(gm.Link.Last == "Perfect WA101 created (Mechanician)", gm.Link.Last);
+        await fixture.SayAsync(gm, "/@get_perf WA101 MS +20");
+        Assert.True(gm.Link.Last == "Perfect +20 WA101 created (Mechanician)", gm.Link.Last);
+        fixture.Tick(1);
+        var ground = FieldOf(fixture).GroundLoot;
+        var lookerCharacter = new CharacterClassRegistry().CreatePlayer(PlayerClass.Fighter, "Looker");
+        var aged = false;
+        foreach (var drop in ground.Snapshot().Where(drop => drop.View.CatalogKey == "WA101"))
+        {
+            var look = Guid.NewGuid();
+            var looker = new WorldPlayer(77, drop.View.Position, lookerCharacter, false, default);
+            if (ground.TryReserve(drop.View.Id, look, looker, out _, out var copy))
+            {
+                aged |= copy?.UpgradeLevel == 20;
+                ground.Resolve(drop.View.Id, look, committed: false);
+            }
+        }
+
+        Assert.True(aged, "the perfect axe was not aged to +20");
         await fixture.SayAsync(gm, "/@get_perf WA101 KS");
         Assert.True(gm.Link.Last == "WA101 cannot take the Knight spec", gm.Link.Last);
         await fixture.SayAsync(gm, "/@get_perf WA101 cooks");

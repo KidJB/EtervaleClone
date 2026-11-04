@@ -310,6 +310,10 @@ public static class AgingRules
         return true;
     }
 
+    // Whether a game master's aging (AgeTo) raises an item of this key: an ageable family that takes it, not refused.
+    public static bool GameMasterAges(string key, ItemKind kind, int unique) =>
+        Ageable(key, kind, unique, 0, false, 0) && (IsRing(key) || Families.TryGetValue(ItemCodes.FamilyOf(key), out var family) && family.GameMasterAging);
+
     public static void AgeTo(ItemInstance item, int level)
     {
         if (FamilyOf(item) is not { GameMasterAging: true })
