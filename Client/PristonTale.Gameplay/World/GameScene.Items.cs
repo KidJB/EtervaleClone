@@ -13,6 +13,10 @@ public sealed partial class GameScene
 {
     private ItemUseEffects _itemEffects;
     private PremiumPetPresentation _pets;
+
+    // The local player's pet collection as the server last sent it (none until it does).
+    public PetCollectionInfo PetCollection { get; private set; } = new(0, 0);
+    private SkinPetPresentation _skinPets;
     private ForceOrbPresentation _forceOrbs;
 
     // The local player's running premium timers as last sent by the server.
@@ -47,6 +51,8 @@ public sealed partial class GameScene
         {
             _pets = new PremiumPetPresentation(_actorScene, _actorLoader, _assetRoot ?? "", scripts, _renderer.TransientLights, _skillSounds, _log);
         }
+
+        _skinPets ??= _renderer is null ? null : new SkinPetPresentation(_actorScene, _actorLoader, _assetRoot ?? "", _log);
     }
 
     private void ObserveItems(PresenceUpdate update)
@@ -57,6 +63,13 @@ public sealed partial class GameScene
         }
 
         _pets?.Observe(update, ItemAnchor);
+        _skinPets?.Observe(update);
+        if (update.PetCollection is { } collection)
+        {
+            PetCollection = collection;
+            // The local player's own pet follows its collection, which the server sends at every change.
+            _skinPets?.Set(SelfEntityId, collection.Out);
+        }
         ObserveOwnHead(update);
         _forceOrbs?.Observe(update, ItemAnchor, _skillClockMs);
 
@@ -111,6 +124,7 @@ public sealed partial class GameScene
     {
         _itemEffects?.Update(_skillClockMs, ItemAnchor, PlayerPosition);
         _pets?.Update(dt, PetOwnerPose, ItemAnchor, PlayerPosition);
+        _skinPets?.Update(dt, PetOwnerPose);
         _forceOrbs?.Update(_skillClockMs, ItemAnchor);
     }
 

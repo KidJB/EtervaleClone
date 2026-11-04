@@ -38,6 +38,10 @@ public readonly struct PlayerAppearanceView
     public bool Phoenix { get; init; }
     public int BigHead { get; init; }
 
+    // The pet skin the player has out (PetSkins id, 0 none).
+    public int PetSkin { get; init; }
+    public string PetName { get; init; } = "";
+
     // The sign of the personal shop the player sells from, empty when it sells nothing.
     public string ShopSign { get; init; } = "";
 

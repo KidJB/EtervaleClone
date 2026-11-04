@@ -38,4 +38,7 @@ public sealed record CharacterRecord(
     long SaveSeq = 0,
     int StarterGiftsReceived = Simulation.Characters.StarterGifts.Count,
     short HelpPet = 0,
-    bool HelpPetHidden = false);
+    bool HelpPetHidden = false,
+    long PetSkins = 0,
+    short PetOut = 0,
+    string PetName = "");

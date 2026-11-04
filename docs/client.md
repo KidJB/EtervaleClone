@@ -376,6 +376,7 @@ Renderer side of stage publication: [rendering.md](rendering.md).
 | Middle drag, cursor at screen edge, wheel | `PristonCamera.UpdateOrbit` (Engine3D) | Orbit, edge orbit, zoom; ignored while the HUD captures the pointer |
 | `I` or `V`, `C`, `S`, `X`, `Q`, `D` | `GameplayHud.UpdateKeys` | Inventory, status, skills, system menu, quest window, party window (ignored with Ctrl held) |
 | `F1`-`F8`, `F10`, `4`-`0`, `-`, `=` | `HudSkillBindings` | The action bar's keys: select the skill or use the item on the shown page's key; while pressing a skill in the tree, bind it ([skills.md](skills.md)) |
+| `J` | `GameplayHud.UpdateKeys` | Open or close the pet collection (`HudPetWindow`) |
 | `B`, `Alt+1`..`Alt+3` | `GameplayHud.UpdateKeys` | Show or hide the action bar; show its page 1 to 3 (Alt keeps `1`-`3` from the potion belt) |
 | `Enter`, `Page Up`/`Page Down`, `Up`/`Down` | `HudChat.Update` | Open the chat input or send its line, scroll the chat, recall commands; while typing, HUD, binding, debug and motion keys and the `A` labels are suppressed |
 | `Esc` | `Game1` | Close the chat window first, then HUD panels, else quit |
@@ -487,6 +488,11 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   the world (the server's `BossList`, kept in `GameScene.BossList`): boss, field and the time to its next pass (`now`,
   `tomorrow`), soonest first, counted down from the list's arrival; the wheel scrolls it, the button, its `x` or Escape
   close it.
+  Under it a pet button (or `J`) opens the pet collection (`HudPetWindow`): every pet skin in a grid of five, unlocked
+  ones lit (the helper pet item's icon) and the one out framed; a click on an unlocked skin sends `/pet <id>` through the
+  chat (on the pet out, `/pet off`), and "Put away" sends `/pet off`. The server's `PetCollection` (`GameScene.PetCollection`)
+  answers. Each player's pet out walks beside it (`SkinPetPresentation`): the skin's monster model at its scale, closing a
+  tenth of the way to its place behind and beside its owner per 70 Hz frame, walking while it moves.
 - Bottom bar gauges (`HudBar`): life, mana and stamina (`Bar_Life`, `Bar_Mana`, `Bar_Stamina`, 94, 94 and 76 pixels)
   and the experience (`sinGage/Bar_Exp.bmp`, 6 x 86 at (485, 508), Menu-1's slot right of the mana under its "NL." label)
   fill from the bottom up; the experience is the level's share. Pointed at, each shows its value; the experience reads

@@ -15,7 +15,10 @@ public sealed class HudItemIcons : IDisposable
         _cache = new HudIconCache(device, assetRoot, log);
     }
 
-    public Texture2D Find(string key) => _cache.Find(key);
+    public Texture2D Find(string key) => _cache.Find(SpriteKey(key));
+
+    // Pet skin items have no sprite of their own and show the helper pet's.
+    private static string SpriteKey(string key) => PetSkins.IsItem(key) ? PetSkins.IconKey : key;
 
     // Item bitmaps are authored at their cell size: drawn unscaled and centred, as in the inventory; a grey cell while the
     // icon is not loaded.
@@ -34,8 +37,8 @@ public sealed class HudItemIcons : IDisposable
     }
     public bool IsIdle => _cache.IsIdle;
     public bool Failed => _cache.Failed;
-    public void Request(IReadOnlyList<OwnedItemView> items) => _cache.Request(items.Select(item => item.CatalogKey));
-    public void Request(IEnumerable<string> catalogKeys) => _cache.Request(catalogKeys);
+    public void Request(IReadOnlyList<OwnedItemView> items) => _cache.Request(items.Select(item => SpriteKey(item.CatalogKey)));
+    public void Request(IEnumerable<string> catalogKeys) => _cache.Request(catalogKeys.Select(SpriteKey));
     public void Update() => _cache.Update();
     public void Dispose() => _cache.Dispose();
 }

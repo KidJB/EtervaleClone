@@ -53,6 +53,60 @@ public sealed partial class PlayerCharacter
     public int HelpPet { get; private set; }
     public bool HelpPetHidden { get; private set; }
 
+    // The pet skins the account unlocked (a bit per PetSkins id) and the one this character has out (0 none).
+    public ulong PetSkins { get; private set; }
+    public int PetOut { get; private set; }
+
+    public void RestorePets(ulong skins, int petOut)
+    {
+        PetSkins = skins;
+        PetOut = Characters.PetSkins.Has(skins, petOut) ? petOut : 0;
+    }
+
+    // The name the player gave its pet (PetNames; empty: the skin's name shows).
+    public string PetName { get; private set; } = "";
+
+    public void RestorePetName(string name) => PetName = PetNames.TryNormalize(name, out var tidy) ? tidy : "";
+
+    // Names the pet (an empty name clears it); false for a name PetNames refuses.
+    public bool RenamePet(string raw)
+    {
+        if (!PetNames.TryNormalize(raw, out var name))
+        {
+            return false;
+        }
+
+        PetName = name;
+        return true;
+    }
+
+    // The skins the account's other characters unlocked join this one's.
+    public void JoinAccountPetSkins(ulong skins) => PetSkins |= skins;
+
+    // Unlocks a skin; false for an unknown skin or one already unlocked.
+    public bool UnlockPetSkin(int id)
+    {
+        if (Characters.PetSkins.Get(id) is null || Characters.PetSkins.Has(PetSkins, id))
+        {
+            return false;
+        }
+
+        PetSkins |= Characters.PetSkins.Bit(id);
+        return true;
+    }
+
+    // Sends an unlocked skin's pet out, or puts the pet away with 0; false for a skin the account has not unlocked.
+    public bool SendPetOut(int id)
+    {
+        if (id != 0 && !Characters.PetSkins.Has(PetSkins, id))
+        {
+            return false;
+        }
+
+        PetOut = id;
+        return true;
+    }
+
     public void RestoreHelpPet(int kind, bool hidden)
     {
         HelpPet = kind is >= 0 and <= HelpPets.Kinds ? kind : throw new ArgumentOutOfRangeException(nameof(kind), "A help pet is 0 to HelpPets.Kinds.");
@@ -661,6 +715,8 @@ public sealed partial class PlayerCharacter
         clone.Quests = Quests.Clone();
         clone.RestoreStarterGifts(StarterGiftsReceived);
         clone.RestoreHelpPet(HelpPet, HelpPetHidden);
+        clone.RestorePets(PetSkins, PetOut);
+        clone.RestorePetName(PetName);
         clone.Premium.CopyFrom(Premium);
         clone.ItemUses.CopyFrom(ItemUses);
         clone.Recompute();

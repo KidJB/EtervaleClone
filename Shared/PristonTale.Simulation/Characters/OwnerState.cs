@@ -104,6 +104,11 @@ public sealed record OwnerState(
     public IReadOnlyList<PremiumTimer> PremiumTimers { get; init; } = Array.Empty<PremiumTimer>();
     public long PremiumClockSeconds { get; init; }
 
+    // The pet skins the account unlocked (PetSkins bits) and the one out (0 none).
+    public ulong PetSkins { get; init; }
+    public int PetOut { get; init; }
+    public string PetName { get; init; } = "";
+
     public long AgingRevision { get; init; } = -1;
     public IReadOnlyList<AgingProgressView> Aging { get; init; } = Array.Empty<AgingProgressView>();
 
@@ -148,6 +153,9 @@ public sealed record OwnerState(
             PremiumTimers = previous is not null && previous.PremiumRevision == character.Premium.Revision ? previous.PremiumTimers
                 : Array.AsReadOnly(character.Premium.Timers.ToArray()),
             PremiumClockSeconds = previous is not null && previous.PremiumRevision == character.Premium.Revision ? previous.PremiumClockSeconds : nowSeconds,
+            PetSkins = character.PetSkins,
+            PetOut = character.PetOut,
+            PetName = character.PetName,
             AgingRevision = character.AgingRevision,
             Aging = previous is not null && previous.AgingRevision == character.AgingRevision && previous.InventoryRevision == character.InventoryRevision
                 ? previous.Aging

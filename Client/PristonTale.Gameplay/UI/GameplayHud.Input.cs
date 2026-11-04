@@ -116,6 +116,11 @@ public sealed partial class GameplayHud
             _actionBar.Toggle();
         }
 
+        if (Pressed(keyboard, Keys.J))
+        {
+            _petWindow.Toggle();
+        }
+
         // Alt with 1 to 3 turns the action bar's page instead of drinking from the belt.
         var alt = keyboard.IsKeyDown(Keys.LeftAlt) || keyboard.IsKeyDown(Keys.RightAlt);
         var shift = keyboard.IsKeyDown(Keys.LeftShift) || keyboard.IsKeyDown(Keys.RightShift);
@@ -195,6 +200,16 @@ public sealed partial class GameplayHud
 
         if (MinimapShown && _bossList.Click(layout, _minimap.Area(layout), pointer))
         {
+            return;
+        }
+
+        if (_petWindow.Click(layout, _minimap.Area(layout), pointer, MinimapShown, PetCollection))
+        {
+            if (_petWindow.TakeRequest() is { } command)
+            {
+                _ = _chat.Send?.Invoke(command, false);
+            }
+
             return;
         }
 
@@ -446,7 +461,7 @@ public sealed partial class GameplayHud
             return true;
         }
 
-        if (_actionBar.Captures(layout, pointer) || HudBar.Captures(design) || MinimapShown && (_minimap.Area(layout).Contains(pointer) || _minimap.Dragging || _bossList.Captures(layout, _minimap.Area(layout), pointer)) || _skillHud.BuffAt(pointer) != 0
+        if (_actionBar.Captures(layout, pointer) || _petWindow.Captures(layout, _minimap.Area(layout), pointer, MinimapShown) || HudBar.Captures(design) || MinimapShown && (_minimap.Area(layout).Contains(pointer) || _minimap.Dragging || _bossList.Captures(layout, _minimap.Area(layout), pointer)) || _skillHud.BuffAt(pointer) != 0
             || WindowContains(layout, _inventorySlide, pointer) || WindowContains(layout, _statusSlide, pointer) || WindowContains(layout, _skillSlide, pointer)
             || _skills.MasterBoxShown && HudSkillTreeLayout.MasterBox.Contains(pointer))
         {

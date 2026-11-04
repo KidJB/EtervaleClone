@@ -92,7 +92,8 @@ internal static class ItemUseActions
         [UsableItemAction.Food] = new FoodUse(),
         [UsableItemAction.GiftBox] = new GiftBoxUse(),
         [UsableItemAction.Chocolate] = new ChocolateUse(),
-        [UsableItemAction.PuzzleBag] = new PuzzleBagUse()
+        [UsableItemAction.PuzzleBag] = new PuzzleBagUse(),
+        [UsableItemAction.PetSkin] = new PetSkinUse()
     };
 
     public static ItemUseAction For(UsableItemAction action) => ByAction.GetValueOrDefault(action, Plain);

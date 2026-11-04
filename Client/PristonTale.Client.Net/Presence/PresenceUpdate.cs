@@ -43,6 +43,9 @@ public sealed record PresenceUpdate(
 
     // Every scheduled boss of the world, soonest first, when the player entered the world or a pass in it came.
     public IReadOnlyList<BossListInfo>? BossList { get; init; }
+
+    // The local player's pet collection, when it entered the world or it changed.
+    public PetCollectionInfo? PetCollection { get; init; }
     public IReadOnlyList<ItemEffectInfo> ItemEffects { get; init; } = [];
 
     // The quest journal when it changed, quest notices and a quest dialog the world opened on its own.
@@ -90,6 +93,13 @@ public sealed record BossTimeInfo(string BossName, int SecondsLeft, bool Exact)
 }
 
 // A boss of the player's field at its spot (wire x, z in world units) and whether it is alive now.
+// The pet skins the account unlocked (PetSkins bits) and the one out (0 none).
+public sealed record PetCollectionInfo(ulong Skins, int Out)
+{
+    // The name the player gave its pet (empty: the skin's name shows).
+    public string Name { get; init; } = "";
+}
+
 public readonly record struct BossSpotInfo(string BossName, float X, float Z, bool Alive);
 
 // A boss of the world, the field it spawns in, and the seconds to its next pass when the list arrived (Exact false: a

@@ -63,6 +63,9 @@ public sealed partial class GameScene
         return Project(anchor);
     }
 
+    // A helper pet or a skin pet is beside the local player (it fetches gold and potions: GroundLootInteraction).
+    private bool PetOut => _pets is not null && _pets.TryGetHelper(SelfEntityId, out _, out _) || _skinPets is not null && _skinPets.Has(SelfEntityId);
+
     // The local player's helper pet and the point over it where it speaks (null while it is not drawn).
     public HudHelperPetView SelfHelperPet()
     {

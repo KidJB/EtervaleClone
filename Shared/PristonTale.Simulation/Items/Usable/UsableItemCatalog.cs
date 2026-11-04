@@ -26,7 +26,9 @@ public enum UsableItemAction : byte
     SoccerHead,
     Chocolate,
     PuzzleBag,
-    UnionCore
+    UnionCore,
+    // Unlocks the pet skin of the argument (PetSkins) for the account and sends that pet out.
+    PetSkin
 }
 
 // The three scroll effects; a scroll refuses while another scroll of the same effect, or the opposite offensive or
@@ -198,6 +200,10 @@ public static class UsableItemCatalog
         Pets(rules, 30 * Day, "BI152", "BI153", "BI154", "BI155");
         Pets(rules, 7 * Day, "BI165", "BI166", "BI167", "BI168");
         Pets(rules, Day, "BI169", "BI170", "BI171", "BI172");
+        foreach (var skin in Characters.PetSkins.All)
+        {
+            rules[skin.ItemKey] = new UsableItemRule(UsableItemAction.PetSkin, skin.Id);
+        }
 
         // Packages run Third Eyes and an EXP potion together at the package's own percentages.
         Package(rules, 20, 10, ("BI201", 3 * Hour), ("BI202", Day), ("BI203", 7 * Day), ("BI204", 30 * Day), ("BI126", Day), ("BI127", 7 * Day));

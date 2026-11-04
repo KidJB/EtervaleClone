@@ -94,6 +94,11 @@ public sealed class SessionAppService
             {
                 CharacterStateCodec.Restore(character, record, _worldData.Current.Items);
                 SavedPremium.Restore(character, record.Premium, _clock.GetUtcNow().ToUnixTimeSeconds());
+                // Pet skins belong to the account: what its other characters unlocked joins this one.
+                foreach (var sibling in await _characters.ListByAccountAsync(session.AccountId, ct))
+                {
+                    character.JoinAccountPetSkins(unchecked((ulong)sibling.PetSkins));
+                }
             }
             catch (Exception exception) when (exception is InvalidDataException or JsonException or ArgumentException)
             {

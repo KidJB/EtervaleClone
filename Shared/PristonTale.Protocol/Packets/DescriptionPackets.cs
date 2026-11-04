@@ -7,8 +7,8 @@ namespace PristonTale.Protocol.Packets;
 
 internal static class DescriptionWire
 {
-    // Version 2 appended the player's shop sign.
-    public const ushort Version = 2;
+    // Version 2 appended the player's shop sign, version 3 the pet skin out, version 4 the pet's name.
+    public const ushort Version = 4;
     public const int MaxNameBytes = 64;
     public const int MaxModelBytes = 160;
 
@@ -60,6 +60,10 @@ public sealed record DescribedPlayer(
 
     // The sign of the personal shop the player sells from; empty when it sells nothing.
     public string ShopSign { get; init; } = "";
+
+    // The pet skin the player has out (PetSkins id, 0 none) and the name it gave its pet.
+    public int PetSkin { get; init; }
+    public string PetName { get; init; } = "";
 }
 
 // A held item's glow: {int8 Blink (0 none, below 0 steady), int16 R, G, B, A, float32 Scale, int8 Mix (-1 none), uint8
@@ -116,7 +120,7 @@ public sealed record DescribedTemplate(
 // 0, varuint EntityId, uint8 Revision, uint8 Kind, varuint Level, varuint MoveSpeed, float32 AttackRate, text Name, text
 // Model}, then for a player {varuint Class, Tier, Face, Hair, text HeadModel, uint32 Weapon, Armor, OffHand, uint8 Flags (1
 // village, 2 Phoenix), uint8 HelperPet, uint8 BigHead, glow WeaponGlow, glow OffHandGlow (DescribedGlow), text ShopSign
-// (from version 2)}, else {varuint Template, float32 TemplateScale, varuint SoundCode, varint PortraitY, PortraitZ,
+// (from version 2), uint8 PetSkin (from version 3), text PetName (from version 4)}, else {varuint Template, float32 TemplateScale, varuint SoundCode, varint PortraitY, PortraitZ,
 // uint8 Brood, varuint Owner, float32 InstanceScale, uint32 NpcServices, varuint Class (the monster class: 1 boss, 200
 // hammer), varint ShadowSize (-1 none, 0 small to 3 large)}. Text is UTF-8 with a uint16 byte length.
 public sealed record EntityDescriptionPacket(
@@ -132,7 +136,7 @@ public sealed record EntityDescriptionPacket(
     DescribedTemplate? Template = null)
 {
     // The player part (four varuints, the head model, three codes, three bytes, two glows, the sign) is the larger tail.
-    private const int PlayerPart = 5 * 4 + 2 + DescriptionWire.MaxModelBytes + 4 * 3 + 3 + 2 * DescribedGlow.Size + 2 + PersonalShopLimits.MaxSignBytes;
+    private const int PlayerPart = 5 * 4 + 2 + DescriptionWire.MaxModelBytes + 4 * 3 + 3 + 2 * DescribedGlow.Size + 2 + PersonalShopLimits.MaxSignBytes + 1 + 2 + PetNameLimits.MaxBytes;
     public const int MaximumSize = 8 + 4 + VarInt.MaxBytes64 + 2 + 5 * 2 + 4 + (2 + DescriptionWire.MaxNameBytes) + (2 + DescriptionWire.MaxModelBytes)
         + PlayerPart;
 
@@ -165,6 +169,8 @@ public sealed record EntityDescriptionPacket(
             player.WeaponGlow.Write(ref writer);
             player.OffHandGlow.Write(ref writer);
             NpcWire.Text(ref writer, player.ShopSign, PersonalShopLimits.MaxSignBytes);
+            writer.Byte((byte)Math.Clamp(player.PetSkin, 0, byte.MaxValue));
+            NpcWire.Text(ref writer, player.PetName, PetNameLimits.MaxBytes);
         }
         else
         {
@@ -215,12 +221,16 @@ public sealed record EntityDescriptionPacket(
                 var weaponGlow = DescribedGlow.Read(ref reader);
                 var offHandGlow = DescribedGlow.Read(ref reader);
                 var sign = version >= 2 ? NpcWire.Text(ref reader, PersonalShopLimits.MaxSignBytes) : "";
+                var petSkin = version >= 3 ? reader.Byte() : 0;
+                var petName = version >= 4 ? NpcWire.Text(ref reader, PetNameLimits.MaxBytes) : "";
                 return new EntityDescriptionPacket(entityId, revision, kind, level, moveSpeed, attackRate, name, model,
                     new DescribedPlayer(playerClass, tier, face, hair, head, weapon, armor, offHand, (flags & 1) != 0, (flags & 2) != 0, pet, bigHead)
                     {
                         WeaponGlow = weaponGlow,
                         OffHandGlow = offHandGlow,
-                        ShopSign = sign
+                        ShopSign = sign,
+                        PetSkin = petSkin,
+                        PetName = petName
                     });
             }
             case EntityKind.Monster or EntityKind.Npc:
