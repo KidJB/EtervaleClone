@@ -59,7 +59,7 @@ internal static class GmItemCommands
         var job = SpecJobCode(specName);
         if (job < 0)
         {
-            context.Reply(Format("Unknown spec {0} (a class name, MS FS PS AS KS ATA PRS MG, 1-8 or none)", specName));
+            context.Reply(Format("Unknown spec {0} (a class name, MS FS PS AS KS ATA PRS MG, 1-10 or none)", specName));
             return;
         }
 
@@ -127,7 +127,7 @@ internal static class GmItemCommands
             return;
         }
 
-        var spec = Enum.IsDefined((PlayerClass)job) && ClassProfiles.Specializes((PlayerClass)job) ? (uint)JobBits.Of((PlayerClass)job) : 0u;
+        var spec = TakesSpec((PlayerClass)job) ? (uint)JobBits.Of((PlayerClass)job) : 0u;
         var overrides = spec != 0 && ItemRoller.CanTakeSpec(definition, spec) ? new ItemRollOverrides(spec) : ItemRollOverrides.None;
         var dropped = await context.Commands.World.DropAsync(context.Issuer.EntityId, rng =>
         {
@@ -216,6 +216,9 @@ internal static class GmItemCommands
     }
 
     // 0 for none, a class number 1 to 8, else -1.
+    // A class an item's spec can name: every class with a class bit (JobBits), the Assassin and the Shaman included.
+    private static bool TakesSpec(PlayerClass playerClass) => Enum.IsDefined(playerClass) && JobBits.Of(playerClass) != 0;
+
     public static int SpecJobCode(string name)
     {
         if (name.Length == 0 || name.Equals("none", StringComparison.OrdinalIgnoreCase))
@@ -223,9 +226,9 @@ internal static class GmItemCommands
             return 0;
         }
 
-        if (name.Length == 1 && name[0] - '0' is var digit && Enum.IsDefined((PlayerClass)digit) && ClassProfiles.Specializes((PlayerClass)digit))
+        if (int.TryParse(name, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number) && TakesSpec((PlayerClass)number))
         {
-            return digit;
+            return number;
         }
 
         var shortNames = new[] { ("FS", 1), ("MS", 2), ("AS", 3), ("PS", 4), ("ATA", 5), ("KS", 6), ("MG", 7), ("PRS", 8) };
@@ -239,7 +242,7 @@ internal static class GmItemCommands
 
         foreach (var playerClass in Enum.GetValues<PlayerClass>())
         {
-            if (ClassProfiles.Specializes(playerClass) && playerClass.ToString().Equals(name, StringComparison.OrdinalIgnoreCase))
+            if (TakesSpec(playerClass) && playerClass.ToString().Equals(name, StringComparison.OrdinalIgnoreCase))
             {
                 return (int)playerClass;
             }

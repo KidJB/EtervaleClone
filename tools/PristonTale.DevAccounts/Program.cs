@@ -153,12 +153,15 @@ async Task<int> CreateBots(List<string> a)
 
 async Task<int> AddCharacter(List<string> a)
 {
+    // --max: the level cap, the last tier, every class skill at the top rank and the level's status points.
+    var max = a.Remove("--max");
     if (a.Count < 4)
-        return Usage($"usage: add-char <user> <name> <class> [level]   (class: {ClassList()})");
+        return Usage($"usage: add-char <user> <name> <class> [level] [--max]   (class: {ClassList()})");
     var (user, name, classText) = (a[1], a[2], a[3]);
     if (!TryParseClass(classText, out var playerClass))
         return Usage($"unknown class '{classText}' (valid: {ClassList()})");
-    var level = a.Count > 4 && int.TryParse(a[4], out var parsed) ? Math.Max(1, parsed) : 1;
+    var level = max ? PristonTale.Simulation.Progression.ExperienceTable.MaximumLevel
+        : a.Count > 4 && int.TryParse(a[4], out var parsed) ? Math.Max(1, parsed) : 1;
 
     var account = await accounts.FindByUserIdAsync(user);
     if (account is null)
@@ -171,9 +174,19 @@ async Task<int> AddCharacter(List<string> a)
     if (CharacterSlots.FirstFree(await characters.UsedSlotsAsync(account.Id)) is not { } slot)
         return Usage($"account '{user}' has no free character slots (max {CharacterSlots.Maximum})");
 
-    var record = CharacterRecordFactory.NewStarter(classes, account.Id, name, slot, playerClass, PristonTale.Simulation.Progression.DeathPenalty.TownField(playerClass), level: level);
+    var field = PristonTale.Simulation.Progression.DeathPenalty.TownField(playerClass);
+    var record = CharacterRecordFactory.NewStarter(classes, account.Id, name, slot, playerClass, field, level: level);
+    if (max)
+    {
+        var character = classes.CreatePlayer(playerClass, name, level);
+        character.ApplyQuestProgress(PlayerCharacter.LastTier, (level - 1) * PlayerCharacter.StatusPointsPerLevel, 0, 0);
+        foreach (var skill in classes.Get(playerClass).Skills.Where(static skill => skill.Code != 0))
+            character.Skills.Restore(skill.Code, PristonTale.Simulation.Progression.SkillLearning.MaxRank);
+        record = CharacterRecordFactory.FromLiveSession(record, character, field, new System.Numerics.Vector3(record.PosX, 0f, record.PosZ));
+    }
+
     var created = await characters.CreateAsync(record);
-    Console.WriteLine($"created character #{created.Id} '{created.Name}' ({playerClass}, level {created.Level}) in slot {slot} of '{user}'");
+    Console.WriteLine($"created character #{created.Id} '{created.Name}' ({playerClass}, level {created.Level}{(max ? ", last tier, every skill at the top rank" : "")}) in slot {slot} of '{user}'");
     return 0;
 }
 
@@ -259,6 +272,7 @@ static void PrintUsage()
               [--spacing S] [--level N]                 grid spacing (0: a 500-unit crowd) and level
               [--skills hex:rank,...]                   learned skills
           add-char <user> <name> <class> [level]      seed a character on an account
+              [--max]                                   ... at the level cap and last tier, every skill at the top rank
           list <user>                                 list an account's characters
           set-gm <user> <level>                       set an account's game-master level (0 player .. 4 administrator)
           gm-audit [count]                            show the newest game-master commands (default 20)

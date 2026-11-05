@@ -145,7 +145,8 @@ Commands match by exact, case-sensitive prefix in table order. Levels:
   the field (each move carries the running statuses), `/hide` and `/show` make the issuer invisible to other players' presence, `/grant` lends the issuer's level to a
   player until that player leaves the world.
 - Items: `/@get code` or `/@get "name"` drops an item (`code#U<n>` or a named unique's name makes that named unique,
-  `code#Q` the quest variant), `/@get_perf code [class] [+level]` its best copy (aged to the level, 1-20, when its family takes game-master aging: `AgingRules.GameMasterAges`; otherwise unaged, and the reply says so), `/@put name code` writes
+  `code#Q` the quest variant), `/@get_perf code [class] [+level]` its best copy (the class by name, number 1-10 or short name: every class with a class bit, the
+  Assassin and the Shaman included) (aged to the level, 1-20, when its family takes game-master aging: `AgingRules.GameMasterAges`; otherwise unaged, and the reply says so), `/@put name code` writes
   a copy into a player's bag before delivering it, `/AgingSetting code level [class 1-8]` drops a weapon or armour aged
   to the level; `/specific job` and `/Performance value` force the class and middle
   roll of items made in the next minute; `/init_premiumitem n` ends a premium timer.
