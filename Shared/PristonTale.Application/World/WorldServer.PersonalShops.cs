@@ -30,6 +30,11 @@ public sealed partial class WorldServer
 
             var viewer = connection.Player;
             var revision = viewer.Character.InventoryRevision;
+            if (TryViewStall(connection, sellerId, out var stallReply))
+            {
+                return stallReply;
+            }
+
             if (!TryGetShopSeller(connection, sellerId, out var seller, out _))
             {
                 return new PersonalShopReply(PersonalShopOutcome.Failed(PersonalShopStatus.Closed, revision));

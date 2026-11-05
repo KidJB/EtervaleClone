@@ -755,7 +755,29 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         return _prey.AnyWithin(worldPosition, PlayerNearRadius);
     }
 
-    public int EntityCount => _players.Count + _monsters.Count + _npcs.Count;
+    public int EntityCount => _players.Count + _monsters.Count + _npcs.Count + _stalls.Count;
+
+    // The offline stalls standing in this field, by entity id; drawn as their owners standing with their signs.
+    private readonly Dictionary<ulong, Stalls.Stall> _stalls = new();
+
+    public void AddStall(Stalls.Stall stall) => _stalls[stall.EntityId] = stall;
+
+    public bool RemoveStall(ulong entityId) => _stalls.Remove(entityId);
+
+    public bool RemoveStallOf(long accountId)
+    {
+        foreach (var (id, stall) in _stalls)
+        {
+            if (stall.AccountId == accountId)
+            {
+                return _stalls.Remove(id);
+            }
+        }
+
+        return false;
+    }
+
+    public bool TryGetStall(ulong entityId, [MaybeNullWhen(false)] out Stalls.Stall stall) => _stalls.TryGetValue(entityId, out stall);
 
     public EntityView[] BuildViews()
     {
@@ -782,6 +804,11 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         foreach (var npc in _npcs.Values)
         {
             views[index++] = WithRevision(npc.ToView());
+        }
+
+        foreach (var stall in _stalls.Values)
+        {
+            views[index++] = WithRevision(stall.ToView());
         }
 
         _descriptors.Prune();

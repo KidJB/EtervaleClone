@@ -18,7 +18,8 @@ public enum HudPersonalShopAction
     Start,
     Stop,
     Unlist,
-    Buy
+    Buy,
+    Offline
 }
 
 // The original personal shop on the store window: the player's own listing (laid down each column from the left, with
@@ -36,6 +37,9 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
     private long _revision;
     private PersonalShopOffer _hovered;
     private Button? _hoveredButton;
+
+    private static readonly Color OfflineStripColor = new(12, 10, 8, 220);
+    private static readonly Color OfflineTextColor = new(255, 214, 90);
 
     private enum Button
     {
@@ -57,6 +61,9 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
     public bool Selling { get; set; }
 
     public IReadOnlyList<PersonalShopOffer> Offers => _offers;
+
+    // Rises whenever the offers change, so the HUD requests their icons with everything else on screen.
+    public int IconRevision { get; private set; }
     public PersonalShopOffer Selected { get; private set; }
     public bool IsOpen => _slide.Open;
     public bool Visible => _slide.Visible;
@@ -111,7 +118,13 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
 
     public void Advance(double seconds) => _slide.Advance(seconds);
 
-    public bool Contains(Point pointer) => _slide.Visible && HudStoreLayout.Window(Origin).Contains(pointer);
+    public bool Contains(Point pointer) =>
+        _slide.Visible && (HudStoreLayout.Window(Origin).Contains(pointer) || OfflineShown && OfflineButton(Origin).Contains(pointer));
+
+    // While the player's own shop sells, a strip under the window leaves it as an offline stall (the chat's "/stall").
+    private bool OfflineShown => !Buying && Selling;
+
+    public static Rectangle OfflineButton(Point origin) => new(origin.X, origin.Y + 306, 344, 22);
 
     // An item of the player's listing, which the bag keeps from being moved.
     public bool Holds(Guid itemId) => !Buying && Find(itemId) >= 0;
@@ -139,6 +152,7 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
         }
 
         _offers.Add(new PersonalShopOffer(item with { Anchor = anchor }, unitPrice));
+        IconRevision++;
         Changed();
         return true;
     }
@@ -149,6 +163,7 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
         if (index >= 0)
         {
             _offers.RemoveAt(index);
+            IconRevision++;
             Changed();
         }
     }
@@ -192,6 +207,11 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
             return HudPersonalShopAction.None;
         }
 
+        if (OfflineShown && OfflineButton(Origin).Contains(pointer))
+        {
+            return HudPersonalShopAction.Offline;
+        }
+
         switch (ButtonAt(pointer))
         {
             case Button.Exit:
@@ -226,6 +246,18 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
         var picture = HudStoreLayout.Picture(origin);
         painter.Sprite(HudPersonalShopArt.Picture, picture.X, picture.Y);
         DrawButtons(painter, origin);
+        if (OfflineShown)
+        {
+            var offline = OfflineButton(origin);
+            painter.Fill(offline, OfflineStripColor);
+            if (interactive && offline.Contains(pointer))
+            {
+                painter.Fill(offline, HudPlacementColors.Selection);
+            }
+
+            painter.TextCentered("Go offline: leave this shop as a stall", offline.X, offline.Right, offline.Y + 4, OfflineTextColor);
+        }
+
         foreach (var view in _views)
         {
             var bounds = HudStoreLayout.Cell(origin, view.Anchor, view.Width, view.Height);
@@ -371,6 +403,7 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
     {
         _offers.Clear();
         _offers.AddRange(offers);
+        IconRevision++;
         Changed();
     }
 

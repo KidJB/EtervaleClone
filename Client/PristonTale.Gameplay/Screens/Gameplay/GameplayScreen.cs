@@ -85,6 +85,8 @@ public sealed class GameplayScreen : GameScreen
         _hud.CoinShop.OpenRequest = _scene.OpenCoinShopAsync;
         _hud.CoinShop.BuyRequest = _scene.BuyCoinShopAsync;
         _hud.Coins.Request = _scene.CoinBalanceAsync;
+        _hud.ItemBox.ListRequest = _scene.OpenItemBoxAsync;
+        _hud.ItemBox.ActRequest = _scene.ActItemBoxAsync;
         _hud.WingGate.RequiredLevel = _scene.FieldTravelLevel;
         _scene.WingGateEntered += _hud.WingGate.Open;
         _scene.WingGateLeft += _hud.WingGate.Close;

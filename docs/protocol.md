@@ -219,6 +219,11 @@ Every message code has the high word `0x4554` ("ET"); every message keeps the `{
 | `0x45541104` | `CoinShopBuyResult` | S→C | `Guid OperationId, uint8 Status (CoinShopStatus), uint8 0, uint16 0, int64 Balance`. |
 | `0x45541105` | `CoinBalance` | C→S | `Guid OperationId`: the account's coins. |
 | `0x45541106` | `CoinBalanceResult` | S→C | `Guid OperationId, int64 Balance`. |
+| `0x45541200` | `ItemBoxOpen` | C→S | `Guid OperationId, uint64 NpcId`: the account's Item Distributor at that NPC. |
+| `0x45541201` | `ItemBoxEntry` | S→C | `Guid OperationId, int64 Id, int64 CreatedAtUnixMs, text Sender, StoreItemEntry Item, ItemDetailEntry Details`: one waiting item of an open. |
+| `0x45541202` | `ItemBoxList` | S→C | `Guid OperationId, uint8 Status (ItemBoxStatus), uint8 0, uint16 0, int32 Count`: ends an open, after its entries. |
+| `0x45541203` | `ItemBoxAction` | C→S | `Guid OperationId, uint64 NpcId, uint8 Action (1 take, 2 discard, 3 send), uint8 0, uint16 0, int64 Id, Guid ItemId, text Recipient`. |
+| `0x45541204` | `ItemBoxResult` | S→C | `Guid OperationId, uint8 Status (ItemBoxStatus: 0 ok, 1 out of reach, 2 not found, 3 no room, 4 no such character, 5 not sendable, 6 busy, 7 storage failed, 8 rejected), uint8 0, uint16 0`. |
 | `0x45540A00` / `0x45540A01` | `RestartRequest` / `RestartResult` | C→S / S→C | A dead player's restart (field, town, exit), correlated by operation id; a stored restart also sends a forced `FieldWarp`. |
 | `0x45540A02` | `RestartOffer` | S→C | While the owner is dead, what a restart would cost, whenever it changes. |
 | `0x45540B00` / `0x45540B01` | `GroundItems` / `GroundItemsRemoved` | S→C | Drops entering and leaving the receiver's view: within the ground-item range (squared `0xC8000` units, about 905 units), private drops only to their owner. |

@@ -51,6 +51,10 @@ public sealed class GameServerConnection : IGameBackend
     private readonly PendingReplies<Guid, CoinShopView> _coinShops = new();
     private readonly PendingReplies<Guid, CoinShopBuyResultPacket> _coinPurchases = new();
     private readonly PendingReplies<Guid, long> _coinBalances = new();
+    private readonly PendingReplies<Guid, ItemBoxListInfo> _itemBoxLists = new();
+    private readonly PendingReplies<Guid, byte> _itemBoxActions = new();
+    // The entries of an Item Distributor open, collected until its list end, which follows them on the same connection.
+    private readonly ConcurrentDictionary<Guid, List<ItemBoxEntryInfo>> _itemBoxEntries = new();
     // The tabs of a coin shop open, collected until its catalog message, which follows them on the same connection.
     private readonly ConcurrentDictionary<Guid, List<CoinShopTab>> _coinShopTabs = new();
     private readonly PendingReplies<ulong, NpcInteraction> _npcDialogs = new();
@@ -331,6 +335,28 @@ public sealed class GameServerConnection : IGameBackend
         return _coinBalances.RequestAsync(packet.OperationId, () => Send(packet), ct);
     }
 
+    internal async Task<ItemBoxListInfo> OpenItemBoxAsync(ulong npcId, CancellationToken ct)
+    {
+        ThrowIfDisconnected();
+        var packet = new ItemBoxOpenPacket(Guid.NewGuid(), npcId);
+        _itemBoxEntries[packet.OperationId] = [];
+        try
+        {
+            return await _itemBoxLists.RequestAsync(packet.OperationId, () => Send(packet), ct);
+        }
+        finally
+        {
+            _itemBoxEntries.TryRemove(packet.OperationId, out _);
+        }
+    }
+
+    internal Task<byte> ActItemBoxAsync(ulong npcId, byte action, long id, Guid itemId, string recipient, CancellationToken ct)
+    {
+        ThrowIfDisconnected();
+        var packet = new ItemBoxActionPacket(Guid.NewGuid(), npcId, action, id, itemId, recipient);
+        return _itemBoxActions.RequestAsync(packet.OperationId, () => Send(packet), ct);
+    }
+
     internal async Task<ProgressionOutcome> ApplyProgressionAsync(ProgressionCommand command, CancellationToken ct)
     {
         var packet = new ProgressionCommandPacket(command.OperationId, command.ExpectedRevision, (int)command.Action, (int)command.Attribute,
@@ -488,6 +514,8 @@ public sealed class GameServerConnection : IGameBackend
             _coinShops.FailAll(error);
             _coinPurchases.FailAll(error);
             _coinBalances.FailAll(error);
+            _itemBoxLists.FailAll(error);
+            _itemBoxActions.FailAll(error);
             _npcDialogs.FailAll(error);
             _services.FailAll(error);
             _quests.FailAll(error);
@@ -614,6 +642,30 @@ public sealed class GameServerConnection : IGameBackend
             {
                 var bought = CoinShopBuyResultPacket.Read(packet);
                 _coinPurchases.Complete(bought.OperationId, bought);
+                break;
+            }
+            case EtervaleOpcodes.ItemBoxEntry:
+            {
+                var entry = ItemBoxEntryPacket.Read(packet);
+                if (_itemBoxEntries.TryGetValue(entry.OperationId, out var entries))
+                {
+                    var item = StoreItems.View(entry.Item) with { Details = OwnerItemDecoder.View(entry.Details) };
+                    entries.Add(new ItemBoxEntryInfo(entry.Id, entry.Sender, DateTimeOffset.FromUnixTimeMilliseconds(entry.CreatedAtUnixMs).UtcDateTime, item));
+                }
+
+                break;
+            }
+            case EtervaleOpcodes.ItemBoxList:
+            {
+                var end = ItemBoxListPacket.Read(packet);
+                var collected = _itemBoxEntries.TryGetValue(end.OperationId, out var entries) ? entries.ToArray() : [];
+                _itemBoxLists.Complete(end.OperationId, new ItemBoxListInfo(end.Status, collected));
+                break;
+            }
+            case EtervaleOpcodes.ItemBoxResult:
+            {
+                var result = ItemBoxResultPacket.Read(packet);
+                _itemBoxActions.Complete(result.OperationId, result.Status);
                 break;
             }
             case EtervaleOpcodes.CoinBalanceResult:

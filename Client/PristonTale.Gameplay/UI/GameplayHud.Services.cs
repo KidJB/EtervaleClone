@@ -66,7 +66,7 @@ public sealed partial class GameplayHud
     }
 
     // The icon cache keeps only the last requested set, so every request names everything on screen: the pack, the open
-    // shop's stock and the open warehouse.
+    // shop's stock, the open warehouse, a personal shop or stall's offers, the Item Distributor and the coin shop.
     private void RequestIcons(OwnerState state)
     {
         RememberKeys(state?.Items);
@@ -82,7 +82,12 @@ public sealed partial class GameplayHud
             keys = keys.Concat(view.Items.Select(static item => item.CatalogKey));
         }
 
-        _icons.Request(keys);
+        if (_personalShop.Window.IsOpen)
+        {
+            keys = keys.Concat(_personalShop.Window.Offers.Select(static offer => offer.Item.CatalogKey));
+        }
+
+        _icons.Request(keys.Concat(_itemBox.IconKeys).Concat(_coinShop.IconKeys));
     }
 
     // Keys of the items seen in the pack or the warehouse, so a sold or stored item still has its sound once it is gone.
@@ -129,6 +134,22 @@ public sealed partial class GameplayHud
         {
             ItemSound?.Invoke(key);
         }
+    }
+
+    // The Item Distributor opens its own window (HudItemBox) and the bag; every other service asks the server to open. True
+    // when a window opens or the request went out.
+    private bool OpenNpcService(ulong npcId, string npcName, NpcServiceKind kind)
+    {
+        if (kind != NpcServiceKind.GiftExpress)
+        {
+            return _services.Request(npcId, npcName, kind, NpcServiceAction.Open);
+        }
+
+        _npcOpen = false;
+        _npc.Dismiss();
+        _itemBox.Show(npcId);
+        OpenOnly(_inventorySlide);
+        return true;
     }
 
     // A service window closes the special item box, as the original does for every window it opens.
@@ -255,7 +276,7 @@ public sealed partial class GameplayHud
 
     private bool InterceptInventoryClick(OwnedItemView item)
     {
-        if (InterceptTradeClick(item) || _personalShop.InterceptBagClick(item))
+        if (InterceptTradeClick(item) || _personalShop.InterceptBagClick(item) || _itemBox.InterceptBagClick(item))
         {
             return true;
         }

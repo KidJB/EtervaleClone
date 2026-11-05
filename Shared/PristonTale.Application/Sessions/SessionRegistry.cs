@@ -30,6 +30,12 @@ public sealed class SessionRegistry : ISessionRegistry
         return _characterOwners.TryAdd(characterId, sessionToken);
     }
 
+    public bool TryGetCharacterSession(long characterId, out PlayerSession session)
+    {
+        session = null!;
+        return _characterOwners.TryGetValue(characterId, out var token) && _sessions.TryGetValue(token, out session!);
+    }
+
     public void ReleaseCharacter(long characterId, string sessionToken)
     {
         _characterOwners.TryRemove(new KeyValuePair<long, string>(characterId, sessionToken));

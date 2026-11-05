@@ -14,5 +14,11 @@ public sealed partial class GameScene
             ? channel.BuyCoinShopAsync(tabId, itemId, quantity, specClass, _presenceCts.Token)
             : Task.FromResult((CoinShopStatus.Rejected, 0L));
 
+    public Task<ItemBoxListInfo> OpenItemBoxAsync(ulong npcId) =>
+        _playChannel is { } channel ? channel.OpenItemBoxAsync(npcId, _presenceCts.Token) : Task.FromResult(new ItemBoxListInfo(8, []));
+
+    public Task<byte> ActItemBoxAsync(ulong npcId, byte action, long id, Guid itemId, string recipient) =>
+        _playChannel is { } channel ? channel.ActItemBoxAsync(npcId, action, id, itemId, recipient, _presenceCts.Token) : Task.FromResult((byte)8);
+
     public Task<long> CoinBalanceAsync() => _playChannel is { } channel ? channel.CoinBalanceAsync(_presenceCts.Token) : Task.FromResult(0L);
 }

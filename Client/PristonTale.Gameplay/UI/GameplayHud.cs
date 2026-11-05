@@ -79,8 +79,10 @@ public sealed partial class GameplayHud : IDisposable
     private readonly HudQuestBook _questBook = new();
     private readonly HudQuestTracker _questTracker = new();
     private readonly HudCoinShop _coinShop = new();
+    private readonly Npc.HudItemBox _itemBox = new();
     private static readonly Color BagCoinColor = new(255, 214, 90);
     private bool _bagWasOpen;
+    private int _iconSources;
     private readonly Dictionary<string, string> _npcQuestMarks = new(StringComparer.Ordinal);
     private bool _marksHuntComplete;
     private readonly List<HudMapMarker> _minimapMarkers = new(64);
@@ -141,7 +143,7 @@ public sealed partial class GameplayHud : IDisposable
         _settings = new HudSettingsPanel(context.Presentation);
         _sprites = new HudSprites(context.GraphicsDevice, context.AssetRoot, context.Log);
         _sprites.Request(HudArt.Static);
-        _sprites.Request([HudMinimap.BossAliveIcon, HudMinimap.BossWaitingIcon, .. HudQuestBook.Art, .. HudQuestTracker.Art, .. HudPetWindow.Art, .. Inventory.HudItemFrame.Art, Widgets.HudGroundLabels.BeamArt, .. HudCoinShop.Art]);
+        _sprites.Request([HudMinimap.BossAliveIcon, HudMinimap.BossWaitingIcon, .. HudQuestBook.Art, .. HudQuestTracker.Art, .. HudPetWindow.Art, .. Inventory.HudItemFrame.Art, Widgets.HudGroundLabels.BeamArt, .. HudCoinShop.Art, .. Npc.HudItemBox.Art]);
         _sprites.Request(HudNpcArt.All);
         _sprites.Request(HudCraftArt.All);
         _sprites.Request(HudArt.BlockText);
@@ -149,7 +151,7 @@ public sealed partial class GameplayHud : IDisposable
         _painter = new HudPainter(context.SpriteBatch, context.Font, _sprites);
         _icons = new HudItemIcons(context.GraphicsDevice, context.AssetRoot, context.Log);
         _icons.Request([PetSkins.IconKey]);
-        _personalShop = new HudPersonalShopController(context.Log) { Notify = _notice.Show, AskCount = (first, second, maximum, accepted) => _countBox.Open(first, second, maximum, accepted) };
+        _personalShop = new HudPersonalShopController(context.Log) { Notify = _notice.Show, Command = line => _ = _chat.Send?.Invoke(line, false), AskCount = (first, second, maximum, accepted) => _countBox.Open(first, second, maximum, accepted) };
         _serviceWindows = [_shop, _warehouse, _aging, _mix, _personalShop.Window, _trade];
         _sprites.Request(HudPersonalShopArt.All);
         _skills = new HudSkillsPanel(context.Font, _sprites);
@@ -282,6 +284,7 @@ public sealed partial class GameplayHud : IDisposable
     public HudWingGate WingGate => _wingGate;
 
     public HudCoinShop CoinShop => _coinShop;
+    public Npc.HudItemBox ItemBox => _itemBox;
 
     // The account's coins, shown by the bag, the trade window and the coin shop; the screen sets its request.
     public HudCoinBalance Coins => _coinShop.Coins;
@@ -421,6 +424,19 @@ public sealed partial class GameplayHud : IDisposable
             return true;
         }
 
+        // Escape leaves the distributor's name box first, then closes it.
+        if (_itemBox.Naming)
+        {
+            _itemBox.CancelNaming();
+            return true;
+        }
+
+        if (_itemBox.Open)
+        {
+            _itemBox.Hide();
+            return true;
+        }
+
         // As in the original, Escape first closes an open chat window and nothing else.
         if (_chat.Window.Open && !_settingsOpen)
         {
@@ -499,6 +515,14 @@ public sealed partial class GameplayHud : IDisposable
         ApplyQuests();
         _coinShop.OwnClass = _class;
         _coinShop.Update(_icons, _sprites);
+        _itemBox.Update();
+        var iconSources = _itemBox.IconRevision + _coinShop.IconRevision * 7919 + _personalShop.Window.IconRevision * 104729
+            + (_itemBox.Open ? 1 : 0) + (_coinShop.Open ? 2 : 0) + (_personalShop.Window.IsOpen ? 4 : 0);
+        if (iconSources != _iconSources)
+        {
+            _iconSources = iconSources;
+            RequestIcons(_state);
+        }
         if (_inventorySlide.Open && !_bagWasOpen)
         {
             Coins.Refresh();
@@ -517,7 +541,7 @@ public sealed partial class GameplayHud : IDisposable
             CloseServices();
             // While the previous window's close is still in flight the dialog shows, and its button opens the service.
             var direct = _npc.DirectService;
-            _npcOpen = direct is null || !_services.Request(_npc.Current.EntityId, _npc.Current.Name, direct.Kind, NpcServiceAction.Open);
+            _npcOpen = direct is null || !OpenNpcService(_npc.Current.EntityId, _npc.Current.Name, direct.Kind);
             _quests.LeaveNpc();
             if (_npc.TakesPartInQuests)
             {
@@ -592,7 +616,7 @@ public sealed partial class GameplayHud : IDisposable
         var clickTaken = clicked && Captures(layout, pointer, design);
         var typedText = _context.TypedText.Drain();
         // A count box or the shop's sign box takes the keyboard: neither the chat nor a game key sees what is typed there.
-        var boxTyping = _countBox.IsOpen || _personalShop.SignOpen || _petWindow.Naming;
+        var boxTyping = _countBox.IsOpen || _personalShop.SignOpen || _petWindow.Naming || _itemBox.Naming;
         if (_countBox.IsOpen)
         {
             _typingKeyboard = keyboard;
@@ -602,6 +626,11 @@ public sealed partial class GameplayHud : IDisposable
         {
             _typingKeyboard = keyboard;
             _personalShop.Type(typedText, _typedKey ??= key => Pressed(_typingKeyboard, key), _canDraw ??= _painter.CanDraw, _measure ??= _painter.Measure);
+        }
+        else if (_itemBox.Naming)
+        {
+            _typingKeyboard = keyboard;
+            _itemBox.Type(typedText, elapsedSeconds, _typedKey ??= key => Pressed(_typingKeyboard, key));
         }
         else if (_petWindow.Naming)
         {
@@ -949,6 +978,8 @@ public sealed partial class GameplayHud : IDisposable
         _questBook.Draw(_painter, layout, pointer);
         _painter.Flush();
         _coinShop.Draw(_painter, layout, _icons, pointer);
+        _painter.Flush();
+        _itemBox.Draw(_painter, layout, _icons, _state, pointer);
         _painter.Flush();
         DrawMinimapName(layout, pointer);
         _actionBar.DrawOverlay(_painter, layout, _state, _icons, _skillHud, pointer);

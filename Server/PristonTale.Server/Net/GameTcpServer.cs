@@ -31,6 +31,7 @@ public sealed class GameTcpServer(
     ChatAppService chat,
     GameServerControl control,
     CoinShopAppService coinShop,
+    ItemBoxAppService itemBox,
     IConfiguration configuration,
     ILogger<GameTcpServer> logger) : BackgroundService
 {
@@ -63,7 +64,7 @@ public sealed class GameTcpServer(
         _loginThrottle = new LoginThrottle(_limits.LoginFailuresPerAccount, _limits.LoginFailuresPerIp, _limits.LoginFailureWindowMs);
         control.Attach(() => _clients.Count, _loginThrottle);
         var services = new SessionServices(auth, characters, sessionsApp, sessions, world, worldData, logger, _limits, _loginThrottle, npc, itemUse,
-            restart, wingGates, quests, personalShops, parties, trades, contacts, chat, control, coinShop);
+            restart, wingGates, quests, personalShops, parties, trades, contacts, chat, control, coinShop, itemBox);
         using var certificate = ServerCertificate.Load(configuration, logger);
         var certificateContext = SslStreamCertificateContext.Create(certificate, additionalCertificates: null);
         using var listener = new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp) { DualMode = true };

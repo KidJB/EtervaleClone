@@ -170,6 +170,8 @@ FluentMigrator scans `PristonTale.Persistence` for `[Migration(n)]` classes. Ver
 | 37 | `M037PetName` | `characters.pet_name` (text up to 64 characters, default empty: the name the player gave its pet, empty showing the skin's name) |
 | 38 | `M038Coins` | `accounts.coins` int64 (default 0: the account's coin shop coins) and the `coin_log` table (`account_id` FK, `change`, `balance` after, `reason`, `created_at`; index on `account_id`); see [coin-shop.md](coin-shop.md) |
 | 39 | `M039Mounts` | `characters.mounts` (int64, default 0: the account's mounts, a bit per `Mounts` id; every row of the account joined at login) and `mount_chosen` (int16, default 0: the mount the character picked) |
+| 40 | `M040ItemBox` | `item_box` (`id` int64 identity, `account_id` FK, `sender` 64, `item` (a saved bag item, JSON), `created_at`; index on `account_id`): the Item Distributor's waiting items |
+| 41 | `M041Stalls` | `stalls` (`id` int64 identity, `account_id` unique FK, `character_id` FK, `field_id`, `x`, `y`, `z`, `facing`, `look` (`StallLook` JSON), `items` (`StallItem` JSON array: saved item, price, cell), `created_at`): offline stalls, one per account |
 
 Upgrade path: databases from the earlier migration set at version 12 upgrade in place. Databases at
 versions 1-11 make `M013Baseline` throw; bring them to 12 with the previous release or back up and recreate them.
@@ -260,7 +262,7 @@ Rows only ever inserted, by the server's background writers, and deleted by age 
 
 | Table | Columns and constraints |
 | --- | --- |
-| `item_transfers` | `id` int64 identity PK; `occurred_at` UTC; `kind` int16 (`ItemTransferKind`: 0 trade, 1 personal shop, 2 warehouse deposit, 3 warehouse withdrawal, 4 ground throw, 5 ground pickup, 6 game-master gift); `transfer_id` (36: the rows of one transfer; a throw and the pickup of what it threw share the ground drop's id); `from_character_id`, `to_character_id` int64 nullable (null: the warehouse, the ground or a game master); `account_id` (the warehouse's account); `field_id`; `item_code` (16, the catalog key; null for gold); `instance_id` (36); `amount` int64 (items, or gold). Indexes on `occurred_at`, `from_character_id`, `to_character_id`, `instance_id` |
+| `item_transfers` | `id` int64 identity PK; `occurred_at` UTC; `kind` int16 (`ItemTransferKind`: 0 trade, 1 personal shop, 2 warehouse deposit, 3 warehouse withdrawal, 4 ground throw, 5 ground pickup, 6 game-master gift, 7 taken from the Item Distributor, 8 sent to another account's Item Distributor; a stall sale is a personal shop row from the stall's owner); `transfer_id` (36: the rows of one transfer; a throw and the pickup of what it threw share the ground drop's id); `from_character_id`, `to_character_id` int64 nullable (null: the warehouse, the ground or a game master); `account_id` (the warehouse's account); `field_id`; `item_code` (16, the catalog key; null for gold); `instance_id` (36); `amount` int64 (items, or gold). Indexes on `occurred_at`, `from_character_id`, `to_character_id`, `instance_id` |
 | `currency_sinks` | `id` int64 identity PK; `occurred_at` UTC (end of the period); `sink` int16 (`CurrencySink`); `gold` int64. Index on `occurred_at` |
 | `server_events` | `id` int64 identity PK; `occurred_at` UTC; `kind` int16 (`ServerEventKind`: 0 started, 1 stopped); `server_name` (64); `detail`. Index on `occurred_at` |
 

@@ -29,6 +29,9 @@ public sealed class ChatAppService
     public GameMasterCommands GameMasters { get; }
     public Func<long> NowMs { get; init; } = static () => Environment.TickCount64;
 
+    // Answers "/stall" and "/stall close" (offline stalls); none leaves them to the other commands.
+    public Services.StallAppService? Stalls { get; init; }
+
     // The client's flood rules, checked again on lines that reach other players. A party, trade or clan line counts
     // toward the rapid-line rule only, as the client counts its channel lines; commands and the yahoo word are free.
     private bool Floods(ChatMember member, string line, bool channel) =>
@@ -76,6 +79,21 @@ public sealed class ChatAppService
                 {
                     renamer.Link.Deliver(ChatLine.Reply($"A pet's name is up to {Simulation.Characters.PetNames.MaxLength} letters, digits and spaces."));
                 }
+            }
+            catch (WorldBusyException)
+            {
+                // A full tick queue drops the command, as it drops a spoken line.
+            }
+
+            return;
+        }
+
+        if (Stalls is not null && ChatCommandText.Match("/stall", text) > 0)
+        {
+            var close = text.Trim().EndsWith(" close", StringComparison.OrdinalIgnoreCase);
+            try
+            {
+                member.Link.Deliver(ChatLine.Reply(close ? await Stalls.CloseAsync(member.Session) : await Stalls.PlaceAsync(member.Session)));
             }
             catch (WorldBusyException)
             {

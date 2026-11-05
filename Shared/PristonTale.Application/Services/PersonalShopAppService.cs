@@ -12,7 +12,7 @@ namespace PristonTale.Application.Services;
 // players buying from each other never block), stores both characters in one transaction and commits both on the tick.
 // Opening and closing hold the seller's gate too, so a listing never changes between a purchase's prepare and commit.
 public sealed class PersonalShopAppService(ISessionRegistry sessions, ICharacterSaves saves, ICharacterRepository characters, WorldServer world,
-    ChatDirectory? chat = null)
+    ChatDirectory? chat = null, StallAppService? stalls = null)
 {
     private readonly DurableOperations _durable = new(saves);
 
@@ -42,6 +42,11 @@ public sealed class PersonalShopAppService(ISessionRegistry sessions, ICharacter
         }
 
         var buyer = lease.Session;
+        if (stalls is not null && PristonTale.Application.World.Stalls.Stall.IsStallId(purchase.SellerId))
+        {
+            return await stalls.BuyAsync(buyer, lease, purchase, ct);
+        }
+
         var seller = purchase.SellerId == buyer.EntityId ? null : await world.PersonalShopSellerAsync(buyer, purchase.SellerId);
         using var sellerLease = seller is null ? null : await _durable.AdmitAsync(seller, TimeSpan.Zero, ct);
         if (sellerLease?.Failure is not null)

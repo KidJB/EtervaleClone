@@ -6,6 +6,9 @@ public sealed class EntityIdAllocator
 {
     public const ulong MonsterIdBase = 1UL << 32;
 
+    // Offline stalls: the base plus the stored stall's id.
+    public const ulong StallIdBase = 1UL << 48;
+
     private long _issued;
 
     public ulong NextMonsterId() => MonsterIdBase + (ulong)Interlocked.Increment(ref _issued) - 1;

@@ -54,6 +54,8 @@ public static class HostingExtensions
             return store;
         });
         builder.Services.AddSingleton<CoinShopAppService>();
+        builder.Services.AddSingleton<ItemBoxAppService>();
+        builder.Services.AddSingleton<StallAppService>();
 
         var provider = builder.Configuration["Database:Provider"] ?? "Sqlite";
         if (string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
@@ -97,6 +99,7 @@ public static class HostingExtensions
             saves: services.GetRequiredService<ICharacterSaves>(),
             log: services.GetRequiredService<IGameLog>()));
         builder.Services.AddHostedService<WorldTickService>();
+        builder.Services.AddHostedService<PristonTale.Server.World.StallRestoreService>();
         AddChat(builder);
         builder.Services.AddSingleton(services =>
         {
@@ -179,6 +182,9 @@ public static class HostingExtensions
             };
         });
         builder.Services.AddSingleton(services => new ChatAppService(services.GetRequiredService<ChatDirectory>(),
-            services.GetRequiredService<WorldServer>(), services.GetRequiredService<GameMasterCommands>()));
+            services.GetRequiredService<WorldServer>(), services.GetRequiredService<GameMasterCommands>())
+        {
+            Stalls = services.GetRequiredService<StallAppService>()
+        });
     }
 }

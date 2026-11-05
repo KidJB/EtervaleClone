@@ -389,6 +389,15 @@ Renderer side of stage publication: [rendering.md](rendering.md).
 | `F1`-`F8`, `F10`, `4`-`0`, `-`, `=` | `HudSkillBindings` | The action bar's keys: select the skill or use the item on the shown page's key; while pressing a skill in the tree, bind it ([skills.md](skills.md)) |
 | `J` | `GameplayHud.UpdateKeys` | Open or close the stable (`HudPetWindow`: pets and mounts) |
 | `G` | `GameplayHud.UpdateKeys` | Get on or off the picked mount (sends `/mount`) |
+
+The Item Distributor (`HudItemBox`) opens instead of a server request when an NPC's `GiftExpress` service is chosen
+(`GameplayHud.OpenNpcService`), with the bag, on a dark frame with the art of `assets/Hud/Distributor/`: Retrieve Items
+shows the waiting items one at a time (sender and date, the item with its tooltip, arrows to page, Accept and Discard) or the
+empty box; Send Items takes a bag item clicked while it shows (`HudItemBox.InterceptBagClick`) and a character's name typed
+in its box (Enter or Send). Its requests are read back without waiting; Escape leaves the name box, then closes it. An
+offline stall (`/stall`, `/stall close`) is drawn as a player standing with its sign and opens the personal shop window as
+a seller does. While the player's own shop sells, a strip under its window ("Go offline: leave this shop as a stall",
+`HudPersonalShopWindow.OfflineButton`) sends `/stall`.
 | `L` | `GameplayHud.UpdateKeys` | Open or close the quest book (`HudQuestBook`) |
 | `B`, `Alt+1`..`Alt+3` | `GameplayHud.UpdateKeys` | Show or hide the action bar; show its page 1 to 3 (Alt keeps `1`-`3` from the potion belt) |
 | `Enter`, `Page Up`/`Page Down`, `Up`/`Down` | `HudChat.Update` | Open the chat input or send its line, scroll the chat, recall commands; while typing, HUD, binding, debug and motion keys and the `A` labels are suppressed |

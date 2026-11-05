@@ -499,6 +499,34 @@ it), so a listing never changes between a purchase's prepare and commit.
   and the gold, prunes the listing and answers what remains on sale. Both players read the sale as a trade chat line.
   A purchase that met another price, fewer units or a sold item answers what the shop offers now.
 
+### Offline stalls
+
+A seller leaves its open shop as a stall with `/stall` (`StallAppService.PlaceAsync`, through `ChatAppService.Stalls`): on
+the tick the listed items leave a copy of its bag for the stall's own stock (`StallRules.TakeStock`, a store grid at the
+listing's cells) and the stall takes the seller's place, facing and look (`WorldServer.PrepareStallAsync`); the seller's
+character and the stall (`stalls`: one per account) are stored in one transaction (`IStallRepository.CreateWithCharacterAsync`)
+before the commit closes the shop and stands the stall in the field (`FieldInstance.AddStall`). A stall is an entity of
+its own (`EntityIdAllocator.StallIdBase` plus its stored id) drawn as its owner with the shop's sign (`Stall.ToView`), and
+it is viewed and bought from as a personal shop is: `PersonalShopAppService.BuyAsync` hands a stall's id to
+`StallAppService.BuyAsync`, which holds the buyer's gate and, when the owner plays or is entering the world
+(`ISessionRegistry.TryGetCharacterSession`), the owner's gate without waiting. The tick checks reach, revision and
+`StallRules.TrySell` on a copy of the stock and the buyer; one transaction writes the buyer, the stall's stock (the row goes
+once sold out) and the owner's gold: its snapshot with the price when it plays, otherwise `money + price` on its row within
+its carry limit (`GoldLimit` otherwise). An account's own stall refuses its characters. `/stall close` works from anywhere:
+one transaction removes the stall and puts each unsold item in the account's Item Distributor (`IStallRepository.CloseAsync`),
+then the stall leaves its field. Stored stalls stand again when the server starts (`StallRestoreService`).
+
+## Item Distributor
+
+An account's mailbox of items (`item_box`, one row per item): unsold stall items, items another player sent, items the
+server gives. Every request needs the player within reach of an NPC offering `GiftExpress` (`WorldServer.AtNpcServiceAsync`).
+`ItemBoxAppService.ListAsync` answers the waiting items with their values for the player; `TakeAsync` prepares the item into
+the bag (`PrepareGiftAsync`), removes the row and writes the character in one transaction
+(`IItemBoxRepository.TakeWithCharacterAsync`), then commits (`ItemBoxTaken` in the transfer log); a full bag answers
+`NoRoom` and keeps the row. `DiscardAsync` drops a row. `SendAsync` takes a bag item the player may hand over out of a copy
+of its character (`PrepareItemBoxSendAsync`), writes the character and a row in the named character's account in one
+transaction, then commits (`ItemBoxSent`). Items are stored in the bag's saved form (`ItemBoxCodec`).
+
 ## Parties
 
 Parties live in memory only, as the original keeps them (`WorldServer.Parties.cs`): two to six players, the leader first

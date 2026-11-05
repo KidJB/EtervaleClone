@@ -38,6 +38,9 @@ public sealed class HudPersonalShopController(IClientLog log)
     public IPersonalShopClient Client { get; set; }
     public Action<string> Notify { get; set; } = static _ => { };
 
+    // Sends a chat command ("/stall" to leave the selling shop as an offline stall).
+    public Action<string> Command { get; set; } = static _ => { };
+
     // The count box: two lines, the largest number, what to do with the number accepted.
     public Action<string, string, long, Action<int>> AskCount { get; set; } = static (_, _, _, _) => { };
 
@@ -191,6 +194,9 @@ public sealed class HudPersonalShopController(IClientLog log)
                 break;
             case HudPersonalShopAction.Stop when Selling && Client is { } client:
                 Send(PersonalShopAction.Close, 0, client.ClosePersonalShopAsync);
+                break;
+            case HudPersonalShopAction.Offline when Selling:
+                Command("/stall");
                 break;
             case HudPersonalShopAction.Unlist when Window.Selected is { } offer:
                 _confirm = offer;

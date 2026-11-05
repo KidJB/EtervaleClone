@@ -77,6 +77,11 @@ public static class EtervaleOpcodes
     public const uint CoinShopBuyResult = 0x45541104;
     public const uint CoinBalance = 0x45541105;
     public const uint CoinBalanceResult = 0x45541106;
+    public const uint ItemBoxOpen = 0x45541200;
+    public const uint ItemBoxEntry = 0x45541201;
+    public const uint ItemBoxList = 0x45541202;
+    public const uint ItemBoxAction = 0x45541203;
+    public const uint ItemBoxResult = 0x45541204;
 
     public const uint PresenceEntries = 0x45540900;
     public const uint DescribeEntity = 0x45540901;

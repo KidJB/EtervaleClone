@@ -121,6 +121,18 @@ internal sealed class OnlinePlayChannel : IPlayChannel
         return await _connection.CoinBalanceAsync(ct);
     }
 
+    public async Task<ItemBoxListInfo> OpenItemBoxAsync(ulong npcId, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.OpenItemBoxAsync(npcId, ct);
+    }
+
+    public async Task<byte> ActItemBoxAsync(ulong npcId, byte action, long id, Guid itemId, string recipient, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.ActItemBoxAsync(npcId, action, id, itemId, recipient, ct);
+    }
+
     public async Task<WingGateOutcome> TravelWingGateAsync(int destination, CancellationToken ct = default)
     {
         await _start.WaitAsync(ct);

@@ -73,6 +73,11 @@ public sealed class HudCoinShop
 
     public bool Open { get; private set; }
 
+    // Rises whenever the catalog changes, so the HUD requests its articles' icons with everything else on screen.
+    public int IconRevision { get; private set; }
+
+    public IEnumerable<string> IconKeys => Open ? _catalog.Tabs.SelectMany(static tab => tab.Items).Select(static item => item.ItemKey) : [];
+
     // The account's coins, shared with the bag and the trade window.
     public HudCoinBalance Coins { get; set; } = new();
 
@@ -172,7 +177,7 @@ public sealed class HudCoinShop
                     var tab = _catalog.Tabs[index];
                     _tabArt[index] = (Folder + "categories/" + tab.Icon + ".png", Folder + "categories/" + tab.Icon + "_.png");
                     sprites.Request([_tabArt[index].Plain, _tabArt[index].Lit]);
-                    icons.Request(tab.Items.Select(static item => item.ItemKey));
+                    IconRevision++;
                 }
             }
             else

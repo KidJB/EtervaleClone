@@ -9,7 +9,10 @@ public enum ItemTransferKind : short
     WarehouseWithdrawal = 3,
     GroundThrow = 4,
     GroundPickup = 5,
-    GameMasterGift = 6
+    GameMasterGift = 6,
+    // An item taken from the account's Item Distributor into the bag, or sent from the bag to another account's.
+    ItemBoxTaken = 7,
+    ItemBoxSent = 8
 }
 
 // One item, part of a stack, or an amount of gold (ItemCode null) that moved. A null character is the other end the kind

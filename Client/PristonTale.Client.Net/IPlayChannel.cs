@@ -55,6 +55,12 @@ public interface IPlayChannel : IAsyncDisposable
     // The account's coins now.
     Task<long> CoinBalanceAsync(CancellationToken ct = default);
 
+    // The Item Distributor at that NPC: its waiting items, and an action (ItemBoxWire: take or discard a row, send a bag item
+    // to a character) answering the server's ItemBoxStatus.
+    Task<ItemBoxListInfo> OpenItemBoxAsync(ulong npcId, CancellationToken ct = default);
+
+    Task<byte> ActItemBoxAsync(ulong npcId, byte action, long id, Guid itemId, string recipient, CancellationToken ct = default);
+
     // A player on a warp stone travels to a stone of the wing warp map; the server checks the wing, level and fee.
     Task<WingGateOutcome> TravelWingGateAsync(int destination, CancellationToken ct = default);
 
