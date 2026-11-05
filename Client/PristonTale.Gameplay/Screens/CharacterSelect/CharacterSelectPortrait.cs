@@ -19,7 +19,14 @@ internal sealed class CharacterSelectPortrait : IDisposable
         _graphicsDevice = graphicsDevice;
     }
 
-    public Texture2D Render(PristonRenderer renderer, PlayerActorHandles actor, int width, int height)
+    public Texture2D Render(PristonRenderer renderer, PlayerActorHandles actor, int width, int height) =>
+        Render(renderer, actor, width, height, null, VisibleHeightRatio, FocusHeightRatio);
+
+    // framing: bounds measured once to frame by (a turning model's own bounds change width every frame and would make the
+    // camera breathe), or null to measure them now. visibleRatio: the share of the model's height the picture shows;
+    // focusRatio: the height, as a share, the camera centres on.
+    public Texture2D Render(PristonRenderer renderer, PlayerActorHandles actor, int width, int height, BoundingBox? framing, float visibleRatio,
+        float focusRatio)
     {
         Span<ActorHandle> handles = stackalloc ActorHandle[PlayerActorHandles.Most];
         var count = 0;
@@ -28,7 +35,12 @@ internal sealed class CharacterSelectPortrait : IDisposable
         AddHandle(actor.Weapon, handles, ref count);
         AddHandle(actor.OffHand, handles, ref count);
         var activeHandles = handles[..count];
-        if (count == 0 || !renderer.TryGetActorBounds(activeHandles, out var bounds))
+        BoundingBox bounds;
+        if (framing is { } fixedBounds)
+        {
+            bounds = fixedBounds;
+        }
+        else if (count == 0 || !renderer.TryGetActorBounds(activeHandles, out bounds))
         {
             return null;
         }
@@ -37,11 +49,11 @@ internal sealed class CharacterSelectPortrait : IDisposable
         var size = bounds.Max - bounds.Min;
         var center = new Vector3(
             (bounds.Min.X + bounds.Max.X) * 0.5f,
-            bounds.Min.Y + size.Y * FocusHeightRatio,
+            bounds.Min.Y + size.Y * focusRatio,
             (bounds.Min.Z + bounds.Max.Z) * 0.5f);
         var aspect = width / (float)height;
         var halfVerticalTangent = MathF.Tan(VerticalFieldOfView * 0.5f);
-        var visibleHalfHeight = size.Y * VisibleHeightRatio * 0.5f;
+        var visibleHalfHeight = size.Y * visibleRatio * 0.5f;
         var verticalDistance = visibleHalfHeight / halfVerticalTangent;
         var horizontalDistance = size.X * 0.58f / (halfVerticalTangent * aspect);
         var distance = MathF.Max(verticalDistance, horizontalDistance) + MathF.Max(size.Z * 0.25f, 1f);

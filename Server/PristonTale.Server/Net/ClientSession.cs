@@ -46,7 +46,8 @@ internal sealed record SessionServices(
     TradeAppService Trades,
     ContactAppService Contacts,
     ChatAppService Chat,
-    GameServerControl Control)
+    GameServerControl Control,
+    CoinShopAppService CoinShop)
 {
     // Shared by every connection so a flood from many peers still yields one warning per interval.
     public LogSampler RejectedPackets { get; } = new(5000);
@@ -252,6 +253,12 @@ internal sealed partial class ClientSession : IMovementVerdictSink
                     break;
                 case EtervaleOpcodes.RestartRequest:
                     await RestartAsync(RestartRequestPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.CoinShopOpen:
+                    await OpenCoinShopAsync(CoinShopOpenPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.CoinShopBuy:
+                    await BuyCoinShopAsync(CoinShopBuyPacket.Read(memory.Span));
                     break;
                 case EtervaleOpcodes.WingGateRequest:
                     await TravelWingGateAsync(WingGateRequestPacket.Read(memory.Span));

@@ -30,6 +30,7 @@ internal static class QuestTests
         yield return ("the wing exchange takes the held wing, crystals and gold for the next wing", WingAsync);
         yield return ("quest drops come only from allowed sources and while a running quest wants them", DropsAsync);
         yield return ("class tier changes only through rank-up quests and masters of a lower group stop at the first", TierAuthorityAsync);
+        yield return ("the quest book lists every quest once per side and marks it from level, tier and logs", QuestBookAsync);
     }
 
     private static Task LevelQuestsAsync()
@@ -621,5 +622,40 @@ internal static class QuestTests
         public int NextExclusive(int minInclusive, int maxExclusive) => Math.Clamp(value, minInclusive, maxExclusive - 1);
 
         public float NextUnit() => 0f;
+    }
+
+    private static Task QuestBookAsync()
+    {
+        foreach (var tempskron in new[] { true, false })
+        {
+            var entries = QuestBook.For(tempskron);
+            foreach (var code in Enum.GetValues<QuestCode>().Where(code => code != QuestCode.None))
+            {
+                var expected = code == (tempskron ? QuestCode.Level55Morion : QuestCode.Level55) ? 0 : 1;
+                Assert.True(entries.Count(entry => entry.Codes.Contains(code)) == expected, $"the quest book lists {code} wrongly");
+            }
+        }
+
+        var level30 = QuestBook.All.Single(entry => entry.Codes.Contains(QuestCode.Level30));
+        var level80 = QuestBook.All.Single(entry => entry.Codes.Contains(QuestCode.Level80));
+        Assert.True(level30.Level == 30 && level30.Task == "Hunt 20 Bargon." && level30.Rewards.SequenceEqual(["+5 stat points"]), "the level 30 entry differs");
+        Assert.True(level80.Rewards.SequenceEqual(["+5 stat points", "+2 skill points"]), "the level 80 rewards differ");
+        Assert.True(QuestBook.All.All(entry => entry.Giver.Length > 0 && entry.GiverNpcs.Count > 0) && QuestBook.Of(QuestCode.RankUpOil)?.Title == "1st Rank-Up"
+            && QuestBook.Of(QuestCode.None) is null, "a quest has no giver or a running code finds the wrong entry");
+
+        var none = new QuestBookFacts(35, 1, true, QuestCode.None, LevelQuestLog.Level30, ElementaryQuestLog.A);
+        var beginnerB = QuestBook.All.Single(entry => entry.Codes.Contains(QuestCode.ElementaryB));
+        var beginnerC = QuestBook.All.Single(entry => entry.Codes.Contains(QuestCode.ElementaryC));
+        var firstRankUp = QuestBook.All.Single(entry => entry.Codes.Contains(QuestCode.RankUpTrophies));
+        var secondRankUp = QuestBook.All.Single(entry => entry.Codes.Contains(QuestCode.RankUpQuestWeapon));
+        var level55 = QuestBook.All.Single(entry => entry.Codes.Contains(QuestCode.Level55));
+        Assert.True(QuestBook.StatusOf(level30, none) == QuestBookStatus.Done && QuestBook.StatusOf(beginnerB, none) == QuestBookStatus.Available
+            && QuestBook.StatusOf(beginnerC, none) == QuestBookStatus.Locked && QuestBook.StatusOf(firstRankUp, none) == QuestBookStatus.Done
+            && QuestBook.StatusOf(secondRankUp, none) == QuestBookStatus.Locked && QuestBook.StatusOf(level55, none) == QuestBookStatus.Locked,
+            "the quest book statuses differ");
+        var running = none with { Level = 40, Active = QuestCode.RankUpQuestWeapon };
+        Assert.True(QuestBook.StatusOf(secondRankUp, running) == QuestBookStatus.Running
+            && QuestBook.StatusOf(beginnerB, running) == QuestBookStatus.Locked, "a running or outgrown quest is marked wrongly");
+        return Task.CompletedTask;
     }
 }

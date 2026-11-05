@@ -1,0 +1,43 @@
+using PristonTale.Persistence.Abstractions.WorldData;
+using PristonTale.Simulation.Items;
+using PristonTale.Simulation.World.Monsters;
+using PristonTale.Simulation.World.Npcs;
+
+namespace PristonTale.Application.World;
+
+public sealed class WorldDataAppService
+{
+    private readonly IWorldDataRepository _repository;
+
+    public WorldDataAppService(IWorldDataRepository repository) => _repository = repository;
+
+    public async Task<WorldData> BuildAsync(CancellationToken ct = default)
+    {
+        var itemRecords = await _repository.GetAllItemTemplatesAsync(ct);
+        var itemSets = await _repository.GetAllItemSetsAsync(ct);
+        var monsterRecords = await _repository.GetAllMonstersAsync(ct);
+        var npcRecords = await _repository.GetAllNpcsAsync(ct);
+        var fieldRecords = await _repository.GetAllFieldSpawnsAsync(ct);
+        var motionModels = await _repository.GetAllMotionModelsAsync(ct);
+        var motionSlots = await _repository.GetAllMotionSlotsAsync(ct);
+
+        var itemDefs = WorldDataFactory.ToItemDefinitions(itemRecords);
+        // The pet skins' items are Etervale's own; an imported item of the same code keeps its place.
+        var imported = itemDefs.Select(static item => item.Code).ToHashSet();
+        itemDefs = [.. itemDefs, .. Simulation.Characters.PetSkins.ItemDefinitions().Where(item => !imported.Contains(item.Code))];
+        var itemCodes = itemDefs.ToDictionary(item => item.CatalogKey, item => item.Code, StringComparer.OrdinalIgnoreCase);
+        var monsterDefs = WorldDataFactory.ToMonsterDefinitions(monsterRecords, itemCodes);
+        var npcDefs = WorldDataFactory.ToNpcDefinitions(npcRecords);
+        var fieldSpawns = WorldDataFactory.ToFieldSpawnData(fieldRecords);
+
+        var motions = WorldDataFactory.ToMotionTimings(motionModels, motionSlots);
+
+        return new WorldData(
+            new ItemCatalog(itemDefs, WorldDataFactory.ToQuestVariantDefinitions(itemRecords), WorldDataFactory.ToNamedUniqueDefinitions(itemRecords),
+                WorldDataFactory.ToItemSets(itemSets)),
+            new MonsterCatalog(monsterDefs),
+            new NpcCatalog(npcDefs),
+            fieldSpawns,
+            motions);
+    }
+}

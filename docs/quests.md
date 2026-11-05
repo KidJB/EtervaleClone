@@ -37,6 +37,7 @@ quest data the importer reads, and the client's quest dialog, quest window, clas
 | `Shared/PristonTale.Simulation/Quests/QuestArena.cs`, `World/Fields/QuestArenaField.cs` | Arena field 32, entry and duel spots, opponent scaling, potions, helpers, blink |
 | `Shared/PristonTale.Simulation/Quests/QuestItems.cs`, `QuestMonsters.cs`, `QuestClasses.cs`, `QuestInventory.cs` | Item and monster codes, class facts (tribe, home town; the quest weapon, hunt and ring come from the class's `ClassProfile`), pack helpers and `QuestGrant` |
 | `Shared/PristonTale.Simulation/Quests/QuestSteps.cs`, `QuestTexts.cs`, `QuestBoard.cs`, `QuestView.cs` | Dialog helpers and the one-quest rule, English texts, quest window lines, the journal view sent to the owner |
+| `Shared/PristonTale.Simulation/Quests/QuestBook.cs` | The quest book: every quest with its level, side, task and rewards, and its status for a character (`QuestBookFacts`) |
 | [QuestTransactions.cs](../Shared/PristonTale.Application/World/QuestTransactions.cs) | Prepare a request or an upkeep on the tick against a candidate copy; follow-up validation; travel destination |
 | `Shared/PristonTale.Application/World/WorldServer.Quests.cs`, `PreparedQuestOperation.cs` | Prepare and commit on the tick, upkeep requests channel, travel, opening the duel |
 | `Shared/PristonTale.Application/World/FieldInstance.Quests.cs`, `PlayerQuestState.cs` | Kill credit and quest drops, deaths, timers, the periodic upkeep check, duels; per-player quest state and the snapshot `QuestUpdate` |
@@ -47,7 +48,7 @@ quest data the importer reads, and the client's quest dialog, quest window, clas
 | `Persistence/PristonTale.Persistence.Abstractions/Characters/QuestStateCodec.cs` | The `characters.quests` JSON (`SavedQuests` version 1) |
 | `Persistence/PristonTale.Persistence/Migrations/M016QuestData.cs` | Monster columns `quest_code`, `event_item`, `potion_count`, `potion_percent` |
 | `Client/PristonTale.Client.Net/Online/QuestWireReader.cs` | Quest messages into the shared quest types |
-| `Client/PristonTale.Gameplay/UI/Quests/` | `HudQuestController` (requests, dialog, boxes, notices), `HudQuestDialog`, `HudQuestWindow`, `HudQuestDocuments`, `HudQuestArt` |
+| `Client/PristonTale.Gameplay/UI/Quests/` | `HudQuestController` (requests, dialog, boxes, notices), `HudQuestDialog`, `HudQuestWindow`, `HudQuestBook`, `HudQuestDocuments`, `HudQuestArt` |
 
 ## Journal and rules
 
@@ -189,6 +190,23 @@ quest variant, which the importer stores as the code's quest definition (`item_d
   frame (right and bottom anchored, so it keeps its place over the bottom bar on a larger screen): five titles per page,
   page arrows, running/finished tabs, close; a title opens its description (`image/party/party_DATA/<file>`) on the
   panel to the left.
+- The quest book (`L`, or the `Q` button under the minimap's pet button) lists every quest of the player's side
+  (`QuestBook.For`): the beginner quests, the level milestones, the bonus chains, Fury of Phantom, the four rank-ups and
+  the wing exchanges, drawn on the open book of `assets/Hud/QuestBook/` (`background.png` with its close, scroll and
+  status icons; a plain dark box when the art is missing). "In Progress" lists the accepted (running) quest,
+  "Quest List" all of them. Each row's icon shows Done (the check mark), Running, Available or Locked (`QuestBook.StatusOf`, from the level, the class
+  tier and the journal's running code and `LevelLog`/`ElementaryLog`); a click shows the quest on the right page: title, level and
+  who gives it (`QuestBookEntry.Giver`),
+  the task beside the green mark, the status beside the blue one and the rewards beside the check. Milestone levels, hunts and points come from `LevelQuests.Milestones`, rank-up levels from
+  `RankUpRules.RequiredLevel`, chain points from `QuestRewards`, wing gold from `WingQuest.ExchangeGold`. The wheel
+  scrolls the list; the `x`, the button, `L` or Escape close it.
+- The quest tracker (`HudQuestTracker`) is a dark box headed "Active Quests" on the right of the screen while a quest
+  runs: the running quest's book title (`QuestBook.Of`), its task and its hunt count (or the quest weapon's hunt line).
+  Its heading strip drags it and its arrow folds it to the strip; both are saved with the action bar's file
+  (`HudActionBarDocument.TrackerX`, `TrackerY`, `TrackerCollapsed`). It hides while the quest book is open.
+- Quest givers carry a mark over their name box (`assets/Hud/QuestMarks/`, matched by the NPC's name against
+  `QuestBookEntry.GiverNpcs`, `HudQuestBook.FillMarks`): a yellow "!" where a quest can be taken, a blue "!" on the
+  repeatable wing exchange, a grey "?" on the running quest's givers and a yellow "?" once its hunt is complete.
 - A running hunt shows the quest timer icon (`QuestTimer.tga`) after the effect icons, with a gauge for a timed hunt;
   its tooltip shows the quest, the kills and the time left. Chat notices go to the chat's assistant tab, events and
   messages to the notice strip, the fanfare plays `drink2.wav`. A rank-up's redistribution offer is a yes/no box; Enter

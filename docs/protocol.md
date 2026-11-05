@@ -212,6 +212,11 @@ Every message code has the high word `0x4554` ("ET"); every message keeps the `{
 | `0x45540805` .. `0x45540807` | `TradeAsked`, `TradeState`, `TradeDetails` | S→C | A player asks the receiver to trade; the trade window when it changed, after its partner items' values. |
 | `0x45541000` / `0x45541001` | `ContactChange` / `ContactRefresh` | C→S | Put a name on the friends or ignored list or take it off; send the lists again. |
 | `0x45541002` | `ContactList` | S→C | One list (friends, then ignored) answering each change or refresh. |
+| `0x45541100` | `CoinShopOpen` | C→S | `Guid OperationId`: open the coin shop ([coin-shop.md](coin-shop.md)). |
+| `0x45541101` | `CoinShopTab` | S→C | `Guid OperationId, int32 Id, text Name, text Icon, uint16 Count`, articles `{int32 Id, text Name, text Description, text ItemKey, int32 Price, Discount, Bulk, MaxBulk, uint8 Flags (1 spec, 2 quantity)}` (at most 32). |
+| `0x45541102` | `CoinShopCatalog` | S→C | `Guid OperationId, int64 Balance, uint16 TabCount, text Name, text Message`: ends an open, after its tabs. |
+| `0x45541103` | `CoinShopBuy` | C→S | `Guid OperationId, int32 TabId, ItemId, Quantity, SpecClass`. |
+| `0x45541104` | `CoinShopBuyResult` | S→C | `Guid OperationId, uint8 Status (CoinShopStatus), uint8 0, uint16 0, int64 Balance`. |
 | `0x45540A00` / `0x45540A01` | `RestartRequest` / `RestartResult` | C→S / S→C | A dead player's restart (field, town, exit), correlated by operation id; a stored restart also sends a forced `FieldWarp`. |
 | `0x45540A02` | `RestartOffer` | S→C | While the owner is dead, what a restart would cost, whenever it changes. |
 | `0x45540B00` / `0x45540B01` | `GroundItems` / `GroundItemsRemoved` | S→C | Drops entering and leaving the receiver's view: within the ground-item range (squared `0xC8000` units, about 905 units), private drops only to their owner. |
@@ -230,7 +235,7 @@ These bodies have no version header, except the combat event list's (see [Event 
 | `Skills` | `int64 Revision, int32 Count`, then `{uint Code, int32 Rank}` | 20 + 8n |
 | `CombatEvents` | `uint16 Version (1), uint16 Count`, then compact entries (see [Event lists](#event-lists)) | 12 + 4 to 65 per entry |
 | `RemoveObjects` | `int32 Count`, then `uint64 EntityId` | 12 + 8n |
-| `GroundItems` | `uint16 Version (1), uint16 Flags, int32 Count`, then `{Guid Id, uint32 ItemCode, uint8 Flags (1 gold), uint8 0, uint16 0, int32 Amount, X, Y, Z, text Name (64 B)}` (1 to 64) | 16 + up to 106n |
+| `GroundItems` | `uint16 Version (1), uint16 Flags, int32 Count`, then `{Guid Id, uint32 ItemCode, uint8 Flags (1 gold), uint8 Rarity (0 none .. 5 legendary), uint16 0, int32 Amount, X, Y, Z, text Name (64 B)}` (1 to 64) | 16 + up to 106n |
 | `GroundItemsRemoved` | `uint16 Version (1), uint16 Flags, int32 Count`, then `Guid Id` | 16 + 16n |
 | `ItemDetails` | `uint16 Version (1), uint16 Flags, int64 Revision, int32 Part, Parts, Count`, then 236-byte entries (at most 24) | 32 + 236n |
 | `OwnerItemStatus` | `uint16 Version (1), uint16 Flags, int32 CarriedWeight, MaxWeight, CriticalChance, BlockChance, ShootingRange, AttackSpeed, PotionSpace, float LifeRegen, ManaRegen, StaminaRegen, MagicMastery, int16 Resistances[8]` | 72 |
@@ -240,7 +245,7 @@ An item details entry is `{Guid InstanceId, int32 DurabilityCurrent, DurabilityM
 AttackRating, Defence, AddLife, AddMana, AddStamina, RequiredLevel, RequiredStrength, RequiredSpirit, RequiredTalent,
 RequiredAgility, RequiredHealth, Price, Critical, AttackSpeed, ShootingRange, PotionSpace, Weight, UniqueItem, Flags
 (1 two-handed, 2 the owner's class may use it), AgingCount, AgingGoal (0 of 0 when the copy is not maturing),
-MixSheltom (the mix's highest sheltom, 0 never mixed), MixStats (`MixStat` bits of the stats the mix raised), uint SpecJob, int32 SpecDefence, SpecAttackSpeed, SpecCritical,
+MixSheltom (the mix's highest sheltom, 0 never mixed), MixStats (`MixStat` bits of the stats the mix raised), Rarity (0 none .. 5 legendary), uint SpecJob, int32 SpecDefence, SpecAttackSpeed, SpecCritical,
 SpecShootingRange, SpecLevelLife, SpecLevelMana, SpecLevelAttackRating, SpecLevelDamage, float Absorb, Block,
 MoveSpeed, LifeRegen, ManaRegen, StaminaRegen, MagicMastery, SpecAbsorb, SpecMoveSpeed, SpecBlock, SpecMagicMastery,
 SpecLifeRegen, SpecManaRegen, SpecStaminaRegen, int16 Resistances[8]}` (`ItemDetailEntry`). The client attaches the
@@ -530,7 +535,7 @@ choices); a notice list is `{int32 Count, (uint8 Kind, uint8 0, text)...}` (at m
 - `QuestResult`: `{Guid OperationId, uint8 Status, uint8 Flags (1 ok, 2 class change offered, 4 redistribution
   offered, 8 dialog follows), uint16 0, int64 Revision, text Message, [dialog], notices}`.
 - `QuestJournal`: `{int64 Revision, uint16 Code, uint8 Timer, uint8 RedistributionOffered, int32 State, text
-  TargetName, int32 Kills, KillsNeeded, int64 TimerMs, int32 WeaponStage, WeaponKillsLeft, int32 ProgressCount,
+  TargetName, int32 Kills, KillsNeeded, int64 TimerMs, int32 WeaponStage, WeaponKillsLeft, uint32 LevelLog, ElementaryLog, int32 ProgressCount,
   (text Title, text Description)..., int32 FinishedCount, lines}` (at most 16 running and 32 finished lines; a
   description names a file under the client's quest board folder).
 - `QuestNotices`: `{uint8 Flags (1 dialog follows), uint8 0, uint16 0, notices, [dialog]}`; more than 32 notices

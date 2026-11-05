@@ -1,3 +1,4 @@
+using PristonTale.Simulation.Shops;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using PristonTale.Client.Net.Presence;
@@ -100,6 +101,18 @@ internal sealed class OnlinePlayChannel : IPlayChannel
     {
         await _start.WaitAsync(ct);
         return await _connection.PersonalShops.BuyAsync(purchase, ct);
+    }
+
+    public async Task<CoinShopView> OpenCoinShopAsync(CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.OpenCoinShopAsync(ct);
+    }
+
+    public async Task<(CoinShopStatus Status, long Balance)> BuyCoinShopAsync(int tabId, int itemId, int quantity, int specClass, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.BuyCoinShopAsync(tabId, itemId, quantity, specClass, ct);
     }
 
     public async Task<WingGateOutcome> TravelWingGateAsync(int destination, CancellationToken ct = default)

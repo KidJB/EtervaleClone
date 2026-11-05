@@ -25,7 +25,7 @@ internal static class QuestWireMapping
 
     public static QuestJournalPacket ToJournal(QuestView view) =>
         new(view.Revision, (ushort)view.Code, (byte)view.Timer, view.SkillResetOffered, view.State, view.TargetName, view.Kills, view.KillsNeeded,
-            view.TimerMs, view.WeaponStage, view.WeaponKillsLeft, Lines(view.Progress, QuestWire.MaxProgress), Lines(view.Finished, QuestWire.MaxFinished));
+            view.TimerMs, view.WeaponStage, view.WeaponKillsLeft, (uint)view.LevelLog, (uint)view.ElementaryLog, Lines(view.Progress, QuestWire.MaxProgress), Lines(view.Finished, QuestWire.MaxFinished));
 
     private static QuestBoardLine[] Lines(IReadOnlyList<QuestBoardEntry> entries, int max) =>
         entries.Take(max).Select(static entry => new QuestBoardLine(entry.Title, entry.Description)).ToArray();

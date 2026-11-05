@@ -99,7 +99,8 @@ internal sealed class OwnerItemDecoder
             AgingCount = e.AgingCount,
             AgingGoal = e.AgingGoal,
             MixSheltom = e.MixSheltom,
-            MixStats = (Simulation.Items.Mixing.MixStat)e.MixStats
+            MixStats = (Simulation.Items.Mixing.MixStat)e.MixStats,
+            Rarity = e.Rarity is >= 0 and <= (int)ItemRarities.Highest ? (ItemRarity)e.Rarity : ItemRarity.None
         };
     }
 }

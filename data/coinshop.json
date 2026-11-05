@@ -1,0 +1,48 @@
+{
+  // The coin shop's articles. Edit and reload in game with /@coinshop_reload.
+  // Price is in coins; Discount (above 0) replaces it. Bulk: percent off per 5 bought, up to MaxBulk percent.
+  // Spec: the buyer chooses the class specialization. Quantity: the buyer chooses how many (one stack).
+  // Icon names an image in assets/Hud/CoinShop/categories (without .png).
+  "Name": "Item Shop",
+  "Message": "Thank you for supporting the server!",
+  "Tabs": [
+    {
+      "Id": 1,
+      "Name": "Potions",
+      "Icon": "misc",
+      "Items": [
+        { "Id": 1, "Name": "Large Life Potion", "Description": "Restores a large amount of life.", "ItemKey": "PL103", "Price": 2, "Bulk": 5, "MaxBulk": 25, "Quantity": true },
+        { "Id": 2, "Name": "Large Mana Potion", "Description": "Restores a large amount of mana.", "ItemKey": "PM103", "Price": 2, "Bulk": 5, "MaxBulk": 25, "Quantity": true },
+        { "Id": 3, "Name": "Large Stamina Potion", "Description": "Restores a large amount of stamina.", "ItemKey": "PS103", "Price": 2, "Bulk": 5, "MaxBulk": 25, "Quantity": true }
+      ]
+    },
+    {
+      "Id": 2,
+      "Name": "Force Orbs",
+      "Icon": "orbs",
+      "Items": [
+        { "Id": 1, "Name": "Force Orb", "Description": "A force orb that powers up your attacks.", "ItemKey": "FO104", "Price": 15 },
+        { "Id": 2, "Name": "Greater Force Orb", "Description": "A stronger force orb.", "ItemKey": "FO106", "Price": 30, "Discount": 25 }
+      ]
+    },
+    {
+      "Id": 3,
+      "Name": "Accessories",
+      "Icon": "amulets",
+      "Items": [
+        { "Id": 1, "Name": "Class Amulet", "Description": "A perfect amulet for the class you choose.", "ItemKey": "OA106", "Price": 50, "Spec": true },
+        { "Id": 2, "Name": "Class Ring", "Description": "A perfect ring for the class you choose.", "ItemKey": "OR106", "Price": 40, "Spec": true }
+      ]
+    },
+    {
+      "Id": 4,
+      "Name": "Pet Skins",
+      "Icon": "petskins",
+      "Items": [
+        { "Id": 1, "Name": "Pet Skin I", "Description": "Unlocks a monster pet skin for your account.", "ItemKey": "PE101", "Price": 100 },
+        { "Id": 2, "Name": "Pet Skin II", "Description": "Unlocks a monster pet skin for your account.", "ItemKey": "PE102", "Price": 100 },
+        { "Id": 3, "Name": "Pet Skin III", "Description": "Unlocks a monster pet skin for your account.", "ItemKey": "PE103", "Price": 100 }
+      ]
+    }
+  ]
+}

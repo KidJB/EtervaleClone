@@ -1,3 +1,4 @@
+using PristonTale.Simulation.Shops;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Net.Sockets;
@@ -47,6 +48,10 @@ public sealed class GameServerConnection : IGameBackend
     private readonly PendingReplies<Guid, ItemUseResultPacket> _itemUses = new();
     private readonly PendingReplies<Guid, RestartResultPacket> _restarts = new();
     private readonly PendingReplies<Guid, WingGateResultPacket> _wingGates = new();
+    private readonly PendingReplies<Guid, CoinShopView> _coinShops = new();
+    private readonly PendingReplies<Guid, CoinShopBuyResultPacket> _coinPurchases = new();
+    // The tabs of a coin shop open, collected until its catalog message, which follows them on the same connection.
+    private readonly ConcurrentDictionary<Guid, List<CoinShopTab>> _coinShopTabs = new();
     private readonly PendingReplies<ulong, NpcInteraction> _npcDialogs = new();
     private readonly PendingReplies<Guid, NpcServiceReply> _services = new();
     private readonly PendingReplies<Guid, QuestOutcome> _quests = new();
@@ -295,6 +300,29 @@ public sealed class GameServerConnection : IGameBackend
         return new WingGateOutcome((WingGateStatus)result.Status, result.Destination, result.Fee);
     }
 
+    internal async Task<CoinShopView> OpenCoinShopAsync(CancellationToken ct)
+    {
+        ThrowIfDisconnected();
+        var packet = new CoinShopOpenPacket(Guid.NewGuid());
+        _coinShopTabs[packet.OperationId] = [];
+        try
+        {
+            return await _coinShops.RequestAsync(packet.OperationId, () => Send(packet), ct);
+        }
+        finally
+        {
+            _coinShopTabs.TryRemove(packet.OperationId, out _);
+        }
+    }
+
+    internal async Task<(CoinShopStatus Status, long Balance)> BuyCoinShopAsync(int tabId, int itemId, int quantity, int specClass, CancellationToken ct)
+    {
+        ThrowIfDisconnected();
+        var packet = new CoinShopBuyPacket(Guid.NewGuid(), tabId, itemId, quantity, specClass);
+        var result = await _coinPurchases.RequestAsync(packet.OperationId, () => Send(packet), ct);
+        return ((CoinShopStatus)result.Status, result.Balance);
+    }
+
     internal async Task<ProgressionOutcome> ApplyProgressionAsync(ProgressionCommand command, CancellationToken ct)
     {
         var packet = new ProgressionCommandPacket(command.OperationId, command.ExpectedRevision, (int)command.Action, (int)command.Attribute,
@@ -538,6 +566,43 @@ public sealed class GameServerConnection : IGameBackend
                 var restart = RestartResultPacket.Read(packet);
                 _restarts.Complete(restart.OperationId, restart);
 
+                break;
+            }
+            case EtervaleOpcodes.CoinShopTab:
+            {
+                var tab = CoinShopTabPacket.Read(packet);
+                if (_coinShopTabs.TryGetValue(tab.OperationId, out var tabs))
+                {
+                    var items = new CoinShopItem[tab.Articles.Count];
+                    for (var index = 0; index < items.Length; index++)
+                    {
+                        var article = tab.Articles[index];
+                        items[index] = new CoinShopItem(article.Id, article.Name, article.Description, article.ItemKey, article.Price)
+                        {
+                            Discount = article.Discount,
+                            Bulk = article.Bulk,
+                            MaxBulk = article.MaxBulk,
+                            Spec = (article.Flags & CoinShopWire.FlagSpec) != 0,
+                            Quantity = (article.Flags & CoinShopWire.FlagQuantity) != 0
+                        };
+                    }
+
+                    tabs.Add(new CoinShopTab(tab.Id, tab.Name, tab.Icon, items));
+                }
+
+                break;
+            }
+            case EtervaleOpcodes.CoinShopCatalog:
+            {
+                var end = CoinShopCatalogPacket.Read(packet);
+                var tabs = _coinShopTabs.TryGetValue(end.OperationId, out var collected) ? collected.ToArray() : [];
+                _coinShops.Complete(end.OperationId, new CoinShopView(new CoinShopCatalog(end.Name, end.Message, tabs), end.Balance));
+                break;
+            }
+            case EtervaleOpcodes.CoinShopBuyResult:
+            {
+                var bought = CoinShopBuyResultPacket.Read(packet);
+                _coinPurchases.Complete(bought.OperationId, bought);
                 break;
             }
             case EtervaleOpcodes.WingGateResult:

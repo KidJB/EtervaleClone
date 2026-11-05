@@ -353,7 +353,7 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         if (_monsters.TryGetValue(reward.MonsterEntityId, out var killed))
         {
             var dropPosition = Terrain.SettleNear(killed.Position, FieldTerrain.DropTolerance);
-            GroundLoot.Place(reward, dropPosition, killed.Def.Drops.AllPlayersSeeDrops, nowMs, _rng);
+            GroundLoot.Place(reward, dropPosition, killed.Def.Drops.AllPlayersSeeDrops, nowMs, _rng, killed.Def.IsBoss);
         }
     }
 

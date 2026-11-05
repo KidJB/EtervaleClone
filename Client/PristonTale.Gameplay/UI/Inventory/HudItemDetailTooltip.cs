@@ -69,6 +69,12 @@ public static class HudItemDetailTooltip
             lines.Add(("", ValueColor));
         }
 
+        // The rarity grade under the name (and under the aging bar's and hunt's lines), in the grade's colour.
+        if (details.Rarity != ItemRarity.None)
+        {
+            lines.Add((ItemRarities.NameOf(details.Rarity), HudRarityColors.Of(details.Rarity)));
+        }
+
         var raised = aged && details.UpgradeLevel > 0 ? AgingRules.RaisedBy(item.CatalogKey) : AgedStats.None;
         Add(lines, roll.DamageMin != 0 || roll.DamageMax != 0, "Attack Power:  ", $"{roll.DamageMin}-{roll.DamageMax}",
             Raised(raised, AgedStats.Damage) ?? Mixed(mixed, MixStat.DamageMin | MixStat.DamageMax));
@@ -145,8 +151,10 @@ public static class HudItemDetailTooltip
         return new AgingGauge(details.UpgradeLevel, count, goal);
     }
 
+    // rarity: the grade whose frame the box takes (HudItemFrame); the classic info box without the art. preview: the
+    // player shown wearing the item (an armour's preview), drawn on a dark panel under the lines.
     public static void Draw(HudPainter painter, HudLayout layout, Point pointer, IReadOnlyList<(string Text, Color Color)> lines,
-        AgingGauge? gauge = null)
+        AgingGauge? gauge = null, ItemRarity rarity = ItemRarity.None, Microsoft.Xna.Framework.Graphics.Texture2D preview = null)
     {
         var textWidth = gauge is null ? 0 : GaugeWidth;
         foreach (var line in lines)
@@ -154,24 +162,53 @@ public static class HudItemDetailTooltip
             textWidth = Math.Max(textWidth, painter.Measure(line.Text));
         }
 
-        var width = Math.Min(layout.Width - 8, textWidth + 28);
-        var bounds = painter.TooltipBox(layout, pointer, width, HudPainter.TooltipLinesY + (lines.Count - 1) * LineHeight + 8);
+        var previewHeight = preview is null ? 0 : preview.Height + PreviewGap;
+        if (preview is not null)
+        {
+            textWidth = Math.Max(textWidth, preview.Width);
+        }
+
+        // The grade frame needs room for its edges on every side and a gap under the name for its divider.
+        var framed = HudItemFrame.HasArt(painter);
+        var pad = framed ? HudItemFrame.Padding : 0;
+        var gap = framed ? HudItemFrame.NameGap : 0;
+        var width = Math.Min(layout.Width - 8, textWidth + 28 + pad * 2);
+        var bounds = HudPainter.TooltipBounds(layout, pointer, width, HudPainter.TooltipLinesY + (lines.Count - 1) * LineHeight + 8 + pad * 2 + gap
+            + previewHeight);
+        var nameY = bounds.Y + HudPainter.TooltipNameY + pad;
+        painter.Flush();
+        if (!framed || !HudItemFrame.Draw(painter, bounds, rarity, nameY))
+        {
+            painter.InfoBox(bounds);
+        }
+
         for (var index = 0; index < lines.Count; index++)
         {
-            var y = index == 0 ? bounds.Y + HudPainter.TooltipNameY : bounds.Y + HudPainter.TooltipLinesY + (index - 1) * LineHeight;
-            painter.TextCentered(painter.Fit(lines[index].Text, bounds.Width - 16), bounds.Left, bounds.Right, y, lines[index].Color);
+            var y = index == 0 ? nameY : bounds.Y + HudPainter.TooltipLinesY + pad + gap + (index - 1) * LineHeight;
+            painter.TextCentered(painter.Fit(lines[index].Text, bounds.Width - 16 - pad * 2), bounds.Left, bounds.Right, y, lines[index].Color);
         }
 
         if (gauge is { } aging)
         {
-            DrawGauge(painter, bounds, aging);
+            DrawGauge(painter, bounds, aging, pad + gap);
+        }
+
+        if (preview is not null)
+        {
+            var panel = new Rectangle(bounds.X + (bounds.Width - preview.Width) / 2, bounds.Bottom - pad - 6 - preview.Height, preview.Width, preview.Height);
+            painter.ColorBox(new Rectangle(panel.X - 1, panel.Y - 1, panel.Width + 2, panel.Height + 2), 150, 150, 150, 255);
+            painter.ColorBox(panel, 34, 36, 36, 255);
+            painter.Image(preview, panel);
         }
     }
 
-    private static void DrawGauge(HudPainter painter, Rectangle bounds, AgingGauge gauge)
+    private const int PreviewGap = 10;
+
+    // below: how far the lines sit lower than in the classic box (the grade frame's padding and name gap).
+    private static void DrawGauge(HudPainter painter, Rectangle bounds, AgingGauge gauge, int below)
     {
         var center = bounds.X + bounds.Width / 2;
-        var top = bounds.Y + 26;
+        var top = bounds.Y + 26 + below;
         if (gauge.Goal > 0)
         {
             var left = center - GaugeWidth / 2;
@@ -189,6 +226,8 @@ public static class HudItemDetailTooltip
 
         painter.TextCentered($"+{gauge.Level}", center - 20, center + 20, top + 3, Color.Black, false, Point.Zero);
     }
+
+    public static ItemRarity RarityOf(OwnedItemView item) => item?.Details?.Rarity ?? ItemRarity.None;
 
     private static bool Aged(ItemDetailView details) => details.UpgradeLevel > 0 || details.AgingGoal > 0;
 

@@ -11,7 +11,7 @@ internal static class PetTests
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
         yield return ("pet skins have unique ids, items and monsters, and their items unlock them", TableAsync);
-        yield return ("a character unlocks a skin once, sends out only unlocked skins and joins its account's skins", CharacterAsync);
+        yield return ("a character unlocks a skin once, sends out only unlocked skins, joins its account's skins and republishes its pets at once", CharacterAsync);
         yield return ("the pet command sends a skin out or puts the pet away and refuses anything else", CommandAsync);
         yield return ("the pet collection and the pet skin in a player's looks travel on the wire; older looks read without a pet", WireAsync);
         yield return ("the pet window's rename box types a name of letters, digits and spaces and sends it as /petname on Enter", RenameAsync);
@@ -69,6 +69,15 @@ internal static class PetTests
         Assert.True(character.UnlockPetSkin(3) && !character.UnlockPetSkin(3) && !character.UnlockPetSkin(0) && !character.UnlockPetSkin(99),
             "a skin unlocked twice, or an unknown one unlocked");
         Assert.True(character.SendPetOut(3) && character.PetOut == 3 && character.SendPetOut(0) && character.PetOut == 0, "the pet did not go out and back");
+        var before = OwnerState.Capture(character);
+        character.SendPetOut(3);
+        var summoned = OwnerState.Capture(character, before);
+        character.RenamePet("Fluffy");
+        var renamed = OwnerState.Capture(character, summoned);
+        Assert.True(!ReferenceEquals(before, summoned) && summoned.PetOut == 3 && !ReferenceEquals(summoned, renamed) && renamed.PetName == "Fluffy",
+            "the owner state did not change with the pet out or its name, so the stable would wait for a field change");
+        character.RenamePet("");
+        character.SendPetOut(0);
 
         // The account's other characters' skins join; a saved pet out that the set lacks is not out.
         character.JoinAccountPetSkins(PetSkins.Bit(5));
@@ -104,8 +113,8 @@ internal static class PetTests
         var pets = new PristonTale.Client.Net.Presence.PetCollectionInfo(PetSkins.Bit(1), 1);
         window.Toggle();
         var frame = PristonTale.Gameplay.UI.Widgets.HudPetWindow.Window(layout);
-        var rename = PristonTale.Gameplay.UI.Widgets.HudPetWindow.Rename(frame).Center;
-        Assert.True(window.Click(layout, map, rename, true, pets) && window.Naming, "Rename did not open the name box");
+        var rename = PristonTale.Gameplay.UI.Widgets.HudPetWindow.Pencil(frame).Center;
+        Assert.True(window.Click(layout, map, rename, true, pets) && window.Naming, "the pencil did not open the name box");
 
         static bool Never(Microsoft.Xna.Framework.Input.Keys key) => false;
         static bool Enter(Microsoft.Xna.Framework.Input.Keys key) => key == Microsoft.Xna.Framework.Input.Keys.Enter;
@@ -114,12 +123,12 @@ internal static class PetTests
         window.Type("", 0.1, Enter);
         Assert.True(window.TakeRequest() == "/petname Fluffy 2" && !window.Naming, "Enter did not send the typed name without the refused '!'");
 
-        // An empty name clears it; without a pet out, Rename does nothing.
+        // An empty name clears it; without a pet out, the pencil does nothing.
         window.Click(layout, map, rename, true, pets);
         window.Type("", 0.1, Enter);
         Assert.True(window.TakeRequest() == "/petname", "an empty name did not clear the name");
         window.Click(layout, map, rename, true, pets with { Out = 0 });
-        Assert.True(!window.Naming, "Rename opened without a pet out");
+        Assert.True(!window.Naming, "the pencil opened the box without a pet out");
         return Task.CompletedTask;
     }
 

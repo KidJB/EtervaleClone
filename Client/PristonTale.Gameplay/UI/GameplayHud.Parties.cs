@@ -74,6 +74,7 @@ public sealed partial class GameplayHud
         _partyWindow.Whispered = _chat.Window.WhisperTo;
         _chat.InParty = InParty;
         Combat.InParty = InParty;
+        Combat.QuestMarks = _npcQuestMarks;
     }
 
     private bool ShowsPlayerButtons => ButtonsPlayerId != 0 && TargetId == ButtonsPlayerId;

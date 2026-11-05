@@ -209,6 +209,10 @@ public sealed class HudInventoryPanel
         return under is null || under.InstanceId == dragged?.InstanceId || controller.Hides(under) ? null : under;
     }
 
+    // The body item under the pointer, which the scene renders the player wearing ("" when none), and that picture.
+    public string PreviewArmorKey => _hovered is { Kind: ItemKind.Armor } armor ? armor.CatalogKey : "";
+    public Microsoft.Xna.Framework.Graphics.Texture2D ArmorPreview { get; set; }
+
     // Drawn after the bottom bar so the held item and the item box stay on top, as the original draws items after the
     // interface; the item box goes over the carried item, as there.
     public void DrawOverlay(HudPainter painter, HudLayout layout, HudItemIcons icons, Point pointer)
@@ -309,7 +313,7 @@ public sealed class HudInventoryPanel
             : item.QuestBox >= 0 ? "Click: carry"
             : item.Kind == ItemKind.Potion ? "Right-click: drink one"
             : usable ? "Right-click: use"
-            : "Click: carry  Shift-click: split  Right-click: equip";
+            : "";
         var named = _counts.Named(item);
         var note = Note?.Invoke(item) ?? "";
         // The box's lines are made again only when the item, the owner state or the texts around them change, as the trade
@@ -330,7 +334,8 @@ public sealed class HudInventoryPanel
             return;
         }
 
-        HudItemDetailTooltip.Draw(painter, layout, pointer, _detailTip, _gaugeTip);
+        HudItemDetailTooltip.Draw(painter, layout, pointer, _detailTip, _gaugeTip, HudItemDetailTooltip.RarityOf(item),
+            item.Kind == ItemKind.Armor ? ArmorPreview : null);
     }
 
     // Whether the bag items lay out a finished puzzle board.

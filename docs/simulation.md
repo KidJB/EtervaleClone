@@ -38,6 +38,7 @@ progression, regeneration and movement rates. `World/`, `Physics/` and `Skills/`
 | `Items/Item.cs` | `ItemKind`, `ItemStatBlock`, `ItemDefinition`, `ItemInstance` |
 | `Items/ItemTemplate.cs`, `ItemRoll.cs` | Authored value ranges of a kind; the values of one copy (`ItemRoll`, `ItemSpecBonus`) |
 | `Items/ItemRoller.cs` | Shop (lowest) form and drop rolls, class specialization and its requirement shift |
+| `Items/ItemRarity.cs` | `ItemRarity` grades and `ItemRarities`: which gear takes a grade, the grade roll, the per-kind bonus steps |
 | `Items/EquipmentTotals.cs` | What the usable worn items and their specializations add (`EquipmentTotals.Sum`) |
 | `Items/ItemUsability.cs`, `CarriedWeight.cs` | Requirement and class checks; carried weight and the weight limit checks |
 | `Items/ItemAbsorbCorrection.cs` | Absorb added to armor, robes, boots, gloves and shields by catalog number |
@@ -378,6 +379,21 @@ totals.
   three times in ten when it has random classes, one random class replaces the fixed one. A specialized copy costs a
   fifth more, its requirements shift by a random percent of its class's range (strength, spirit, talent, agility; see the
   class's `ClassProfile.Shift`) and its bonus ranges are rolled in hundredths. Unspecialized copies carry no bonus.
+- Rarity (`ItemRarities`): a monster's drop of gear (weapons, armour, boots, gloves, bracelets, vambraces, amulets,
+  rings, shields, orbs; never a quest or unique item, nor a sealed puzzle piece) rolls a grade when it falls
+  (`FieldGroundLoot.Place`): Uncommon 20%, Rare 7%, Epic 2.5%, Legendary 0.5%, Common the rest; a boss kill triples
+  Rare and above. Each grade above Common is one step of the kind's table, added to the copy's `ItemRoll`: weapons
+  damage +3, attack rating +10 and critical +1 per step (+4/+13 from item level 103, +5/+20 from 113); worn kinds their
+  defence, absorb, block, attack rating or life/mana/stamina steps, armour and shields lowering strength, boots
+  agility, amulets and rings spirit by 3 per step (never below zero); the price rises half again per step. The grade
+  (`ItemInstance.Rarity`) is saved with the item (`SavedItem.Rarity`), sent in `ItemDetailEntry.Rarity` and on the
+  ground drop. The client shows it in the item box (the grade's name in its colour, and the box framed by the grade's
+  art from `assets/Hud/ItemBox/<grade>/`, `HudItemFrame`, the classic info box when it is missing), as a coloured border and faint
+  wash behind the item's icon (`HudItemCounts.Draw`: bag, belt, warehouse), as the ground name's colour, and as a loot
+  light (`GroundLootPresentation.CollectBeams`, `HudGroundLabels.DrawBeams`): a glow on the ground under Uncommon and
+  above, a pillar of a fixed screen size, whatever the zoom, over Rare (110 pixels), Epic (150) and Legendary (200) drawn with the spire art of
+  `assets/Hud/LootBeam/` tinted to the grade (layered columns without it), and a flash as a drop comes into view. Items
+  made before rarity are None.
 - `ItemUsability.CanUse`: level and the five attribute requirements of the copy, and `AllowedJobs`.
 - Weight: `CarriedWeight.CanTake(character, weight)` allows carried + weight up to `MaxWeight`; `IsOverweight` is
   carried above it. See [Equipment rules](#equipment-rules-playercharactercanequip) and the NPC rules in

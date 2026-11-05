@@ -130,8 +130,12 @@ public sealed partial class GameScene : IDisposable, IHudPortraitScene
     private const float PlayerRadius = 24f;
     private const float BodyProbeHeight = FieldTerrain.BodyProbeHeight;
     private WallTrace _wallTrace;
+    // The ground moves the player two ways: a press walks toward the cursor at once and stops where it is released; a
+    // double click (two presses within DoubleClickMs) keeps walking toward the cursor until blocked or the next click.
     private const double DoubleClickMs = 350.0;
-    private double _lastLeftClickMs = double.NegativeInfinity;
+    private double _leftPressMs;
+    private double _lastGroundClickMs = double.NegativeInfinity;
+    private bool _autoFollow;
     // The walk/run setting (R or the bar's button), running at first as in the original.
     private bool _runFlag = true;
     // After a double click on the ground the player keeps walking toward the cursor until it is blocked or clicks again.
@@ -417,6 +421,7 @@ public sealed partial class GameScene : IDisposable, IHudPortraitScene
     public void Update(GameTime gameTime)
     {
         _npcAudio?.Update();
+        UpdateArmorPreview();
         if (_equipmentPresentation?.Update(Owner, _activeField?.Definition.State == FieldState.Village, PlayerWorld(), _playerController.Current) == true)
         {
             _playerBodyActor = _equipmentPresentation.Handles.Body;
@@ -587,11 +592,24 @@ public sealed partial class GameScene : IDisposable, IHudPortraitScene
         _groundLoot.CollectLabels(_graphicsDevice.Viewport, _camera, HoveredDropId, ShowAllDropLabels, labels);
     }
 
+    // The light columns over graded drops this frame (GroundLootPresentation.CollectBeams).
+    public void CollectGroundBeams(List<GroundBeam> beams)
+    {
+        if (_groundLoot is null || _camera is null)
+        {
+            beams.Clear();
+            return;
+        }
+
+        _groundLoot.CollectBeams(_graphicsDevice.Viewport, _camera, beams);
+    }
+
     public void PlaceGroundLabel(Guid id, Rectangle bounds) => _groundLoot?.SetLabelBounds(id, bounds);
 
     public void Dispose()
     {
         _fieldStreamer?.Dispose();
+        DisposeArmorPreview();
         TearDownRemotePresence();
         _equipmentPresentation?.Stop();
         _groundLoot?.Dispose();

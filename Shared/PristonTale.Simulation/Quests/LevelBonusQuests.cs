@@ -8,7 +8,7 @@ public static class LevelBonusQuests
 {
     private const int MinimumLevel80 = QuestRewards.FirstChainLevel;
     private const int MinimumLevel90 = QuestRewards.SecondChainLevel;
-    private const int CursedHuntCount = 50;
+    public const int CursedHuntCount = 50;
     private static readonly int[] CursedPrey = [QuestMonsters.Omega, QuestMonsters.DMachine, QuestMonsters.Mountain];
 
     // 1010 and 1012 are the first level 80 NPC, 1011 the second; 1012 is also the first level 90 NPC and 1013 the second.

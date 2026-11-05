@@ -17,7 +17,11 @@ namespace PristonTale.Gameplay.World.Remote;
 public delegate bool FloorHeightQuery(float x, float referenceHeight, float z, out float y);
 
 // A drop's name to draw over the scene: its screen point (back-buffer pixels) and whether the cursor is on the drop.
-public readonly record struct GroundLabel(Guid Id, string Text, Vector2 Anchor, bool Hovered);
+// A light over a graded drop: its foot on the screen (pixels), the grade that colours and sizes it and how long ago the
+// drop came into view (milliseconds), for its landing flash.
+public readonly record struct GroundBeam(Vector2 Foot, Simulation.Items.ItemRarity Rarity, long AgeMs);
+
+public readonly record struct GroundLabel(Guid Id, string Text, Vector2 Anchor, bool Hovered, Simulation.Items.ItemRarity Rarity = default);
 
 public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader loader, string root, IClientLog log) : IDisposable
 {
@@ -242,6 +246,33 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
         return id != Guid.Empty;
     }
 
+    // The beams to draw this frame: every drop on the floor of Uncommon grade and above, 32 to 768 units from the camera.
+    // The HUD sizes the light by grade in screen pixels (HudGroundLabels.DrawBeams).
+    public void CollectBeams(Viewport viewport, PristonCamera camera, List<GroundBeam> beams)
+    {
+        beams.Clear();
+        foreach (var entry in _entries.Values)
+        {
+            if (!entry.FloorFound || entry.Drop.Rarity < Simulation.Items.ItemRarity.Uncommon)
+            {
+                continue;
+            }
+
+            var depth = -Vector3.Transform(entry.Position, camera.View).Z;
+            if (depth < 32 || depth >= UI.Rendering.HudNameColors.OverheadDepth)
+            {
+                continue;
+            }
+
+            var foot = viewport.Project(entry.Position, camera.Projection, camera.View, Matrix.Identity);
+            if (foot.Z is >= 0 and <= 1)
+            {
+                beams.Add(new GroundBeam(new Vector2(foot.X, foot.Y), entry.Drop.Rarity, Environment.TickCount64 - entry.SeenMs));
+            }
+        }
+    }
+
+
     // The labels to draw this frame, each anchored at its own drop 16 units up, in the order the HUD stacks them: nearest
     // first, kept from frame to frame (SettleOrder) and a newly named drop placed by its depth. Holding A names the drops
     // 32 to 768 units from the camera; the hovered drop is named at any distance. The HUD reports where each label landed
@@ -280,7 +311,7 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
         SettleOrder(_labelOrder, static entry => entry.LabelDepth);
         foreach (var entry in _labelOrder)
         {
-            labels.Add(new GroundLabel(entry.Drop.Id, entry.Label, entry.LabelAnchor, entry.Drop.Id == hovered));
+            labels.Add(new GroundLabel(entry.Drop.Id, entry.Label, entry.LabelAnchor, entry.Drop.Id == hovered, entry.Drop.Rarity));
         }
     }
 
@@ -364,6 +395,7 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
     private sealed class Entry(GroundDropView drop, Task<PristonActor> preparation)
     {
         public GroundDropView Drop { get; } = drop;
+        public long SeenMs { get; } = Environment.TickCount64;
         public Matrix Rotation { get; } = Orientation(drop);
         public Task<PristonActor> Preparation { get; } = preparation;
         public ActorHandle Handle { get; set; } = ActorHandle.None;

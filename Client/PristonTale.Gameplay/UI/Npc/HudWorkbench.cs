@@ -223,7 +223,7 @@ public abstract class HudWorkbench : IHudServiceWindow
                 _describedGauge = HudItemDetailTooltip.Gauge(_hovered, state);
             }
 
-            HudItemDetailTooltip.Draw(painter, layout, pointer, _description, _describedGauge);
+            HudItemDetailTooltip.Draw(painter, layout, pointer, _description, _describedGauge, HudItemDetailTooltip.RarityOf(_hovered));
         }
     }
 

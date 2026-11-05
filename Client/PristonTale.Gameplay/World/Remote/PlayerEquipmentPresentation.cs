@@ -27,6 +27,14 @@ public sealed class PlayerEquipmentPresentation
 
     public string WeaponKey => (_requestedPlayerVisuals ?? _basePlayerVisuals)?.WeaponKey ?? "";
 
+    // The player's look with another body item worn in place of the current one (the armour preview); null before the
+    // first look.
+    public CharacterVisualSet Wearing(string armorKey)
+    {
+        var current = _requestedPlayerVisuals ?? _basePlayerVisuals;
+        return current is null ? null : EquipmentVisuals.Apply(_basePlayerVisuals, armorKey, current.WeaponKey, current.OffHandKey, current.InVillage, _jobMask);
+    }
+
     public bool HoldsShield => ItemEquipmentMetadata.IsShield((_requestedPlayerVisuals ?? _basePlayerVisuals)?.OffHandKey);
 
     public PlayerEquipmentPresentation(PlayerActorComposer composer, IActorScene scene, IClientLog log, string root,

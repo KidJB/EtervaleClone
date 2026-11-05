@@ -50,12 +50,31 @@ internal static class GmItemCommands
     }
 
     // The best copy of an item code dropped at the game master, optionally for a class: a class name, a short name
-    // (MS FS PS AS KS ATA PRS MG), its number 1 to 8, or none.
+    // (MS FS PS AS KS ATA PRS MG), its number 1 to 10, or none; then, in either order, "+N" ages it and a rarity grade
+    // name (common .. legendary) gives it that grade.
     public static async Task Perfect(GmCommandContext context)
     {
         var code = context.Word();
         var specName = context.Word();
-        var aging = AgingLevel(context.Word());
+        var aging = 0;
+        var rarity = ItemRarity.None;
+        for (var word = context.Word(); word.Length > 0; word = context.Word())
+        {
+            if (word[0] == '+')
+            {
+                aging = AgingLevel(word);
+            }
+            else if (RarityNamed(word) is { } named)
+            {
+                rarity = named;
+            }
+            else
+            {
+                context.Reply(Format("Unknown option {0} (+1 to +20 or common, uncommon, rare, epic, legendary)", word));
+                return;
+            }
+        }
+
         var job = SpecJobCode(specName);
         if (job < 0)
         {
@@ -82,6 +101,7 @@ internal static class GmItemCommands
         var dropped = await context.Commands.World.DropAsync(context.Issuer.EntityId, _ =>
         {
             var item = ItemRoller.CreatePerfect(definition, 1, specBit);
+            ItemRarities.Apply(item, rarity);
             if (ageable)
             {
                 Simulation.Items.Aging.AgingRules.AgeTo(item, aging);
@@ -93,6 +113,20 @@ internal static class GmItemCommands
             : ageable ? Format("Perfect +{2} {0} created ({1})", code, className, aging)
             : aging > 0 ? Format("Perfect {0} created ({1}); it cannot be aged", code, className)
             : Format("Perfect {0} created ({1})", code, className));
+    }
+
+    // A rarity grade by name (case ignored), or null.
+    public static ItemRarity? RarityNamed(string word)
+    {
+        for (var grade = ItemRarity.Common; grade <= ItemRarities.Highest; grade++)
+        {
+            if (word.Equals(ItemRarities.NameOf(grade), StringComparison.OrdinalIgnoreCase))
+            {
+                return grade;
+            }
+        }
+
+        return null;
     }
 
     // "+N" after /@get_perf's class: the aging level 1 to AgingRules.MaxLevel to age the perfect copy to; 0 without one.

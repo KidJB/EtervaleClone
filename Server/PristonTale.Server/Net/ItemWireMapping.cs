@@ -77,6 +77,7 @@ public static class ItemWireMapping
             AgingGoal = details.AgingGoal,
             MixSheltom = details.MixSheltom,
             MixStats = (int)details.MixStats,
+            Rarity = (int)details.Rarity,
             SpecJob = roll.SpecJob,
             SpecDefence = spec.Defence,
             SpecAttackSpeed = spec.AttackSpeed,

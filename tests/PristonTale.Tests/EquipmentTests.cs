@@ -23,7 +23,7 @@ internal static class EquipmentTests
         yield return ("equipment resources preserve original indices, armor aliases and village bones", ResourcesAsync);
         yield return ("the assassin holds a dagger in each hand and the shaman's phantom hovers at its back", NewClassWeaponsAsync);
         yield return ("an item key's family names its kind without allocating", KindOfAsync);
-        yield return ("motion selection respects item lists, class and map masks", MotionAsync);
+        yield return ("motion selection respects item lists, class and map masks and refuses clips the model lacks", MotionAsync);
         yield return ("equipment changes refresh public appearance over TCP", PresenceAsync);
         yield return ("remote equipment preparation preserves old actors and discards superseded swaps", ReplacementAsync);
     }
@@ -131,6 +131,8 @@ internal static class EquipmentTests
         var info = new PristonModelInfo("", "", "", "", group, group, group, slots, (uint)slots.Count, "", "", "", [], 0);
         Assert.True(PristonMotionSelection.Select(info, MotionCode.Stand, new(15, 1, 2)) == armed, "job/item mask ignored");
         Assert.True(PristonMotionSelection.Select(info, MotionCode.Stand, new(15, 1, 1)) == city, "village must select the unarmed sentinel");
+        Assert.True(PristonMotionSelection.SkillVariant(info, slots.Count, new(15, 1, 2)) == -1
+            && PristonMotionSelection.SkillVariant(info, 11, new(15, 1, 2)) == 11, "a skill clip the model lacks must resolve to -1");
         return Task.CompletedTask;
     }
 

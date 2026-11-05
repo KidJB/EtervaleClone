@@ -5,18 +5,22 @@ namespace PristonTale.Simulation.Quests;
 // which a death takes back.
 public static class LevelQuests
 {
-    private sealed record Spec(QuestCode Code, LevelQuestLog Bit, LevelQuestLog Requires, int Level, int Prey, int Count, string Documents);
+    // StatPoints and SkillPoints: what finishing the hunt adds (the level 85 and 90 rewards are lasting effects instead).
+    public sealed record Spec(QuestCode Code, LevelQuestLog Bit, LevelQuestLog Requires, int Level, int Prey, int Count, string Documents, int StatPoints,
+        int SkillPoints);
 
     private static readonly Spec[] Specs =
     [
-        new(QuestCode.Level30, LevelQuestLog.Level30, LevelQuestLog.None, 30, QuestMonsters.Bargon, 20, "LevelQuest30"),
-        new(QuestCode.Level55, LevelQuestLog.Level55, LevelQuestLog.Level30, 55, QuestMonsters.Muffin, 20, "LevelQuest55"),
-        new(QuestCode.Level55Morion, LevelQuestLog.Level55, LevelQuestLog.Level30, 55, QuestMonsters.DireBee, 20, "LevelQuest55-2"),
-        new(QuestCode.Level70, LevelQuestLog.Level70, LevelQuestLog.Level55, 70, QuestMonsters.Typhoon, 10, "LevelQuest70"),
-        new(QuestCode.Level80, LevelQuestLog.Level80, LevelQuestLog.Level70, 80, QuestMonsters.Ratoo, 5, "LevelQuest80"),
-        new(QuestCode.Level85, LevelQuestLog.Level85, LevelQuestLog.Level80, 85, QuestMonsters.Grotesque, 10, "LevelQuest85"),
-        new(QuestCode.Level90, LevelQuestLog.Level90, LevelQuestLog.Level85, 90, QuestMonsters.IronFist, 10, "LevelQuest90")
+        new(QuestCode.Level30, LevelQuestLog.Level30, LevelQuestLog.None, 30, QuestMonsters.Bargon, 20, "LevelQuest30", 5, 0),
+        new(QuestCode.Level55, LevelQuestLog.Level55, LevelQuestLog.Level30, 55, QuestMonsters.Muffin, 20, "LevelQuest55", 0, 1),
+        new(QuestCode.Level55Morion, LevelQuestLog.Level55, LevelQuestLog.Level30, 55, QuestMonsters.DireBee, 20, "LevelQuest55-2", 0, 1),
+        new(QuestCode.Level70, LevelQuestLog.Level70, LevelQuestLog.Level55, 70, QuestMonsters.Typhoon, 10, "LevelQuest70", 5, 1),
+        new(QuestCode.Level80, LevelQuestLog.Level80, LevelQuestLog.Level70, 80, QuestMonsters.Ratoo, 5, "LevelQuest80", 5, 2),
+        new(QuestCode.Level85, LevelQuestLog.Level85, LevelQuestLog.Level80, 85, QuestMonsters.Grotesque, 10, "LevelQuest85", 0, 0),
+        new(QuestCode.Level90, LevelQuestLog.Level90, LevelQuestLog.Level85, 90, QuestMonsters.IronFist, 10, "LevelQuest90", 0, 0)
     ];
+
+    public static IReadOnlyList<Spec> Milestones => Specs;
 
     public static bool IsLevelQuest(QuestCode code) => Find(code) is not null;
 
@@ -193,23 +197,24 @@ public static class LevelQuests
     private static void Complete(QuestContext context, Spec spec)
     {
         var character = context.Character;
+        if (spec.StatPoints != 0 || spec.SkillPoints != 0)
+        {
+            character.ApplyQuestProgress(character.Tier, spec.StatPoints, spec.SkillPoints, 0);
+        }
+
         switch (spec.Code)
         {
             case QuestCode.Level30:
-                character.ApplyQuestProgress(character.Tier, 5, 0, 0);
                 context.Notice(QuestNoticeKind.Message, QuestTexts.StatPointsFive);
                 break;
             case QuestCode.Level55:
             case QuestCode.Level55Morion:
-                character.ApplyQuestProgress(character.Tier, 0, 1, 0);
                 context.Notice(QuestNoticeKind.Message, QuestTexts.SkillPointOne);
                 break;
             case QuestCode.Level70:
-                character.ApplyQuestProgress(character.Tier, 5, 1, 0);
                 context.Notice(QuestNoticeKind.Message, QuestTexts.StatFiveSkillOne);
                 break;
             case QuestCode.Level80:
-                character.ApplyQuestProgress(character.Tier, 5, 2, 0);
                 context.Notice(QuestNoticeKind.Message, QuestTexts.StatFiveSkillTwo);
                 break;
             case QuestCode.Level85:

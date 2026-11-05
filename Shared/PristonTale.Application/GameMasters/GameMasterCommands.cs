@@ -110,6 +110,8 @@ public sealed class GameMasterCommands
     public IAccountRepository? Accounts { get; init; }
     public Saves.ICharacterSaves? Saves { get; init; }
     public IWarehouseRepository? Warehouses { get; init; }
+    public Persistence.Abstractions.Coins.ICoinRepository? Coins { get; init; }
+    public Services.CoinShopCatalogStore? CoinShop { get; init; }
     public ItemCreationOverrides ItemOverrides { get; } = new();
 
     // Milliseconds of the process clock used for the item overrides and connection times.
@@ -128,6 +130,8 @@ public sealed class GameMasterCommands
         new("/@get_perf", GameMasterLevel.Administrator, GmItemCommands.Perfect),
         new("/@get", GameMasterLevel.Administrator, GmItemCommands.Create),
         new("/@put", GameMasterLevel.Administrator, GmItemCommands.Gift),
+        new("/@coinshop_reload", GameMasterLevel.Administrator, GmCoinCommands.Reload),
+        new("/@coins", GameMasterLevel.Administrator, GmCoinCommands.Grant),
         new("/AgingSetting", GameMasterLevel.Operator, GmItemCommands.Aged),
         new("/get_potion", GameMasterLevel.Guide, GmInformationCommands.Potions) { Enabled = static options => options.PotionMonitor },
         new("/>", GameMasterLevel.Moderator, GmServerCommands.Notice),

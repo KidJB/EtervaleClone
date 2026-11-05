@@ -49,9 +49,10 @@ public static class PristonMotionSelection
     // only in the weapons they list. Returns the sibling whose weapons include the context's, else the indexed clip.
     public static int SkillVariant(PristonModelInfo info, int motionIndex, PristonMotionContext context)
     {
-        if ((uint)motionIndex >= (uint)info.Motions.Count)
+        // A clip the model's motion file does not have (older character data than the skill table) resolves to -1.
+        if ((uint)motionIndex >= Math.Min((uint)info.Motions.Count, info.MotionCount))
         {
-            return motionIndex;
+            return -1;
         }
 
         var authored = info.Motions[motionIndex];

@@ -390,12 +390,18 @@ public sealed class HudPainter : IDisposable
 
     public Rectangle TooltipBox(HudLayout layout, Point anchor, int width, int height)
     {
-        var size = InfoBoxBounds(0, 0, width, height);
-        var placed = layout.PlaceOverlay(new Point(anchor.X - size.Width / 2, anchor.Y - size.Height - 8), size.Width, size.Height);
-        var bounds = InfoBoxBounds(placed.X, placed.Y, placed.Width, placed.Height);
+        var bounds = TooltipBounds(layout, anchor, width, height);
         Flush();
         InfoBox(bounds);
         return bounds;
+    }
+
+    // Where TooltipBox puts a box of this content size, without drawing it.
+    public static Rectangle TooltipBounds(HudLayout layout, Point anchor, int width, int height)
+    {
+        var size = InfoBoxBounds(0, 0, width, height);
+        var placed = layout.PlaceOverlay(new Point(anchor.X - size.Width / 2, anchor.Y - size.Height - 8), size.Width, size.Height);
+        return InfoBoxBounds(placed.X, placed.Y, placed.Width, placed.Height);
     }
 
     // A help box's title plate, centred at its top, and its OK button, centred at its bottom.
