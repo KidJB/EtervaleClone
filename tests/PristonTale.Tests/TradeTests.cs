@@ -30,16 +30,19 @@ internal static class TradeTests
         yield return ("an offered item another path changed refuses the exchange for both, and NPC services wait for the trade to end", ChangedAsync);
         yield return ("both sides locking at once go through once the partner's gate frees; a pending request is not replaced", ConcurrencyAsync);
         yield return ("trade rules: the grid, what may pass, and an exchange that does not fit names the side", RulesAsync);
+        yield return ("coins cross with the exchange less the fee, never past the balance or the per-trade cap", CoinsAsync);
         yield return ("trade messages round-trip on the wire and refuse bad counts and answers", WireAsync);
     }
 
-    private sealed record Fixture(ChatFixture World, TradeAppService Trades, SpecialItemTests.ManualClock Clock);
+    private sealed record Fixture(ChatFixture World, TradeAppService Trades, SpecialItemTests.ManualClock Clock, MemoryCoins Coins);
 
     private static Fixture Create()
     {
         var clock = new SpecialItemTests.ManualClock();
         var world = new ChatFixture(clock: clock);
-        return new Fixture(world, new TradeAppService(world.Sessions, new ImmediateSaves(world.Characters), world.Characters, world.World, world.Directory), clock);
+        var coins = new MemoryCoins(world.Characters);
+        return new Fixture(world, new TradeAppService(world.Sessions, new ImmediateSaves(world.Characters), world.Characters, coins, world.World, world.Directory),
+            clock, coins);
     }
 
     private static Task Request(Fixture fixture, ChatFixture.Player from, ChatFixture.Player to) =>
@@ -72,6 +75,47 @@ internal static class TradeTests
         Assert.True(player.Session.Character!.Inventory.TryAdd(item), "fixture item not given");
         return item;
     }
+
+    private static async Task CoinsAsync()
+    {
+        var fixture = Create();
+        var ann = await fixture.World.JoinAsync("Ann", 0, 0);
+        var bob = await fixture.World.JoinAsync("Bob", 100, 0);
+        var (annAccount, bobAccount) = (ann.Session.AccountId, bob.Session.AccountId);
+        Assert.True(annAccount != bobAccount, "fixture accounts");
+        fixture.Coins.Balances[annAccount] = 1_000;
+        await Open(fixture, ann, bob);
+
+        await CoinOffer(fixture, ann, 2_000);
+        Assert.True(ann.Link.Last == TradeMessages.Of(TradeStatus.NotEnoughCoins) && View(fixture, bob) is { PartnerCoins: 0 },
+            "coins above the balance were offered");
+        fixture.Coins.Balances[annAccount] = CoinTrading.MaxPerTrade + 1;
+        await CoinOffer(fixture, ann, CoinTrading.MaxPerTrade + 1);
+        Assert.True(ann.Link.Last == TradeMessages.Of(TradeStatus.CoinLimit), "coins above the per-trade cap were offered");
+
+        fixture.Coins.Balances[annAccount] = 1_000;
+        await CoinOffer(fixture, ann, 105);
+        Assert.True(View(fixture, bob) is { PartnerCoins: 105 } && View(fixture, ann) is { Own.Coins: 105 }, "the coin offer did not show");
+
+        // Spent elsewhere before the lock: storage refuses and the trade opens again.
+        fixture.Coins.Balances[annAccount] = 50;
+        fixture.Clock.Now += TimeSpan.FromSeconds(3);
+        await Lock(fixture, ann);
+        await Lock(fixture, bob);
+        Assert.True(fixture.Coins.Balances[annAccount] == 50 && fixture.Coins.Balances.GetValueOrDefault(bobAccount) == 0
+            && ann.Link.Last == TradeMessages.Of(TradeStatus.NotEnoughCoins) && View(fixture, ann) is { OwnLocked: false },
+            "a trade short of coins was stored");
+
+        fixture.Coins.Balances[annAccount] = 1_000;
+        await Lock(fixture, ann);
+        await Lock(fixture, bob);
+        Assert.True(CoinTrading.Fee(105) == 11 && CoinTrading.Fee(1) == 1 && CoinTrading.Fee(0) == 0, "the fee is not ten percent rounded up");
+        Assert.True(fixture.Coins.Balances[annAccount] == 895 && fixture.Coins.Balances[bobAccount] == 94 && View(fixture, ann) is null,
+            "the coins did not cross less the fee");
+    }
+
+    private static Task CoinOffer(Fixture fixture, ChatFixture.Player player, long coins) =>
+        fixture.World.RunAsync(fixture.Trades.OfferAsync(player.Session.SessionToken, new TradeOffer([], 0) { Coins = coins }));
 
     private static async Task OpenAsync()
     {
@@ -353,18 +397,18 @@ internal static class TradeTests
     private static Task WireAsync()
     {
         var buffer = new byte[TradeStatePacket.MaxSize];
-        var offer = TradeOfferPacket.Read(buffer.AsSpan(0, new TradeOfferPacket(70, [new TradeEntryWire(Guid.NewGuid(), 4)]).Write(buffer)));
+        var offer = TradeOfferPacket.Read(buffer.AsSpan(0, new TradeOfferPacket(70, [new TradeEntryWire(Guid.NewGuid(), 4)], 33).Write(buffer)));
         var answer = TradeAnswerPacket.Read(buffer.AsSpan(0, new TradeAnswerPacket(3, true).Write(buffer)));
         var request = TradeRequestPacket.Read(buffer.AsSpan(0, new TradeRequestPacket(8).Write(buffer)));
         var signal = TradeSignalPacket.Read(buffer.AsSpan(0, new TradeSignalPacket(EtervaleOpcodes.TradeLock).Write(buffer)));
         var asked = TradeAskedPacket.Read(buffer.AsSpan(0, new TradeAskedPacket(5, "Ann").Write(buffer)));
-        Assert.True(offer is { Money: 70, Entries: [{ Cell: 4 }] } && answer is { FromId: 3, Accept: true } && request.TargetId == 8
+        Assert.True(offer is { Money: 70, Coins: 33, Entries: [{ Cell: 4 }] } && answer is { FromId: 3, Accept: true } && request.TargetId == 8
             && signal.Code == EtervaleOpcodes.TradeLock && asked is { FromId: 5, FromName: "Ann" }, "trade requests did not round-trip");
 
         var item = new StoreItemEntry(Guid.NewGuid(), 0x0101_0100, 1, 1, 9, 2, 3, "Stone Axe");
-        var state = new TradeStatePacket(2, "Bob", TradeStatePacket.PartnerLocked, 5, 6, [new TradeEntryWire(Guid.NewGuid(), 0)], [item]);
+        var state = new TradeStatePacket(2, "Bob", TradeStatePacket.PartnerLocked, 5, 6, [new TradeEntryWire(Guid.NewGuid(), 0)], [item], 7, 8);
         var read = TradeStatePacket.Read(buffer.AsSpan(0, state.Write(buffer)));
-        Assert.True(read is { PartnerId: 2, PartnerName: "Bob", Flags: TradeStatePacket.PartnerLocked, OwnMoney: 5, PartnerMoney: 6 }
+        Assert.True(read is { PartnerId: 2, PartnerName: "Bob", Flags: TradeStatePacket.PartnerLocked, OwnMoney: 5, PartnerMoney: 6, OwnCoins: 7, PartnerCoins: 8 }
             && read.Own.SequenceEqual(state.Own) && read.PartnerItems.SequenceEqual(state.PartnerItems), "the trade window did not round-trip");
 
         var details = TradeDetailsPacket.Read(buffer.AsSpan(0, new TradeDetailsPacket([new ItemDetailEntry { InstanceId = item.InstanceId, DamageMin = 4 }])

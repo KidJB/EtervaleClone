@@ -16,7 +16,7 @@ internal sealed partial class ClientSession
         _player is null
             ? Task.CompletedTask
             : _services.Trades.OfferAsync(RequireToken(), new TradeOffer(offer.Entries.Select(static entry => new TradeEntry(entry.ItemId, entry.Cell)).ToArray(),
-                offer.Money));
+                offer.Money) { Coins = offer.Coins });
 
     private Task SignalTradeAsync(TradeSignalPacket signal) =>
         _player is null ? Task.CompletedTask

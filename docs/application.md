@@ -539,8 +539,9 @@ original's texts (`PartyMessages`, [simulation.md](simulation.md)).
 Trades live in memory (`WorldServer.Trades.cs`): two players of a field within `TradeLimits.Reach` (3D), neither in
 another trade, dead or selling from a personal shop. A request waits `TradeLimits.RequestMs` for its answer, and while
 it waits the asked player is busy to other requests; a yes opens the trade (`Trade`, side 0 the asker), and both sides
-then send their whole offer (`TradeOffer`: bag items at trade grid cells and gold, checked by `TradeRules.Check`;
-[simulation.md](simulation.md)). Each change unlocks both sides, and a side may not lock within
+then send their whole offer (`TradeOffer`: bag items at trade grid cells, gold and coins, checked by
+`TradeRules.Check` and `CoinTrading.Check`; [simulation.md](simulation.md), coins in [coin-shop.md](coin-shop.md)).
+Each change unlocks both sides, and a side may not lock within
 `TradeLimits.LockDelayMs` of the other's change; the same offer sent again changes nothing, and a refused one answers
 the offer the server holds. A lock is refused when the side could not take what it receives (`TradeRules.Exchange` on
 clones), or when an offered stack no longer has the count the other side was shown (both read the original's "changed"

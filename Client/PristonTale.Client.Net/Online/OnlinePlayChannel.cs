@@ -1,3 +1,4 @@
+using PristonTale.Simulation.Shops;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using PristonTale.Client.Net.Presence;
@@ -102,6 +103,24 @@ internal sealed class OnlinePlayChannel : IPlayChannel
         return await _connection.PersonalShops.BuyAsync(purchase, ct);
     }
 
+    public async Task<CoinShopView> OpenCoinShopAsync(CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.OpenCoinShopAsync(ct);
+    }
+
+    public async Task<(CoinShopStatus Status, long Balance)> BuyCoinShopAsync(int tabId, int itemId, int quantity, int specClass, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.BuyCoinShopAsync(tabId, itemId, quantity, specClass, ct);
+    }
+
+    public async Task<long> CoinBalanceAsync(CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.CoinBalanceAsync(ct);
+    }
+
     public async Task<WingGateOutcome> TravelWingGateAsync(int destination, CancellationToken ct = default)
     {
         await _start.WaitAsync(ct);
@@ -177,7 +196,8 @@ internal sealed class OnlinePlayChannel : IPlayChannel
     public async Task OfferTradeAsync(Simulation.Trades.TradeOffer offer, CancellationToken ct = default)
     {
         await _start.WaitAsync(ct);
-        _connection.SendSocial(new TradeOfferPacket(offer.Money, offer.Entries.Select(static entry => new TradeEntryWire(entry.ItemId, entry.Cell)).ToArray()));
+        _connection.SendSocial(new TradeOfferPacket(offer.Money, offer.Entries.Select(static entry => new TradeEntryWire(entry.ItemId, entry.Cell)).ToArray(),
+            offer.Coins));
     }
 
     public async Task LockTradeAsync(CancellationToken ct = default)

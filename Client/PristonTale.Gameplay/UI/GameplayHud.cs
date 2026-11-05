@@ -76,8 +76,16 @@ public sealed partial class GameplayHud : IDisposable
     private readonly HudBossTime _bossTime = new();
     private readonly HudBossList _bossList = new();
     private readonly HudPetWindow _petWindow = new();
+    private readonly HudQuestBook _questBook = new();
+    private readonly HudQuestTracker _questTracker = new();
+    private readonly HudCoinShop _coinShop = new();
+    private static readonly Color BagCoinColor = new(255, 214, 90);
+    private bool _bagWasOpen;
+    private readonly Dictionary<string, string> _npcQuestMarks = new(StringComparer.Ordinal);
+    private bool _marksHuntComplete;
     private readonly List<HudMapMarker> _minimapMarkers = new(64);
     private int _savedMap = -1;
+    private int _savedTracker = -1;
     private readonly HudTargetPortrait _portrait;
     private readonly HudNotice _notice = new();
     private readonly HudChat _chat = new();
@@ -133,7 +141,7 @@ public sealed partial class GameplayHud : IDisposable
         _settings = new HudSettingsPanel(context.Presentation);
         _sprites = new HudSprites(context.GraphicsDevice, context.AssetRoot, context.Log);
         _sprites.Request(HudArt.Static);
-        _sprites.Request([HudMinimap.BossAliveIcon, HudMinimap.BossWaitingIcon]);
+        _sprites.Request([HudMinimap.BossAliveIcon, HudMinimap.BossWaitingIcon, .. HudQuestBook.Art, .. HudQuestTracker.Art, .. HudPetWindow.Art, .. Inventory.HudItemFrame.Art, Widgets.HudGroundLabels.BeamArt, .. HudCoinShop.Art]);
         _sprites.Request(HudNpcArt.All);
         _sprites.Request(HudCraftArt.All);
         _sprites.Request(HudArt.BlockText);
@@ -246,6 +254,15 @@ public sealed partial class GameplayHud : IDisposable
     public ulong TracedId { get; set; }
     // The drop names to draw under the entity names, and where each one landed (back-buffer pixels) for clicks on it.
     public IReadOnlyList<GroundLabel> GroundLabels { get; set; } = [];
+    public IReadOnlyList<GroundBeam> GroundBeams { get; set; } = [];
+
+    // The armour under the pointer in the bag window ("" none) and the scene's picture of the player wearing it.
+    public string PreviewArmorKey => _inventorySlide.FullyOpen ? _inventoryPanel.PreviewArmorKey : "";
+
+    public Microsoft.Xna.Framework.Graphics.Texture2D ArmorPreview
+    {
+        set => _inventoryPanel.ArmorPreview = value;
+    }
     public Action<Guid, Rectangle> GroundLabelPlaced { get; set; }
     public HudWorldView World { get; set; }
 
@@ -263,6 +280,11 @@ public sealed partial class GameplayHud : IDisposable
 
     // The wing warp map a warp stone opens; the screen opens it and sets its trip.
     public HudWingGate WingGate => _wingGate;
+
+    public HudCoinShop CoinShop => _coinShop;
+
+    // The account's coins, shown by the bag, the trade window and the coin shop; the screen sets its request.
+    public HudCoinBalance Coins => _coinShop.Coins;
     public IHudPortraitScene PortraitScene { get; set; }
     public bool PortraitReady => _portrait.Texture(TargetId) is not null;
     public float MinimapViewSize => _minimap.CurrentViewSize;
@@ -387,6 +409,18 @@ public sealed partial class GameplayHud : IDisposable
             return true;
         }
 
+        if (_questBook.Open)
+        {
+            _questBook.Close();
+            return true;
+        }
+
+        if (_coinShop.Open)
+        {
+            _coinShop.Close();
+            return true;
+        }
+
         // As in the original, Escape first closes an open chat window and nothing else.
         if (_chat.Window.Open && !_settingsOpen)
         {
@@ -463,6 +497,15 @@ public sealed partial class GameplayHud : IDisposable
         UpdateContacts(_clock.Elapsed.TotalMilliseconds);
         ForwardMessages();
         ApplyQuests();
+        _coinShop.OwnClass = _class;
+        _coinShop.Update(_icons, _sprites);
+        if (_inventorySlide.Open && !_bagWasOpen)
+        {
+            Coins.Refresh();
+        }
+
+        _bagWasOpen = _inventorySlide.Open;
+        Coins.Poll();
         ApplyServices(state);
         _personalShop.SignShown = SelfId != 0 && ShopSigns.ContainsKey(SelfId);
         _personalShop.Update(state, _clock.Elapsed.TotalMilliseconds);
@@ -501,6 +544,18 @@ public sealed partial class GameplayHud : IDisposable
         else if (MinimapShown && _bossList.Open && _bossList.Window(layout, _minimap.Area(layout)).Contains(pointer))
         {
             _bossList.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
+        }
+        else if (_petWindow.Open && HudPetWindow.Window(layout).Contains(pointer))
+        {
+            _petWindow.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
+        }
+        else if (_coinShop.Open && HudCoinShop.Window(layout).Contains(pointer))
+        {
+            _coinShop.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
+        }
+        else if (_questBook.Open && HudQuestBook.Window(layout).Contains(pointer))
+        {
+            _questBook.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
         }
 
         if (state is not null && (_state is null || state.InventoryRevision != _state.InventoryRevision))
@@ -620,6 +675,8 @@ public sealed partial class GameplayHud : IDisposable
         _skills.RefreshRanks(_state);
         var hoveredSkill = _skillSlide.FullyOpen && _skillMaster == 0 ? _skills.HoveredSkill(skillOrigin, pointer) : 0;
         _minimap.Drag(layout, pointer, mouse, _previousMouse, MinimapShown && !ModalOpen && !_settingsOpen && _inventory.Dragging == Guid.Empty
+            && _warehouse.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty && !_questTracker.Dragging);
+        _questTracker.Update(layout, pointer, mouse, _previousMouse, !ModalOpen && !_settingsOpen && !_minimap.Dragging && _inventory.Dragging == Guid.Empty
             && _warehouse.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty);
 
         // The bar reads the skill window's press before the bindings forget it on its release.
@@ -679,6 +736,7 @@ public sealed partial class GameplayHud : IDisposable
         var pointer = layout.ToLogical(_previousMouse.Position);
         var pressed = _previousMouse.LeftButton == ButtonState.Pressed;
         _painter.Begin(layout);
+        HudGroundLabels.DrawBeams(_painter, layout, GroundBeams, _clock.Elapsed.TotalMilliseconds);
         _dropNames.Draw(_painter, layout, GroundLabels, GroundLabelPlaced);
         Combat.DrawNamePlates(_painter, layout, Overhead, HoveredId, TracedId, _context.Presentation.Requested.ClassicNamePlates);
         DrawPetLabels(layout);
@@ -701,6 +759,8 @@ public sealed partial class GameplayHud : IDisposable
 
             _bossList.DrawButton(_painter, _minimap.Area(layout), pointer);
             HudPetWindow.DrawButton(_painter, _minimap.Area(layout), pointer, _petWindow.Open);
+            HudQuestBook.DrawButton(_painter, _minimap.Area(layout), pointer, _questBook.Open);
+            HudCoinShop.DrawButton(_painter, _minimap.Area(layout), pointer, _coinShop.Open);
             _painter.Flush();
             _bossList.Draw(_painter, layout, _minimap.Area(layout), _clock.Elapsed.TotalMilliseconds);
         }
@@ -728,8 +788,11 @@ public sealed partial class GameplayHud : IDisposable
         if (_inventorySlide.Visible)
         {
             _inventoryPanel.ClockMs = _clock.Elapsed.TotalMilliseconds;
-            _inventoryPanel.Draw(_painter, PanelOrigin(layout, _inventorySlide), _state, _inventory, _icons, pointer, _inventorySlide.FullyOpen,
-                _warehouse.Carried);
+            var bagOrigin = PanelOrigin(layout, _inventorySlide);
+            _inventoryPanel.Draw(_painter, bagOrigin, _state, _inventory, _icons, pointer, _inventorySlide.FullyOpen, _warehouse.Carried);
+            var money = Inventory.HudInventoryLayout.Money(bagOrigin);
+            _painter.Text("Coins", money.Right + 40, money.Y, BagCoinColor);
+            _painter.Text(Coins.Text, money.Right + 84, money.Y, BagCoinColor);
         }
         else
         {
@@ -880,6 +943,13 @@ public sealed partial class GameplayHud : IDisposable
         _painter.Flush();
         _petWindow.Draw(_painter, layout, PetCollection, CharacterName, _icons, pointer);
         _painter.Flush();
+        _questTracker.Refresh(_painter, _questView, _weaponHunt);
+        _questTracker.Visible = !_questBook.Open;
+        _questTracker.Draw(_painter, layout, pointer);
+        _questBook.Draw(_painter, layout, pointer);
+        _painter.Flush();
+        _coinShop.Draw(_painter, layout, _icons, pointer);
+        _painter.Flush();
         DrawMinimapName(layout, pointer);
         _actionBar.DrawOverlay(_painter, layout, _state, _icons, _skillHud, pointer);
         _painter.Flush();
@@ -887,7 +957,7 @@ public sealed partial class GameplayHud : IDisposable
         _painter.End();
     }
 
-    // Each pet's name centred over it, within the distance speech bubbles show at.
+    // Each pet's name in the NPCs' name box over it, within the distance speech bubbles show at.
     private void DrawPetLabels(HudLayout layout)
     {
         var scale = Math.Max(1, layout.Scale);
@@ -896,7 +966,7 @@ public sealed partial class GameplayHud : IDisposable
             if (point.Depth <= HudChatBubbles.MaxDepth)
             {
                 var x = (int)(point.Screen.X / scale);
-                _painter.TextCentered(text, x - 200, x + 200, (int)(point.Screen.Y / scale) - HudPainter.LineHeight, PetLabelColor);
+                HudCombat.DrawNamePlate(_painter, layout, text, x, (int)(point.Screen.Y / scale), PetLabelColor);
             }
         }
     }
@@ -924,17 +994,21 @@ public sealed partial class GameplayHud : IDisposable
             _actionBar.Restore(saved.Open, saved.Locked, saved.Vertical, new Point(saved.X, saved.Y));
             _bindings.Slots.Restore(saved.Slots, saved.Page);
             _minimap.Offset = new Point(saved.MapX, saved.MapY);
+            _questTracker.Offset = new Point(saved.TrackerX, saved.TrackerY);
+            _questTracker.Collapsed = saved.TrackerCollapsed;
         }
 
         _savedSlots = _bindings.Slots.Revision;
         _savedBar = _actionBar.Revision;
         _savedMap = _minimap.Revision;
+        _savedTracker = _questTracker.Revision;
     }
 
     // Saves the bar when a shortcut, the page or the window changed (not while the character's file is still read).
     private void SaveActionBar()
     {
-        if (_actionBarStore.Reading || _savedSlots == _bindings.Slots.Revision && _savedBar == _actionBar.Revision && _savedMap == _minimap.Revision)
+        if (_actionBarStore.Reading || _savedSlots == _bindings.Slots.Revision && _savedBar == _actionBar.Revision && _savedMap == _minimap.Revision
+            && _savedTracker == _questTracker.Revision)
         {
             return;
         }
@@ -942,8 +1016,14 @@ public sealed partial class GameplayHud : IDisposable
         _savedSlots = _bindings.Slots.Revision;
         _savedBar = _actionBar.Revision;
         _savedMap = _minimap.Revision;
+        _savedTracker = _questTracker.Revision;
         _actionBarStore.Save(new HudActionBarDocument(HudActionBarDocument.CurrentVersion, _actionBar.Open, _actionBar.Locked, _actionBar.Vertical,
-            _actionBar.Anchor.X, _actionBar.Anchor.Y, _bindings.Slots.Page, _bindings.Slots.Save(), _minimap.Offset.X, _minimap.Offset.Y));
+            _actionBar.Anchor.X, _actionBar.Anchor.Y, _bindings.Slots.Page, _bindings.Slots.Save(), _minimap.Offset.X, _minimap.Offset.Y)
+        {
+            TrackerX = _questTracker.Offset.X,
+            TrackerY = _questTracker.Offset.Y,
+            TrackerCollapsed = _questTracker.Collapsed
+        });
     }
 
     private HudLayout Layout() => HudLayout.Of(_context.GraphicsDevice.Viewport);

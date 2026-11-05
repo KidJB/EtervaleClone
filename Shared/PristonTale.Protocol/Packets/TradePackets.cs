@@ -3,16 +3,18 @@ using PristonTale.Protocol.Binary;
 
 namespace PristonTale.Protocol.Packets;
 
-// Trade messages. Each body starts with {uint16 Version = 1, uint16 Flags = 0}; readers reject version 0. Names are UTF-8
+// Trade messages. Each body starts with {uint16 Version = 2, uint16 Flags = 0}; readers reject version 0, and the offer and
+// the state, which carry coins since version 2, reject version 1. Names are UTF-8
 // with a uint16 byte length, within the character names' limit. Requests are not answered: TradeState (after
 // TradeDetails, the partner items' values) and chat lines show what changed.
 public static class TradeWire
 {
-    public const ushort Version = 1;
+    public const ushort Version = 2;
+    public const ushort CoinsVersion = 2;
 
     internal static void Header(ref PacketWriter writer) => WireHeader.Write(ref writer, Version);
 
-    internal static void ReadHeader(ref PacketReader reader) => WireHeader.Read(ref reader, "Trade message");
+    internal static void ReadHeader(ref PacketReader reader, ushort minimumVersion = 1) => WireHeader.Read(ref reader, "Trade message", minimumVersion);
 
     internal static string Name(ref PacketReader reader) => Utf8Text.Read(ref reader, AccountWire.MaxNameBytes, "Trade message");
 
@@ -87,10 +89,10 @@ public sealed record TradeAnswerPacket(ulong FromId, bool Accept) : IFramePacket
     }
 }
 
-// C->S: the side's whole offer. {header, int64 Money, int32 Count, entries}.
-public sealed record TradeOfferPacket(long Money, IReadOnlyList<TradeEntryWire> Entries) : IFramePacket
+// C->S: the side's whole offer. {header, int64 Money, int64 Coins, int32 Count, entries}.
+public sealed record TradeOfferPacket(long Money, IReadOnlyList<TradeEntryWire> Entries, long Coins = 0) : IFramePacket
 {
-    private const int MinimumSize = 8 + WireHeader.Size + 8 + 4;
+    private const int MinimumSize = 8 + WireHeader.Size + 8 + 4 + 8;
     public const int MaxSize = MinimumSize + TradeLimits.MaxItems * TradeEntryWire.Size;
 
     public int Write(Span<byte> destination)
@@ -103,6 +105,7 @@ public sealed record TradeOfferPacket(long Money, IReadOnlyList<TradeEntryWire> 
         var writer = new PacketWriter(destination, EtervaleOpcodes.TradeOffer);
         TradeWire.Header(ref writer);
         writer.Int64(Money);
+        writer.Int64(Coins);
         WireList.Write(ref writer, Entries);
         return writer.Finish();
     }
@@ -110,9 +113,10 @@ public sealed record TradeOfferPacket(long Money, IReadOnlyList<TradeEntryWire> 
     public static TradeOfferPacket Read(ReadOnlySpan<byte> packet)
     {
         var reader = new PacketReader(packet, MinimumSize);
-        TradeWire.ReadHeader(ref reader);
+        TradeWire.ReadHeader(ref reader, TradeWire.CoinsVersion);
         var money = reader.Int64();
-        return new TradeOfferPacket(money, WireList.Read<TradeEntryWire>(ref reader, TradeLimits.MaxItems, "Trade offer"));
+        var coins = reader.Int64();
+        return new TradeOfferPacket(money, WireList.Read<TradeEntryWire>(ref reader, TradeLimits.MaxItems, "Trade offer"), coins);
     }
 }
 
@@ -166,13 +170,13 @@ public sealed record TradeAskedPacket(ulong FromId, string FromName) : IFramePac
 
 // S->C: the receiver's trade window; PartnerId 0 once it trades with nobody. {header, uint64 PartnerId, text PartnerName,
 // uint8 Flags (1 own offer locked, 2 the partner's), int64 OwnMoney, int64 PartnerMoney, int32 Count, own entries, int32
-// Count, the partner's items (StoreItemEntry, anchored at their trade grid cells)}.
+// Count, the partner's items (StoreItemEntry, anchored at their trade grid cells), int64 OwnCoins, int64 PartnerCoins}.
 public sealed record TradeStatePacket(ulong PartnerId, string PartnerName, byte Flags, long OwnMoney, long PartnerMoney, IReadOnlyList<TradeEntryWire> Own,
-    IReadOnlyList<StoreItemEntry> PartnerItems) : IFramePacket
+    IReadOnlyList<StoreItemEntry> PartnerItems, long OwnCoins = 0, long PartnerCoins = 0) : IFramePacket
 {
     public const byte OwnLocked = 1;
     public const byte PartnerLocked = 2;
-    private const int MinimumSize = 8 + WireHeader.Size + 8 + 2 + 1 + 8 + 8 + 4 + 4;
+    private const int MinimumSize = 8 + WireHeader.Size + 8 + 2 + 1 + 8 + 8 + 4 + 4 + 8 + 8;
     public const int MaxSize = MinimumSize + AccountWire.MaxNameBytes + TradeLimits.MaxItems * (TradeEntryWire.Size + StoreItemEntry.MaxSize);
 
     public int Write(Span<byte> destination)
@@ -201,13 +205,15 @@ public sealed record TradeStatePacket(ulong PartnerId, string PartnerName, byte 
             item.Write(ref writer);
         }
 
+        writer.Int64(OwnCoins);
+        writer.Int64(PartnerCoins);
         return writer.Finish();
     }
 
     public static TradeStatePacket Read(ReadOnlySpan<byte> packet)
     {
         var reader = new PacketReader(packet, MinimumSize);
-        TradeWire.ReadHeader(ref reader);
+        TradeWire.ReadHeader(ref reader, TradeWire.CoinsVersion);
         var partner = reader.UInt64();
         var name = TradeWire.Name(ref reader);
         var flags = reader.Byte();
@@ -225,12 +231,14 @@ public sealed record TradeStatePacket(ulong PartnerId, string PartnerName, byte 
             items[index] = StoreItemEntry.Read(ref reader);
         }
 
+        var ownCoins = reader.Int64();
+        var partnerCoins = reader.Int64();
         if (reader.Remaining != 0)
         {
             throw new InvalidDataException("Trade state has trailing bytes.");
         }
 
-        return new TradeStatePacket(partner, name, flags, ownMoney, partnerMoney, own, items);
+        return new TradeStatePacket(partner, name, flags, ownMoney, partnerMoney, own, items, ownCoins, partnerCoins);
     }
 
     private static int Count(ref PacketReader reader)

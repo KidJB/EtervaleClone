@@ -3,7 +3,7 @@ using PristonTale.Simulation.Characters;
 namespace PristonTale.Simulation.Quests;
 
 // What the owner's client shows of its quests: the running quest with its hunt and timer, the quest window lines and
-// whether a skill redistribution is offered. Sent again whenever the journal revision changes.
+// whether a skill redistribution is offered, and the finished-quest logs the quest book reads. Sent again whenever the journal revision changes.
 public sealed record QuestView(
     long Revision,
     QuestCode Code,
@@ -19,6 +19,8 @@ public sealed record QuestView(
     public bool SkillResetOffered { get; init; }
     public int WeaponStage { get; init; }
     public int WeaponKillsLeft { get; init; }
+    public LevelQuestLog LevelLog { get; init; }
+    public ElementaryQuestLog ElementaryLog { get; init; }
 
     public static QuestView Capture(PlayerCharacter character)
     {
@@ -29,7 +31,9 @@ public sealed record QuestView(
         {
             SkillResetOffered = journal.SkillResetOffered,
             WeaponStage = active.WeaponStage,
-            WeaponKillsLeft = active.WeaponKillsLeft
+            WeaponKillsLeft = active.WeaponKillsLeft,
+            LevelLog = journal.LevelLog,
+            ElementaryLog = journal.ElementaryLog
         };
     }
 }

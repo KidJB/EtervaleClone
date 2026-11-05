@@ -39,8 +39,9 @@ public sealed partial class WorldServer
     public Task<WorldNotice[]> AnswerTradeAsync(PlayerSession session, ulong fromId, bool accept) =>
         EnqueueAsync(session.EntityId, () => NoticeAction(session, connection => AnswerTrade(connection, fromId, accept)));
 
-    public Task<WorldNotice[]> OfferTradeAsync(PlayerSession session, TradeOffer offer) =>
-        EnqueueAsync(session.EntityId, () => NoticeAction(session, connection => OfferTrade(connection.Player, offer)));
+    // coinBalance: the account's coins, read before the tick, which the offered coins may not exceed.
+    public Task<WorldNotice[]> OfferTradeAsync(PlayerSession session, TradeOffer offer, long coinBalance) =>
+        EnqueueAsync(session.EntityId, () => NoticeAction(session, connection => OfferTrade(connection.Player, offer, coinBalance)));
 
     // Exempt from the quota: the window is already closed.
     public Task<WorldNotice[]> CancelTradeAsync(PlayerSession session) =>
@@ -275,7 +276,7 @@ public sealed partial class WorldServer
 
     // The same offer sent again changes nothing (no unlock, no lock delay for the partner). A refused one answers the offer
     // the server holds again, so the window drops its guess.
-    private void OfferTrade(WorldPlayer player, TradeOffer offer)
+    private void OfferTrade(WorldPlayer player, TradeOffer offer, long coinBalance)
     {
         if (player.Trade is not { Executing: false } trade || trade.IsLocked(trade.SideOf(player.EntityId))
             || trade.OfferOf(trade.SideOf(player.EntityId)).SameAs(offer))
@@ -284,6 +285,11 @@ public sealed partial class WorldServer
         }
 
         var status = TradeRules.Check(player.Character, offer);
+        if (status == TradeStatus.Ok)
+        {
+            status = CoinTrading.Check(offer.Coins, coinBalance);
+        }
+
         if (status != TradeStatus.Ok)
         {
             Reply(player, TradeMessages.Of(status));
@@ -392,6 +398,6 @@ public sealed partial class WorldServer
         }
 
         return new TradeView(partner.EntityId, partner.Character.Name, trade.OfferOf(side), trade.IsLocked(side), items, offer.Money,
-            trade.IsLocked(1 - side));
+            trade.IsLocked(1 - side), offer.Coins);
     }
 }

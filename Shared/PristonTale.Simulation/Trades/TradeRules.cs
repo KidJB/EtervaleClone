@@ -8,9 +8,12 @@ namespace PristonTale.Simulation.Trades;
 // A bag item a side offers, at its cell of the trade grid (row-major, TradeLimits.Columns wide).
 public readonly record struct TradeEntry(Guid ItemId, int Cell);
 
-// One side's offer: bag items laid on the trade grid and gold. The items stay in the bag until the exchange.
+// One side's offer: bag items laid on the trade grid, gold and account coins (CoinTrading). The items stay in the bag until
+// the exchange.
 public sealed record TradeOffer(IReadOnlyList<TradeEntry> Entries, long Money)
 {
+    public long Coins { get; init; }
+
     public static readonly TradeOffer Empty = new([], 0);
 
     public bool Holds(Guid itemId)
@@ -26,7 +29,7 @@ public sealed record TradeOffer(IReadOnlyList<TradeEntry> Entries, long Money)
         return false;
     }
 
-    public bool SameAs(TradeOffer other) => Money == other.Money && Entries.SequenceEqual(other.Entries);
+    public bool SameAs(TradeOffer other) => Money == other.Money && Coins == other.Coins && Entries.SequenceEqual(other.Entries);
 }
 
 // Why a trade change was refused, or why the trade ended.
@@ -44,7 +47,9 @@ public enum TradeStatus : ushort
     GoldLimit = 9,
     Changed = 10,
     Cancelled = 11,
-    StorageFailed = 12
+    StorageFailed = 12,
+    NotEnoughCoins = 13,
+    CoinLimit = 14
 }
 
 // The original's trade: each side lays up to 20 bag items it may hand over (BoundItems.CanHandOver) on its 9x4 grid and
@@ -201,6 +206,8 @@ public static class TradeMessages
         TradeStatus.Changed => "Item has been changed. Please check",
         TradeStatus.Cancelled => "Transaction cancelled",
         TradeStatus.StorageFailed => ItemRuleMessages.TradeStorageFailed,
+        TradeStatus.NotEnoughCoins => "Not enough coins",
+        TradeStatus.CoinLimit => "Too many coins for one trade",
         _ => "The trade was refused"
     };
 

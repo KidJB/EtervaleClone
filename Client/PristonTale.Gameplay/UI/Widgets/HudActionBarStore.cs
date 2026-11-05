@@ -5,10 +5,14 @@ using PristonTale.Engine3D.Diagnostics;
 namespace PristonTale.Gameplay.UI.Widgets;
 
 // The action bar as saved: shown, locked, turned, where it lies (HudActionBar.Anchor, -1 until moved), the shown page and
-// every page's shortcuts (HudActionBarSlots.Save); and how far the minimap was moved from its place (HudMinimap.Offset).
+// every page's shortcuts (HudActionBarSlots.Save); how far the minimap was moved from its place (HudMinimap.Offset); and
+// the quest tracker's move and fold (HudQuestTracker.Offset, Collapsed).
 public sealed record HudActionBarDocument(int Version, bool Open, bool Locked, bool Vertical, int X, int Y, int Page, string[] Slots, int MapX = 0, int MapY = 0)
 {
     public const int CurrentVersion = 1;
+    public int TrackerX { get; init; }
+    public int TrackerY { get; init; }
+    public bool TrackerCollapsed { get; init; }
 }
 
 // One file per character in action-bars/ beside the executable, read and written off the game thread: Load starts the

@@ -71,6 +71,17 @@ public sealed partial class GameplayHud
                 _questDocuments.Lines(HudQuestDocuments.BoardPath(entry.Description));
             }
         }
+
+        if (_state is not null)
+        {
+            var huntComplete = _questView is { KillsNeeded: > 0 } && _questView.Kills >= _questView.KillsNeeded;
+            if (_questBook.Refresh(new QuestBookFacts(_state.Level, _state.Tier, QuestClasses.IsTempskron(_class), _questView?.Code ?? QuestCode.None,
+                _questView?.LevelLog ?? LevelQuestLog.None, _questView?.ElementaryLog ?? ElementaryQuestLog.None)) || huntComplete != _marksHuntComplete)
+            {
+                _marksHuntComplete = huntComplete;
+                _questBook.FillMarks(_npcQuestMarks, huntComplete);
+            }
+        }
     }
 
     // The quest dialog, its yes/no box and the skill redistribution offer are modal: they take every click.

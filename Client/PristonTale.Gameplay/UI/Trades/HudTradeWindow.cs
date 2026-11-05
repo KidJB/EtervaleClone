@@ -18,6 +18,7 @@ public enum HudTradeAction
     Close,
     Lock,
     Money,
+    Coins,
     TakeBack
 }
 
@@ -25,7 +26,9 @@ public enum HudTradeAction
 // at (21, 86)) over the strip at y 174 and the player's grid at (21, 195), the partner's name, gold and weight and its lock
 // mark on the right panel, the player's gold (a click asks how much), weight, lock (26x26 at (253, 260); grey for
 // TradeLimits.LockDelayMs after the partner changed its offer) and close (305, 264). The player's offer is what it last
-// sent until the server's window replaces it; its items keep their bag cells (Holds).
+// sent until the server's window replaces it; its items keep their bag cells (Holds). A strip under the frame shows the
+// coins each side offers and what the other receives after the fee (CoinTrading); a click on the player's half asks how
+// many.
 public sealed class HudTradeWindow : IHudServiceWindow
 {
     private const int GridHeight = TradeLimits.Rows * HudGridPlacement.CellSize;
@@ -38,7 +41,13 @@ public sealed class HudTradeWindow : IHudServiceWindow
     private readonly HudNumberText _ownWeight = new();
     private readonly HudNumberText _partnerMoney = new();
     private readonly HudNumberText _partnerWeight = new();
+    private static readonly Color CoinStripColor = new(12, 10, 8, 210);
+    private static readonly Color CoinColor = new(255, 214, 90);
     private long _revision;
+    private long _coinsShown = -1;
+    private long _partnerCoinsShown = -1;
+    private string _coinsLine = "";
+    private string _partnerCoinsLine = "";
     private int _partnerWeightValue;
     private string _partnerName;
     private string _partnerNameShown;
@@ -48,6 +57,7 @@ public sealed class HudTradeWindow : IHudServiceWindow
 
     public TradeInfo Info { get; private set; } = TradeInfo.None;
     public long Money { get; private set; }
+    public long Coins { get; private set; }
     public IReadOnlyList<TradeEntry> Entries => _entries;
 
     // When the lock works again after the partner changed its offer (the HUD clock, ms).
@@ -70,6 +80,8 @@ public sealed class HudTradeWindow : IHudServiceWindow
     public static Rectangle MoneyButton(Point origin) => new(origin.X + 235, origin.Y + 205, 25, 21);
     public static Rectangle LockButton(Point origin) => new(origin.X + 253, origin.Y + 260, 25, 26);
     public static Rectangle CloseButton(Point origin) => new(origin.X + 305, origin.Y + 264, 20, 20);
+    public static Rectangle CoinStrip(Point origin) => new(origin.X, origin.Y + 306, 344, 22);
+    public static Rectangle CoinsButton(Point origin) => new(origin.X, origin.Y + 306, 172, 22);
 
     public bool Holds(Guid itemId)
     {
@@ -93,6 +105,7 @@ public sealed class HudTradeWindow : IHudServiceWindow
         Info = TradeInfo.None;
         _entries.Clear();
         Money = 0;
+        Coins = 0;
         Changed(null);
     }
 
@@ -108,12 +121,12 @@ public sealed class HudTradeWindow : IHudServiceWindow
 
     public void Advance(double seconds) => _slide.Advance(seconds);
 
-    public bool Contains(Point pointer) => _slide.Visible && HudStoreLayout.Window(Origin).Contains(pointer);
+    public bool Contains(Point pointer) => _slide.Visible && (HudStoreLayout.Window(Origin).Contains(pointer) || CoinStrip(Origin).Contains(pointer));
 
     // The server's window: the player's offer as it holds it, the partner's; a changed partner offer greys the lock.
     public void Apply(TradeInfo info, IReadOnlyList<OwnedItemView> owned, double nowMs)
     {
-        if (!ReferenceEquals(info.PartnerItems, Info.PartnerItems) && (info.PartnerMoney != Info.PartnerMoney || !SameItems(info.PartnerItems, Info.PartnerItems)))
+        if (!ReferenceEquals(info.PartnerItems, Info.PartnerItems) && (info.PartnerMoney != Info.PartnerMoney || info.PartnerCoins != Info.PartnerCoins || !SameItems(info.PartnerItems, Info.PartnerItems)))
         {
             LockReadyMs = nowMs + TradeLimits.LockDelayMs;
         }
@@ -122,6 +135,7 @@ public sealed class HudTradeWindow : IHudServiceWindow
         _entries.Clear();
         _entries.AddRange(info.Own.Entries);
         Money = info.Own.Money;
+        Coins = info.Own.Coins;
         _partnerWeightValue = Weight(info.PartnerItems);
         _partnerCounts.Refresh(++_revision, info.PartnerItems);
         Changed(owned);
@@ -163,7 +177,9 @@ public sealed class HudTradeWindow : IHudServiceWindow
 
     public void SetMoney(long money) => Money = Math.Max(0, money);
 
-    public TradeOffer Offer() => new(_entries.ToArray(), Money);
+    public void SetCoins(long coins) => Coins = Math.Max(0, coins);
+
+    public TradeOffer Offer() => new(_entries.ToArray(), Money) { Coins = Coins };
 
     public bool CanLock(double nowMs) => Info.Open && !Info.OwnLocked && nowMs >= LockReadyMs;
 
@@ -194,6 +210,11 @@ public sealed class HudTradeWindow : IHudServiceWindow
         if (MoneyButton(origin).Contains(pointer))
         {
             return HudTradeAction.Money;
+        }
+
+        if (CoinsButton(origin).Contains(pointer))
+        {
+            return HudTradeAction.Coins;
         }
 
         if (ItemAt(_own, OwnGrid(origin), pointer) is { } item)
@@ -257,6 +278,7 @@ public sealed class HudTradeWindow : IHudServiceWindow
             painter.Sprite(HudTradeArt.Locked, lockButton.X, lockButton.Y);
         }
 
+        DrawCoins(painter, origin, interactive && !Info.OwnLocked && CoinsButton(origin).Contains(pointer));
         if (interactive && CloseButton(origin).Contains(pointer))
         {
             var close = CloseButton(origin);
@@ -290,7 +312,35 @@ public sealed class HudTradeWindow : IHudServiceWindow
             (_described, _description) = (item, HudItemDetailTooltip.Lines(counts.Named(item), state, null, null));
         }
 
-        HudItemDetailTooltip.Draw(painter, layout, pointer, _description);
+        HudItemDetailTooltip.Draw(painter, layout, pointer, _description, null, HudItemDetailTooltip.RarityOf(item));
+    }
+
+    private void DrawCoins(HudPainter painter, Point origin, bool hovered)
+    {
+        if (Coins != _coinsShown)
+        {
+            _coinsShown = Coins;
+            _coinsLine = Coins > 0
+                ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Coins: {Coins:N0} (gets {CoinTrading.Received(Coins):N0})")
+                : "Coins: click to offer";
+        }
+
+        if (Info.PartnerCoins != _partnerCoinsShown)
+        {
+            _partnerCoinsShown = Info.PartnerCoins;
+            _partnerCoinsLine = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"Their coins: {Info.PartnerCoins:N0} (you get {CoinTrading.Received(Info.PartnerCoins):N0})");
+        }
+
+        var strip = CoinStrip(origin);
+        painter.Fill(strip, CoinStripColor);
+        if (hovered)
+        {
+            painter.Fill(CoinsButton(origin), HudPlacementColors.Selection);
+        }
+
+        painter.TextCentered(_coinsLine, strip.X, strip.X + strip.Width / 2, strip.Y + 4, CoinColor);
+        painter.TextCentered(_partnerCoinsLine, strip.X + strip.Width / 2, strip.Right, strip.Y + 4, CoinColor);
     }
 
     private void DrawItems(HudPainter painter, HudItemIcons icons, IReadOnlyList<OwnedItemView> items, Rectangle grid, HudItemCounts counts)

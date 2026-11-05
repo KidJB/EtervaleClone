@@ -377,6 +377,7 @@ Renderer side of stage publication: [rendering.md](rendering.md).
 | Input | Where | Effect |
 |---|---|---|
 | Left click | `GameScene.UpdatePlayerInput` | In order: pick ground loot, cast the left socket skill, pick a monster (attack) or NPC (approach and talk), move. A skill motion is never cut: a click during it casts nothing; a picked monster or NPC is kept and approached once the motion ends, and a ground point is walked to then (`SelfCasting` holds the attack approach, the NPC approach and the walk, and `StopPredictedMovement` leaves the skill clip playing) |
+| Hold left on the ground | same | Walk toward the cursor from the press while the button is held (until blocked); releasing it stops the walk where the player is |
 | Double left click (350 ms) on the ground | same | Keep walking toward the cursor without holding the button, until blocked or the next click |
 | `R`, or the bar's walk/run button | `GameplayHud.RunToggleRequested` -> `GameScene.ToggleRun` | Walk/run setting (running at first) for every move: clicks, monster, NPC and item approaches. A player tracing a target or holding the button keeps its pace while its stamina is at a quarter or less and walks once it runs out; overweight only walks |
 | Shift held while running (game masters) | `GameScene.MovementSpeed` | Dash at 3000/256 units per original tick; `WorldJoined` carries the game master level and the server allows game masters that speed |
@@ -387,6 +388,7 @@ Renderer side of stage publication: [rendering.md](rendering.md).
 | `I` or `V`, `C`, `S`, `X`, `Q`, `D` | `GameplayHud.UpdateKeys` | Inventory, status, skills, system menu, quest window, party window (ignored with Ctrl held) |
 | `F1`-`F8`, `F10`, `4`-`0`, `-`, `=` | `HudSkillBindings` | The action bar's keys: select the skill or use the item on the shown page's key; while pressing a skill in the tree, bind it ([skills.md](skills.md)) |
 | `J` | `GameplayHud.UpdateKeys` | Open or close the pet collection (`HudPetWindow`) |
+| `L` | `GameplayHud.UpdateKeys` | Open or close the quest book (`HudQuestBook`) |
 | `B`, `Alt+1`..`Alt+3` | `GameplayHud.UpdateKeys` | Show or hide the action bar; show its page 1 to 3 (Alt keeps `1`-`3` from the potion belt) |
 | `Enter`, `Page Up`/`Page Down`, `Up`/`Down` | `HudChat.Update` | Open the chat input or send its line, scroll the chat, recall commands; while typing, HUD, binding, debug and motion keys and the `A` labels are suppressed |
 | `Esc` | `Game1` | Close the chat window first, then HUD panels, else quit |
@@ -508,15 +510,20 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   the world (the server's `BossList`, kept in `GameScene.BossList`): boss, field and the time to its next pass (`now`,
   `tomorrow`), soonest first, counted down from the list's arrival; the wheel scrolls it, the button, its `x` or Escape
   close it.
-  Under it a pet button (or `J`) opens the pet collection (`HudPetWindow`): every pet skin in a grid of five, unlocked
-  ones lit (the helper pet item's icon) and the one out framed; a click on an unlocked skin sends `/pet <id>` through the
-  chat (on the pet out, `/pet off`), and "Put away" sends `/pet off`. The header shows the pet out's name (`PetNames.Shown`); "Rename" opens a
-  name box (`TextInputField` taking letters, digits and spaces) that holds the keyboard: Enter or OK sends
-  `/petname <name>` (an empty name clears it) and Escape leaves the box before it closes the window. The server's `PetCollection` (`GameScene.PetCollection`)
+  Under the pet button a quest book button (or `L`) opens the quest book (`HudQuestBook`, see [quests.md](quests.md#client)).
+  Under the boss list's button a pet button (or `J`) opens the pet collection (`HudPetWindow`), drawn on the stable
+  frame of `assets/Hud/Stable/` (a plain dark box without it): the Pets tab, the pet out's name (`PetNames.Shown`) with
+  a pencil, one row per pet skin four at a time (portrait frame with the helper pet item's icon, name, Out, Unlocked
+  or Locked; the wheel and the scroll bar move the list) and "N of M acquired". An unlocked row's paw sends
+  `/pet <id>` through the chat; on the pet out the remove mark sends `/pet off`. The pencil opens a name box
+  (`TextInputField` taking letters, digits and spaces) on the name line that holds the keyboard: Enter sends
+  `/petname <name>` (an empty name clears it) and Escape leaves the box before it closes the window. The server's
+  `PetCollection` (`GameScene.PetCollection`)
   answers. Each player's pet out walks beside it (`SkinPetPresentation`): the skin's monster model at its scale, closing a
   tenth of the way to its place behind and beside its owner per 70 Hz frame, walking while it moves. Its name hangs over
   it (`SkinPetPresentation.CollectLabels`, projected by `GameScene.CollectPetLabels`, drawn by the HUD within the speech
-  bubbles' `MaxDepth`): the name its owner gave it, or "<owner>'s Pet" (`PetNames.Shown`).
+  bubbles' `MaxDepth`) in the NPCs' name box (`HudCombat.DrawNamePlate`): the name its owner gave it, or "<owner>'s Pet"
+  (`PetNames.Shown`).
 - Bottom bar gauges (`HudBar`): life, mana and stamina (`Bar_Life`, `Bar_Mana`, `Bar_Stamina`, 94, 94 and 76 pixels)
   and the experience (`sinGage/Bar_Exp.bmp`, 6 x 86 at (485, 508), Menu-1's slot right of the mana under its "NL." label)
   fill from the bottom up; the experience is the level's share. Pointed at, each shows its value; the experience reads
@@ -566,7 +573,10 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   aged or normal colour), attack power, weapon speed, range, critical, defence, attack rating, absorb (with the catalog
   correction, one decimal), block, speed, integrity, the eight resistances, regeneration, added pools, potion storage,
   the requirements (orange when met, red when not), then the class specialization header and its bonuses in green, the
-  shop price and the action hint. With an item carried (from the bag or the warehouse) the window takes no hover, but
+  shop price and the action hint (a bag item that is not worn, drunk or used shows none). Hovering a body armour in the
+  bag window also shows the player wearing it under the lines, facing the viewer on a grey panel with a thin light border (`GameScene.PreviewArmor` composes a
+  hidden copy of the player with that body, `RenderArmorPreview` draws it into its own picture before the world each
+  frame). With an item carried (from the bag or the warehouse) the window takes no hover, but
   the item under the pointer still shows its box, drawn over the carried item and without an action hint
   (`HudInventoryPanel.CarriedOver`), as in the original. An aged copy shows its gauge under the name: the bar
   (`Aging/Bar.bmp`) filling toward the goal while it matures (with the live count from `AgingProgress` for worn

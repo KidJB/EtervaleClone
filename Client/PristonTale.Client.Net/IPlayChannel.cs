@@ -1,3 +1,4 @@
+using PristonTale.Simulation.Shops;
 using System.Numerics;
 using PristonTale.Client.Net.Presence;
 using PristonTale.Simulation.Items;
@@ -45,6 +46,14 @@ public interface IPlayChannel : IAsyncDisposable
     Task<PersonalShopReply> ViewPersonalShopAsync(ulong sellerId, CancellationToken ct = default);
 
     Task<PersonalShopReply> BuyFromPersonalShopAsync(PersonalShopPurchase purchase, CancellationToken ct = default);
+
+    // The coin shop: its catalog with the account's balance, and a purchase answering its status and the new balance.
+    Task<CoinShopView> OpenCoinShopAsync(CancellationToken ct = default);
+
+    Task<(CoinShopStatus Status, long Balance)> BuyCoinShopAsync(int tabId, int itemId, int quantity, int specClass, CancellationToken ct = default);
+
+    // The account's coins now.
+    Task<long> CoinBalanceAsync(CancellationToken ct = default);
 
     // A player on a warp stone travels to a stone of the wing warp map; the server checks the wing, level and fee.
     Task<WingGateOutcome> TravelWingGateAsync(int destination, CancellationToken ct = default);

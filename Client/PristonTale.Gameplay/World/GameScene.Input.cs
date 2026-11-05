@@ -73,9 +73,7 @@ public sealed partial class GameScene
         UpdateRunMode(mouse);
         if (!WorldClicksBlocked && mouse.LeftButton == ButtonState.Pressed && _lastMouseState.LeftButton == ButtonState.Released)
         {
-            var nowMs = gameTime.TotalGameTime.TotalMilliseconds;
-            var doubleClick = (nowMs - _lastLeftClickMs) <= DoubleClickMs;
-            _lastLeftClickMs = nowMs;
+            _leftPressMs = gameTime.TotalGameTime.TotalMilliseconds;
             _followCursor = false;
             if (TryPickLoot(mouse))
             {
@@ -89,11 +87,14 @@ public sealed partial class GameScene
             }
             else if (SetMoveTarget(mouse))
             {
-                // A ground click during a skill motion is kept: the walk starts once the skill ends.
+                // A double click during a skill motion is kept: the walk starts once the skill ends.
                 CancelPendingCast();
                 ClearAttackTarget();
                 _lootInteraction.Cancel();
-                _followCursor = doubleClick;
+                var doubleClick = _leftPressMs - _lastGroundClickMs <= DoubleClickMs;
+                _lastGroundClickMs = doubleClick ? double.NegativeInfinity : _leftPressMs;
+                _autoFollow = doubleClick;
+                _followCursor = true;
                 _reports.Request();
             }
         }
@@ -111,7 +112,16 @@ public sealed partial class GameScene
         _lootInteraction?.Update(_groundLoot, _playerBody.Position, _serverPlanarPosition, Owner, PetOut, _presentation?.Requested.PetPicksUpPotions ?? true,
             gameTime.TotalGameTime.TotalMilliseconds);
         UpdateAttackPresentation(gameTime);
-        if (_followCursor && !WorldClicksBlocked && !SelfCasting)
+        if (_followCursor && !_autoFollow && mouse.LeftButton == ButtonState.Released)
+        {
+            _followCursor = false;
+            if (_hasMoveTarget && !SelfCasting)
+            {
+                StopPredictedMovement();
+                _reports.Request();
+            }
+        }
+        else if (_followCursor && !WorldClicksBlocked && !SelfCasting)
         {
             SetMoveTarget(mouse);
         }

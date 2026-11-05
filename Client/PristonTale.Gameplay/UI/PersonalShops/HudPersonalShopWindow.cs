@@ -276,7 +276,7 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
             (_described, _description) = (offer, HudItemDetailTooltip.Lines(_counts.Named(offer.Item), state, price, hint));
         }
 
-        HudItemDetailTooltip.Draw(painter, layout, pointer, _description);
+        HudItemDetailTooltip.Draw(painter, layout, pointer, _description, null, HudItemDetailTooltip.RarityOf(offer.Item));
     }
 
     private void DrawButtons(HudPainter painter, Point origin)

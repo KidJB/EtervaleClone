@@ -27,6 +27,11 @@ public sealed partial class GameplayHud
         {
             if (!info.Open)
             {
+                if (_trade.IsOpen)
+                {
+                    Coins.Refresh();
+                }
+
                 _trade.Close();
             }
             else
@@ -38,6 +43,7 @@ public sealed partial class GameplayHud
                     _inventory.CloseQuestBox();
                     OpenOnly(_inventorySlide);
                     _trade.Show();
+                    Coins.Refresh();
                 }
 
                 _trade.Apply(info, _state?.Items, nowMs);
@@ -113,6 +119,14 @@ public sealed partial class GameplayHud
                     SendOffer();
                 }, zeroAccepted: true);
                 break;
+            case HudTradeAction.Coins:
+                Coins.Refresh();
+                _countBox.Open(TradeCoins.First, TradeCoins.Second, Math.Min(Coins.Value, CoinTrading.MaxPerTrade), count =>
+                {
+                    _trade.SetCoins(count);
+                    SendOffer();
+                }, zeroAccepted: true);
+                break;
             case HudTradeAction.TakeBack:
                 _trade.TakeBack(_trade.Selected, _state?.Items);
                 SendOffer();
@@ -124,4 +138,5 @@ public sealed partial class GameplayHud
 
     // The original's question for the gold a trade offers.
     private static readonly (string First, string Second) TradeGold = ("How many gold", "do you wanna trade?");
+    private static readonly (string First, string Second) TradeCoins = ("How many coins", "(10% fee) to trade?");
 }

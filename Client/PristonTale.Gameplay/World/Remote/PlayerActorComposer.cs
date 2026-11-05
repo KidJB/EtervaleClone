@@ -36,8 +36,15 @@ public readonly record struct PlayerActorHandles(ActorHandle Body, ActorHandle H
         scene.RestartActorMotion(Head, motion);
     }
 
+    // A negative index (a skill clip the model lacks, ResolveSkillMotion) plays the class's general skill motion instead.
     public void SetMotionIndex(IActorScene scene, int motionIndex)
     {
+        if (motionIndex < 0)
+        {
+            RestartMotion(scene, MotionCode.Skill);
+            return;
+        }
+
         scene.SetActorMotionIndex(Body, motionIndex);
         scene.SetActorMotionIndex(Head, motionIndex);
     }

@@ -23,6 +23,10 @@ public static class WingQuest
         new([Wings[4], Crystal(7), Crystal(8)], 80000, Wings[5], "E_Wing")
     ];
 
+    public static int ExchangeCount => Recipes.Length;
+
+    public static int ExchangeGold(int index) => Recipes[index].Gold;
+
     private static uint Crystal(int ordinal) => ItemCodes.Parse($"GP1{ordinal:D2}");
 
     // The recipe of the held wing (the last one found in the pack); -1 when the extreme wing is already held.

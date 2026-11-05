@@ -420,8 +420,8 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
 
                 var flags = (byte)((view.OwnLocked ? TradeStatePacket.OwnLocked : 0) | (view.PartnerLocked ? TradeStatePacket.PartnerLocked : 0));
                 connection.Send(_scratch.AsSpan(0, new TradeDetailsPacket(details).Write(_scratch)));
-                connection.Send(_scratch.AsSpan(0, new TradeStatePacket(view.PartnerId, view.PartnerName, flags, view.Own.Money, view.PartnerMoney, own, items)
-                    .Write(_scratch)));
+                connection.Send(_scratch.AsSpan(0, new TradeStatePacket(view.PartnerId, view.PartnerName, flags, view.Own.Money, view.PartnerMoney, own, items,
+                    view.Own.Coins, view.PartnerCoins).Write(_scratch)));
             }
             else
             {

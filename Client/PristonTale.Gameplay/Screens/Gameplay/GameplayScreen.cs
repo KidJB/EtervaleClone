@@ -17,6 +17,7 @@ public sealed class GameplayScreen : GameScreen
     private GameScene _scene;
     private GameplayHud _hud;
     private readonly List<GroundLabel> _groundLabels = [];
+    private readonly List<GroundBeam> _groundBeams = [];
     private KeyboardState _lastKeyboard;
     private bool _showRenderStats = true;
     private volatile PristonTale.Client.Net.WorldCatalog.WorldRenderCatalog _pendingHudCatalog;
@@ -71,6 +72,7 @@ public sealed class GameplayScreen : GameScreen
         _hud.Chat.Send = _scene.SendChatAsync;
         _hud.Overhead = _scene.Overhead;
         _hud.GroundLabels = _groundLabels;
+        _hud.GroundBeams = _groundBeams;
         _hud.GroundLabelPlaced = _scene.PlaceGroundLabel;
         _scene.PresenceObserved += _hud.ObserveChat;
         _scene.PresenceObserved += _hud.ObserveGuide;
@@ -80,6 +82,9 @@ public sealed class GameplayScreen : GameScreen
         _hud.Restart.Restart = _scene.RestartAsync;
         _hud.Restart.ExitRequested += RequestExit;
         _hud.WingGate.Travel = _scene.TravelWingGateAsync;
+        _hud.CoinShop.OpenRequest = _scene.OpenCoinShopAsync;
+        _hud.CoinShop.BuyRequest = _scene.BuyCoinShopAsync;
+        _hud.Coins.Request = _scene.CoinBalanceAsync;
         _hud.WingGate.RequiredLevel = _scene.FieldTravelLevel;
         _scene.WingGateEntered += _hud.WingGate.Open;
         _scene.WingGateLeft += _hud.WingGate.Close;
@@ -170,6 +175,7 @@ public sealed class GameplayScreen : GameScreen
             UpdateMotionKeys();
             UpdateDebugKeys();
         }
+        _scene.PreviewArmor(_hud.PreviewArmorKey);
         _scene.Update(gameTime);
         _hud.TargetId = _scene.SelectedTargetId;
         _hud.HelperPet = _scene.SelfHelperPet();
@@ -182,9 +188,12 @@ public sealed class GameplayScreen : GameScreen
     public override void Draw()
     {
         _hud.RenderPortrait();
+        _scene.RenderArmorPreview();
+        _hud.ArmorPreview = _scene.ArmorPreview;
         Context.GraphicsDevice.Clear(_scene.SkyColor);
         _scene.Draw();
         _scene.CollectGroundLabels(_groundLabels);
+        _scene.CollectGroundBeams(_groundBeams);
         _scene.DrawCombatText(Context.SpriteBatch, Context.Font);
         _hud.Draw();
     }

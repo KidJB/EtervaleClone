@@ -223,12 +223,13 @@ public sealed record QuestResultPacket(Guid OperationId, byte Status, bool Ok, b
 }
 
 // S->C whenever the journal changes: {header, int64 Revision, uint16 Code, uint8 Timer, uint8 SkillResetOffered,
-// int32 State, text TargetName, int32 Kills, KillsNeeded, int64 TimerMs, int32 WeaponStage, WeaponKillsLeft,
+// int32 State, text TargetName, int32 Kills, KillsNeeded, int64 TimerMs, int32 WeaponStage, WeaponKillsLeft, uint32 LevelLog, ElementaryLog,
 // int32 ProgressCount, lines, int32 FinishedCount, lines}; a line is {text Title, text Description}.
 public sealed record QuestJournalPacket(long Revision, ushort Code, byte Timer, bool SkillResetOffered, int State, string TargetName, int Kills,
-    int KillsNeeded, long TimerMs, int WeaponStage, int WeaponKillsLeft, IReadOnlyList<QuestBoardLine> Progress, IReadOnlyList<QuestBoardLine> Finished)
+    int KillsNeeded, long TimerMs, int WeaponStage, int WeaponKillsLeft, uint LevelLog, uint ElementaryLog, IReadOnlyList<QuestBoardLine> Progress,
+    IReadOnlyList<QuestBoardLine> Finished)
 {
-    private const int MinimumSize = 8 + 4 + 8 + 4 + 4 + 2 + 4 + 4 + 8 + 4 + 4 + 4 + 4;
+    private const int MinimumSize = 8 + 4 + 8 + 4 + 4 + 2 + 4 + 4 + 8 + 4 + 4 + 4 + 4 + 4 + 4;
 
     public int Capacity
     {
@@ -264,6 +265,8 @@ public sealed record QuestJournalPacket(long Revision, ushort Code, byte Timer, 
         writer.Int64(TimerMs);
         writer.Int32(WeaponStage);
         writer.Int32(WeaponKillsLeft);
+        writer.UInt32(LevelLog);
+        writer.UInt32(ElementaryLog);
         WriteLines(ref writer, Progress);
         WriteLines(ref writer, Finished);
         return writer.Finish();
@@ -312,9 +315,11 @@ public sealed record QuestJournalPacket(long Revision, ushort Code, byte Timer, 
         var timerMs = reader.Int64();
         var stage = reader.Int32();
         var left = reader.Int32();
+        var levelLog = reader.UInt32();
+        var elementaryLog = reader.UInt32();
         var progress = ReadLines(ref reader, QuestWire.MaxProgress);
         var finished = ReadLines(ref reader, QuestWire.MaxFinished);
-        return new QuestJournalPacket(revision, code, timer, reset, state, target, kills, needed, timerMs, stage, left, progress, finished);
+        return new QuestJournalPacket(revision, code, timer, reset, state, target, kills, needed, timerMs, stage, left, levelLog, elementaryLog, progress, finished);
     }
 }
 

@@ -26,6 +26,13 @@ public sealed partial class HudCombat
     private const int PlateBarHeight = 11;
     private readonly List<(ulong Id, HudOverheadPoint Point, bool Focus)> _plates = new();
 
+    // The quest mark art over an NPC, by its name (HudQuestBook.FillMarks).
+    public IReadOnlyDictionary<string, string> QuestMarks { get; set; } = new Dictionary<string, string>();
+
+    // The mark stands this far above the head point, over the name box.
+    private const int QuestMarkLift = 84;
+    private const int QuestMarkWidth = 12;
+
     // Whether a player is in the local player's party.
     public Func<ulong, bool> InParty { get; set; } = static _ => false;
 
@@ -60,6 +67,10 @@ public sealed partial class HudCombat
             var owner = summon ? OwnerLabel(entity) : null;
             var x = (int)(point.Screen.X / scale);
             var y = (int)(point.Screen.Y / scale);
+            if (!monster && !member && QuestMarks.TryGetValue(Name(id), out var mark))
+            {
+                painter.Sprite(mark, x - QuestMarkWidth / 2, y - QuestMarkLift);
+            }
             var ownSummon = summon && entity.Spawn.OwnerId == _self;
             if (classic)
             {
@@ -116,6 +127,10 @@ public sealed partial class HudCombat
             DrawHealthBar(painter, new Rectangle(anchorX - PlateBarWidth / 2, y + frameHeight - 2, PlateBarWidth, PlateBarHeight), bar.Life, bar.Spawn.MaxLife);
         }
     }
+
+    // A lone name in the NPCs' name box over an anchor (the pets' names).
+    public static void DrawNamePlate(HudPainter painter, HudLayout layout, string name, int anchorX, int anchorY, Color color) =>
+        DrawPlate(painter, layout, name, null, anchorX, anchorY, color, false, null);
 
     // The name box around the smaller text, the capitals centred inside with room for descenders.
     private static void DrawPlate(HudPainter painter, HudLayout layout, string name, string owner, int anchorX, int anchorY, Color color, bool hovered, Entity bar)

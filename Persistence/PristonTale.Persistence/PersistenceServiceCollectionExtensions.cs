@@ -25,6 +25,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<ICharacterRepository, DapperCharacterRepository>();
         services.AddSingleton<IWorldDataRepository, DapperWorldDataRepository>();
         services.AddSingleton<IWarehouseRepository, DapperWarehouseRepository>();
+        services.AddSingleton<Abstractions.Coins.ICoinRepository, DapperCoinRepository>();
         services.AddSingleton<IContactRepository, DapperContactRepository>();
         services.AddSingleton<IGameMasterRepository, DapperGameMasterRepository>();
         services.AddSingleton<IGameLogRepository, DapperGameLogRepository>();

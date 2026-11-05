@@ -235,8 +235,9 @@ internal sealed class PresenceDecoder : IEventHandleReader
 
         return new PresenceUpdate(_tick, [], [], [], [], FieldId)
         {
-            Trade = new TradeInfo(packet.PartnerId, packet.PartnerName, new Simulation.Trades.TradeOffer(own, packet.OwnMoney),
-                (packet.Flags & TradeStatePacket.OwnLocked) != 0, items, packet.PartnerMoney, (packet.Flags & TradeStatePacket.PartnerLocked) != 0)
+            Trade = new TradeInfo(packet.PartnerId, packet.PartnerName, new Simulation.Trades.TradeOffer(own, packet.OwnMoney) { Coins = packet.OwnCoins },
+                (packet.Flags & TradeStatePacket.OwnLocked) != 0, items, packet.PartnerMoney, (packet.Flags & TradeStatePacket.PartnerLocked) != 0,
+                packet.PartnerCoins)
         };
     }
 
@@ -609,7 +610,8 @@ internal sealed class PresenceDecoder : IEventHandleReader
         foreach (var item in items)
         {
             var key = item.Gold ? ItemCodes.GoldKey : ItemCodes.KeyOf(item.ItemCode);
-            added.Add(new GroundDropView(item.Id, item.ItemCode, key, item.Name, item.Amount, item.Gold, Position(item.X, item.Y, item.Z)));
+            var rarity = item.Rarity <= (byte)ItemRarities.Highest ? (ItemRarity)item.Rarity : ItemRarity.None;
+            added.Add(new GroundDropView(item.Id, item.ItemCode, key, item.Name, item.Amount, item.Gold, Position(item.X, item.Y, item.Z)) { Rarity = rarity });
         }
 
         return new PresenceUpdate(_tick, [], [], [], [], FieldId) { GroundAdded = added };

@@ -151,7 +151,8 @@ public sealed class ItemInstance
             Sealed = Sealed,
             Maturity = Maturity,
             MixSheltom = MixSheltom,
-            MixStats = MixStats
+            MixStats = MixStats,
+            Rarity = Rarity
         };
     }
 
@@ -170,6 +171,9 @@ public sealed class ItemInstance
     public Mixing.MixStat MixStats { get; set; }
 
     public bool Mixed => MixSheltom > 0;
+
+    // The grade the copy rolled when it dropped (ItemRarities); its steps are already in Roll.
+    public ItemRarity Rarity { get; set; }
 
     public int DurabilityCurrent { get; set; }
     public int DurabilityMax { get; set; }

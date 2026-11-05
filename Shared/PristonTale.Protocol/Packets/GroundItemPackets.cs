@@ -3,9 +3,11 @@ using PristonTale.Protocol.Binary;
 namespace PristonTale.Protocol.Packets;
 
 // A drop on the ground as the receiver sees it. Id is the drop's id, which the pick-up command names; gold drops carry
-// the gold code with Amount gold.
+// the gold code with Amount gold. Rarity is the copy's grade (0 none .. 5 legendary).
 public readonly record struct GroundItemEntry(Guid Id, uint ItemCode, bool Gold, int Amount, int X, int Y, int Z, string Name)
 {
+    public byte Rarity { get; init; }
+
     public const int MaxNameBytes = 64;
     public const int MaxSize = 16 + 4 + 4 + 4 + 12 + 2 + MaxNameBytes;
     private const byte GoldFlag = 1;
@@ -15,7 +17,8 @@ public readonly record struct GroundItemEntry(Guid Id, uint ItemCode, bool Gold,
         writer.Guid(Id);
         writer.UInt32(ItemCode);
         writer.Byte(Gold ? GoldFlag : (byte)0);
-        writer.Zero(3);
+        writer.Byte(Rarity);
+        writer.Zero(2);
         writer.Int32(Amount);
         writer.Int32(X);
         writer.Int32(Y);
@@ -28,14 +31,15 @@ public readonly record struct GroundItemEntry(Guid Id, uint ItemCode, bool Gold,
         var id = reader.Guid();
         var code = reader.UInt32();
         var flags = reader.Byte();
-        reader.Skip(3);
+        var rarity = reader.Byte();
+        reader.Skip(2);
         return new GroundItemEntry(id, code, (flags & GoldFlag) != 0, reader.Int32(), reader.Int32(), reader.Int32(), reader.Int32(),
-            Utf8Text.Read(ref reader, MaxNameBytes, "Ground item"));
+            Utf8Text.Read(ref reader, MaxNameBytes, "Ground item")) { Rarity = rarity };
     }
 }
 
 // S->C {header, uint16 Version = 1, uint16 Flags = 0, int32 Count, entries {Guid Id, uint32 ItemCode, uint8 Flags (1 gold),
-// uint8 0, uint16 0, int32 Amount, X, Y, Z (x256), text Name}}: drops entering the receiver's view.
+// uint8 Rarity, uint16 0, int32 Amount, X, Y, Z (x256), text Name}}: drops entering the receiver's view.
 public static class GroundItemList
 {
     public const ushort CurrentVersion = 1;

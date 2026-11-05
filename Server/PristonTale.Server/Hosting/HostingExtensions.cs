@@ -47,6 +47,13 @@ public static class HostingExtensions
         builder.Services.AddSingleton<TradeAppService>();
         builder.Services.AddSingleton<ContactAppService>();
         builder.Services.AddSingleton<StarterGiftAppService>();
+        builder.Services.AddSingleton(_ =>
+        {
+            var store = new CoinShopCatalogStore(DataPath.Resolve(builder.Configuration["CoinShop:Path"] ?? Path.Combine("data", "coinshop.json")));
+            store.Reload();
+            return store;
+        });
+        builder.Services.AddSingleton<CoinShopAppService>();
 
         var provider = builder.Configuration["Database:Provider"] ?? "Sqlite";
         if (string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
@@ -166,7 +173,9 @@ public static class HostingExtensions
             {
                 Accounts = services.GetRequiredService<IAccountRepository>(),
                 Saves = services.GetRequiredService<ICharacterSaves>(),
-                Warehouses = services.GetRequiredService<IWarehouseRepository>()
+                Warehouses = services.GetRequiredService<IWarehouseRepository>(),
+                Coins = services.GetRequiredService<PristonTale.Persistence.Abstractions.Coins.ICoinRepository>(),
+                CoinShop = services.GetRequiredService<CoinShopCatalogStore>()
             };
         });
         builder.Services.AddSingleton(services => new ChatAppService(services.GetRequiredService<ChatDirectory>(),

@@ -59,9 +59,9 @@ public sealed class Trade
 }
 
 // What a side's trade window shows: the partner, its own offer as the server holds it, the partner's items as this side
-// sees them (each copy's values for its class, anchored at its trade grid cell), the partner's gold and both locks.
+// sees them (each copy's values for its class, anchored at its trade grid cell), the partner's gold and coins and both locks.
 public sealed record TradeView(ulong PartnerId, string PartnerName, TradeOffer Own, bool OwnLocked, IReadOnlyList<OwnedItemView> PartnerItems,
-    long PartnerMoney, bool PartnerLocked);
+    long PartnerMoney, bool PartnerLocked, long PartnerCoins = 0);
 
 // A request to trade waiting for its answer.
 public sealed record TradeRequest(ulong FromId, string FromName, long ExpiresMs);

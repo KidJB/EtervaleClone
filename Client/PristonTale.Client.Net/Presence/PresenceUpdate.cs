@@ -73,9 +73,9 @@ public sealed record PresenceUpdate(
 public sealed record ContactListInfo(ContactList List, IReadOnlyList<(string Name, bool Online)> Entries);
 
 // The trade window as the server holds it: the partner, the local player's own offer, the partner's items (anchored at
-// their trade grid cells, with their values for the local player), the partner's gold and both locks.
+// their trade grid cells, with their values for the local player), the partner's gold and coins and both locks.
 public sealed record TradeInfo(ulong PartnerId, string PartnerName, PristonTale.Simulation.Trades.TradeOffer Own, bool OwnLocked,
-    IReadOnlyList<OwnedItemView> PartnerItems, long PartnerMoney, bool PartnerLocked)
+    IReadOnlyList<OwnedItemView> PartnerItems, long PartnerMoney, bool PartnerLocked, long PartnerCoins = 0)
 {
     public static readonly TradeInfo None = new(0, "", PristonTale.Simulation.Trades.TradeOffer.Empty, false, [], 0, false);
 

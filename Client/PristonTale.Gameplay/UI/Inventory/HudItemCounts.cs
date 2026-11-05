@@ -12,6 +12,7 @@ public sealed class HudItemCounts
     private readonly Dictionary<Guid, string> _labels = new();
     private readonly Dictionary<Guid, OwnedItemView> _named = new();
     private long _revision = long.MinValue;
+    private const float WashAlpha = 0.18f;
 
     public void Refresh(long revision, IReadOnlyList<OwnedItemView> items)
     {
@@ -39,10 +40,27 @@ public sealed class HudItemCounts
     // The item as its tooltip names it: with its count when it is a stack.
     public OwnedItemView Named(OwnedItemView item) => _named.GetValueOrDefault(item.InstanceId, item);
 
-    // The item's icon in its cells, its count over the corner.
+    // The item's icon in its cells, its count over the corner; gear of Uncommon grade and above sits on a faint wash of
+    // its grade's colour inside a one-pixel border of it (HudRarityColors).
     public void Draw(HudPainter painter, HudItemIcons icons, OwnedItemView item, Rectangle bounds, Color tint)
     {
+        var rarity = item.Details?.Rarity ?? Simulation.Items.ItemRarity.None;
+        var graded = rarity >= Simulation.Items.ItemRarity.Uncommon;
+        if (graded)
+        {
+            painter.Fill(bounds, HudRarityColors.Of(rarity) * WashAlpha);
+        }
+
         icons.Draw(painter, item.CatalogKey, bounds, tint);
+        if (graded)
+        {
+            var color = HudRarityColors.Of(rarity);
+            painter.Fill(new Rectangle(bounds.X, bounds.Y, bounds.Width, 1), color);
+            painter.Fill(new Rectangle(bounds.X, bounds.Bottom - 1, bounds.Width, 1), color);
+            painter.Fill(new Rectangle(bounds.X, bounds.Y, 1, bounds.Height), color);
+            painter.Fill(new Rectangle(bounds.Right - 1, bounds.Y, 1, bounds.Height), color);
+        }
+
         var label = Label(item);
         if (label.Length > 0)
         {
