@@ -56,6 +56,11 @@ public sealed partial class WorldServer
     public Task<bool> SendPetOutAsync(ulong entityId, int skin) =>
         EnqueueAsync(entityId, () => _connections.TryGetValue(entityId, out var connection) && connection.Player.Character.SendPetOut(skin));
 
+    // The mount command: null toggles riding the chosen mount, 0 gets off, an id picks that owned mount and rides it; false
+    // when there is nothing to ride (no mount picked, one not owned, a dead or trading player, a personal shop open).
+    public Task<bool> RideAsync(ulong entityId, int? mount) =>
+        EnqueueAsync(entityId, () => _connections.TryGetValue(entityId, out var connection) && connection.Player.Ride(mount));
+
     // Names the pet (empty clears the name); false for a name PetNames refuses.
     public Task<bool> RenamePetAsync(ulong entityId, string name) =>
         EnqueueAsync(entityId, () => _connections.TryGetValue(entityId, out var connection) && connection.Player.Character.RenamePet(name));

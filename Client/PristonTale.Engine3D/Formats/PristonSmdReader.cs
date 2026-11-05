@@ -15,6 +15,8 @@ public sealed class PristonSmdReader
     private const int TexLinkSize = 32;
     private const int Obj3DSize = 2236;
     private const int ModelVertexSize = 24;
+    private const int TangentVertexSize = 48;
+    private const int InfluenceSize = 24;
     private const int ModelFaceSize = 36;
     private const int RotationKeySize = 20;
     private const int PositionKeySize = 16;
@@ -165,15 +167,18 @@ public sealed class PristonSmdReader
             throw new InvalidDataException($"{path} material block ends at {cursor.Position}, but First_ObjInfoPoint is {header.FirstObjectOffset}.");
         }
 
+        var layout = ModelLayout.Of(header.Kind);
         var objects = new List<PristonModelObject>(header.ObjectCount);
+        var measuredEnd = cursor.Position;
         foreach (var info in infos)
         {
             cursor.Position = info.Offset;
-            objects.Add(ReadObject(cursor, info, path));
+            objects.Add(ReadObject(cursor, info, path, layout));
+            measuredEnd = Math.Max(measuredEnd, cursor.Position);
         }
 
-        var lastObjectEnd = infos.Count == 0
-            ? cursor.Position
+        var lastObjectEnd = infos.Count == 0 || layout.Measured
+            ? measuredEnd
             : infos.Max(static info => checked(info.Offset + info.Length));
         if (lastObjectEnd > data.Length)
         {
@@ -225,6 +230,21 @@ public sealed class PristonSmdReader
             return PristonSmdHeaderKind.Version62Model;
         }
 
+        if (string.Equals(headerName, SmdLayout.ModelSignature64, StringComparison.Ordinal))
+        {
+            return PristonSmdHeaderKind.Version64Model;
+        }
+
+        if (string.Equals(headerName, SmdLayout.ModelSignature65, StringComparison.Ordinal))
+        {
+            return PristonSmdHeaderKind.Version65Model;
+        }
+
+        if (string.Equals(headerName, SmdLayout.ModelSignature66, StringComparison.Ordinal))
+        {
+            return PristonSmdHeaderKind.Version66Model;
+        }
+
         if (string.Equals(headerName, SmdLayout.StageSignature, StringComparison.Ordinal))
         {
             return PristonSmdHeaderKind.StageVersion72;
@@ -251,7 +271,8 @@ public sealed class PristonSmdReader
 
     private static bool IsModelHeader(PristonSmdHeaderKind kind)
     {
-        return kind is PristonSmdHeaderKind.Version62Model or PristonSmdHeaderKind.BinaryModel;
+        return kind is PristonSmdHeaderKind.Version62Model or PristonSmdHeaderKind.Version64Model or PristonSmdHeaderKind.Version65Model
+            or PristonSmdHeaderKind.Version66Model or PristonSmdHeaderKind.BinaryModel;
     }
 
     private static bool IsStageHeader(PristonSmdHeaderKind kind)
@@ -281,13 +302,15 @@ public sealed class PristonSmdReader
 
         // The original model loader never checks the object record's Head field; some costume exporters overwrote it with
         // material string bytes, so a model signature only needs a consistent object range.
-        if (!LooksLikeModelLayout(data, header, requireObjectHead: !IsModelHeader(header.Kind)))
+        if (!LooksLikeModelLayout(data, header, requireObjectHead: !IsModelHeader(header.Kind), ModelLayout.Of(header.Kind).Measured))
         {
             throw new InvalidDataException($"{path} does not have a complete Win32 model layout with valid object offsets and lengths.");
         }
     }
 
-    private static bool LooksLikeModelLayout(byte[] data, SmdFileHeader header, bool requireObjectHead)
+    // measured: the later layouts, whose exporters declare object lengths that need not match their counts (ReadObject
+    // measures each object from its counts instead), so only an object's start must lie within the file.
+    private static bool LooksLikeModelLayout(byte[] data, SmdFileHeader header, bool requireObjectHead, bool measured = false)
     {
         try
         {
@@ -316,7 +339,7 @@ public sealed class PristonSmdReader
             {
                 var info = ReadObjectInfo(cursor);
                 var objectEnd = checked(info.Offset + info.Length);
-                if (info.Length < Obj3DSize || info.Offset != previousEnd || objectEnd > data.Length)
+                if (measured ? info.Offset + Obj3DSize > data.Length : info.Length < Obj3DSize || info.Offset != previousEnd || objectEnd > data.Length)
                 {
                     return false;
                 }
@@ -721,7 +744,7 @@ public sealed class PristonSmdReader
         };
     }
 
-    private static PristonModelObject ReadObject(BinaryCursor cursor, ObjectInfo info, string path)
+    private static PristonModelObject ReadObject(BinaryCursor cursor, ObjectInfo info, string path, ModelLayout layout)
     {
         var objectStart = cursor.Position;
         var head = cursor.UInt32();
@@ -754,7 +777,7 @@ public sealed class PristonSmdReader
         var nodeName = cursor.FixedString(32);
         var parentName = cursor.FixedString(32);
         var parentPointer32 = cursor.UInt32();
-        var transform = PristonBinaryUtil.ReadFixedMatrix(cursor);
+        var transform = layout.Floats ? PristonBinaryUtil.ReadFloatMatrix(cursor) : PristonBinaryUtil.ReadFixedMatrix(cursor);
         var inverseTransform = PristonBinaryUtil.ReadFixedMatrix(cursor);
         var frameTransform = PristonBinaryUtil.ReadFloatMatrix(cursor);
         var baseRotation = PristonBinaryUtil.ReadFixedMatrix(cursor);
@@ -765,6 +788,10 @@ public sealed class PristonSmdReader
         var baseQuaternion = ToMonoGameModelRotation(rawQuaternion);
         var baseScaleFixed = ReadInt3(cursor);
         var basePositionFixed = ReadInt3(cursor);
+        if (layout.Floats && physiquePointer32 != 0 && !nodeName.StartsWith("Bip", StringComparison.Ordinal))
+        {
+            transform = WithoutBaseScale(transform, baseScaleFixed);
+        }
         var rotationKeysPointer32 = cursor.UInt32();
         var positionKeysPointer32 = cursor.UInt32();
         var scaleKeysPointer32 = cursor.UInt32();
@@ -789,54 +816,37 @@ public sealed class PristonSmdReader
             throw new InvalidDataException($"{path}:{nodeName} has invalid TmFrameCnt {frameSegmentCount}.");
         }
 
-        var readsPhysique = physiquePointer32 != 0;
-        ValidateObjectLength(path, info, vertexCount, faceCount, textureLinkCount, rotationKeyCount, positionKeyCount, scaleKeyCount, readsPhysique);
+        // The later layouts flag a skeleton's bone boxes as skinned without storing bone names for them.
+        var readsPhysique = physiquePointer32 != 0 && !(layout.Measured && nodeName.StartsWith("Bip", StringComparison.Ordinal));
+        ValidateObjectLength(path, info, cursor.Length, layout, vertexCount, faceCount, textureLinkCount, rotationKeyCount, positionKeyCount, scaleKeyCount, readsPhysique);
 
         var vertices = new List<PristonModelVertex>(vertexCount);
-        for (var index = 0; index < vertexCount; index++)
-        {
-            vertices.Add(ReadModelVertex(cursor, (head & ObjHeadTypeNewNormal) != 0));
-        }
-
         var faces = new List<PristonModelFace>(faceCount);
-        for (var index = 0; index < faceCount; index++)
-        {
-            faces.Add(ReadModelFace(cursor, textureLinkPointer32));
-        }
-
         var textureLinks = new List<PristonTexLink>(textureLinkCount);
-        for (var index = 0; index < textureLinkCount; index++)
-        {
-            textureLinks.Add(ReadTexLink(cursor, textureLinkPointer32, textureLinkCount));
-        }
-
         var rotationKeys = new List<PristonRotationKey>(rotationKeyCount);
-        for (var index = 0; index < rotationKeyCount; index++)
-        {
-            var frame = cursor.Int32();
-            var rotation = ToMonoGameModelRotation(new Quaternion(cursor.Single(), cursor.Single(), cursor.Single(), cursor.Single()));
-            rotationKeys.Add(new PristonRotationKey(frame, rotation));
-        }
-
         var positionKeys = new List<PristonPositionKey>(positionKeyCount);
-        for (var index = 0; index < positionKeyCount; index++)
-        {
-            var frame = cursor.Int32();
-            positionKeys.Add(new PristonPositionKey(frame, ToMonoGameModelPosition(cursor.Single(), cursor.Single(), cursor.Single())));
-        }
-
         var scaleKeys = new List<PristonScaleKey>(scaleKeyCount);
-        for (var index = 0; index < scaleKeyCount; index++)
-        {
-            var frame = cursor.Int32();
-            var scaleFixed = ReadInt3(cursor);
-            scaleKeys.Add(new PristonScaleKey(frame, ToMonoGameModelScale(scaleFixed)));
-        }
-
         var previousRotationMatrices = new List<Matrix>(rotationKeyCount);
-        for (var index = 0; index < rotationKeyCount; index++)
+        var normalEndpoints = (head & ObjHeadTypeNewNormal) != 0;
+        if (layout.Reordered)
         {
-            previousRotationMatrices.Add(PristonBinaryUtil.ReadFloatMatrix(cursor));
+            ReadFaces(cursor, faces, faceCount, textureLinkPointer32);
+            ReadVertices(cursor, vertices, vertexCount, layout, normalEndpoints);
+            ReadTextureLinks(cursor, textureLinks, textureLinkCount, textureLinkPointer32);
+            ReadPositionKeys(cursor, positionKeys, positionKeyCount);
+            ReadRotationKeys(cursor, rotationKeys, rotationKeyCount);
+            ReadMatrices(cursor, previousRotationMatrices, rotationKeyCount);
+            ReadScaleKeys(cursor, scaleKeys, scaleKeyCount);
+        }
+        else
+        {
+            ReadVertices(cursor, vertices, vertexCount, layout, normalEndpoints);
+            ReadFaces(cursor, faces, faceCount, textureLinkPointer32);
+            ReadTextureLinks(cursor, textureLinks, textureLinkCount, textureLinkPointer32);
+            ReadRotationKeys(cursor, rotationKeys, rotationKeyCount);
+            ReadPositionKeys(cursor, positionKeys, positionKeyCount);
+            ReadScaleKeys(cursor, scaleKeys, scaleKeyCount);
+            ReadMatrices(cursor, previousRotationMatrices, rotationKeyCount);
         }
 
         var physiqueBoneNames = new List<string>();
@@ -847,10 +857,16 @@ public sealed class PristonSmdReader
             {
                 physiqueBoneNames.Add(cursor.FixedString(PhysiqueNameSize));
             }
+
+            // Each vertex's four weighted bones follow; the named bone above is its main one, which the skinning uses.
+            if (layout.Floats)
+            {
+                cursor.Position += vertexCount * InfluenceSize;
+            }
         }
 
         var expectedObjectEnd = checked(info.Offset + info.Length);
-        if (cursor.Position != expectedObjectEnd)
+        if (!layout.Measured && cursor.Position != expectedObjectEnd)
         {
             throw new InvalidDataException($"{path}:{nodeName} consumed {cursor.Position - objectStart} bytes, but the object info record Length declares {info.Length}.");
         }
@@ -913,6 +929,124 @@ public sealed class PristonSmdReader
         };
     }
 
+    private static void ReadVertices(BinaryCursor cursor, List<PristonModelVertex> vertices, int count, ModelLayout layout, bool normalEndpoints)
+    {
+        for (var index = 0; index < count; index++)
+        {
+            vertices.Add(layout.Floats ? ReadFloatVertex(cursor, layout.Tangents) : ReadModelVertex(cursor, normalEndpoints));
+        }
+    }
+
+    // A float vertex: its position and its normal's end point in game units, then (with tangents) the tangent and bitangent.
+    private static PristonModelVertex ReadFloatVertex(BinaryCursor cursor, bool tangents)
+    {
+        var x = cursor.Single();
+        var y = cursor.Single();
+        var z = cursor.Single();
+        var normal = ToMonoGameModelPosition(cursor.Single() - x, cursor.Single() - y, cursor.Single() - z);
+        if (normal.LengthSquared() > 0.000001f)
+        {
+            normal.Normalize();
+        }
+
+        if (tangents)
+        {
+            cursor.Position += TangentVertexSize - ModelVertexSize;
+        }
+
+        return new PristonModelVertex(ToMonoGameModelPosition(x, y, z), normal);
+    }
+
+    private static void ReadFaces(BinaryCursor cursor, List<PristonModelFace> faces, int count, uint textureLinkPointer32)
+    {
+        for (var index = 0; index < count; index++)
+        {
+            faces.Add(ReadModelFace(cursor, textureLinkPointer32));
+        }
+    }
+
+    private static void ReadTextureLinks(BinaryCursor cursor, List<PristonTexLink> links, int count, uint textureLinkPointer32)
+    {
+        for (var index = 0; index < count; index++)
+        {
+            links.Add(ReadTexLink(cursor, textureLinkPointer32, count));
+        }
+    }
+
+    private static void ReadRotationKeys(BinaryCursor cursor, List<PristonRotationKey> keys, int count)
+    {
+        for (var index = 0; index < count; index++)
+        {
+            var frame = cursor.Int32();
+            keys.Add(new PristonRotationKey(frame, ToMonoGameModelRotation(new Quaternion(cursor.Single(), cursor.Single(), cursor.Single(), cursor.Single()))));
+        }
+    }
+
+    private static void ReadPositionKeys(BinaryCursor cursor, List<PristonPositionKey> keys, int count)
+    {
+        for (var index = 0; index < count; index++)
+        {
+            var frame = cursor.Int32();
+            keys.Add(new PristonPositionKey(frame, ToMonoGameModelPosition(cursor.Single(), cursor.Single(), cursor.Single())));
+        }
+    }
+
+    private static void ReadScaleKeys(BinaryCursor cursor, List<PristonScaleKey> keys, int count)
+    {
+        for (var index = 0; index < count; index++)
+        {
+            var frame = cursor.Int32();
+            keys.Add(new PristonScaleKey(frame, ToMonoGameModelScale(ReadInt3(cursor))));
+        }
+    }
+
+    private static void ReadMatrices(BinaryCursor cursor, List<Matrix> matrices, int count)
+    {
+        for (var index = 0; index < count; index++)
+        {
+            matrices.Add(PristonBinaryUtil.ReadFloatMatrix(cursor));
+        }
+    }
+
+    // A skinned mesh's float transform carries its base scale in its rotation part; the skinning applies that scale itself.
+    // A bone keeps its transform whole.
+    private static Matrix WithoutBaseScale(Matrix transform, Int3 baseScaleFixed)
+    {
+        var scale = (baseScaleFixed.X + baseScaleFixed.Y + baseScaleFixed.Z) / 3f / GameUnits.FixedScale;
+        if (scale == 0f)
+        {
+            return transform;
+        }
+
+        transform.M11 /= scale;
+        transform.M12 /= scale;
+        transform.M13 /= scale;
+        transform.M21 /= scale;
+        transform.M22 /= scale;
+        transform.M23 /= scale;
+        transform.M31 /= scale;
+        transform.M32 /= scale;
+        transform.M33 /= scale;
+        return transform;
+    }
+
+    // How a model version lays out an object: section order (Reordered), float transform, vertices and bone weights
+    // (Floats), and tangent-space vertices (Tangents).
+    private readonly record struct ModelLayout(bool Reordered, bool Floats, bool Tangents)
+    {
+        public int VertexSize => Tangents ? TangentVertexSize : ModelVertexSize;
+
+        public bool Measured => Reordered || Floats;
+
+        public static ModelLayout Of(PristonSmdHeaderKind kind) => kind switch
+        {
+            PristonSmdHeaderKind.Version64Model => new ModelLayout(true, false, false),
+            PristonSmdHeaderKind.Version65Model => new ModelLayout(false, true, false),
+            PristonSmdHeaderKind.Version66Model => new ModelLayout(true, true, true),
+            _ => default
+        };
+    }
+
     // With ObjHeadTypeNewNormal in the object's head the normal field holds the normal's end point (position + normal),
     // in the position's fixed-point units.
     private static PristonModelVertex ReadModelVertex(BinaryCursor cursor, bool normalEndpoints)
@@ -967,6 +1101,8 @@ public sealed class PristonSmdReader
     private static void ValidateObjectLength(
         string path,
         ObjectInfo info,
+        int fileLength,
+        ModelLayout layout,
         int vertexCount,
         int faceCount,
         int textureLinkCount,
@@ -977,15 +1113,15 @@ public sealed class PristonSmdReader
     {
         var expectedLength = checked(
             (long)Obj3DSize
-            + (long)vertexCount * ModelVertexSize
+            + (long)vertexCount * layout.VertexSize
             + (long)faceCount * ModelFaceSize
             + (long)textureLinkCount * TexLinkSize
             + (long)rotationKeyCount * RotationKeySize
             + (long)positionKeyCount * PositionKeySize
             + (long)scaleKeyCount * ScaleKeySize
             + (long)rotationKeyCount * MatrixSize
-            + (readsPhysique ? (long)vertexCount * PhysiqueNameSize : 0));
-        if (expectedLength != info.Length)
+            + (readsPhysique ? (long)vertexCount * (PhysiqueNameSize + (layout.Floats ? InfluenceSize : 0)) : 0));
+        if (layout.Measured ? info.Offset + expectedLength > fileLength : expectedLength != info.Length)
         {
             throw new InvalidDataException($"{path}:{info.Name} declares object length {info.Length}, but its Win32 counts require {expectedLength} bytes.");
         }

@@ -130,6 +130,11 @@ public sealed partial class GameplayHud
             _petWindow.Toggle();
         }
 
+        if (Pressed(keyboard, Keys.G))
+        {
+            _ = _chat.Send?.Invoke(MountCommand.Of(null), false);
+        }
+
         if (Pressed(keyboard, Keys.L))
         {
             _questBook.Toggle();

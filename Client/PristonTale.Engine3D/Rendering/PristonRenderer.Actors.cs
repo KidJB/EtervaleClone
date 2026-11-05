@@ -63,6 +63,20 @@ public sealed partial class PristonRenderer
         UpdateActor(runtime);
     }
 
+    // Drives the bones a clip names from that clip (a rider's pose on its mount); null ends it.
+    public void SetActorClip(ActorHandle handle, PristonModel clip)
+    {
+        if (!TryResolveActor(handle, out var runtime))
+        {
+            return;
+        }
+
+        if (runtime.SetClip(clip))
+        {
+            UpdateActor(runtime);
+        }
+    }
+
     public void SetActorHidden(ActorHandle handle, bool hidden)
     {
         if (TryResolveActor(handle, out var runtime) && runtime.Hidden != hidden)

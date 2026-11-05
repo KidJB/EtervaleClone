@@ -61,6 +61,13 @@ public readonly record struct PlayerActorHandles(ActorHandle Body, ActorHandle H
         scene.SetActorPlaybackRate(Head, rate);
     }
 
+    // A riding pose drives the body's and the head's bones; null returns them to their motions.
+    public void SetClip(IActorScene scene, PristonModel clip)
+    {
+        scene.SetActorClip(Body, clip);
+        scene.SetActorClip(Head, clip);
+    }
+
     public void SetColorAdd(IActorScene scene, Vector3 colorAdd)
     {
         scene.SetActorColorAdd(Body, colorAdd);

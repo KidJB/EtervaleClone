@@ -19,6 +19,9 @@ public sealed record PlayerAppearanceInfo(
     // The pet skin out (PetSkins id, 0 none).
     public int PetSkin { get; init; }
     public string PetName { get; init; } = "";
+
+    // The mount the player rides (Mounts id, 0 on foot).
+    public int Mount { get; init; }
     public bool Phoenix { get; init; }
     public int BigHead { get; init; }
 

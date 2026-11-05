@@ -1,5 +1,7 @@
 using Microsoft.Xna.Framework;
 using PristonTale.Client.Net.Presence;
+using PristonTale.Contracts.Characters;
+using PristonTale.Engine3D.Formats;
 using PristonTale.Gameplay.Effects;
 using PristonTale.Gameplay.World.Remote;
 using PristonTale.Simulation.Characters;
@@ -20,6 +22,9 @@ public sealed partial class GameScene
     // The local player's pet collection as the server last sent it (none until it does).
     public PetCollectionInfo PetCollection { get; private set; } = new(0, 0);
     private SkinPetPresentation _skinPets;
+    private MountPresentation _mounts;
+    private Action<ulong, PristonModel, float> _seatRider;
+    private float _appliedSelfLift;
     private ForceOrbPresentation _forceOrbs;
 
     // The local player's running premium timers as last sent by the server.
@@ -56,6 +61,7 @@ public sealed partial class GameScene
         }
 
         _skinPets ??= _renderer is null ? null : new SkinPetPresentation(_actorScene, _actorLoader, _assetRoot ?? "", _log);
+        _mounts ??= _renderer is null ? null : new MountPresentation(_actorScene, _actorLoader, _assetRoot ?? "", _log);
     }
 
     private void ObserveItems(PresenceUpdate update)
@@ -67,11 +73,13 @@ public sealed partial class GameScene
 
         _pets?.Observe(update, _itemAnchor ??= ItemAnchor);
         _skinPets?.Observe(update);
+        _mounts?.Observe(update);
         if (update.PetCollection is { } collection)
         {
             PetCollection = collection;
-            // The local player's own pet follows its collection, which the server sends at every change.
+            // The local player's own pet and mount follow its collection, which the server sends at every change.
             _skinPets?.Set(SelfEntityId, collection.Out, PetNames.Shown(collection.Name, _player?.Name ?? ""));
+            _mounts?.Set(SelfEntityId, collection.Riding ? collection.MountChosen : 0, _player?.Class.Class ?? PlayerClass.Fighter);
         }
         ObserveOwnHead(update);
         _forceOrbs?.Observe(update, _itemAnchor ??= ItemAnchor, _skillClockMs);
@@ -130,11 +138,35 @@ public sealed partial class GameScene
         _itemEffects?.Update(_skillClockMs, _itemAnchor, PlayerPosition);
         _pets?.Update(dt, _petOwnerPose, _itemAnchor, PlayerPosition);
         _skinPets?.Update(dt, _petOwnerPose);
+        _seatRider ??= SeatRider;
+        _mounts?.Update(_petOwnerPose, _seatRider);
+        if (SelfLift != _appliedSelfLift && _playerBody is not null)
+        {
+            _appliedSelfLift = SelfLift;
+            ApplyPlayerWorld();
+        }
         _forceOrbs?.Update(_skillClockMs, _itemAnchor);
     }
 
     private (Vector3 Position, float Facing)? PetOwnerPose(ulong entityId) =>
         TryGetDrawnPosition(entityId, out var position) && TryGetDrawnFacing(entityId, out var facing) ? (position, facing) : null;
+
+    // A rider's model takes its riding pose (null: its own motions) and rises onto its mount; the local player's rises
+    // through PlayerWorld.
+    private void SeatRider(ulong entityId, PristonModel pose, float lift)
+    {
+        if (IsSelf(entityId))
+        {
+            PlayerActors.SetClip(_actorScene, pose);
+            return;
+        }
+
+        _remote?.SetRiderLift(entityId, lift);
+        _remote?.SetRiderClip(entityId, pose);
+    }
+
+    // How far the local player's model rises: its mount's saddle height while it rides.
+    private float SelfLift => _mounts is null || _remote is null ? 0f : _mounts.LiftOf(_remote.SelfEntityId);
 
     private Vector3? ItemAnchor(ulong entityId) => TryGetDrawnPosition(entityId, out var position) ? position : null;
 

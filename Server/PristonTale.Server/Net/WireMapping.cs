@@ -44,7 +44,8 @@ internal static class WireMapping
                     OffHandGlow = Glow(appearance.OffHandGlow),
                     ShopSign = appearance.ShopSign,
                     PetSkin = appearance.PetSkin,
-                    PetName = appearance.PetName
+                    PetName = appearance.PetName,
+                    Mount = appearance.Mount
                 };
                 return new EntityDescriptionPacket(view.EntityId, revision, EntityKind.Player, view.Level, view.MoveSpeed, view.AttackRate,
                     appearance.Name ?? "", appearance.ModelName ?? "", looks);

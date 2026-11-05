@@ -8,6 +8,9 @@ public static class SmdLayout
     public const string StageSignature = "SMD Stage data Ver 0.72";
     public const string StageSignature73 = "SMD Stage data Ver 0.73";
     public const string ModelSignature = "SMD Model data Ver 0.62";
+    public const string ModelSignature64 = "SMD Model data Ver 0.64";
+    public const string ModelSignature65 = "SMD Model data Ver 0.65";
+    public const string ModelSignature66 = "SMD Model data Ver 0.66";
     public const string StagePrefix = "SMD Stage data";
     public const string ModelPrefix = "SMD Model data";
     public const int SignatureSize = 24;

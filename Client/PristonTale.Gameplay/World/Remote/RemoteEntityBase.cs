@@ -91,6 +91,9 @@ public abstract class RemoteEntityBase
 
     public Vector3 RenderPosition => _renderPosition;
 
+    // How far the model rises above its ground position: a mount's saddle height while the player rides.
+    public float RiderLift { get; set; }
+
     public Vector3 DrawnPosition => _renderPosition;
 
     public float RenderFacing => _renderFacing;
@@ -126,7 +129,7 @@ public abstract class RemoteEntityBase
         UpdateStall(elapsedMs);
         _renderPosition = pose.Position;
         _renderFacing = SideView ? ActionFieldView.Facing(pose.Facing) : pose.Facing;
-        ApplyWorld(Matrix.CreateRotationY(_renderFacing) * Matrix.CreateTranslation(_renderPosition));
+        ApplyWorld(Matrix.CreateRotationY(_renderFacing) * Matrix.CreateTranslation(_renderPosition + Vector3.Up * RiderLift));
 
         if (_pendingMotion.Kind != MotionCommandKind.None)
         {

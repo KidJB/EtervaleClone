@@ -189,7 +189,16 @@ internal sealed class PresenceDecoder : IEventHandleReader
     }
 
     public PresenceUpdate OnPetCollection(PetCollectionPacket packet) =>
-        Update([], []) with { PetCollection = new PetCollectionInfo(packet.Skins, packet.Out) { Name = packet.Name } };
+        Update([], []) with
+        {
+            PetCollection = new PetCollectionInfo(packet.Skins, packet.Out)
+            {
+                Name = packet.Name,
+                Mounts = packet.Mounts,
+                MountChosen = packet.MountChosen,
+                Riding = packet.Riding
+            }
+        };
 
     public PresenceUpdate OnBossTime(BossTimePacket packet) =>
         Update([], []) with { BossTime = new BossTimeInfo(packet.BossName, (int)Math.Min(packet.SecondsLeft, int.MaxValue), packet.Exact) };
@@ -736,6 +745,7 @@ internal sealed class PresenceDecoder : IEventHandleReader
                 HelperPet = looks.HelperPet,
                 PetSkin = looks.PetSkin,
                 PetName = looks.PetName,
+                Mount = looks.Mount,
                 Phoenix = looks.Phoenix,
                 BigHead = looks.BigHead,
                 WeaponGlow = Glow(looks.WeaponGlow),

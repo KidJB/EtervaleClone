@@ -25,7 +25,7 @@ public sealed class PristonActorLoader
         var motionInfo = ResolveMotionInfo(assetRoot, info);
         var motionPath = ResolveMotionPath(assetRoot, motionInfo.MotionFile);
         var skeleton = _smdReader.ReadModel(motionPath);
-        var mesh = PristonPhysiqueRepair.Repair(_smdReader.ReadModel(meshPath), skeleton);
+        var mesh = PristonPhysiqueRepair.Repair(PristonBindSpace.ToBoneSpace(_smdReader.ReadModel(meshPath), skeleton), skeleton);
         // Shared armor meshes require the INX high-LOD filter; models without groups render all objects.
         var renderObjectNames = SelectRenderObjectNames(info);
         return new PristonActor(motionInfo, mesh, skeleton, renderObjectNames);
@@ -34,7 +34,7 @@ public sealed class PristonActorLoader
     public PristonActor LoadSkinned(string meshSmdPath, string skeletonSmbPath)
     {
         var skeleton = _smdReader.ReadModel(skeletonSmbPath);
-        var mesh = PristonPhysiqueRepair.Repair(_smdReader.ReadModel(meshSmdPath), skeleton);
+        var mesh = PristonPhysiqueRepair.Repair(PristonBindSpace.ToBoneSpace(_smdReader.ReadModel(meshSmdPath), skeleton), skeleton);
         return new PristonActor(CreateSyntheticIdleInfo(skeleton.LastFrame), mesh, skeleton, []);
     }
 

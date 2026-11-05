@@ -22,9 +22,14 @@ public sealed class WorldDataAppService
         var motionSlots = await _repository.GetAllMotionSlotsAsync(ct);
 
         var itemDefs = WorldDataFactory.ToItemDefinitions(itemRecords);
-        // The pet skins' items are Etervale's own; an imported item of the same code keeps its place.
+        // The pet skins' and mounts' items are Etervale's own; an imported item of the same code keeps its place.
         var imported = itemDefs.Select(static item => item.Code).ToHashSet();
-        itemDefs = [.. itemDefs, .. Simulation.Characters.PetSkins.ItemDefinitions().Where(item => !imported.Contains(item.Code))];
+        itemDefs =
+        [
+            .. itemDefs,
+            .. Simulation.Characters.PetSkins.ItemDefinitions().Where(item => !imported.Contains(item.Code)),
+            .. Simulation.Characters.Mounts.ItemDefinitions().Where(item => !imported.Contains(item.Code))
+        ];
         var itemCodes = itemDefs.ToDictionary(item => item.CatalogKey, item => item.Code, StringComparer.OrdinalIgnoreCase);
         var monsterDefs = WorldDataFactory.ToMonsterDefinitions(monsterRecords, itemCodes);
         var npcDefs = WorldDataFactory.ToNpcDefinitions(npcRecords);

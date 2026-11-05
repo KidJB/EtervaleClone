@@ -590,6 +590,22 @@ public sealed partial class RemoteEntityManager
     public int CopyActorHandles(ulong entityId, Span<ActorHandle> destination) =>
         _entities.TryGetValue(entityId, out var entity) ? entity.CopyActorHandles(destination) : 0;
 
+    public void SetRiderLift(ulong entityId, float lift)
+    {
+        if (_entities.TryGetValue(entityId, out var entity))
+        {
+            entity.RiderLift = lift;
+        }
+    }
+
+    public void SetRiderClip(ulong entityId, PristonTale.Engine3D.Formats.PristonModel clip)
+    {
+        if (_entities.TryGetValue(entityId, out var entity) && entity is RemoteEntity player)
+        {
+            player.Handles.SetClip(_scene, clip);
+        }
+    }
+
     public bool TryGetDrawnPosition(ulong entityId, out XnaVector3 position)
     {
         if (_entities.TryGetValue(entityId, out var entity))

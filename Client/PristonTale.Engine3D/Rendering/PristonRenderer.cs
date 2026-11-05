@@ -1004,6 +1004,13 @@ public sealed partial class PristonRenderer : IDisposable
 
         public Matrix[] SampleSkeleton()
         {
+            if (_clipAnimator is not null)
+            {
+                _sampledFrame = float.NaN;
+                _sampledTransforms = Animator.Evaluate(Frame, Motion.EndFrame * GameUnits.FrameTicks, _clipAnimator.Evaluate(_clipFrame, _clipEnd), _clipBones);
+                return _sampledTransforms;
+            }
+
             if (_sampledFrame != Frame)
             {
                 _sampledTransforms = Animator.Evaluate(Frame, Motion.EndFrame * GameUnits.FrameTicks);
@@ -1013,11 +1020,53 @@ public sealed partial class PristonRenderer : IDisposable
             return _sampledTransforms;
         }
 
+        // A clip that drives the bones it names (a rider's pose on its mount), looping on its own clock over the clip's
+        // frames; null returns the actor to its own motions alone.
+        private PristonModelAnimator _clipAnimator;
+        private PristonModel _clipModel;
+        private int[] _clipBones;
+        private float _clipFrame;
+        private int _clipEnd;
+
+        public bool HasClip => _clipAnimator is not null;
+
+        // False when the clip is the one already playing (its clock goes on).
+        public bool SetClip(PristonModel clip)
+        {
+            if (ReferenceEquals(clip, _clipModel))
+            {
+                return false;
+            }
+
+            _clipModel = clip;
+            if (clip is null)
+            {
+                _clipAnimator = null;
+                _clipBones = null;
+                _sampledFrame = float.NaN;
+                return true;
+            }
+
+            var byName = clip.ObjectIndexByName();
+            var bones = new int[Animator.ObjectCount];
+            var skeleton = Instance.Actor.Skeleton.Objects;
+            for (var index = 0; index < bones.Length; index++)
+            {
+                bones[index] = byName.TryGetValue(skeleton[index].Name, out var clipIndex) ? clipIndex : -1;
+            }
+
+            _clipAnimator = new PristonModelAnimator(clip);
+            _clipBones = bones;
+            _clipEnd = Math.Max(GameUnits.FrameTicks, clip.LastFrame);
+            _clipFrame = 0f;
+            return true;
+        }
+
         // The pose of the palette: sampled again as Pose.NeedsSample says, otherwise the one it shows.
         public ActorPose Pose { get; } = new();
 
         public Matrix[] SamplePose(bool refresh) =>
-            Pose.NeedsSample(refresh, Frame, Motion) ? Pose.Take(SampleSkeleton(), Frame, Motion) : Pose.Transforms;
+            HasClip || Pose.NeedsSample(refresh, Frame, Motion) ? Pose.Take(SampleSkeleton(), Frame, Motion) : Pose.Transforms;
 
         // The pose an attached actor hangs from: the palette's, or the current frame's before the first palette.
         public Matrix[] ShownPose() => Pose.Taken ? Pose.Transforms : SampleSkeleton();
@@ -1079,7 +1128,7 @@ public sealed partial class PristonRenderer : IDisposable
         public bool PaletteIsCurrent(bool refresh)
         {
             var attached = Parent.IsValid;
-            if (_paletteWorld != World || _paletteAttached != attached)
+            if (HasClip || _paletteWorld != World || _paletteAttached != attached)
                 return false;
             return attached || !Pose.NeedsSample(refresh, Frame, Motion) && _paletteFrame == Pose.Frame;
         }
@@ -1156,6 +1205,11 @@ public sealed partial class PristonRenderer : IDisposable
 
         public void Advance(float deltaSeconds)
         {
+            if (_clipAnimator is not null)
+            {
+                _clipFrame = (_clipFrame + deltaSeconds * GameUnits.FrameTicksPerSecond) % _clipEnd;
+            }
+
             var start = StartTicks(Motion);
             var end = EndTicks(Motion, Instance.Actor.Skeleton.LastFrame);
             if (end <= start)

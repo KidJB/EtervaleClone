@@ -50,6 +50,33 @@ public sealed class PristonModelAnimator
         return _transforms;
     }
 
+    // The pose with some bones taken from another skeleton's evaluated pose (a riding clip): a bone whose overrides entry
+    // is 0 or more takes that bone's world transform from overrideWorld; every other bone keeps its own local transform
+    // under its parent, wherever that parent went.
+    public Matrix[] Evaluate(float frame, float rotationEnd, Matrix[] overrideWorld, int[] overrides)
+    {
+        for (var orderIndex = 0; orderIndex < _rig.EvaluationOrder.Length; orderIndex++)
+        {
+            var index = _rig.EvaluationOrder[orderIndex];
+            if (overrides[index] >= 0)
+            {
+                _transforms[index] = overrideWorld[overrides[index]];
+                continue;
+            }
+
+            var obj = _model.Objects[index];
+            var parent = _rig.ParentIndices[index];
+            if (!obj.IsAnimated || !TrySampleObjectTransform(index, obj, frame, rotationEnd, out var local))
+            {
+                local = parent < 0 ? obj.Transform : obj.Transform * _rig.ParentInverses[index];
+            }
+
+            _transforms[index] = parent < 0 ? local : local * _transforms[parent];
+        }
+
+        return _transforms;
+    }
+
     // A skeleton merged from several motion files keeps, per object and channel, the key range of each file. Only the
     // range holding the frame is sampled; a channel with none takes its base value (rotation, position) or no scale.
     private bool TrySampleObjectTransform(int objectIndex, PristonModelObject obj, float frame, float rotationEnd, out Matrix local)

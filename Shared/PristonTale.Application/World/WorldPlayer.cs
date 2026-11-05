@@ -240,6 +240,7 @@ public sealed class WorldPlayer
 
         Action = PlayerActionState.Cast;
         MoveState = MotionState.Skill;
+        _character.Ride(false);
         CastCompleted = false;
         _timeline = ActionTimeline.Start(durationMs);
         ClearAttackTarget();
@@ -377,6 +378,7 @@ public sealed class WorldPlayer
         BigHead = _character.Premium.BigHeadMode,
         PetSkin = _character.PetOut,
         PetName = _character.PetName,
+        Mount = _character.MountRidden,
         ShopSign = Shop?.Sign ?? ""
     };
 
@@ -523,6 +525,23 @@ public sealed class WorldPlayer
         }
     }
 
+    // The mount command (MountCommand): null toggles riding, 0 gets off, an id picks that owned mount and rides it. A dead,
+    // trading or selling player stays on foot; false when it may not ride.
+    public bool Ride(int? mount)
+    {
+        if (mount == 0)
+        {
+            return _character.Ride(false);
+        }
+
+        if (IsDead || Trade is not null || Shop is not null || mount is { } id && !_character.ChooseMount(id))
+        {
+            return false;
+        }
+
+        return _character.Ride(mount is not null || !_character.Riding);
+    }
+
     public void SetAttackTarget(ulong targetEntityId, bool sustained)
     {
         _attackTargetId = targetEntityId;
@@ -580,6 +599,7 @@ public sealed class WorldPlayer
 
     public void BeginSwing(ulong targetId, Vector3 targetPos, float durationMs, float hitAtMs)
     {
+        _character.Ride(false);
         Facing = Planar.Heading(Position, targetPos);
         Action = PlayerActionState.Swing;
         MoveState = MotionState.Attack;
@@ -662,6 +682,7 @@ public sealed class WorldPlayer
         if (life <= 0)
         {
             _character.Life = 0;
+            _character.Ride(false);
             IsDead = true;
             Shop = null;
             _pendingPotion = null;

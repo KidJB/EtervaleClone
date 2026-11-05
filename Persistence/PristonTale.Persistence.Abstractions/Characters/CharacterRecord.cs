@@ -41,4 +41,6 @@ public sealed record CharacterRecord(
     bool HelpPetHidden = false,
     long PetSkins = 0,
     short PetOut = 0,
-    string PetName = "");
+    string PetName = "",
+    long Mounts = 0,
+    short MountChosen = 0);

@@ -387,7 +387,8 @@ Renderer side of stage publication: [rendering.md](rendering.md).
 | Middle drag, cursor at screen edge, wheel | `PristonCamera.UpdateOrbit` (Engine3D) | Orbit, edge orbit, zoom; ignored while the HUD captures the pointer |
 | `I` or `V`, `C`, `S`, `X`, `Q`, `D` | `GameplayHud.UpdateKeys` | Inventory, status, skills, system menu, quest window, party window (ignored with Ctrl held) |
 | `F1`-`F8`, `F10`, `4`-`0`, `-`, `=` | `HudSkillBindings` | The action bar's keys: select the skill or use the item on the shown page's key; while pressing a skill in the tree, bind it ([skills.md](skills.md)) |
-| `J` | `GameplayHud.UpdateKeys` | Open or close the pet collection (`HudPetWindow`) |
+| `J` | `GameplayHud.UpdateKeys` | Open or close the stable (`HudPetWindow`: pets and mounts) |
+| `G` | `GameplayHud.UpdateKeys` | Get on or off the picked mount (sends `/mount`) |
 | `L` | `GameplayHud.UpdateKeys` | Open or close the quest book (`HudQuestBook`) |
 | `B`, `Alt+1`..`Alt+3` | `GameplayHud.UpdateKeys` | Show or hide the action bar; show its page 1 to 3 (Alt keeps `1`-`3` from the potion belt) |
 | `Enter`, `Page Up`/`Page Down`, `Up`/`Down` | `HudChat.Update` | Open the chat input or send its line, scroll the chat, recall commands; while typing, HUD, binding, debug and motion keys and the `A` labels are suppressed |
@@ -511,8 +512,12 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   `tomorrow`), soonest first, counted down from the list's arrival; the wheel scrolls it, the button, its `x` or Escape
   close it.
   Under the pet button a quest book button (or `L`) opens the quest book (`HudQuestBook`, see [quests.md](quests.md#client)).
-  Under the boss list's button a pet button (or `J`) opens the pet collection (`HudPetWindow`), drawn on the stable
-  frame of `assets/Hud/Stable/` (a plain dark box without it): the Pets tab, the pet out's name (`PetNames.Shown`) with
+  Under the boss list's button a pet button (or `J`) opens the stable (`HudPetWindow`), drawn on the frame of
+  `assets/Hud/Stable/` (a plain dark box without it) with a Pets and a Mount tab (`Pets.png`, `Mount.png`, lit by
+  their `H_` art while shown or pointed at). The Mount tab shows the picked mount's name and one row per mount (its
+  portrait from `assets/Hud/Mount/mounts/`, its name in its rarity's colour, its speed and rarity, Riding or Locked) with
+  "N of M owned"; an owned row's saddle sends `/mount <id>` and on the ridden mount the remove mark sends `/mount off`.
+  The Pets tab shows the pet out's name (`PetNames.Shown`) with
   a pencil, one row per pet skin four at a time (portrait frame with the helper pet item's icon, name, Out, Unlocked
   or Locked; the wheel and the scroll bar move the list) and "N of M acquired". An unlocked row's paw sends
   `/pet <id>` through the chat; on the pet out the remove mark sends `/pet off`. The pencil opens a name box
@@ -523,7 +528,15 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   tenth of the way to its place behind and beside its owner per 70 Hz frame, walking while it moves. Its name hangs over
   it (`SkinPetPresentation.CollectLabels`, projected by `GameScene.CollectPetLabels`, drawn by the HUD within the speech
   bubbles' `MaxDepth`) in the NPCs' name box (`HudCombat.DrawNamePlate`): the name its owner gave it, or "<owner>'s Pet"
-  (`PetNames.Shown`).
+  (`PetNames.Shown`). Each rider's mount (`MountPresentation`, from the looks and, for the local player, the
+  `PetCollection`) is drawn at the rider's ground place and facing at its scale, running while the rider moved more
+  than 0.2 units that frame and standing otherwise. The rider sits in its class's riding pose for the mount's seat
+  (`MountSeat`: `game/objects/animations/<class>/Mount_<Seat>.smb`, and `Mount_<Seat>_Run.smb` while it moves; `fs`
+  Fighter, `as` Archer, `ps` Pikeman, `mgs` Magician, `prs` Priestess, `asn` Assassin, `sha` Shaman, and the
+  Mechanician and Knight borrow `fs`, the Atalanta `as`): the pose drives the bones it names on the body and head actors
+  (`IActorScene.SetActorClip`, looping on its own clock; `PristonModelAnimator.Evaluate` with overrides keeps every
+  other bone under its parent) and already seats the rider. Without the pose files the rider keeps its own motions and
+  its model rises by the mount's saddle height (`RemoteEntityBase.RiderLift`, `GameScene.PlayerWorld`).
 - Bottom bar gauges (`HudBar`): life, mana and stamina (`Bar_Life`, `Bar_Mana`, `Bar_Stamina`, 94, 94 and 76 pixels)
   and the experience (`sinGage/Bar_Exp.bmp`, 6 x 86 at (485, 508), Menu-1's slot right of the mana under its "NL." label)
   fill from the bottom up; the experience is the level's share. Pointed at, each shows its value; the experience reads

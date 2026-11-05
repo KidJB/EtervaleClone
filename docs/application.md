@@ -572,6 +572,22 @@ looks (`PlayerAppearanceView.PetSkin`, description version 3) and the owner's co
 `/petname` alone clears it), and the name travels in the looks (version 4) and the collection; an unnamed pet shows
 "<owner>'s Pet". A pet out fetches gold and potions as a helper pet does (Ground loot).
 
+## Mounts
+
+A mount is a model a player rides (`Mounts`: id, name, `.inx` model with Stand and Run motions under
+`assets/game/objects/mounts/`, scale, saddle height, rarity, portrait and item; eighteen to start). The account owns its
+mounts as it owns pet skins: each character row keeps a bit per mount (`mounts`) and entering the world joins every row
+of the account (`PlayerCharacter.JoinAccountMounts`); the character keeps the one it picked (`mount_chosen`). Riding is
+not saved (`PlayerCharacter.Riding`): a character enters the world on foot. While it rides, the mount's speed (4, 6, 8
+or 10 move speed points by rarity, each about 4% of the running speed) joins the equipment's in the derived stats, so
+the server's movement check and the client's movement follow it. `/mount` gets on or off the picked mount, `/mount
+<id>` picks an owned mount and rides it, `/mount off` gets off (`MountCommand`, `WorldServer.RideAsync`,
+`WorldPlayer.Ride`); a dead, trading or selling player cannot ride ("You cannot ride now"), and a swing, a skill cast or
+death takes the rider down. A mount's item (`MT101`-`MT118`, added to the imported catalog by `WorldDataAppService`,
+`ItemKind.Misc`, sold in the coin shop's Mounts tab) adds the mount and picks it (`MountUse`); a mount already owned
+refuses it, so the item is kept. The ridden mount is part of the player's looks (`PlayerAppearanceView.Mount`,
+description version 5) and the stable travels in `PetCollection` (protocol.md).
+
 ## Beginner's helper pet
 
 A character below level 10 has one of the four helper dragons beside it, as the original's low-level pet

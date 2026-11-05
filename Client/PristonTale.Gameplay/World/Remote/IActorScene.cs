@@ -28,6 +28,7 @@ public interface IActorScene
     void RestartActorMotion(ActorHandle handle, MotionCode motion);
     void SetActorPlaybackRate(ActorHandle handle, float rateFactor);
     void SetActorHidden(ActorHandle handle, bool hidden) { }
+    void SetActorClip(ActorHandle handle, PristonModel clip) { }
     void RemoveActor(ActorHandle handle);
     void SetActorAppearance(ActorHandle handle, in PristonActorAppearance appearance) { }
     ActorHandle AddActorEcho(ActorHandle source, float lagFrames, ActorHandle parent) => ActorHandle.None;

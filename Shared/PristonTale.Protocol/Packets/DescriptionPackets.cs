@@ -7,9 +7,9 @@ namespace PristonTale.Protocol.Packets;
 
 internal static class DescriptionWire
 {
-    // Version 2 carries the player's shop sign after the fields of version 1, version 3 the pet skin out and version 4 the
-    // pet's name.
-    public const ushort Version = 4;
+    // Version 2 carries the player's shop sign after the fields of version 1, version 3 the pet skin out, version 4 the
+    // pet's name and version 5 the mount ridden.
+    public const ushort Version = 5;
     public const int MaxNameBytes = 64;
     public const int MaxModelBytes = 160;
 
@@ -65,6 +65,9 @@ public sealed record DescribedPlayer(
     // The pet skin the player has out (PetSkins id, 0 none) and the name it gave its pet.
     public int PetSkin { get; init; }
     public string PetName { get; init; } = "";
+
+    // The mount the player rides (Mounts id, 0 on foot).
+    public int Mount { get; init; }
 }
 
 // A held item's glow: {int8 Blink (0 none, below 0 steady), int16 R, G, B, A, float32 Scale, int8 Mix (-1 none), uint8
@@ -121,7 +124,7 @@ public sealed record DescribedTemplate(
 // 0, varuint EntityId, uint8 Revision, uint8 Kind, varuint Level, varuint MoveSpeed, float32 AttackRate, text Name, text
 // Model}, then for a player {varuint Class, Tier, Face, Hair, text HeadModel, uint32 Weapon, Armor, OffHand, uint8 Flags (1
 // village, 2 Phoenix), uint8 HelperPet, uint8 BigHead, glow WeaponGlow, glow OffHandGlow (DescribedGlow), text ShopSign
-// (from version 2), uint8 PetSkin (from version 3), text PetName (from version 4)}, else {varuint Template, float32 TemplateScale, varuint SoundCode, varint PortraitY, PortraitZ,
+// (from version 2), uint8 PetSkin (from version 3), text PetName (from version 4), uint8 Mount (from version 5)}, else {varuint Template, float32 TemplateScale, varuint SoundCode, varint PortraitY, PortraitZ,
 // uint8 Brood, varuint Owner, float32 InstanceScale, uint32 NpcServices, varuint Class (the monster class: 1 boss, 200
 // hammer), varint ShadowSize (-1 none, 0 small to 3 large)}. Text is UTF-8 with a uint16 byte length.
 public sealed record EntityDescriptionPacket(
@@ -137,7 +140,7 @@ public sealed record EntityDescriptionPacket(
     DescribedTemplate? Template = null)
 {
     // The player part (four varuints, the head model, three codes, three bytes, two glows, the sign) is the larger tail.
-    private const int PlayerPart = 5 * 4 + 2 + DescriptionWire.MaxModelBytes + 4 * 3 + 3 + 2 * DescribedGlow.Size + 2 + PersonalShopLimits.MaxSignBytes + 1 + 2 + PetNameLimits.MaxBytes;
+    private const int PlayerPart = 5 * 4 + 2 + DescriptionWire.MaxModelBytes + 4 * 3 + 3 + 2 * DescribedGlow.Size + 2 + PersonalShopLimits.MaxSignBytes + 1 + 2 + PetNameLimits.MaxBytes + 1;
     public const int MaximumSize = 8 + 4 + VarInt.MaxBytes64 + 2 + 5 * 2 + 4 + (2 + DescriptionWire.MaxNameBytes) + (2 + DescriptionWire.MaxModelBytes)
         + PlayerPart;
 
@@ -172,6 +175,7 @@ public sealed record EntityDescriptionPacket(
             NpcWire.Text(ref writer, player.ShopSign, PersonalShopLimits.MaxSignBytes);
             writer.Byte((byte)Math.Clamp(player.PetSkin, 0, byte.MaxValue));
             NpcWire.Text(ref writer, player.PetName, PetNameLimits.MaxBytes);
+            writer.Byte((byte)Math.Clamp(player.Mount, 0, byte.MaxValue));
         }
         else
         {
@@ -224,6 +228,7 @@ public sealed record EntityDescriptionPacket(
                 var sign = version >= 2 ? NpcWire.Text(ref reader, PersonalShopLimits.MaxSignBytes) : "";
                 var petSkin = version >= 3 ? reader.Byte() : 0;
                 var petName = version >= 4 ? NpcWire.Text(ref reader, PetNameLimits.MaxBytes) : "";
+                var mount = version >= 5 ? reader.Byte() : 0;
                 return new EntityDescriptionPacket(entityId, revision, kind, level, moveSpeed, attackRate, name, model,
                     new DescribedPlayer(playerClass, tier, face, hair, head, weapon, armor, offHand, (flags & 1) != 0, (flags & 2) != 0, pet, bigHead)
                     {
@@ -231,7 +236,8 @@ public sealed record EntityDescriptionPacket(
                         OffHandGlow = offHandGlow,
                         ShopSign = sign,
                         PetSkin = petSkin,
-                        PetName = petName
+                        PetName = petName,
+                        Mount = mount
                     });
             }
             case EntityKind.Monster or EntityKind.Npc:

@@ -98,6 +98,11 @@ public sealed record PetCollectionInfo(ulong Skins, int Out)
 {
     // The name the player gave its pet (empty: the skin's name shows).
     public string Name { get; init; } = "";
+
+    // The account's mounts (Mounts bits), the one picked (0 none) and whether the character rides it.
+    public ulong Mounts { get; init; }
+    public int MountChosen { get; init; }
+    public bool Riding { get; init; }
 }
 
 public readonly record struct BossSpotInfo(string BossName, float X, float Z, bool Alive);

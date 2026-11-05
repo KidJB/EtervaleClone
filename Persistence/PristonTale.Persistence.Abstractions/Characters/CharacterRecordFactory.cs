@@ -92,6 +92,8 @@ public static class CharacterRecordFactory
             PetSkins = unchecked((long)character.PetSkins),
             PetOut = (short)character.PetOut,
             PetName = character.PetName,
+            Mounts = unchecked((long)character.Mounts),
+            MountChosen = (short)character.MountChosen,
             Strength = attributes.Strength,
             Spirit = attributes.Spirit,
             Talent = attributes.Talent,

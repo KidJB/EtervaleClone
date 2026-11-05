@@ -169,6 +169,7 @@ FluentMigrator scans `PristonTale.Persistence` for `[Migration(n)]` classes. Ver
 | 36 | `M036PetSkins` | `characters.pet_skins` (int64, default 0: the pet skins unlocked, a bit per `PetSkins` id; the account's set is every one of its rows joined at login) and `pet_out` (int16, default 0: the skin out) |
 | 37 | `M037PetName` | `characters.pet_name` (text up to 64 characters, default empty: the name the player gave its pet, empty showing the skin's name) |
 | 38 | `M038Coins` | `accounts.coins` int64 (default 0: the account's coin shop coins) and the `coin_log` table (`account_id` FK, `change`, `balance` after, `reason`, `created_at`; index on `account_id`); see [coin-shop.md](coin-shop.md) |
+| 39 | `M039Mounts` | `characters.mounts` (int64, default 0: the account's mounts, a bit per `Mounts` id; every row of the account joined at login) and `mount_chosen` (int16, default 0: the mount the character picked) |
 
 Upgrade path: databases from the earlier migration set at version 12 upgrade in place. Databases at
 versions 1-11 make `M013Baseline` throw; bring them to 12 with the previous release or back up and recreate them.

@@ -61,7 +61,7 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
             }
 
             // A pet skin's item lies on the ground as the helper pet's item, whose sprite it shows too.
-            var model = PetSkins.IsItem(drop.CatalogKey) ? PetSkins.IconKey : drop.CatalogKey;
+            var model = PetSkins.IsItem(drop.CatalogKey) || Mounts.IsItem(drop.CatalogKey) ? PetSkins.IconKey : drop.CatalogKey;
             if (!_prepared.TryGetValue(model, out var task))
             {
                 task = PrepareAsync(model);

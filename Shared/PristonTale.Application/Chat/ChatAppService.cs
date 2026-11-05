@@ -85,6 +85,23 @@ public sealed class ChatAppService
             return;
         }
 
+        if (Simulation.Characters.MountCommand.TryParse(text, out var mount))
+        {
+            try
+            {
+                if (!await World.RideAsync(entityId, mount) && Directory.TryGet(entityId, out var rider))
+                {
+                    rider.Link.Deliver(ChatLine.Reply(Simulation.Characters.MountMessages.CannotRide));
+                }
+            }
+            catch (WorldBusyException)
+            {
+                // A full tick queue drops the command, as it drops a spoken line.
+            }
+
+            return;
+        }
+
         if (Simulation.Characters.PetCommand.TryParse(text, out var petSkin))
         {
             try

@@ -42,6 +42,9 @@ public readonly struct PlayerAppearanceView
     public int PetSkin { get; init; }
     public string PetName { get; init; } = "";
 
+    // The mount the player rides (Mounts id, 0 on foot).
+    public int Mount { get; init; }
+
     // The sign of the personal shop the player sells from, empty when it sells nothing.
     public string ShopSign { get; init; } = "";
 

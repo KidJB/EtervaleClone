@@ -100,6 +100,9 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
     private long _petSkins = -1;
     private int _petOut = -1;
     private string? _petName;
+    private long _mounts = -1;
+    private int _mountChosen = -1;
+    private bool _riding;
 
     // The world's boss list last sent.
     private BossList? _bossList;
@@ -475,15 +478,26 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
 
     private void SendPetCollection(Simulation.Characters.OwnerState? owner, IPacketSink connection)
     {
-        if (owner is null || unchecked((long)owner.PetSkins) == _petSkins && owner.PetOut == _petOut && owner.PetName == _petName)
+        if (owner is null || unchecked((long)owner.PetSkins) == _petSkins && owner.PetOut == _petOut && owner.PetName == _petName
+            && unchecked((long)owner.Mounts) == _mounts && owner.MountChosen == _mountChosen && owner.Riding == _riding)
         {
             return;
         }
 
+        _mounts = unchecked((long)owner.Mounts);
+        _mountChosen = owner.MountChosen;
+        _riding = owner.Riding;
+
         _petSkins = unchecked((long)owner.PetSkins);
         _petOut = owner.PetOut;
         _petName = owner.PetName;
-        var packet = new PetCollectionPacket(owner.PetSkins, (byte)Math.Clamp(owner.PetOut, 0, byte.MaxValue)) { Name = owner.PetName };
+        var packet = new PetCollectionPacket(owner.PetSkins, (byte)Math.Clamp(owner.PetOut, 0, byte.MaxValue))
+        {
+            Name = owner.PetName,
+            Mounts = owner.Mounts,
+            MountChosen = (byte)Math.Clamp(owner.MountChosen, 0, byte.MaxValue),
+            Riding = owner.Riding
+        };
         connection.Send(_scratch.AsSpan(0, packet.Write(_scratch)));
     }
 
@@ -1143,7 +1157,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         return HashCode.Combine(view.MaxLife, view.Level, view.TemplateId, view.MoveSpeed, view.AttackRate,
             HashCode.Combine(appearance.WeaponKey, appearance.ArmorKey, appearance.OffHandKey, appearance.InVillage, appearance.Tier, appearance.HairIndex,
                 HashCode.Combine(appearance.HelperPet, appearance.Phoenix, appearance.BigHead, appearance.WeaponGlow, appearance.OffHandGlow, appearance.ShopSign,
-                    appearance.PetSkin, appearance.PetName)),
+                    HashCode.Combine(appearance.PetSkin, appearance.PetName, appearance.Mount))),
             view.OwnerId,
             view.ModelScale);
     }

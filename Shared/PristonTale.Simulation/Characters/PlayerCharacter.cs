@@ -543,8 +543,8 @@ public sealed partial class PlayerCharacter
         return held;
     }
 
-    // The single derived-stats path: attributes and level, usable equipment with its class specialization, carried
-    // weight, passive skills, then every active modifier.
+    // The single derived-stats path: attributes and level, usable equipment with its class specialization, the ridden
+    // mount's speed, carried weight, passive skills, then every active modifier.
     private void Recompute()
     {
         PassiveSkillEffects.Sync(this);
@@ -562,7 +562,9 @@ public sealed partial class PlayerCharacter
         }
 
         _equipmentTotals = equipped;
-        var stats = DerivedStats.Compute(Attributes, Level, Definition.FunctionProfile, equipped, Items.CarriedWeight.Of(this));
+        var riddenSpeed = MountSpeed;
+        var stats = DerivedStats.Compute(Attributes, Level, Definition.FunctionProfile,
+            riddenSpeed == 0 ? equipped : equipped with { MoveSpeed = equipped.MoveSpeed + riddenSpeed }, Items.CarriedWeight.Of(this));
         _derivedEffectsRevision = Effects.Revision;
         _derived = ModifierRules.Apply(PassiveSkills.Apply(stats, this), Effects.Totals);
         _derived = _derived with { MaxWeight = _derived.MaxWeight + PremiumRules.WeightBonus(Premium) };
