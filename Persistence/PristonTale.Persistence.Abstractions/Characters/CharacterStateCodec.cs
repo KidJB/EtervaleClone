@@ -60,6 +60,8 @@ public static class CharacterStateCodec
         character.RestorePets(unchecked((ulong)record.PetSkins), record.PetOut);
         character.RestorePetName(record.PetName);
         character.RestoreMounts(unchecked((ulong)record.Mounts), record.MountChosen);
+        DailyQuestCodec.Restore(character.DailyQuests, record.DailyQuests);
+        character.Skins = SkinCodec.Restore(record.Skins);
 
         character.RestoreSides(inventory.ActiveSide, equipment.ActiveSide);
         // Gear restores first: the potion space it gives bounds the belt's stacks.

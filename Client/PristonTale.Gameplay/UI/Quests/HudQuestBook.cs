@@ -7,11 +7,11 @@ using PristonTale.Simulation.Quests;
 namespace PristonTale.Gameplay.UI.Quests;
 
 // The quest book, drawn on the open book of Hud/QuestBook: the quests of the player's side (QuestBook) on the left page,
-// "In Progress" showing the accepted (running) one and "Quest List" all of them, each marked done, running,
+// "In Progress" showing the accepted (running) one, "Quest List" all of them and "Daily" the daily quests (HudQuestBook.Daily), each marked done, running,
 // available or locked from the journal the server sends; the clicked quest on the right page, its task beside the green
 // mark, its status beside the blue one and its rewards beside the check. L or the book button under the pet button opens
 // and closes it; Escape closes it. Without the book art it draws on a plain dark box.
-public sealed class HudQuestBook
+public sealed partial class HudQuestBook
 {
     public const string Folder = "Hud/QuestBook/";
     public const string Background = Folder + "background.png";
@@ -32,8 +32,14 @@ public sealed class HudQuestBook
     // The book's art is 620x460; every place below is in its pixels.
     private const int Width = 620;
     private const int Height = 460;
-    private static readonly Rectangle ProgressTab = new(50, 111, 120, 27);
-    private static readonly Rectangle ListTab = new(178, 111, 120, 27);
+    // The three tabs share the art's tab strip over the left page, drawn over its two painted tabs.
+    private static readonly Rectangle TabStrip = new(48, 109, 274, 31);
+    private static readonly Rectangle ProgressTab = new(50, 111, 88, 27);
+    private static readonly Rectangle ListTab = new(142, 111, 88, 27);
+    private static readonly Rectangle DailyTab = new(234, 111, 88, 27);
+    private static readonly Color TabFace = new(206, 186, 146);
+    private static readonly Color TabLit = new(238, 222, 184);
+    private static readonly Color TabEdge = new(96, 64, 32);
     private static readonly Rectangle ListArea = new(52, 142, 232, 274);
     private static readonly Rectangle Track = new(288, 144, 4, 270);
     private static readonly Rectangle CloseMark = new(585, 10, 24, 24);
@@ -66,15 +72,31 @@ public sealed class HudQuestBook
     private QuestBookEntry _detailFor;
     private string _levelLine = "";
     private int _shownCount;
-    private bool _inProgress = true;
+    private enum BookMode
+    {
+        Progress,
+        List,
+        Daily
+    }
+
+    private BookMode _mode = BookMode.Progress;
+    private bool InProgressTab => _mode == BookMode.Progress;
     private int _scroll;
     private int _selected = -1;
 
     public bool Open { get; private set; }
 
-    public void Toggle() => Open = !Open;
+    public void Toggle()
+    {
+        Open = !Open;
+        DailyNpc = 0;
+    }
 
-    public void Close() => Open = false;
+    public void Close()
+    {
+        Open = false;
+        DailyNpc = 0;
+    }
 
     public static Rectangle Button(Rectangle minimapArea)
     {
@@ -90,7 +112,7 @@ public sealed class HudQuestBook
     private static Rectangle Row(Rectangle window, int visibleIndex) =>
         new(window.X + ListArea.X, window.Y + ListArea.Y + visibleIndex * RowHeight, ListArea.Width, RowHeight - 1);
 
-    private int MaxScroll => Math.Max(0, _shownCount - VisibleRows);
+    private int MaxScroll => Math.Max(0, (_mode == BookMode.Daily ? _dailies.Count : _shownCount) - VisibleRows);
 
     public bool Captures(HudLayout layout, Rectangle minimapArea, Point pointer, bool minimapShown) =>
         minimapShown && Button(minimapArea).Contains(pointer) || Open && Window(layout).Contains(pointer);
@@ -156,7 +178,7 @@ public sealed class HudQuestBook
         _shownCount = 0;
         for (var index = 0; index < _entries.Length; index++)
         {
-            if (!_inProgress || _statuses[index] == QuestBookStatus.Running)
+            if (!InProgressTab || _statuses[index] == QuestBookStatus.Running)
             {
                 _shown[_shownCount++] = index;
             }
@@ -189,12 +211,17 @@ public sealed class HudQuestBook
             return true;
         }
 
-        if (At(window, ProgressTab).Contains(pointer) || At(window, ListTab).Contains(pointer))
+        if (At(window, ProgressTab).Contains(pointer) || At(window, ListTab).Contains(pointer) || At(window, DailyTab).Contains(pointer))
         {
-            _inProgress = At(window, ProgressTab).Contains(pointer);
+            _mode = At(window, ProgressTab).Contains(pointer) ? BookMode.Progress : At(window, ListTab).Contains(pointer) ? BookMode.List : BookMode.Daily;
             _scroll = 0;
             Filter();
             return true;
+        }
+
+        if (_mode == BookMode.Daily)
+        {
+            return ClickDaily(window, pointer);
         }
 
         for (var row = 0; row < VisibleRows && _scroll + row < _shownCount; row++)
@@ -231,7 +258,13 @@ public sealed class HudQuestBook
         painter.Sprite(Background, window.X, window.Y);
         var close = At(window, CloseMark);
         painter.Sprite(close.Contains(pointer) ? CloseHoverArt : CloseArt, close.X, close.Y);
-        painter.ColorBox(At(window, _inProgress ? ProgressTab : ListTab), 255, 240, 200, 40);
+        DrawTabs(painter, window, pointer);
+        if (_mode == BookMode.Daily)
+        {
+            DrawDaily(painter, window, pointer);
+            DrawScroll(painter, window);
+            return;
+        }
 
         for (var row = 0; row < VisibleRows && _scroll + row < _shownCount; row++)
         {
@@ -249,20 +282,40 @@ public sealed class HudQuestBook
 
         if (_shownCount == 0)
         {
-            painter.TextCentered(_inProgress ? "No quest accepted." : "No quest here.", window.X + ListArea.X, window.X + ListArea.Right, window.Y + ListArea.Y + 4, ListText);
+            painter.TextCentered(InProgressTab ? "No quest accepted." : "No quest here.", window.X + ListArea.X, window.X + ListArea.Right, window.Y + ListArea.Y + 4, ListText);
         }
 
+        DrawScroll(painter, window);
+        if (_selected >= 0 && _selected < _entries.Length)
+        {
+            DrawPage(painter, window, _entries[_selected], _statuses[_selected]);
+        }
+    }
+
+    private void DrawTabs(HudPainter painter, Rectangle window, Point pointer)
+    {
+        painter.Fill(At(window, TabStrip), new Color(46, 30, 18));
+        DrawTab(painter, At(window, ProgressTab), "In Progress", _mode == BookMode.Progress, pointer);
+        DrawTab(painter, At(window, ListTab), "Quest List", _mode == BookMode.List, pointer);
+        DrawTab(painter, At(window, DailyTab), "Daily", _mode == BookMode.Daily, pointer);
+    }
+
+    // A tab: a parchment face in a dark edge, lit while open or pointed at.
+    private static void DrawTab(HudPainter painter, Rectangle tab, string label, bool open, Point pointer)
+    {
+        painter.Fill(tab, TabEdge);
+        painter.Fill(new Rectangle(tab.X + 1, tab.Y + 1, tab.Width - 2, tab.Height - (open ? 1 : 2)), open || tab.Contains(pointer) ? TabLit : TabFace);
+        painter.TextCentered(label, tab.X, tab.Right, tab.Y + 6, open ? Heading : Ink, shadow: false);
+    }
+
+    private void DrawScroll(HudPainter painter, Rectangle window)
+    {
         if (MaxScroll > 0)
         {
             var track = At(window, Track);
             painter.Stretch(ScrollArt, track);
             var thumbY = track.Y + (track.Height - 18) * _scroll / MaxScroll;
             painter.Sprite(ScrollerArt, track.X + track.Width / 2 - 9, thumbY);
-        }
-
-        if (_selected >= 0 && _selected < _entries.Length)
-        {
-            DrawPage(painter, window, _entries[_selected], _statuses[_selected]);
         }
     }
 

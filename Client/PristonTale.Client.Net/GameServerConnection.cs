@@ -53,6 +53,10 @@ public sealed class GameServerConnection : IGameBackend
     private readonly PendingReplies<Guid, long> _coinBalances = new();
     private readonly PendingReplies<Guid, ItemBoxListInfo> _itemBoxLists = new();
     private readonly PendingReplies<Guid, byte> _itemBoxActions = new();
+    private readonly PendingReplies<Guid, byte> _dailyQuests = new();
+    private readonly PendingReplies<Guid, SkinCatalogInfo> _skinCatalogs = new();
+    private readonly PendingReplies<Guid, (PristonTale.Simulation.Characters.SkinStatus, long)> _skinResults = new();
+    private readonly Dictionary<Guid, List<PristonTale.Contracts.Characters.SkinArticle>> _skinParts = new();
     // The entries of an Item Distributor open, collected until its list end, which follows them on the same connection.
     private readonly ConcurrentDictionary<Guid, List<ItemBoxEntryInfo>> _itemBoxEntries = new();
     // The tabs of a coin shop open, collected until its catalog message, which follows them on the same connection.
@@ -357,6 +361,34 @@ public sealed class GameServerConnection : IGameBackend
         return _itemBoxActions.RequestAsync(packet.OperationId, () => Send(packet), ct);
     }
 
+    internal Task<SkinCatalogInfo> OpenSkinsAsync(CancellationToken ct)
+    {
+        ThrowIfDisconnected();
+        var packet = new SkinOpenPacket(Guid.NewGuid());
+        return _skinCatalogs.RequestAsync(packet.OperationId, () => Send(packet), ct);
+    }
+
+    internal Task<(PristonTale.Simulation.Characters.SkinStatus, long)> BuySkinAsync(string key, CancellationToken ct)
+    {
+        ThrowIfDisconnected();
+        var packet = new SkinBuyPacket(Guid.NewGuid(), key);
+        return _skinResults.RequestAsync(packet.OperationId, () => Send(packet), ct);
+    }
+
+    internal Task<(PristonTale.Simulation.Characters.SkinStatus, long)> ApplySkinsAsync(PristonTale.Simulation.Characters.SkinSet skins, CancellationToken ct)
+    {
+        ThrowIfDisconnected();
+        var packet = new SkinApplyPacket(Guid.NewGuid(), skins.Weapon, skins.Armor, skins.OffHand, skins.Hair);
+        return _skinResults.RequestAsync(packet.OperationId, () => Send(packet), ct);
+    }
+
+    internal Task<byte> DailyQuestAsync(ulong npcId, int questId, byte action, CancellationToken ct)
+    {
+        ThrowIfDisconnected();
+        var packet = new DailyQuestRequestPacket(Guid.NewGuid(), npcId, questId, action);
+        return _dailyQuests.RequestAsync(packet.OperationId, () => Send(packet), ct);
+    }
+
     internal async Task<ProgressionOutcome> ApplyProgressionAsync(ProgressionCommand command, CancellationToken ct)
     {
         var packet = new ProgressionCommandPacket(command.OperationId, command.ExpectedRevision, (int)command.Action, (int)command.Attribute,
@@ -516,6 +548,9 @@ public sealed class GameServerConnection : IGameBackend
             _coinBalances.FailAll(error);
             _itemBoxLists.FailAll(error);
             _itemBoxActions.FailAll(error);
+            _dailyQuests.FailAll(error);
+            _skinCatalogs.FailAll(error);
+            _skinResults.FailAll(error);
             _npcDialogs.FailAll(error);
             _services.FailAll(error);
             _quests.FailAll(error);
@@ -660,6 +695,36 @@ public sealed class GameServerConnection : IGameBackend
                 var end = ItemBoxListPacket.Read(packet);
                 var collected = _itemBoxEntries.TryGetValue(end.OperationId, out var entries) ? entries.ToArray() : [];
                 _itemBoxLists.Complete(end.OperationId, new ItemBoxListInfo(end.Status, collected));
+                break;
+            }
+            case EtervaleOpcodes.SkinCatalog:
+            {
+                var part = SkinCatalogPacket.Read(packet);
+                if (!_skinParts.TryGetValue(part.OperationId, out var articles))
+                {
+                    _skinParts[part.OperationId] = articles = [];
+                }
+
+                articles.AddRange(part.Articles);
+                if (part.Last)
+                {
+                    _skinParts.Remove(part.OperationId);
+                    _skinCatalogs.Complete(part.OperationId, new SkinCatalogInfo(part.Balance,
+                        new PristonTale.Simulation.Characters.SkinSet(part.Weapon, part.Armor, part.OffHand, part.Hair), articles));
+                }
+
+                break;
+            }
+            case EtervaleOpcodes.SkinResult:
+            {
+                var result = SkinResultPacket.Read(packet);
+                _skinResults.Complete(result.OperationId, ((PristonTale.Simulation.Characters.SkinStatus)result.Status, result.Balance));
+                break;
+            }
+            case EtervaleOpcodes.DailyQuestResult:
+            {
+                var result = DailyQuestResultPacket.Read(packet);
+                _dailyQuests.Complete(result.OperationId, result.Status);
                 break;
             }
             case EtervaleOpcodes.ItemBoxResult:

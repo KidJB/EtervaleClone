@@ -170,7 +170,13 @@ internal static class SkillCatalogTests
         Rule(0x05080004, out var piercing);
         Assert.True(SkillFormulas.Timing(piercing, 1, 1f, default).HitsAtMs.Length == 3 && SkillFormulas.Timing(piercing, 5, 1f, default).HitsAtMs.Length == 5
             && SkillFormulas.Timing(piercing, 9, 1f, default).HitsAtMs.Length == 7, "Divine Piercing hits do not follow its rank's motion");
-        Assert.True(piercing.ForRank(10).MotionIndex == 174 && piercing.ForRank(4).MotionIndex == 172, "Divine Piercing motion variant");
+        Assert.True(piercing.ForRank(10).MotionIndex == 169 && piercing.ForRank(4).MotionIndex == 167, "Divine Piercing motion variant");
+        Rule(0x02080001, out var destroyer);
+        Rule(0x02080002, out var berserker);
+        Rule(0x02080003, out var cyclone);
+        Assert.True(destroyer.MotionIndex == 141 && berserker.MotionIndex == 144 && cyclone.MotionIndex == 147, "Fighter final-tier skills play their own clips");
+        Rule(0x08080004, out var meteo);
+        Assert.True(meteo.MotionFrames == 117 && SkillFormulas.HitCount(meteo, 10) == 2, "Meteo strikes twice over its whole clip");
         Rule(0x06040004, out var storm);
         var stormTiming = SkillFormulas.Timing(storm, 1, 1f, default);
         Assert.True(stormTiming.HitsAtMs.Length == 2 && stormTiming.HitsAtMs[1] > stormTiming.DurationMs / 2, "Storm Javelin does not strike once per loop");

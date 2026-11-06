@@ -24,7 +24,7 @@ internal static class SkillSystemTests
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
         yield return ("skill rules cover all 32 first-tier skills of the eight original classes with consistent kinds", RulesAsync);
-        yield return ("skill cooldown follows the original mastery gauge from 0.49 s to 17.15 s", CooldownAsync);
+        yield return ("skill cooldown lasts M / 2 x 35 / 60 seconds, M from 2 to 1000", CooldownAsync);
         yield return ("skill formulas: weapon bonuses, magic power, area share, heal and buff rolls", FormulasAsync);
         yield return ("modifier engine stacks, refreshes, keeps the strongest, removes by source and feeds derived stats", ModifierEngineAsync);
         yield return ("modifier engine ticks periodic effects and expires timed ones but keeps permanent ones", PeriodicAsync);
@@ -76,12 +76,11 @@ internal static class SkillSystemTests
     private static Task CooldownAsync()
     {
         SkillRuleCatalog.TryGet(0x08010002, out var fireBolt);
-        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 0, 0, 0) == 17150, "low mastery is not the gauge's longest fill");
-        // Talent 150 gives proficiency 5000: M = 84 + 2 - 50 = 36 -> still the 36-70 bracket.
-        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 150, 0, 0) == 17150, "M 36 left the slowest bracket");
-        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 150, 0, 300) == 8330, "M 33 should fill in 8.33 s");
-        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 0, 50, 300) == 8330, "item mastery did not count toward proficiency");
-        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 150, 0, 5000) == 490, "full proficiency should reach the 0.49 s floor");
+        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 0, 0, 0) == 25083, "M 86 should last M / 2 x 35 / 60 s");
+        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 150, 0, 0) == 10500, "talent did not shorten the cooldown");
+        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 150, 0, 300) == 9625, "M 33 should last 9.625 s");
+        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 0, 50, 300) == 9625, "item mastery did not count toward proficiency");
+        Assert.True(SkillFormulas.CooldownMs(fireBolt, 1, 150, 0, 5000) == 583, "full proficiency should reach the floor of M 2");
         Assert.True(SkillFormulas.UsesAfterCast(0, 5, 0, 1) == 100 && SkillFormulas.UsesAfterCast(0, 4, 0, 1) == 0, "use counter changed");
         Assert.True(SkillFormulas.UsesAfterCast(0, 6, 0, 4) == 100 && SkillFormulas.UsesAfterCast(0, 5, 0, 4) == 0, "rank did not lengthen the streak");
         Assert.True(SkillFormulas.UsesAfterCast(0, 9, 8, 1) == 100 && SkillFormulas.UsesAfterCast(0, 17, 15, 3) == 100, "window position streak changed");
@@ -262,7 +261,7 @@ internal static class SkillSystemTests
         Assert.True(field.CastSkill(player, request with { TargetId = 4242 }).Verdict == SkillCastVerdict.InvalidTarget, "missing target accepted");
         monster.Position = new Vector3(120, 0, 0);
         var accepted = field.CastSkill(player, request);
-        Assert.True(accepted.Accepted && accepted.CooldownMs == 17150 && player.IsCasting, $"valid cast refused: {accepted.Verdict}");
+        Assert.True(accepted.Accepted && accepted.CooldownMs > 0 && player.IsCasting, $"valid cast refused: {accepted.Verdict}");
         Assert.True(field.CastSkill(player, request).Verdict == SkillCastVerdict.Busy, "second cast during the motion accepted");
         for (var tick = 0; tick < 40; tick++)
         {

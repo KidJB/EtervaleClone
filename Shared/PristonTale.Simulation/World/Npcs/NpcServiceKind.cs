@@ -56,7 +56,16 @@ public enum NpcServiceKind : byte
     EventMonster = 24,
 
     // Text: label of a key present in the supplied data that no classic client handles.
-    Unported = 25
+    Unported = 25,
+
+    // Etervale's daily quests (Quests.DailyQuests), added to their giver when the world data loads.
+    DailyQuest = 26,
+
+    // Etervale's boss arena entry (World.BossArena), added to its NPC when the world data loads.
+    BossArena = 27,
+
+    // Etervale's skins (Characters.SkinRules), added to its NPC when the world data loads.
+    Cabinet = 28
 }
 
 public sealed record NpcService(NpcServiceKind Kind, int Value = 0, int Value2 = 0, string Text = "");

@@ -27,6 +27,27 @@ internal sealed class MemoryCoins(MemoryCharacterBook characters) : ICoinReposit
             ? null
             : await AddAsync(character.AccountId, -price, reason, ct);
 
+    public Dictionary<long, List<string>> Skins { get; } = new();
+
+    public Task<IReadOnlyList<string>> OwnedSkinsAsync(long accountId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<string>>(Skins.GetValueOrDefault(accountId) ?? []);
+
+    public async Task<long?> BuySkinAsync(long accountId, string itemKey, long price, string reason, CancellationToken ct = default)
+    {
+        if (Balances.GetValueOrDefault(accountId) < price)
+        {
+            return null;
+        }
+
+        if (!Skins.TryGetValue(accountId, out var owned))
+        {
+            Skins[accountId] = owned = [];
+        }
+
+        owned.Add(itemKey);
+        return await AddAsync(accountId, -price, reason, ct);
+    }
+
     public async Task<CoinTradeStore> TradeWithCharactersAsync(IReadOnlyList<CharacterRecord> records, IReadOnlyList<CoinTransfer> transfers,
         CancellationToken ct = default)
     {

@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using PristonTale.Contracts.Characters;
 using PristonTale.Contracts.Units;
 using PristonTale.Simulation.Characters;
+using PristonTale.Simulation.Items;
 
 namespace PristonTale.Gameplay.World.Remote;
 
@@ -33,6 +34,20 @@ public static class EquipmentVisuals
             result.TryAdd(item.Key, (item.MotionIndex, item.Mesh, item.LeftHand, item.VillageBone));
         }
 
+        // A skin without an item takes the motion index, hand and village bone of the first item of its family and grip.
+        foreach (var gear in Costumes.Gear)
+        {
+            foreach (var item in EquipmentVisualTables.Items)
+            {
+                if (ItemEquipmentMetadata.KindOf(item.Key) == ItemEquipmentMetadata.KindOf(gear.Like.Length > 0 ? gear.Like : gear.Key)
+                    && ItemEquipmentMetadata.IsTwoHanded(item.Key) == gear.Two)
+                {
+                    result.TryAdd(gear.Key, (item.MotionIndex, gear.Key.ToLowerInvariant(), item.LeftHand, item.VillageBone));
+                    break;
+                }
+            }
+        }
+
         return result;
     }
 
@@ -57,7 +72,11 @@ public static class EquipmentVisuals
         string body = defaults.Body.InxExtensionPath;
         // Premium costume bodies (CA) keep the class body; their wings are an effect (CostumeWings). An armour without a
         // body in the table also keeps it, so one unknown item cannot stop the frame that draws its wearer.
-        if (!string.IsNullOrEmpty(armor) && !armor.StartsWith("CA", StringComparison.OrdinalIgnoreCase)
+        if (!string.IsNullOrEmpty(armor) && Costumes.Body(armor, defaults.ArmorTableIndex) is { } costume)
+        {
+            body = "char/tmABCD/" + costume;
+        }
+        else if (!string.IsNullOrEmpty(armor) && !armor.StartsWith("CA", StringComparison.OrdinalIgnoreCase)
             && EquipmentVisualTables.ArmorSlots.TryGetValue(armor, out var index))
         {
             if ((uint)defaults.ArmorTableIndex >= (uint)EquipmentVisualTables.Armors.Length)
@@ -77,6 +96,9 @@ public static class EquipmentVisuals
             JobMask = jobMask
         };
     }
+
+    // Whether wearing the key changes the body, so The Cabinet sells only looks that show.
+    public static bool HasBody(string armor) => EquipmentVisualTables.ArmorSlots.ContainsKey(armor) || Costumes.Find(armor) is not null;
 
     // True when the item is held in the left hand (bows); false for the right hand or an unknown key.
     public static bool HeldInLeftHand(string key) => Items.TryGetValue(key, out var item) && item.LeftHand;

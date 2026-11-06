@@ -330,8 +330,8 @@ Example (real entry, Mechanician window index 1):
 ## Shared formulas
 
 - Cooldown (`SkillFormulas.CooldownMs`): proficiency `P = min(min(talent / 3 + itemMastery, 50) x 100 + uses, 10000)`
-  (fourth- and fifth-tier skills always 10000, `IsFullyTrained`; `itemMastery` is the worn magic mastery, truncated); mastery `M = clamp(masteryBase + masteryPerRank x rank - P / 100, 1, 70)`;
-  cooldown = `35 x max(1, 35 / max(1, 70 / M)) x 14 ms`, from 0.49 s to 17.15 s.
+  (fourth- and fifth-tier skills always 10000, `IsFullyTrained`; `itemMastery` is the worn magic mastery, truncated); mastery `M = clamp(masteryBase + masteryPerRank x rank - P / 100, 2, 1000)`;
+  the cooldown lasts `M / 2 x 35 / 60` seconds.
 - Proficiency (`UsesAfterCast`): every `CastsPerStep[windowIndex] + (rank - 1) / 3` casts add 100 uses (max 10000).
   The cast counter (`WorldPlayer.SkillCasts`) is per session; uses persist.
 - Mana: `mana[rank]` scaled by `SkillManaCost` percent plus flat, not below 0. Stamina has no modifiers.

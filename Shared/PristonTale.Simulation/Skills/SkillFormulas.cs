@@ -25,12 +25,14 @@ public static partial class SkillFormulas
 {
     // The original gauge advances once per 14 ms tick.
     public const int CooldownTickMs = 14;
+    public const int MinMastery = 2;
+    public const int MaxMastery = 1000;
+    private const int CooldownUnitsPerSecond = 120;
     private const int Gauge = 35;
     public const float FrameStepAtRateOne = 80f;
 
     // Proficiency = min(talent / 3 + item mastery, 50) x 100 + uses (100 per completed use streak), at most LearnedSkills.MaxUses.
-    // Mastery units M = base + perRank x rank - proficiency / 100, clamped to 1..70. The 35-step gauge then fills one
-    // step every max(1, 35 / floor(70 / M)) ticks: from 0.49 s (M 1-3) to 17.15 s (M 36-70).
+    // Mastery units M = base + perRank x rank - proficiency / 100, clamped to 2..1000; the cooldown is M / 2 x the 35-step gauge at 60 steps a second.
     public static int CooldownMs(SkillRule rule, int rank, int talent, int itemMastery, int uses)
     {
         if (rule.MasteryBase == 0 && rule.MasteryPerRank == 0)
@@ -40,10 +42,8 @@ public static partial class SkillFormulas
 
         // Fourth- and fifth-tier skills have no proficiency to train: they always count as fully trained.
         var proficiency = IsFullyTrained(rule.Code) ? LearnedSkills.MaxUses : Math.Min(LearnedSkills.MaxUses, Math.Min(talent / 3 + itemMastery, 50) * 100 + Math.Max(0, uses));
-        var mastery = Math.Clamp(rule.MasteryBase + rule.MasteryPerRank * rank - proficiency / 100, 1, 70);
-        var step = Math.Max(1, 70 / mastery);
-        var ticksPerStep = Math.Max(1, Gauge / step);
-        return Gauge * ticksPerStep * CooldownTickMs;
+        var mastery = Math.Clamp(rule.MasteryBase + rule.MasteryPerRank * rank - proficiency / 100, MinMastery, MaxMastery);
+        return mastery * Gauge * 1000 / CooldownUnitsPerSecond;
     }
 
     public static bool IsFullyTrained(uint code) => (code >> 16 & 0xFF) is (uint)JobTier.Job4 or (uint)JobTier.Job5;

@@ -20,8 +20,8 @@ public static class PristonFormatConstants
 public enum PristonSmdHeaderKind
 {
     Version62Model,
-    // Later model layouts: 0.64 stores an object's sections in another order; 0.65 stores the transform and the vertices
-    // as floats with four bone weights per skinned vertex; 0.66 does both, with tangent-space vertices.
+    // Later model layouts: 0.64 stores an object's sections in another order with scrambled vertex positions; 0.65 stores the transform and the vertices
+    // as floats with four bone weights per skinned vertex; 0.66 does both, with tangent-space vertices (some exporters sign the 0.64 layout as 0.66).
     Version64Model,
     Version65Model,
     Version66Model,

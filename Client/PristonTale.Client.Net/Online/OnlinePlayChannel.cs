@@ -121,6 +121,30 @@ internal sealed class OnlinePlayChannel : IPlayChannel
         return await _connection.CoinBalanceAsync(ct);
     }
 
+    public async Task<byte> DailyQuestAsync(ulong npcId, int questId, byte action, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.DailyQuestAsync(npcId, questId, action, ct);
+    }
+
+    public async Task<SkinCatalogInfo> OpenSkinsAsync(CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.OpenSkinsAsync(ct);
+    }
+
+    public async Task<(PristonTale.Simulation.Characters.SkinStatus Status, long Balance)> BuySkinAsync(string key, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.BuySkinAsync(key, ct);
+    }
+
+    public async Task<(PristonTale.Simulation.Characters.SkinStatus Status, long Balance)> ApplySkinsAsync(PristonTale.Simulation.Characters.SkinSet skins, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.ApplySkinsAsync(skins, ct);
+    }
+
     public async Task<ItemBoxListInfo> OpenItemBoxAsync(ulong npcId, CancellationToken ct = default)
     {
         await _start.WaitAsync(ct);

@@ -88,6 +88,20 @@ public sealed class ChatAppService
             return;
         }
 
+        if (ChatCommandText.Match("/arena", text) > 0)
+        {
+            try
+            {
+                await World.ArenaAsync(entityId, text.Trim().EndsWith(" enter", StringComparison.OrdinalIgnoreCase));
+            }
+            catch (WorldBusyException)
+            {
+                // A full tick queue drops the command, as it drops a spoken line.
+            }
+
+            return;
+        }
+
         if (Stalls is not null && ChatCommandText.Match("/stall", text) > 0)
         {
             var close = text.Trim().EndsWith(" close", StringComparison.OrdinalIgnoreCase);

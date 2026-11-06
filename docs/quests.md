@@ -200,8 +200,12 @@ quest variant, which the importer stores as the code's quest definition (`item_d
   the task beside the green mark, the status beside the blue one and the rewards beside the check. Milestone levels, hunts and points come from `LevelQuests.Milestones`, rank-up levels from
   `RankUpRules.RequiredLevel`, chain points from `QuestRewards`, wing gold from `WingQuest.ExchangeGold`. The wheel
   scrolls the list; the `x`, the button, `L` or Escape close it.
-- The quest tracker (`HudQuestTracker`) is a dark box headed "Active Quests" on the right of the screen while a quest
-  runs: the running quest's book title (`QuestBook.Of`), its task and its hunt count (or the quest weapon's hunt line).
+- The quest tracker (`HudQuestTracker`) is a bordered dark box headed "Active Quests" (with the number tracked) on the
+  right of the screen while a quest or a daily quest runs. Each quest is a block: its title with a QUEST or DAILY tag,
+  its task wrapped to the box, a progress row (the hunted monster, or "Monsters slain", on the left and the count on
+  the right) and a bar that turns gold once the hunt is complete; the running quest comes from its book entry
+  (`QuestBook.Of`, the quest weapon's hunt line standing for the count during the second rank-up), the dailies from
+  the daily state. A faint line parts the blocks.
   Its heading strip drags it and its arrow folds it to the strip; both are saved with the action bar's file
   (`HudActionBarDocument.TrackerX`, `TrackerY`, `TrackerCollapsed`). It hides while the quest book is open.
 - Quest givers carry a mark over their name box (`assets/Hud/QuestMarks/`, matched by the NPC's name against
@@ -246,3 +250,32 @@ lines in `QuestBoard`, and kill credit in `QuestTick.OnKill` when it hunts.
 - [world.md](world.md) — loot rolls, monsters and NPC services.
 - [client.md](client.md) — HUD windows and input routing.
 - [testing.md](testing.md) — quest regression cases and HUD captures.
+
+## Daily quests
+
+Daily hunts (`DailyQuests`, Simulation: fifteen quests from level 10, the last eight named after the original server's
+level 80 to 115 dailies), given by Messenger Ian in Ricarten: the world data adds the `DailyQuest` service to the NPC of
+`DailyQuests.GiverName` when it loads (`WorldDataAppService`). Every quest whose level range holds the player's level is
+offered each day; the day turns at midnight on the server's clock (`DailyQuests.DayOf`) and a new day clears what was
+accepted and claimed (`DailyQuestState.Turn`). Accepting needs the player at the giver (`WorldServer.AcceptDailyQuestAsync`)
+and changes the live character, stored with its next save (`characters.daily_quests`, `DailyQuestCodec`). Every kill
+credited to the player counts toward each accepted hunt whose monster level it reaches (`FieldInstance.CreditQuests`,
+`DailyQuestState.OnKill`). A claim at the giver (`DailyQuestAppService.ClaimAsync`) prepares on a copy the experience (the
+quest's percent of what the level needs), the gold (within the carry limit), the potion stack and the claim; the character
+and the coins added to the account are stored in one transaction (`ICoinRepository.BuyWithCharacterAsync` with a negative
+price) before the commit. The owner's state travels as `DailyQuestState` (protocol.md); the quest book's Daily tab
+(`HudQuestBook.Daily`) lists the dailies of the player's level, and Messenger Ian's "Daily quests" button opens it with
+Accept and Claim.
+
+## Boss arena
+
+Every six hours of the server's clock a boss appears in the middle of Cursed Temple 2F (`BossArena`, Simulation; `WorldServer.BossArena`):
+King Fury (level 100+) at 00:00 and 12:00, Hagios (level 120+) at 06:00 and 18:00, both made from the imported Fury when the
+world data loads (`BossArenaBosses`). Notices go to everyone 30, 15, 10 and 5 minutes before. In the 15 minutes before a
+start, the `BossArena` service of Knight Commander Derik (added at load) opens the event window (`HudArenaEvent`, art in
+`assets/Hud/GrandFury/`: countdown, next boss, a teleport that sends `/arena enter`; it reads the schedule on the client's
+clock); `/arena` tells the next event. The field stays a hunting field: the arena is the ground within `BossArena.Radius` of the spot where the imported Fury NPC stood, which the world data drops at load. Six minions ring the boss and return each minute. The boss's fall gives every player in the arena experience by
+kill time and gold at once, and a random prize through the Item Distributor (`ArenaPrizes`, `BossArenaPrizeService`). The
+event also ends after two hours or once the arena is empty; everyone in it returns to Ricarten. `/@arena [king|hagios|end]`
+starts or ends it for a game master.
+

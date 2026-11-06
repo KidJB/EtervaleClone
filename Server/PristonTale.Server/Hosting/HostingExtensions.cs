@@ -56,6 +56,8 @@ public static class HostingExtensions
         builder.Services.AddSingleton<CoinShopAppService>();
         builder.Services.AddSingleton<ItemBoxAppService>();
         builder.Services.AddSingleton<StallAppService>();
+        builder.Services.AddSingleton<DailyQuestAppService>();
+        builder.Services.AddSingleton<SkinAppService>();
 
         var provider = builder.Configuration["Database:Provider"] ?? "Sqlite";
         if (string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
@@ -100,6 +102,7 @@ public static class HostingExtensions
             log: services.GetRequiredService<IGameLog>()));
         builder.Services.AddHostedService<WorldTickService>();
         builder.Services.AddHostedService<PristonTale.Server.World.StallRestoreService>();
+        builder.Services.AddHostedService<PristonTale.Server.World.BossArenaPrizeService>();
         AddChat(builder);
         builder.Services.AddSingleton(services =>
         {

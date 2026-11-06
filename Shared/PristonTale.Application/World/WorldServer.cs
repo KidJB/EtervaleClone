@@ -709,6 +709,7 @@ public sealed partial class WorldServer
         var commandsDone = Stopwatch.GetTimestamp();
         RefreshParties(serverTick);
         var localNow = _clock.GetLocalNow();
+        UpdateBossArena(localNow);
         bool bossPassDue = _bossSchedule.TryBeginPass(localNow, _clock.GetElapsedTime(_clockOrigin));
         int? bossHour = bossPassDue ? localNow.Hour : null;
 

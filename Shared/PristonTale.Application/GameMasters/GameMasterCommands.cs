@@ -132,6 +132,7 @@ public sealed class GameMasterCommands
         new("/@put", GameMasterLevel.Administrator, GmItemCommands.Gift),
         new("/@coinshop_reload", GameMasterLevel.Administrator, GmCoinCommands.Reload),
         new("/@coins", GameMasterLevel.Administrator, GmCoinCommands.Grant),
+        new("/@arena", GameMasterLevel.Administrator, GmArenaCommands.Arena),
         new("/AgingSetting", GameMasterLevel.Operator, GmItemCommands.Aged),
         new("/get_potion", GameMasterLevel.Guide, GmInformationCommands.Potions) { Enabled = static options => options.PotionMonitor },
         new("/>", GameMasterLevel.Moderator, GmServerCommands.Notice),

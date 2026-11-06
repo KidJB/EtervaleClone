@@ -21,6 +21,9 @@ public sealed partial class GameScene
 
     // The local player's pet collection as the server last sent it (none until it does).
     public PetCollectionInfo PetCollection { get; private set; } = new(0, 0);
+
+    // The local player's daily quests as the server last sent them.
+    public DailyQuestsInfo DailyQuests { get; private set; } = DailyQuestsInfo.None;
     private SkinPetPresentation _skinPets;
     private MountPresentation _mounts;
     private Action<ulong, PristonModel, float> _seatRider;
@@ -74,6 +77,11 @@ public sealed partial class GameScene
         _pets?.Observe(update, _itemAnchor ??= ItemAnchor);
         _skinPets?.Observe(update);
         _mounts?.Observe(update);
+        if (update.DailyQuests is { } dailies)
+        {
+            DailyQuests = dailies;
+        }
+
         if (update.PetCollection is { } collection)
         {
             PetCollection = collection;
@@ -125,6 +133,7 @@ public sealed partial class GameScene
                 continue;
             }
 
+            _selfTier = appearance.Tier;
             var playerClass = _player.Class.Class;
             var head = CharacterHead.Apply(_player.Definition.DefaultVisuals, playerClass, appearance.Tier, appearance.FaceIndex, appearance.HairIndex);
             _equipmentPresentation.SetBaseVisuals(CharacterHead.ApplyBigHead(head, playerClass, appearance.BigHead));

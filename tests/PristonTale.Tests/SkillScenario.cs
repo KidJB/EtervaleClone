@@ -105,7 +105,11 @@ internal sealed class SkillScenario
         Character.Stamina = Character.MaxStamina;
     }
 
-    public void ClearCooldowns() => Run(20 * 20);
+    public void ClearCooldowns()
+    {
+        Run(20 * 20);
+        Player.Cooldowns.Rebase(600_000, 0);
+    }
 
     public IEnumerable<MonsterInstance> Summons => Host.Monsters.Where(monster => monster.IsSummon && monster.IsAlive);
 

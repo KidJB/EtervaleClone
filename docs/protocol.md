@@ -223,6 +223,9 @@ Every message code has the high word `0x4554` ("ET"); every message keeps the `{
 | `0x45541201` | `ItemBoxEntry` | S→C | `Guid OperationId, int64 Id, int64 CreatedAtUnixMs, text Sender, StoreItemEntry Item, ItemDetailEntry Details`: one waiting item of an open. |
 | `0x45541202` | `ItemBoxList` | S→C | `Guid OperationId, uint8 Status (ItemBoxStatus), uint8 0, uint16 0, int32 Count`: ends an open, after its entries. |
 | `0x45541203` | `ItemBoxAction` | C→S | `Guid OperationId, uint64 NpcId, uint8 Action (1 take, 2 discard, 3 send), uint8 0, uint16 0, int64 Id, Guid ItemId, text Recipient`. |
+| `0x45541300` | `DailyQuestState` | S→C | `int32 Day, int32 Count, entries {int32 Id, int32 Kills, uint8 Flags (1 accepted, 2 claimed), uint8 0, uint16 0}`: the owner's daily quests of the day, when it enters and whenever they change. |
+| `0x45541301` | `DailyQuestRequest` | C→S | `Guid OperationId, uint64 NpcId, int32 QuestId, uint8 Action (1 accept, 2 claim), uint8 0, uint16 0`. |
+| `0x45541302` | `DailyQuestResult` | S→C | `Guid OperationId, uint8 Status (DailyQuestStatus), uint8 0, uint16 0`. |
 | `0x45541204` | `ItemBoxResult` | S→C | `Guid OperationId, uint8 Status (ItemBoxStatus: 0 ok, 1 out of reach, 2 not found, 3 no room, 4 no such character, 5 not sendable, 6 busy, 7 storage failed, 8 rejected), uint8 0, uint16 0`. |
 | `0x45540A00` / `0x45540A01` | `RestartRequest` / `RestartResult` | C→S / S→C | A dead player's restart (field, town, exit), correlated by operation id; a stored restart also sends a forced `FieldWarp`. |
 | `0x45540A02` | `RestartOffer` | S→C | While the owner is dead, what a restart would cost, whenever it changes. |

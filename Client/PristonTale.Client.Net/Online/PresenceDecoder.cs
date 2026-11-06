@@ -152,6 +152,7 @@ internal sealed class PresenceDecoder : IEventHandleReader
             EtervaleOpcodes.BossSpots => OnBossSpots(BossSpotsPacket.Read(packet)),
             EtervaleOpcodes.BossList => OnBossList(BossListPacket.Read(packet)),
             EtervaleOpcodes.PetCollection => OnPetCollection(PetCollectionPacket.Read(packet)),
+            EtervaleOpcodes.DailyQuestState => OnDailyQuests(DailyQuestStatePacket.Read(packet)),
             _ => NotPresence(out presence)
         };
         return presence;
@@ -186,6 +187,25 @@ internal sealed class PresenceDecoder : IEventHandleReader
         }
 
         return Update([], []) with { BossSpots = spots };
+    }
+
+    public PresenceUpdate OnDailyQuests(DailyQuestStatePacket packet)
+    {
+        var accepted = new Dictionary<int, int>();
+        var claimed = new HashSet<int>();
+        foreach (var entry in packet.Entries)
+        {
+            if ((entry.Flags & DailyQuestEntry.Claimed) != 0)
+            {
+                claimed.Add(entry.Id);
+            }
+            else if ((entry.Flags & DailyQuestEntry.Accepted) != 0)
+            {
+                accepted[entry.Id] = entry.Kills;
+            }
+        }
+
+        return Update([], []) with { DailyQuests = new DailyQuestsInfo(packet.Day, accepted, claimed) };
     }
 
     public PresenceUpdate OnPetCollection(PetCollectionPacket packet) =>

@@ -733,6 +733,9 @@ public sealed partial class PlayerCharacter
         clone.RestoreHelpPet(HelpPet, HelpPetHidden);
         clone.RestorePets(PetSkins, PetOut);
         clone.RestorePetName(PetName);
+        clone.RestoreMounts(Mounts, MountChosen);
+        clone.DailyQuests.CopyFrom(DailyQuests);
+        clone.Skins = Skins;
         clone.Premium.CopyFrom(Premium);
         clone.ItemUses.CopyFrom(ItemUses);
         clone.Recompute();

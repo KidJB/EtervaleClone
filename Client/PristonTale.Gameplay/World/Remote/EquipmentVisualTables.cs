@@ -1194,6 +1194,10 @@ internal static class EquipmentVisualTables
     // The body slot each armour and robe wears: its catalog ordinal, the ordinals from 26 sixteen slots further.
     internal static readonly Dictionary<string, int> ArmorSlots = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["DA130"] = 46,
+        ["DA230"] = 46,
+        ["DA153"] = 69,
+        ["DA253"] = 69,
         ["DA101"] = 1,
         ["DA102"] = 2,
         ["DA103"] = 3,

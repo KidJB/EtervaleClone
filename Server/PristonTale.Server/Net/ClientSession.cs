@@ -48,7 +48,9 @@ internal sealed record SessionServices(
     ChatAppService Chat,
     GameServerControl Control,
     CoinShopAppService CoinShop,
-    ItemBoxAppService ItemBox)
+    ItemBoxAppService ItemBox,
+    DailyQuestAppService DailyQuests,
+    SkinAppService Skins)
 {
     // Shared by every connection so a flood from many peers still yields one warning per interval.
     public LogSampler RejectedPackets { get; } = new(5000);
@@ -269,6 +271,18 @@ internal sealed partial class ClientSession : IMovementVerdictSink
                     break;
                 case EtervaleOpcodes.ItemBoxAction:
                     await ActItemBoxAsync(ItemBoxActionPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.SkinOpen:
+                    await OpenSkinsAsync(SkinOpenPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.SkinBuy:
+                    await BuySkinAsync(SkinBuyPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.SkinApply:
+                    await ApplySkinsAsync(SkinApplyPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.DailyQuestRequest:
+                    await DailyQuestAsync(DailyQuestRequestPacket.Read(memory.Span));
                     break;
                 case EtervaleOpcodes.WingGateRequest:
                     await TravelWingGateAsync(WingGateRequestPacket.Read(memory.Span));

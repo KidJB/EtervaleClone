@@ -59,6 +59,14 @@ public interface IPlayChannel : IAsyncDisposable
     // to a character) answering the server's ItemBoxStatus.
     Task<ItemBoxListInfo> OpenItemBoxAsync(ulong npcId, CancellationToken ct = default);
 
+    // Accepts (1) or claims (2) a daily quest at its giver; the answer is the server's DailyQuestStatus.
+    Task<byte> DailyQuestAsync(ulong npcId, int questId, byte action, CancellationToken ct = default);
+
+    // The Cabinet: its catalog, buying a skin and showing looks; each answer carries the coin balance.
+    Task<SkinCatalogInfo> OpenSkinsAsync(CancellationToken ct = default);
+    Task<(PristonTale.Simulation.Characters.SkinStatus Status, long Balance)> BuySkinAsync(string key, CancellationToken ct = default);
+    Task<(PristonTale.Simulation.Characters.SkinStatus Status, long Balance)> ApplySkinsAsync(PristonTale.Simulation.Characters.SkinSet skins, CancellationToken ct = default);
+
     Task<byte> ActItemBoxAsync(ulong npcId, byte action, long id, Guid itemId, string recipient, CancellationToken ct = default);
 
     // A player on a warp stone travels to a stone of the wing warp map; the server checks the wing, level and fee.

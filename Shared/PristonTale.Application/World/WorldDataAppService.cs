@@ -32,8 +32,30 @@ public sealed class WorldDataAppService
         ];
         var itemCodes = itemDefs.ToDictionary(item => item.CatalogKey, item => item.Code, StringComparer.OrdinalIgnoreCase);
         var monsterDefs = WorldDataFactory.ToMonsterDefinitions(monsterRecords, itemCodes);
-        var npcDefs = WorldDataFactory.ToNpcDefinitions(npcRecords);
-        var fieldSpawns = WorldDataFactory.ToFieldSpawnData(fieldRecords);
+        // The boss arena's bosses are Etervale's own, made from the imported Fury.
+        monsterDefs = [.. monsterDefs, .. Simulation.World.BossArenaBosses.From(monsterDefs)];
+        // The daily quest giver offers Etervale's daily quests beside what it was authored with.
+        var npcDefs = WorldDataFactory.ToNpcDefinitions(npcRecords)
+            .Select(static npc => npc.Label == Simulation.Quests.DailyQuests.GiverName || npc.Name == Simulation.Quests.DailyQuests.GiverName
+                ? npc with { Services = [.. npc.Services, new Simulation.World.Npcs.NpcService(Simulation.World.Npcs.NpcServiceKind.DailyQuest)] }
+                : npc.Label == Simulation.World.BossArena.NpcName || npc.Name == Simulation.World.BossArena.NpcName
+                    ? npc with
+                    {
+                        Services =
+                        [
+                            .. npc.Services, new Simulation.World.Npcs.NpcService(Simulation.World.Npcs.NpcServiceKind.BossArena),
+                            new Simulation.World.Npcs.NpcService(Simulation.World.Npcs.NpcServiceKind.Cabinet)
+                        ]
+                    }
+                    : npc)
+            .ToList();
+        // The boss arena stands where the imported Fury statue stood.
+        var fieldSpawns = WorldDataFactory.ToFieldSpawnData(fieldRecords.Select(static field => field with
+        {
+            Npcs = string.Equals(field.Stage, Simulation.World.BossArena.FieldStage, StringComparison.OrdinalIgnoreCase)
+                ? [.. field.Npcs.Where(static npc => npc.NpcId != Simulation.World.BossArena.StatueNpcId)]
+                : field.Npcs
+        }).ToList());
 
         var motions = WorldDataFactory.ToMotionTimings(motionModels, motionSlots);
 

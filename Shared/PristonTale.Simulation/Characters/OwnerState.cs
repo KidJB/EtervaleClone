@@ -109,6 +109,12 @@ public sealed record OwnerState(
     public int PetOut { get; init; }
     public string PetName { get; init; } = "";
 
+    // The daily quests of the day: accepted ones with their kills, and the ones claimed (Quests.DailyQuestState).
+    public int DailyDay { get; init; }
+    public IReadOnlyDictionary<int, int> DailyAccepted { get; init; } = new Dictionary<int, int>();
+    public IReadOnlyList<int> DailyDone { get; init; } = [];
+    public long DailyRevision { get; init; }
+
     // The account's mounts (Mounts bits), the one picked and whether the character rides it.
     public ulong Mounts { get; init; }
     public int MountChosen { get; init; }
@@ -131,7 +137,8 @@ public sealed record OwnerState(
         var stamp = new OwnerStamp(character.Level, character.Experience, character.Money, character.Life, character.Mana, character.Stamina,
             character.StatPoints, character.SkillPoints, character.EliteSkillPoints, character.Tier, character.BagPage, character.WeaponSet, attributes,
             character.InventoryRevision, character.ProgressionRevision, character.Skills.Revision, character.Premium.Revision, character.AgingRevision,
-            character.Effects.Revision, character.PetSkins, character.PetOut, character.PetName, character.Mounts, character.MountChosen, character.Riding);
+            character.Effects.Revision, character.PetSkins, character.PetOut, character.PetName, character.Mounts, character.MountChosen, character.Riding,
+            character.DailyQuests.Revision);
         if (previous is not null && previous.Stamp == stamp)
         {
             return previous;
@@ -177,6 +184,10 @@ public sealed record OwnerState(
             PetSkins = character.PetSkins,
             PetOut = character.PetOut,
             PetName = character.PetName,
+            DailyDay = character.DailyQuests.Day,
+            DailyAccepted = new Dictionary<int, int>(character.DailyQuests.Accepted),
+            DailyDone = [.. character.DailyQuests.Done],
+            DailyRevision = character.DailyQuests.Revision,
             Mounts = character.Mounts,
             MountChosen = character.MountChosen,
             Riding = character.Riding,
@@ -227,4 +238,4 @@ public sealed record OwnerState(
 internal readonly record struct OwnerStamp(int Level, ulong Experience, long Money, int Life, int Mana, int Stamina, int StatPoints, int SkillPoints,
     int EliteSkillPoints, short Tier, int BagPage, int WeaponSet, CharacterAttributes Attributes, long InventoryRevision, long ProgressionRevision,
     long SkillsRevision, long PremiumRevision, long AgingRevision, long EffectsRevision, ulong PetSkins, int PetOut, string PetName, ulong Mounts,
-    int MountChosen, bool Riding);
+    int MountChosen, bool Riding, long DailyRevision);

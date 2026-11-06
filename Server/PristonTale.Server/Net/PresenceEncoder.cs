@@ -101,6 +101,8 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
     private int _petOut = -1;
     private string? _petName;
     private long _mounts = -1;
+    private long _dailyRevision = -1;
+    private int _dailyDay = -1;
     private int _mountChosen = -1;
     private bool _riding;
 
@@ -359,6 +361,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         SendOwner(snapshot.Owner, connection);
         SendPremium(snapshot.Owner, connection);
         SendPetCollection(snapshot.Owner, connection);
+        SendDailyQuests(snapshot.Owner, connection);
         SendCooldowns(snapshot, connection);
         SendRestartOffer(snapshot.Restart, connection);
         SendWeather(snapshot.Weather, connection);
@@ -474,6 +477,30 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         SendBossTime(snapshot, connection);
         SendBossSpots(snapshot, connection);
         SendBossList(snapshot, connection);
+    }
+
+    // The owner's daily quests whenever they change (a new day, an accept, a kill, a claim).
+    private void SendDailyQuests(Simulation.Characters.OwnerState? owner, IPacketSink connection)
+    {
+        if (owner is null || owner.DailyRevision == _dailyRevision && owner.DailyDay == _dailyDay)
+        {
+            return;
+        }
+
+        (_dailyRevision, _dailyDay) = (owner.DailyRevision, owner.DailyDay);
+        var entries = new List<DailyQuestEntry>(owner.DailyAccepted.Count + owner.DailyDone.Count);
+        foreach (var (id, kills) in owner.DailyAccepted)
+        {
+            entries.Add(new DailyQuestEntry(id, kills, DailyQuestEntry.Accepted));
+        }
+
+        foreach (var id in owner.DailyDone)
+        {
+            entries.Add(new DailyQuestEntry(id, 0, DailyQuestEntry.Claimed));
+        }
+
+        var packet = new DailyQuestStatePacket(owner.DailyDay, entries.Take(DailyQuestStatePacket.MaxEntries).ToArray());
+        connection.Send(_scratch.AsSpan(0, packet.Write(_scratch)));
     }
 
     private void SendPetCollection(Simulation.Characters.OwnerState? owner, IPacketSink connection)

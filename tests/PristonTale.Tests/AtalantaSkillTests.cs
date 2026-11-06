@@ -45,7 +45,7 @@ internal static class AtalantaSkillTests
         Assert.True(before < Locomotion.StepLimit && atalanta.Character.Derived.MoveSpeed == before + 5,
             $"talaria raised the caster's step level from {before} to {atalanta.Character.Derived.MoveSpeed}");
         // An ally rule refuses a holder that has it once the cooldown let the cast through.
-        SkillFixtures.Wait(field, 18f);
+        atalanta.Cooldowns.Rebase(600_000, 0);
         SkillFixtures.Refuse(SkillCastVerdict.AlreadyActive, "talaria recast on the caster", field, atalanta, Talaria);
 
         var other = SkillFixtures.Field();

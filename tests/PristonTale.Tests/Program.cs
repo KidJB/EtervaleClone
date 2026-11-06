@@ -144,6 +144,12 @@ if (args.Length is 4 or 5 && args[0] == "--capture-vfx")
     return 0;
 }
 
+if (args.Length == 2 && args[0] == "--verify-costumes")
+{
+    CostumeProbe.Run(args[1]);
+    return 0;
+}
+
 if (args.Length == 2 && args[0] == "--verify-skill-motions")
 {
     SkillMotionProbe.Run(args[1]);

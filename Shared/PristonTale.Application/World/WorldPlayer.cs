@@ -366,12 +366,13 @@ public sealed class WorldPlayer
     // Built on every read from the equipment and premium state: read InVillage for the flag alone.
     public PlayerAppearanceView Appearance => _appearance with
     {
-        WeaponKey = _character.GetEquipped(EquipmentSlot.Weapon)?.Definition.CatalogKey ?? "",
-        ArmorKey = _character.GetEquipped(EquipmentSlot.Armor)?.Definition.CatalogKey ?? "",
-        OffHandKey = _character.GetEquipped(EquipmentSlot.OffHand)?.Definition.CatalogKey ?? "",
+        WeaponKey = SkinRules.Look(_character.GetEquipped(EquipmentSlot.Weapon)?.Definition.CatalogKey ?? "", _character.Skins.Weapon),
+        ArmorKey = SkinRules.Look(_character.GetEquipped(EquipmentSlot.Armor)?.Definition.CatalogKey ?? "", _character.Skins.Armor),
+        OffHandKey = SkinRules.Look(_character.GetEquipped(EquipmentSlot.OffHand)?.Definition.CatalogKey ?? "", _character.Skins.OffHand),
         WeaponGlow = HeldItemGlow.For(_character.GetEquipped(EquipmentSlot.Weapon)),
         OffHandGlow = HeldItemGlow.For(_character.GetEquipped(EquipmentSlot.OffHand)),
         InVillage = _inVillage,
+        HairIndex = SkinRules.HairOf(_character.Skins.Hair) ?? _appearance.HairIndex,
         Tier = _character.Tier,
         HelperPet = HelpPets.Active(_character) is { } pet ? HelpPets.KindOf(pet) : 0,
         Phoenix = _character.Premium.IsActive(PremiumEffectKind.PhoenixPet),

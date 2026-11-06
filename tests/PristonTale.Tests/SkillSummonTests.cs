@@ -139,6 +139,7 @@ internal static class SkillSummonTests
         golem.ApplyDamage(golem.Life);
         scenario.Run(2);
         Assert.True(!scenario.Character.Effects.TryGet(MetalGolem, out _), "the owner kept the status of a dead summon");
+        scenario.ClearCooldowns();
         var again = scenario.Cast(MetalGolem);
         Assert.True(again.Accepted, $"a new call after the summon died was refused: {again.Verdict}");
         scenario.Run(80, () => scenario.Summons.Any());

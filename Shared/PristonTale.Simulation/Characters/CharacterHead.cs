@@ -4,8 +4,33 @@ namespace PristonTale.Simulation.Characters;
 
 public static class CharacterHead
 {
+    // A hair index from here on names a numbered head every tier of the class shares.
+    public const int CustomHair = 100;
+
+    public static string CustomHead(PlayerClass playerClass, int number) => string.Create(System.Globalization.CultureInfo.InvariantCulture,
+        $"char/tmABCD/{CustomPrefix(playerClass)}{number}.inx");
+
+    private static string CustomPrefix(PlayerClass playerClass) => playerClass switch
+    {
+        PlayerClass.Mechanician => "Tmh-A",
+        PlayerClass.Fighter => "Tmh-B",
+        PlayerClass.Pikeman => "Tmh-C",
+        PlayerClass.Archer => "Tfh-D",
+        PlayerClass.Knight => "Mmh-A",
+        PlayerClass.Atalanta => "Mfh-B",
+        PlayerClass.Priestess => "Mfh-C",
+        PlayerClass.Magician => "Mmh-D",
+        PlayerClass.Assassin => "Tfh-E",
+        _ => "Mmh-E"
+    };
+
     public static CharacterVisualSet Apply(CharacterVisualSet defaults, PlayerClass playerClass, int tier, int faceIndex, int hairIndex)
     {
+        if (hairIndex >= CustomHair)
+        {
+            return defaults with { Head = new CharacterAssetRef(CustomHead(playerClass, hairIndex - CustomHair)), FaceIndex = faceIndex, HairIndex = hairIndex };
+        }
+
         // Existing saves use faceIndex for the three creation variants and zero hairIndex until a hair override exists.
         var variant = hairIndex == 0 ? faceIndex : hairIndex;
         ValidateTier(tier);

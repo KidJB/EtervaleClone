@@ -52,7 +52,7 @@ public readonly struct PlayerAppearanceView
     public PlayerClass Class { get; }
     public int Tier { get; init; }
     public int FaceIndex { get; }
-    public int HairIndex { get; }
+    public int HairIndex { get; init; }
     public string ModelName { get; }
     public string ModelName2 { get; }
 }

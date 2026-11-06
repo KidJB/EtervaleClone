@@ -120,6 +120,7 @@ internal static class FighterSkillTests
         Assert.True(effects.Totals.Flat(StatKind.HitDamage) == 380 && effects.Totals.Flat(StatKind.Absorption) == -23, "bloody berserker rank 10 values");
         SkillFixtures.Refuse(SkillCastVerdict.AlreadyActive, "bloody berserker recast while running", field, fighter, BloodyBerserker);
         SkillFixtures.Wait(field, 18f);
+        fighter.Cooldowns.Rebase(600_000, 0);
         SkillFixtures.Accept("Berserker", field, fighter, Berserker);
         SkillFixtures.Finish(field, fighter);
         Assert.True(effects.TryGet(Berserker, out _) && !effects.TryGet(BloodyBerserker, out _), "the berserker did not replace the bloody berserker");

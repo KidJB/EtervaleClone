@@ -1,0 +1,2877 @@
+{
+ "rows": {
+  "Fighter": 1,
+  "Mechanician": 0,
+  "Archer": 3,
+  "Pikeman": 2,
+  "Atalanta": 5,
+  "Knight": 4,
+  "Magician": 7,
+  "Priestess": 6,
+  "Assassin": 8,
+  "Shaman": 9
+ },
+ "costumes": [
+  {
+   "key": "CA166",
+   "name": "Cygnus (M)",
+   "bodies": {
+    "Fighter": "Cb027.inx",
+    "Mechanician": "Ca027.inx",
+    "Pikeman": "Cc027.inx",
+    "Knight": "Cma027.inx",
+    "Magician": "Cmd027.inx",
+    "Shaman": "Cme027.inx"
+   }
+  },
+  {
+   "key": "CA168",
+   "name": "Cygnus (F)",
+   "bodies": {
+    "Archer": "Cd027.inx",
+    "Atalanta": "Cmb027.inx",
+    "Priestess": "Cmc027.inx",
+    "Assassin": "Ce027.inx"
+   }
+  },
+  {
+   "key": "CA174",
+   "name": "Season 3 Costume",
+   "bodies": {
+    "Fighter": "b100.inx",
+    "Mechanician": "a100.inx",
+    "Archer": "d100.inx",
+    "Pikeman": "c100.inx",
+    "Atalanta": "mb100.inx",
+    "Knight": "ma100.inx",
+    "Magician": "md100.inx",
+    "Priestess": "mc100.inx",
+    "Assassin": "e099.inx",
+    "Shaman": "me099.inx"
+   }
+  },
+  {
+   "key": "CA177",
+   "name": "Season 9 Costume",
+   "bodies": {
+    "Fighter": "s9_Costume_FS.inx",
+    "Mechanician": "s9_Costume_MS.inx",
+    "Archer": "s9_Costume_AS.inx",
+    "Pikeman": "s9_Costume_PS.inx",
+    "Atalanta": "s9_Costume_ATA.inx",
+    "Knight": "s9_Costume_KS.inx",
+    "Magician": "s9_Costume_MGS.inx",
+    "Priestess": "s9_Costume_PRS.inx",
+    "Assassin": "s9_Costume_ASS.inx",
+    "Shaman": "s9_Costume_SHA.inx"
+   }
+  },
+  {
+   "key": "CA178",
+   "name": "Season 10 Costume",
+   "bodies": {
+    "Fighter": "s10_Costume_FS.inx",
+    "Mechanician": "s10_Costume_MS.inx",
+    "Archer": "s10_Costume_AS.inx",
+    "Pikeman": "s10_Costume_PS.inx",
+    "Atalanta": "s10_Costume_ATA.inx",
+    "Knight": "s10_Costume_KS.inx",
+    "Magician": "s10_Costume_MGS.inx",
+    "Priestess": "s10_Costume_PRS.inx",
+    "Assassin": "s10_Costume_ASS.inx",
+    "Shaman": "s10_Costume_SHA.inx"
+   }
+  },
+  {
+   "key": "CA185",
+   "name": "Aquila (M)",
+   "bodies": {
+    "Fighter": "Cb024.inx",
+    "Mechanician": "Ca024.inx",
+    "Pikeman": "Cc024.inx",
+    "Knight": "Cma024.inx",
+    "Magician": "Cmd024.inx",
+    "Shaman": "Cme024.inx"
+   }
+  },
+  {
+   "key": "CA187",
+   "name": "Aquila (F)",
+   "bodies": {
+    "Archer": "Cd024.inx",
+    "Atalanta": "Cmb024.inx",
+    "Priestess": "Cmc024.inx",
+    "Assassin": "Ce024.inx"
+   }
+  },
+  {
+   "key": "CA189",
+   "name": "Corvus (M)",
+   "bodies": {
+    "Fighter": "Cb025.inx",
+    "Mechanician": "Ca025.inx",
+    "Pikeman": "Cc025.inx",
+    "Knight": "Cma025.inx",
+    "Magician": "Cmd025.inx",
+    "Shaman": "Cme025.inx"
+   }
+  },
+  {
+   "key": "CA191",
+   "name": "Corvus (F)",
+   "bodies": {
+    "Archer": "Cd025.inx",
+    "Atalanta": "Cmb025.inx",
+    "Priestess": "Cmc025.inx",
+    "Assassin": "Ce025.inx"
+   }
+  },
+  {
+   "key": "CA193",
+   "name": "Summer Clothe (M)",
+   "bodies": {
+    "Fighter": "Cb026.inx",
+    "Mechanician": "Ca026.inx",
+    "Pikeman": "Cc026.inx",
+    "Knight": "Cma026.inx",
+    "Magician": "Cmd026.inx",
+    "Shaman": "Cme026.inx"
+   }
+  },
+  {
+   "key": "CA195",
+   "name": "Summer Clothe (F)",
+   "bodies": {
+    "Archer": "Cd026.inx",
+    "Atalanta": "Cmb026.inx",
+    "Priestess": "Cmc026.inx",
+    "Assassin": "Ce026.inx"
+   }
+  },
+  {
+   "key": "CA252",
+   "name": "Crystal Costume (F)",
+   "bodies": {
+    "Assassin": "ce049.inx"
+   }
+  },
+  {
+   "key": "CA353",
+   "name": "Elegant School Uniform (M)",
+   "bodies": {
+    "Fighter": "Cb037.inx",
+    "Mechanician": "Ca037.inx",
+    "Pikeman": "Cc037.inx",
+    "Knight": "Cma037.inx",
+    "Magician": "Cmd037.inx",
+    "Shaman": "Cme037.inx"
+   }
+  },
+  {
+   "key": "CA501",
+   "name": "South Grace Hanbok (M)",
+   "bodies": {
+    "Fighter": "Cb028.inx",
+    "Mechanician": "Ca028.inx",
+    "Pikeman": "Cc028.inx",
+    "Knight": "Cma028.inx",
+    "Magician": "Cmd028.inx",
+    "Shaman": "Cme028.inx"
+   }
+  },
+  {
+   "key": "CA502",
+   "name": "South Grace Hanbok (F)",
+   "bodies": {
+    "Archer": "Cd028.inx",
+    "Atalanta": "Cmb028.inx",
+    "Priestess": "Cmc028.inx",
+    "Assassin": "Ce028.inx"
+   }
+  },
+  {
+   "key": "CA503",
+   "name": "Magnificent Hanbok (M)",
+   "bodies": {
+    "Fighter": "Cb029.inx",
+    "Mechanician": "Ca029.inx",
+    "Pikeman": "Cc029.inx",
+    "Knight": "Cma029.inx",
+    "Magician": "Cmd029.inx",
+    "Shaman": "Cme029.inx"
+   }
+  },
+  {
+   "key": "CA505",
+   "name": "Magnificent Hanbok (F)",
+   "bodies": {
+    "Archer": "Cd029.inx",
+    "Atalanta": "Cmb029.inx",
+    "Priestess": "Cmc029.inx",
+    "Assassin": "Ce029.inx"
+   }
+  },
+  {
+   "key": "CA507",
+   "name": "Gray Suit (M)",
+   "bodies": {
+    "Fighter": "Cb030.inx",
+    "Mechanician": "Ca030.inx",
+    "Pikeman": "Cc030.inx",
+    "Knight": "Cma030.inx",
+    "Magician": "Cmd030.inx",
+    "Shaman": "Cme030.inx"
+   }
+  },
+  {
+   "key": "CA508",
+   "name": "Gray Suit (F)",
+   "bodies": {
+    "Archer": "Cd030.inx",
+    "Atalanta": "Cmb030.inx",
+    "Priestess": "Cmc030.inx",
+    "Assassin": "Ce030.inx"
+   }
+  },
+  {
+   "key": "CA509",
+   "name": "Vampire Suit",
+   "bodies": {
+    "Fighter": "Cb031.inx",
+    "Mechanician": "Ca031.inx",
+    "Pikeman": "Cc031.inx",
+    "Knight": "Cma031.inx",
+    "Magician": "Cmd031.inx",
+    "Shaman": "Cme031.inx"
+   }
+  },
+  {
+   "key": "CA511",
+   "name": "Succubus",
+   "bodies": {
+    "Archer": "Cd031.inx",
+    "Atalanta": "Cmb031.inx",
+    "Priestess": "Cmc031.inx",
+    "Assassin": "Ce031.inx"
+   }
+  },
+  {
+   "key": "CA515",
+   "name": "Elegant Christmas Costume",
+   "bodies": {
+    "Fighter": "Cb032.inx",
+    "Mechanician": "Ca032.inx",
+    "Pikeman": "Cc032.inx",
+    "Knight": "Cma032.inx",
+    "Magician": "Cmd032.inx",
+    "Shaman": "Cme032.inx"
+   }
+  },
+  {
+   "key": "CA516",
+   "name": "Elegant Christmas Costume",
+   "bodies": {
+    "Archer": "Cd032.inx",
+    "Atalanta": "Cmb032.inx",
+    "Priestess": "Cmc032.inx",
+    "Assassin": "Ce032.inx"
+   }
+  },
+  {
+   "key": "CA517",
+   "name": "Romantic Suit (M)",
+   "bodies": {
+    "Fighter": "Cb035.inx",
+    "Mechanician": "Ca035.inx",
+    "Pikeman": "Cc035.inx",
+    "Knight": "Cma035.inx",
+    "Magician": "Cmd035.inx",
+    "Shaman": "Cme035.inx"
+   }
+  },
+  {
+   "key": "CA518",
+   "name": "Romantic Suit (F)",
+   "bodies": {
+    "Archer": "Cd035.inx",
+    "Atalanta": "Cmb035.inx",
+    "Priestess": "Cmc035.inx",
+    "Assassin": "Ce035.inx"
+   }
+  },
+  {
+   "key": "CA521",
+   "name": "Mechanic Costume (M)",
+   "bodies": {
+    "Fighter": "Cb034.inx",
+    "Mechanician": "Ca034.inx",
+    "Pikeman": "Cc034.inx",
+    "Knight": "Cma034.inx",
+    "Magician": "Cmd034.inx",
+    "Shaman": "Cme034.inx"
+   }
+  },
+  {
+   "key": "CA522",
+   "name": "Broyale Costume (M)",
+   "bodies": {
+    "Fighter": "cb303.inx",
+    "Mechanician": "ca303.inx",
+    "Pikeman": "cc303.inx",
+    "Knight": "cma303.inx",
+    "Magician": "cmd303.inx",
+    "Shaman": "cme303.inx"
+   }
+  },
+  {
+   "key": "CA523",
+   "name": "Mechanic Costume (F)",
+   "bodies": {
+    "Archer": "Cd034.inx",
+    "Atalanta": "Cmb034.inx",
+    "Priestess": "Cmc034.inx",
+    "Assassin": "Ce034.inx"
+   }
+  },
+  {
+   "key": "CA524",
+   "name": "Broyale Costume (F)",
+   "bodies": {
+    "Archer": "cd303.inx",
+    "Atalanta": "cmb303.inx",
+    "Priestess": "cmc303.inx",
+    "Assassin": "ce303.inx"
+   }
+  },
+  {
+   "key": "CA525",
+   "name": "Football (M)",
+   "bodies": {
+    "Fighter": "Cb011.inx",
+    "Mechanician": "Ca011.inx",
+    "Pikeman": "Cc011.inx",
+    "Knight": "Cma011.inx",
+    "Magician": "Cmd011.inx",
+    "Shaman": "Cme011.inx"
+   }
+  },
+  {
+   "key": "CA527",
+   "name": "Football (F)",
+   "bodies": {
+    "Archer": "Cd011.inx",
+    "Atalanta": "Cmb011.inx",
+    "Priestess": "Cmc011.inx",
+    "Assassin": "Ce011.inx"
+   }
+  },
+  {
+   "key": "CA531",
+   "name": "Casual School Uniform (M)",
+   "bodies": {
+    "Fighter": "Cb036.inx",
+    "Mechanician": "Ca036.inx",
+    "Pikeman": "Cc036.inx",
+    "Knight": "Cma036.inx",
+    "Magician": "Cmd036.inx",
+    "Shaman": "Cme036.inx"
+   }
+  },
+  {
+   "key": "CA533",
+   "name": "Casual School Uniform (F)",
+   "bodies": {
+    "Archer": "Cd036.inx",
+    "Atalanta": "Cmb036.inx",
+    "Priestess": "Cmc036.inx",
+    "Assassin": "Ce036.inx"
+   }
+  },
+  {
+   "key": "CA537",
+   "name": "Elegant School Uniform (F)",
+   "bodies": {
+    "Archer": "Cd037.inx",
+    "Atalanta": "Cmb037.inx",
+    "Priestess": "Cmc037.inx",
+    "Assassin": "Ce037.inx"
+   }
+  },
+  {
+   "key": "CA539",
+   "name": "Royal (M)",
+   "bodies": {
+    "Fighter": "Cb038.inx",
+    "Mechanician": "Ca038.inx",
+    "Pikeman": "Cc038.inx",
+    "Knight": "Cma038.inx",
+    "Magician": "Cmd038.inx",
+    "Shaman": "Cme038.inx"
+   }
+  },
+  {
+   "key": "CA541",
+   "name": "Royal (F)",
+   "bodies": {
+    "Archer": "Cd038.inx",
+    "Atalanta": "Cmb038.inx",
+    "Priestess": "Cmc038.inx",
+    "Assassin": "Ce038.inx"
+   }
+  },
+  {
+   "key": "CA543",
+   "name": "Marine Costume (M)",
+   "bodies": {
+    "Fighter": "Cb039.inx",
+    "Mechanician": "Ca039.inx",
+    "Pikeman": "Cc039.inx",
+    "Knight": "Cma039.inx",
+    "Magician": "Cmd039.inx",
+    "Shaman": "Cme039.inx"
+   }
+  },
+  {
+   "key": "CA545",
+   "name": "Marine Costume (F)",
+   "bodies": {
+    "Archer": "Cd039.inx",
+    "Atalanta": "Cmb039.inx",
+    "Priestess": "Cmc039.inx",
+    "Assassin": "Ce039.inx"
+   }
+  },
+  {
+   "key": "CA547",
+   "name": "Hopy Costume",
+   "bodies": {
+    "Fighter": "Cb040.inx",
+    "Mechanician": "Ca040.inx",
+    "Pikeman": "Cc040.inx",
+    "Knight": "Cma040.inx",
+    "Magician": "Cmd040.inx",
+    "Shaman": "Cme040.inx"
+   }
+  },
+  {
+   "key": "CA548",
+   "name": "Cuepy Costume",
+   "bodies": {
+    "Archer": "Cd040.inx",
+    "Atalanta": "Cmb040.inx",
+    "Priestess": "Cmc040.inx",
+    "Assassin": "Ce040.inx"
+   }
+  },
+  {
+   "key": "CA549",
+   "name": "Chelsea Soccer Suit",
+   "bodies": {
+    "Fighter": "cb043.inx",
+    "Mechanician": "ca043.inx",
+    "Archer": "cd043.inx",
+    "Pikeman": "cc043.inx",
+    "Atalanta": "cmb043.inx",
+    "Knight": "cma043.inx",
+    "Magician": "cmd043.inx",
+    "Priestess": "cmc043.inx",
+    "Assassin": "ce043.inx",
+    "Shaman": "cme043.inx"
+   }
+  },
+  {
+   "key": "CA550",
+   "name": "Manchester City Soccer Suit",
+   "bodies": {
+    "Fighter": "cb044.inx",
+    "Mechanician": "ca044.inx",
+    "Archer": "cd044.inx",
+    "Pikeman": "cc044.inx",
+    "Atalanta": "cmb044.inx",
+    "Knight": "cma044.inx",
+    "Magician": "cmd044.inx",
+    "Priestess": "cmc044.inx",
+    "Assassin": "ce044.inx",
+    "Shaman": "cme044.inx"
+   }
+  },
+  {
+   "key": "CA551",
+   "name": "Hopy Costume Ice",
+   "bodies": {
+    "Fighter": "cb041.inx",
+    "Mechanician": "ca041.inx",
+    "Pikeman": "cc041.inx",
+    "Knight": "cma041.inx",
+    "Magician": "cmd041.inx",
+    "Shaman": "cme041.inx"
+   }
+  },
+  {
+   "key": "CA552",
+   "name": "Cuepy Costume Ice",
+   "bodies": {
+    "Archer": "cd041.inx",
+    "Atalanta": "cmb041.inx",
+    "Priestess": "cmc041.inx",
+    "Assassin": "ce041.inx"
+   }
+  },
+  {
+   "key": "CA553",
+   "name": "Chemist Costume (M)",
+   "bodies": {
+    "Fighter": "cb042.inx",
+    "Mechanician": "ca042.inx",
+    "Pikeman": "cc042.inx",
+    "Knight": "cma042.inx",
+    "Magician": "cmd042.inx",
+    "Shaman": "cme042.inx"
+   }
+  },
+  {
+   "key": "CA554",
+   "name": "Chemist Costume (F)",
+   "bodies": {
+    "Archer": "cd042.inx",
+    "Atalanta": "cmb042.inx",
+    "Priestess": "cmc042.inx",
+    "Assassin": "ce042.inx"
+   }
+  },
+  {
+   "key": "CA555",
+   "name": "Dracula Dragon Costume (M)",
+   "bodies": {
+    "Fighter": "cb043.inx",
+    "Mechanician": "ca043.inx",
+    "Pikeman": "cc043.inx",
+    "Knight": "cma043.inx",
+    "Magician": "cmd043.inx",
+    "Shaman": "cme043.inx"
+   }
+  },
+  {
+   "key": "CA556",
+   "name": "Dracula Dragon Costume (F)",
+   "bodies": {
+    "Archer": "cd043.inx",
+    "Atalanta": "cmb043.inx",
+    "Priestess": "cmc043.inx",
+    "Assassin": "ce043.inx"
+   }
+  },
+  {
+   "key": "CA557",
+   "name": "Akatsuki Costume (M)",
+   "bodies": {
+    "Fighter": "AkatsukiCostumeM1.inx"
+   }
+  },
+  {
+   "key": "CA559",
+   "name": "Ice Costume (M)",
+   "bodies": {
+    "Fighter": "cb044.inx",
+    "Mechanician": "ca044.inx",
+    "Pikeman": "cc044.inx",
+    "Knight": "cma044.inx",
+    "Magician": "cmd044.inx",
+    "Shaman": "cme044.inx"
+   }
+  },
+  {
+   "key": "CA560",
+   "name": "Ice Costume (F)",
+   "bodies": {
+    "Archer": "cd044.inx",
+    "Atalanta": "cmb044.inx",
+    "Priestess": "cmc044.inx",
+    "Assassin": "ce044.inx"
+   }
+  },
+  {
+   "key": "CA561",
+   "name": "Golden Hopy Costume (M)",
+   "bodies": {
+    "Fighter": "cb045.inx",
+    "Mechanician": "ca045.inx",
+    "Pikeman": "cc045.inx",
+    "Knight": "cma045.inx",
+    "Magician": "cmd045.inx",
+    "Shaman": "cme045.inx"
+   }
+  },
+  {
+   "key": "CA562",
+   "name": "Golden Hopy Costume (F)",
+   "bodies": {
+    "Archer": "cd045.inx",
+    "Atalanta": "cmb045.inx",
+    "Priestess": "cmc045.inx",
+    "Assassin": "ce045.inx"
+   }
+  },
+  {
+   "key": "CA565",
+   "name": "Sandurr Red Costume (M)",
+   "bodies": {
+    "Fighter": "cb046.inx",
+    "Mechanician": "ca046.inx",
+    "Pikeman": "cc046.inx",
+    "Knight": "cma046.inx",
+    "Magician": "cmd046.inx",
+    "Shaman": "cme046.inx"
+   }
+  },
+  {
+   "key": "CA566",
+   "name": "Sandurr Red Costume (F)",
+   "bodies": {
+    "Archer": "cd046.inx",
+    "Atalanta": "cmb046.inx",
+    "Priestess": "cmc046.inx",
+    "Assassin": "ce046.inx"
+   }
+  },
+  {
+   "key": "CA567",
+   "name": "Sandurr Purple Costume (M)",
+   "bodies": {
+    "Fighter": "cb047.inx",
+    "Mechanician": "ca047.inx",
+    "Pikeman": "cc047.inx",
+    "Knight": "cma047.inx",
+    "Magician": "cmd047.inx",
+    "Shaman": "cme047.inx"
+   }
+  },
+  {
+   "key": "CA568",
+   "name": "Sandurr Purple Costume (F)",
+   "bodies": {
+    "Archer": "cd047.inx",
+    "Atalanta": "cmb047.inx",
+    "Priestess": "cmc047.inx",
+    "Assassin": "ce047.inx"
+   }
+  },
+  {
+   "key": "CA569",
+   "name": "Chaotic Costume",
+   "bodies": {
+    "Fighter": "rPT_Costume_4_FS.inx",
+    "Mechanician": "rPT_Costume_4_MS.inx",
+    "Pikeman": "rPT_Costume_4_PS.inx",
+    "Knight": "rPT_Costume_4_KS.inx",
+    "Magician": "rPT_Costume_4_MG.inx",
+    "Shaman": "rPT_Costume_4_SS.inx"
+   }
+  },
+  {
+   "key": "CA570",
+   "name": "Chaotic Costume (F)",
+   "bodies": {
+    "Archer": "rPT_Costume_4_AS.inx",
+    "Atalanta": "rPT_Costume_4_ATA.inx",
+    "Priestess": "rPT_Costume_4_PRS.inx",
+    "Assassin": "rPT_Costume_4_ASS.inx"
+   }
+  },
+  {
+   "key": "CA625",
+   "name": "Peruvian Soccer Suit",
+   "bodies": {
+    "Fighter": "cb018.inx",
+    "Mechanician": "ca018.inx",
+    "Archer": "cd018.inx",
+    "Pikeman": "cc018.inx",
+    "Atalanta": "cmb018.inx",
+    "Knight": "cma018.inx",
+    "Magician": "cmd018.inx",
+    "Priestess": "cmc018.inx"
+   }
+  },
+  {
+   "key": "CA626",
+   "name": "Brazilian Soccer Suit",
+   "bodies": {
+    "Fighter": "cb019.inx",
+    "Mechanician": "ca019.inx",
+    "Archer": "cd019.inx",
+    "Pikeman": "cc019.inx",
+    "Atalanta": "cmb019.inx",
+    "Knight": "cma019.inx",
+    "Magician": "cmd019.inx",
+    "Priestess": "cmc019.inx"
+   }
+  },
+  {
+   "key": "CA627",
+   "name": "Argentine Soccer Suit",
+   "bodies": {
+    "Fighter": "cb020.inx",
+    "Mechanician": "ca020.inx",
+    "Archer": "cd020.inx",
+    "Pikeman": "cc020.inx",
+    "Atalanta": "cmb020.inx",
+    "Knight": "cma020.inx",
+    "Magician": "cmd020.inx",
+    "Priestess": "cmc020.inx"
+   }
+  },
+  {
+   "key": "CA628",
+   "name": "Chilean Soccer Suit",
+   "bodies": {
+    "Fighter": "cb021.inx",
+    "Mechanician": "ca021.inx",
+    "Archer": "cd021.inx",
+    "Pikeman": "cc021.inx",
+    "Atalanta": "cmb021.inx",
+    "Knight": "cma021.inx",
+    "Magician": "cmd021.inx",
+    "Priestess": "cmc021.inx"
+   }
+  },
+  {
+   "key": "CA630",
+   "name": "Vietnamese Soccer Suit",
+   "bodies": {
+    "Atalanta": "cmb098.inx",
+    "Magician": "cmd098.inx",
+    "Priestess": "cmc098.inx",
+    "Assassin": "Ce098.inx",
+    "Shaman": "Cme098.inx"
+   }
+  },
+  {
+   "key": "CA635",
+   "name": "Mexican Soccer Suit",
+   "bodies": {
+    "Archer": "cd096.inx",
+    "Atalanta": "cmb096.inx",
+    "Knight": "cma096.inx",
+    "Magician": "cmd096.inx",
+    "Priestess": "cmc096.inx",
+    "Assassin": "Ce096.inx",
+    "Shaman": "Cme096.inx"
+   }
+  },
+  {
+   "key": "CA640",
+   "name": "Japanese Soccer Suit",
+   "bodies": {
+    "Fighter": "cb022.inx",
+    "Mechanician": "ca022.inx",
+    "Archer": "cd022.inx",
+    "Pikeman": "cc022.inx",
+    "Atalanta": "cmb022.inx",
+    "Knight": "cma022.inx",
+    "Magician": "cmd022.inx",
+    "Priestess": "cmc022.inx"
+   }
+  },
+  {
+   "key": "CA646",
+   "name": "Summer Event Costume",
+   "bodies": {
+    "Fighter": "cb102.inx",
+    "Mechanician": "ca102.inx",
+    "Pikeman": "cc102.inx",
+    "Knight": "cma102.inx",
+    "Magician": "cmd102.inx",
+    "Shaman": "cme102.inx"
+   }
+  },
+  {
+   "key": "CA647",
+   "name": "Pumpkin Costume",
+   "bodies": {
+    "Fighter": "cb103.inx",
+    "Mechanician": "ca103.inx",
+    "Pikeman": "cc103.inx",
+    "Knight": "cma103.inx",
+    "Magician": "cmd103.inx",
+    "Shaman": "cme103.inx"
+   }
+  },
+  {
+   "key": "CA650",
+   "name": "Skeleton Costume",
+   "bodies": {
+    "Archer": "cd102.inx",
+    "Atalanta": "cmb102.inx",
+    "Priestess": "cmc102.inx",
+    "Assassin": "ce102.inx"
+   }
+  },
+  {
+   "key": "CA651",
+   "name": "Pumpkin Costume",
+   "bodies": {
+    "Archer": "cd103.inx",
+    "Atalanta": "cmb103.inx",
+    "Priestess": "cmc103.inx",
+    "Assassin": "ce103.inx"
+   }
+  },
+  {
+   "key": "CA919",
+   "name": "Royale Costume",
+   "bodies": {
+    "Knight": "cma050.inx",
+    "Magician": "cmd050.inx"
+   }
+  },
+  {
+   "key": "DA130",
+   "name": "Quantum Armor",
+   "bodies": {
+    "Fighter": "b031.inx",
+    "Mechanician": "a031.inx",
+    "Archer": "d031.inx",
+    "Pikeman": "c031.inx",
+    "Atalanta": "mb031.inx",
+    "Knight": "ma031.inx",
+    "Assassin": "e031.inx"
+   }
+  },
+  {
+   "key": "DA156",
+   "name": "Wedding Suit",
+   "bodies": {
+    "Fighter": "cb013.inx",
+    "Mechanician": "ca013.inx",
+    "Pikeman": "cc013.inx",
+    "Knight": "cma013.inx",
+    "Magician": "cmd013.inx",
+    "Shaman": "Cme013.inx"
+   }
+  },
+  {
+   "key": "DA157",
+   "name": "Wedding Dress",
+   "bodies": {
+    "Archer": "cd013.inx",
+    "Atalanta": "cmb013.inx",
+    "Priestess": "cmc013.inx",
+    "Assassin": "Ce013.inx"
+   }
+  },
+  {
+   "key": "DA158",
+   "name": "Changpao (M)",
+   "bodies": {
+    "Fighter": "Cb014.inx",
+    "Mechanician": "Ca014.inx",
+    "Pikeman": "Cc014.inx",
+    "Knight": "Cma014.inx",
+    "Magician": "Cmd014.inx",
+    "Shaman": "Cme014.inx"
+   }
+  },
+  {
+   "key": "DA159",
+   "name": "Changpao (F)",
+   "bodies": {
+    "Archer": "Cd014.inx",
+    "Atalanta": "Cmb014.inx",
+    "Priestess": "Cmc014.inx",
+    "Assassin": "Ce014.inx"
+   }
+  },
+  {
+   "key": "DA160",
+   "name": "Kimono (M)",
+   "bodies": {
+    "Fighter": "cb015.inx",
+    "Mechanician": "ca015.inx",
+    "Pikeman": "cc015.inx",
+    "Knight": "cma015.inx",
+    "Magician": "cmd015.inx",
+    "Shaman": "Cme015.inx"
+   }
+  },
+  {
+   "key": "DA161",
+   "name": "Kimono (F)",
+   "bodies": {
+    "Archer": "cd015.inx",
+    "Atalanta": "cmb015.inx",
+    "Priestess": "cmc015.inx",
+    "Assassin": "Ce015.inx"
+   }
+  },
+  {
+   "key": "DA162",
+   "name": "Santa Coat Costume",
+   "bodies": {
+    "Fighter": "cb016.inx",
+    "Mechanician": "ca016.inx",
+    "Pikeman": "cc016.inx",
+    "Knight": "cma016.inx",
+    "Magician": "cmd016.inx",
+    "Shaman": "Cme016.inx"
+   }
+  },
+  {
+   "key": "DA163",
+   "name": "Santa Coat Costume",
+   "bodies": {
+    "Archer": "cd016.inx",
+    "Atalanta": "cmb016.inx",
+    "Priestess": "cmc016.inx",
+    "Assassin": "Ce016.inx"
+   }
+  },
+  {
+   "key": "DA164",
+   "name": "Korean (M)",
+   "bodies": {
+    "Fighter": "Cb017.inx",
+    "Mechanician": "Ca017.inx",
+    "Pikeman": "Cc017.inx",
+    "Knight": "Cma017.inx",
+    "Magician": "Cmd017.inx",
+    "Shaman": "Cme017.inx"
+   }
+  },
+  {
+   "key": "DA165",
+   "name": "Korean (F)",
+   "bodies": {
+    "Archer": "Cd017.inx",
+    "Atalanta": "Cmb017.inx",
+    "Priestess": "Cmc017.inx",
+    "Assassin": "Ce017.inx"
+   }
+  },
+  {
+   "key": "DA166",
+   "name": "Luxurious Suit",
+   "bodies": {
+    "Fighter": "cb101.inx",
+    "Mechanician": "ca101.inx",
+    "Pikeman": "cc101.inx",
+    "Knight": "cma101.inx",
+    "Magician": "cmd101.inx",
+    "Shaman": "cme101.inx"
+   }
+  },
+  {
+   "key": "DA167",
+   "name": "Luxurious Dress",
+   "bodies": {
+    "Archer": "cd101.inx",
+    "Atalanta": "cmb101.inx",
+    "Priestess": "cmc101.inx",
+    "Assassin": "ce101.inx"
+   }
+  },
+  {
+   "key": "DA230",
+   "name": "Warlock Robe",
+   "bodies": {
+    "Magician": "md031.inx",
+    "Priestess": "mc031.inx",
+    "Shaman": "me031.inx"
+   }
+  },
+  {
+   "key": "DA305",
+   "name": "Mythril Armor",
+   "bodies": {
+    "Fighter": "B115.inx",
+    "Mechanician": "A115.inx",
+    "Archer": "D115.inx",
+    "Pikeman": "C115.inx",
+    "Atalanta": "mB115.inx",
+    "Knight": "mA115.inx",
+    "Assassin": "E115.inx"
+   }
+  },
+  {
+   "key": "DA306",
+   "name": "Imperial Armor",
+   "bodies": {
+    "Fighter": "B116.inx",
+    "Mechanician": "A116.inx",
+    "Archer": "D116.inx",
+    "Pikeman": "C116.inx",
+    "Atalanta": "mB116.inx",
+    "Knight": "mA116.inx",
+    "Assassin": "E116.inx"
+   }
+  },
+  {
+   "key": "DA307",
+   "name": "Abyss Armor",
+   "bodies": {
+    "Fighter": "b032.inx",
+    "Mechanician": "a032.inx",
+    "Archer": "d032.inx",
+    "Pikeman": "c032.inx",
+    "Atalanta": "mb032.inx",
+    "Knight": "ma032.inx",
+    "Assassin": "e032.inx"
+   }
+  },
+  {
+   "key": "DA307",
+   "name": "KPT Armor 307",
+   "bodies": {
+    "Mechanician": "a035.inx",
+    "Fighter": "b035.inx",
+    "Pikeman": "c035.inx",
+    "Archer": "d035.inx",
+    "Knight": "ma035.inx",
+    "Atalanta": "mb035.inx",
+    "Assassin": "e035.inx"
+   }
+  },
+  {
+   "key": "DA308",
+   "name": "KPT Armor 308",
+   "bodies": {
+    "Mechanician": "a036.inx",
+    "Fighter": "b036.inx",
+    "Pikeman": "c036.inx",
+    "Archer": "d036.inx",
+    "Knight": "ma036.inx",
+    "Atalanta": "mb036.inx",
+    "Assassin": "e036.inx"
+   }
+  },
+  {
+   "key": "DA309",
+   "name": "KPT Armor 309",
+   "bodies": {
+    "Mechanician": "a037.inx",
+    "Fighter": "b037.inx",
+    "Pikeman": "c037.inx",
+    "Archer": "d037.inx",
+    "Knight": "ma037.inx",
+    "Atalanta": "mb037.inx",
+    "Assassin": "e037.inx"
+   }
+  },
+  {
+   "key": "DA310",
+   "name": "KPT Armor 310",
+   "bodies": {
+    "Mechanician": "a038.inx",
+    "Fighter": "b038.inx",
+    "Pikeman": "c038.inx",
+    "Archer": "d038.inx",
+    "Knight": "ma038.inx",
+    "Atalanta": "mb038.inx",
+    "Assassin": "e038.inx"
+   }
+  },
+  {
+   "key": "DA311",
+   "name": "KPT Armor 311",
+   "bodies": {
+    "Mechanician": "a039.inx",
+    "Fighter": "b039.inx",
+    "Pikeman": "c039.inx",
+    "Archer": "d039.inx",
+    "Knight": "ma039.inx",
+    "Atalanta": "mb039.inx",
+    "Assassin": "e039.inx"
+   }
+  },
+  {
+   "key": "DA312",
+   "name": "KPT Armor 312",
+   "bodies": {
+    "Mechanician": "a040.inx",
+    "Fighter": "b040.inx",
+    "Pikeman": "c040.inx",
+    "Archer": "d040.inx",
+    "Knight": "ma040.inx",
+    "Atalanta": "mb040.inx",
+    "Assassin": "e040.inx"
+   }
+  },
+  {
+   "key": "DA340",
+   "name": "Deius Armor",
+   "bodies": {
+    "Fighter": "DeiusFS.inx",
+    "Mechanician": "DeiusMS.inx",
+    "Archer": "DeiusAS.inx",
+    "Pikeman": "DeiusPS.inx",
+    "Atalanta": "DeiusATA.inx",
+    "Knight": "DeiusKS.inx",
+    "Assassin": "DeiusASS.inx"
+   }
+  },
+  {
+   "key": "DA405",
+   "name": "Lunar Robe",
+   "bodies": {
+    "Magician": "mD115.inx",
+    "Priestess": "mC115.inx",
+    "Shaman": "mE115.inx"
+   }
+  },
+  {
+   "key": "DA406",
+   "name": "Cherub Robe",
+   "bodies": {
+    "Magician": "mD116.inx",
+    "Priestess": "mC116.inx",
+    "Shaman": "mE116.inx"
+   }
+  },
+  {
+   "key": "DA407",
+   "name": "Abyss Robe",
+   "bodies": {
+    "Magician": "md032.inx",
+    "Priestess": "mc032.inx",
+    "Shaman": "me032.inx"
+   }
+  },
+  {
+   "key": "DA408",
+   "name": "KPT Robe 408",
+   "bodies": {
+    "Priestess": "mc036.inx",
+    "Magician": "md036.inx",
+    "Shaman": "me036.inx"
+   }
+  },
+  {
+   "key": "DA409",
+   "name": "KPT Robe 409",
+   "bodies": {
+    "Priestess": "mc037.inx",
+    "Magician": "md037.inx",
+    "Shaman": "me037.inx"
+   }
+  },
+  {
+   "key": "DA410",
+   "name": "KPT Robe 410",
+   "bodies": {
+    "Priestess": "mc038.inx",
+    "Magician": "md038.inx",
+    "Shaman": "me038.inx"
+   }
+  },
+  {
+   "key": "DA411",
+   "name": "KPT Robe 411",
+   "bodies": {
+    "Priestess": "mc039.inx",
+    "Magician": "md039.inx",
+    "Shaman": "me039.inx"
+   }
+  },
+  {
+   "key": "DA440",
+   "name": "Deius Robe",
+   "bodies": {
+    "Magician": "DeiusMGS.inx",
+    "Priestess": "DeiusPRS.inx",
+    "Shaman": "DeiusSHA.inx"
+   }
+  }
+ ],
+ "gear": [
+  {
+   "key": "DS130",
+   "name": "Lava Shield",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS131",
+   "name": "Amethyst Shield",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS134",
+   "name": "Celestial Shield",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS135",
+   "name": "Oblivion Shield",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS136",
+   "name": "Scourgelord Shield",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS137",
+   "name": "KPT Shield 137",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS138",
+   "name": "KPT Shield 138",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS139",
+   "name": "KPT Shield 139",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS140",
+   "name": "KPT Shield 140",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS141",
+   "name": "KPT Shield 141",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS147",
+   "name": "Hollow Shield",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS154",
+   "name": "Ancestor's Shield",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS200",
+   "name": "Maple Shield",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS303",
+   "name": "Crystal Shield",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS304",
+   "name": "Runic Shield",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS305",
+   "name": "Aegis Shield",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "DS306",
+   "name": "Torment Shield",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "OM126",
+   "name": "Mythology Orb",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "OM131",
+   "name": "Amethyst Orb",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "OM132",
+   "name": "Etherium Orb",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "OM133",
+   "name": "Pantheon Orb",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "OM134",
+   "name": "Celestial Orb",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "OM135",
+   "name": "Oblivion Orb",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "OM136",
+   "name": "Scourgelord Orb",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "OM303",
+   "name": "Kelvezu Claw",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "OM304",
+   "name": "Dynasty Sphere",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "OM305",
+   "name": "Runic Orb",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "OM306",
+   "name": "Aeon Sphere",
+   "slot": 2,
+   "two": false
+  },
+  {
+   "key": "WA133",
+   "name": "Abyss Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA134",
+   "name": "Lava Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA135",
+   "name": "Amethyst Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA136",
+   "name": "Etherium Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA137",
+   "name": "Pantheon Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA138",
+   "name": "Celestial Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA139",
+   "name": "Oblivion Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA140",
+   "name": "Scourgelord Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA147",
+   "name": "Hollow Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA154",
+   "name": "Ancestor's Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA155",
+   "name": "Ancestor's Tomahawk",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WA156",
+   "name": "Eldritch TomaHawk",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WA157",
+   "name": "Eldritch Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA160",
+   "name": "Meat Cleaver Axe",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WA303",
+   "name": "Inferno Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA304",
+   "name": "Blazing Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA305",
+   "name": "Demolition Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA306",
+   "name": "Gladiator Axe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WA307",
+   "name": "Etherium Axe 1Hand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WA309",
+   "name": "Celestial Axe 1Hand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WA310",
+   "name": "Oblivion Axe 1Hand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WA311",
+   "name": "Scourgelord Axe 1Hand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WC132",
+   "name": "Lava Claw",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WC133",
+   "name": "Amethyst Claw",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WC135",
+   "name": "Pantheon Claw",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WC136",
+   "name": "Celestial Claw",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WC137",
+   "name": "Oblivion Claw",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WC138",
+   "name": "Scourgelord Claw",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WC139",
+   "name": "KPT Claw 139",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WC147",
+   "name": "Hollow Claw",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WC154",
+   "name": "Ancestor's Talon",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WC155",
+   "name": "Eldritch Talon",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WC303",
+   "name": "Inferno Claw",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WC304",
+   "name": "Imperial Talon",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WC305",
+   "name": "Raging Claw",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WC306",
+   "name": "Avenger Claw",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WD138",
+   "name": "Scourgelord Dagger",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WD139",
+   "name": "KPT Dagger 139",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WD147",
+   "name": "Hollow Dagger",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WD154",
+   "name": "Ancestor's Dagger",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WD155",
+   "name": "Eldritch Dagger",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WD303",
+   "name": "Inferno Dagger",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WD304",
+   "name": "Enigma Dagger",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WD305",
+   "name": "Flaming Dagger",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WD306",
+   "name": "Venomous Dagger",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WH134",
+   "name": "Lava Hammer",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WH135",
+   "name": "Amethyst Hammer",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WH136",
+   "name": "Etherium Hammer",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WH138",
+   "name": "Celestial Hammer",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WH139",
+   "name": "Oblivion Hammer",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WH140",
+   "name": "Scourgelord Hammer",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WH141",
+   "name": "KPT Hammer 141",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WH147",
+   "name": "Hollow Mace",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WH149",
+   "name": "Hollow Hammer",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WH154",
+   "name": "Ancestor's Hammer",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WH155",
+   "name": "Ancestor's Mace",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WH156",
+   "name": "Eldritch Mace",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WH157",
+   "name": "Eldritch Hammer",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WH303",
+   "name": "Inferno Hammer",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WH304",
+   "name": "Legendary Hammer",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WH305",
+   "name": "Destructive Hammer",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WH306",
+   "name": "Molten Hammer",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM134",
+   "name": "Abyss Staff",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM135",
+   "name": "Lava Staff",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM136",
+   "name": "Amethyst Staff",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM137",
+   "name": "Etherium Staff",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM138",
+   "name": "Pantheon Staff",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM139",
+   "name": "Celestial Staff",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM140",
+   "name": "Oblivion Staff",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM141",
+   "name": "Scourgelord Staff",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM147",
+   "name": "Hollow Wand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WM149",
+   "name": "Hollow Staff",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM154",
+   "name": "Ancestor's Staff",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM155",
+   "name": "Ancestor's Wand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WM156",
+   "name": "Eldritch Staff",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM157",
+   "name": "Eldritch Wand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WM303",
+   "name": "Blessed Staff",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM304",
+   "name": "Mystic Staff",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM305",
+   "name": "Brutal Wand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WM306",
+   "name": "Twilight Staff",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WM307",
+   "name": "Crystal Wand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WM308",
+   "name": "Pantheon Wand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WM309",
+   "name": "Celestial Wand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WM310",
+   "name": "Oblivion Wand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WM311",
+   "name": "Scourgelord Wand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WN138",
+   "name": "Scourgelord Phantom",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WN139",
+   "name": "KPT Phantom 139",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WN147",
+   "name": "Hollow Phantom",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WN154",
+   "name": "Ancestor's Phantom",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WN303",
+   "name": "Luta Phantom",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WN304",
+   "name": "Woomahga Phantom",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WN305",
+   "name": "Hakuna Phantom",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WN306",
+   "name": "Wakinyan Phantom",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WP133",
+   "name": "Lava Scythe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WP134",
+   "name": "Amethyst Scythe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WP135",
+   "name": "Etherium Scythe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WP136",
+   "name": "Pantheon Scythe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WP137",
+   "name": "Celestial Scythe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WP138",
+   "name": "Oblivion Scythe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WP139",
+   "name": "Scourgelord Scythe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WP140",
+   "name": "KPT Scythe 140",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WP147",
+   "name": "Hollow Scythe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WP154",
+   "name": "Ancestor's Spear",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WP155",
+   "name": "Eldritch Scythe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WP303",
+   "name": "Inferno Scythe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WP304",
+   "name": "Death Scythe",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WP305",
+   "name": "Twin Scythe",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WP306",
+   "name": "DoubleSided Spear",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS134",
+   "name": "Lava Bow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS135",
+   "name": "Amethyst Bow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS137",
+   "name": "Pantheon Bow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS138",
+   "name": "Celestial Bow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS139",
+   "name": "Oblivion Bow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS140",
+   "name": "Scourgelord Bow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS141",
+   "name": "KPT Sword 141",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS147",
+   "name": "Hollow Bow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS149",
+   "name": "Hollow Crossbow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS154",
+   "name": "Ancestor's Bow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS155",
+   "name": "Ancestor's Hand Bow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS156",
+   "name": "Eldritch Bow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS236",
+   "name": "Abyss Sword",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS237",
+   "name": "Lava Sword",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS238",
+   "name": "Amethyst Sword",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS239",
+   "name": "Etherium Sword",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS240",
+   "name": "Pantheon Sword",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS241",
+   "name": "Celestial Sword",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS242",
+   "name": "Oblivion Sword",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS243",
+   "name": "ScourgelordSword",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS247",
+   "name": "Hollow Blade",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS249",
+   "name": "Hollow Claymore",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS255",
+   "name": "Ancestor's Blade",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS256",
+   "name": "Eldritch Claymore",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS257",
+   "name": "Eldritch Blade",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WS303",
+   "name": "Enigma Bow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS304",
+   "name": "Supreme Bow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS305",
+   "name": "Rogue Bow",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WS306",
+   "name": "FatalHandCross Bow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS403",
+   "name": "Inferno Sword",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS406",
+   "name": "Kingsbane Sword",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS407",
+   "name": "Relic Sword",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WS408",
+   "name": "Etherium Sword 1Hand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WS409",
+   "name": "Pantheon Sword 1Hand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WS410",
+   "name": "Celestial Sword 1Hand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WS411",
+   "name": "Oblivion Sword 1Hand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WS412",
+   "name": "Scourgelord Sword 1Hand",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WS427",
+   "name": "Star Wars Bow",
+   "slot": 0,
+   "two": true
+  },
+  {
+   "key": "WT133",
+   "name": "Lava Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WT134",
+   "name": "Amethyst Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WT135",
+   "name": "Etherium Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WT136",
+   "name": "Pantheon Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WT137",
+   "name": "Celestial Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WT138",
+   "name": "Oblivion Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WT139",
+   "name": "Scourgelord Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WT140",
+   "name": "KPT Javelin 140",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WT147",
+   "name": "Hollow Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WT154",
+   "name": "Ancestor's Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WT155",
+   "name": "Eldritch Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WT303",
+   "name": "Inferno Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WT304",
+   "name": "Flame Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WT305",
+   "name": "Blessed Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WT306",
+   "name": "Royal Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU001",
+   "name": "Zekram's Fury",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU002",
+   "name": "Fusionist Axe",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU101",
+   "name": "Aerden's Creation",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU102",
+   "name": "Mardanos's Method",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU103",
+   "name": "Fusionist Claw",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU201",
+   "name": "Dion's Grace",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU202",
+   "name": "Fusionist Bow",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU301",
+   "name": "Phallanxis's Ferocity",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU302",
+   "name": "Fusionist Scythe",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU401",
+   "name": "Galantia's Furor",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU402",
+   "name": "Fusionist Javelin",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU501",
+   "name": "Ruijgrok's Edge",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU502",
+   "name": "Fusionist Claymore",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU601",
+   "name": "Kavas's Decimation",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU604",
+   "name": "Destructive Fusionist Staff",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU701",
+   "name": "Kahlia's Divinity",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU801",
+   "name": "Midranda's Impact",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU802",
+   "name": "Fusionist Daggers",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU901",
+   "name": "Midranda's Wrath",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "WU902",
+   "name": "Fusionist Phantom",
+   "slot": 0,
+   "two": false
+  },
+  {
+   "key": "CW131",
+   "name": "Frost Axe",
+   "slot": 0,
+   "like": "WA101",
+   "two": true
+  },
+  {
+   "key": "CW132",
+   "name": "Frost Claw",
+   "slot": 0,
+   "like": "WC101",
+   "two": false
+  },
+  {
+   "key": "CW133",
+   "name": "Frost Hammer",
+   "slot": 0,
+   "like": "WH101",
+   "two": true
+  },
+  {
+   "key": "CW134",
+   "name": "Frost Staff",
+   "slot": 0,
+   "like": "WM101",
+   "two": true
+  },
+  {
+   "key": "CW135",
+   "name": "Frost Scythe",
+   "slot": 0,
+   "like": "WP101",
+   "two": true
+  },
+  {
+   "key": "CW136",
+   "name": "Frost Bow",
+   "slot": 0,
+   "like": "WS101",
+   "two": true
+  },
+  {
+   "key": "CW137",
+   "name": "Frost Sword",
+   "slot": 0,
+   "like": "WS201",
+   "two": true
+  },
+  {
+   "key": "CW138",
+   "name": "Frost Javelin",
+   "slot": 0,
+   "like": "WT101",
+   "two": false
+  },
+  {
+   "key": "CW139",
+   "name": "Frost Dagger",
+   "slot": 0,
+   "like": "WD101",
+   "two": false
+  },
+  {
+   "key": "CW140",
+   "name": "Frost Phantom",
+   "slot": 0,
+   "like": "WN101",
+   "two": false
+  },
+  {
+   "key": "CW141",
+   "name": "Frost Shield",
+   "slot": 2,
+   "like": "DS101",
+   "two": false
+  },
+  {
+   "key": "CW142",
+   "name": "Pumpkin Axe",
+   "slot": 0,
+   "like": "WA101",
+   "two": true
+  },
+  {
+   "key": "CW143",
+   "name": "Pumpkin Claw",
+   "slot": 0,
+   "like": "WC101",
+   "two": false
+  },
+  {
+   "key": "CW144",
+   "name": "Pumpkin Hammer",
+   "slot": 0,
+   "like": "WH101",
+   "two": true
+  },
+  {
+   "key": "CW145",
+   "name": "Pumpkin Staff",
+   "slot": 0,
+   "like": "WM101",
+   "two": true
+  },
+  {
+   "key": "CW146",
+   "name": "Pumpkin Scythe",
+   "slot": 0,
+   "like": "WP101",
+   "two": true
+  },
+  {
+   "key": "CW147",
+   "name": "Pumpkin Bow",
+   "slot": 0,
+   "like": "WS101",
+   "two": true
+  },
+  {
+   "key": "CW148",
+   "name": "Pumpkin Sword",
+   "slot": 0,
+   "like": "WS201",
+   "two": true
+  },
+  {
+   "key": "CW149",
+   "name": "Pumpkin Javelin",
+   "slot": 0,
+   "like": "WT101",
+   "two": false
+  },
+  {
+   "key": "CW150",
+   "name": "Pumpkin Dagger",
+   "slot": 0,
+   "like": "WD101",
+   "two": false
+  },
+  {
+   "key": "CW151",
+   "name": "Pumpkin Phantom",
+   "slot": 0,
+   "like": "WN101",
+   "two": false
+  },
+  {
+   "key": "CW152",
+   "name": "Pumpkin Shield",
+   "slot": 2,
+   "like": "DS101",
+   "two": false
+  },
+  {
+   "key": "CW153",
+   "name": "Dragon Axe",
+   "slot": 0,
+   "like": "WA101",
+   "two": true
+  },
+  {
+   "key": "CW154",
+   "name": "Dragon Claw",
+   "slot": 0,
+   "like": "WC101",
+   "two": false
+  },
+  {
+   "key": "CW155",
+   "name": "Dragon Hammer",
+   "slot": 0,
+   "like": "WH101",
+   "two": true
+  },
+  {
+   "key": "CW156",
+   "name": "Dragon Staff",
+   "slot": 0,
+   "like": "WM101",
+   "two": true
+  },
+  {
+   "key": "CW157",
+   "name": "Dragon Scythe",
+   "slot": 0,
+   "like": "WP101",
+   "two": true
+  },
+  {
+   "key": "CW158",
+   "name": "Dragon Bow",
+   "slot": 0,
+   "like": "WS101",
+   "two": true
+  },
+  {
+   "key": "CW159",
+   "name": "Dragon Sword",
+   "slot": 0,
+   "like": "WS201",
+   "two": true
+  },
+  {
+   "key": "CW160",
+   "name": "Dragon Javelin",
+   "slot": 0,
+   "like": "WT101",
+   "two": false
+  },
+  {
+   "key": "CW161",
+   "name": "Dragon Dagger",
+   "slot": 0,
+   "like": "WD101",
+   "two": false
+  },
+  {
+   "key": "CW162",
+   "name": "Dragon Phantom",
+   "slot": 0,
+   "like": "WN101",
+   "two": false
+  },
+  {
+   "key": "CW163",
+   "name": "Dragon Shield",
+   "slot": 2,
+   "like": "DS101",
+   "two": false
+  },
+  {
+   "key": "CW164",
+   "name": "Kitchen Axe",
+   "slot": 0,
+   "like": "WA101",
+   "two": true
+  },
+  {
+   "key": "CW165",
+   "name": "Kitchen Claw",
+   "slot": 0,
+   "like": "WC101",
+   "two": false
+  },
+  {
+   "key": "CW166",
+   "name": "Kitchen Hammer",
+   "slot": 0,
+   "like": "WH101",
+   "two": true
+  },
+  {
+   "key": "CW167",
+   "name": "Kitchen Staff",
+   "slot": 0,
+   "like": "WM101",
+   "two": true
+  },
+  {
+   "key": "CW168",
+   "name": "Kitchen Scythe",
+   "slot": 0,
+   "like": "WP101",
+   "two": true
+  },
+  {
+   "key": "CW169",
+   "name": "Kitchen Bow",
+   "slot": 0,
+   "like": "WS101",
+   "two": true
+  },
+  {
+   "key": "CW170",
+   "name": "Kitchen Sword",
+   "slot": 0,
+   "like": "WS201",
+   "two": true
+  },
+  {
+   "key": "CW171",
+   "name": "Kitchen Javelin",
+   "slot": 0,
+   "like": "WT101",
+   "two": false
+  },
+  {
+   "key": "CW172",
+   "name": "Kitchen Dagger",
+   "slot": 0,
+   "like": "WD101",
+   "two": false
+  },
+  {
+   "key": "CW173",
+   "name": "Kitchen Phantom",
+   "slot": 0,
+   "like": "WN101",
+   "two": false
+  },
+  {
+   "key": "CW174",
+   "name": "Kitchen Shield",
+   "slot": 2,
+   "like": "DS101",
+   "two": false
+  }
+ ],
+ "hidden": [
+  "DA132",
+  "DA133",
+  "DA134",
+  "DA136",
+  "DA137",
+  "DA138",
+  "DA140",
+  "DA141",
+  "DA142",
+  "DA144",
+  "DA145",
+  "DA146",
+  "DA155",
+  "DA201",
+  "DA202",
+  "DA203",
+  "DA204",
+  "DA205",
+  "DA206",
+  "DA207",
+  "DA208",
+  "DA209",
+  "DA210",
+  "DA211",
+  "DA212",
+  "DA213",
+  "DA214",
+  "DA215",
+  "DA216",
+  "DA217",
+  "DA218",
+  "DA219",
+  "DA220",
+  "DA221",
+  "DA222",
+  "DA223",
+  "DA224",
+  "DA225",
+  "DA226",
+  "DA227",
+  "DA228",
+  "DA229",
+  "DA230",
+  "DA231",
+  "DA232",
+  "DA233",
+  "DA234",
+  "DA235",
+  "DA236",
+  "DA237",
+  "DA238",
+  "DA239",
+  "DA240",
+  "DA241",
+  "DA242",
+  "DA243",
+  "DA244",
+  "DA245",
+  "DA246",
+  "DA247",
+  "DA248",
+  "DA249",
+  "DA250",
+  "DA251",
+  "DA252",
+  "DA253",
+  "DA254",
+  "DA255",
+  "DA301",
+  "DA401",
+  "DA402",
+  "DA403",
+  "DA404",
+  "WA151",
+  "WA152",
+  "WA153",
+  "WC134",
+  "WC151",
+  "WC152",
+  "WC153",
+  "WD136",
+  "WD137",
+  "WD151",
+  "WD152",
+  "WD153",
+  "WH151",
+  "WH152",
+  "WH153",
+  "WM151",
+  "WM152",
+  "WM153",
+  "WN135",
+  "WN136",
+  "WN137",
+  "WN151",
+  "WN152",
+  "WN153",
+  "WP151",
+  "WP152",
+  "WP153",
+  "WR109",
+  "WS151",
+  "WS152",
+  "WS153",
+  "WS252",
+  "WS253",
+  "WS254",
+  "WT151",
+  "WT152",
+  "WT153"
+ ],
+ "hair": [
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30,
+  31,
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39
+ ]
+}

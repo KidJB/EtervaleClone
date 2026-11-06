@@ -48,6 +48,31 @@ public sealed class DapperCoinRepository(IDbConnectionFactory connectionFactory)
         return balance;
     }
 
+    public async Task<IReadOnlyList<string>> OwnedSkinsAsync(long accountId, CancellationToken ct = default)
+    {
+        await using var connection = await connectionFactory.OpenAsync(ct);
+        var keys = await connection.QueryAsync<string>(new CommandDefinition(
+            "SELECT item_key FROM account_skins WHERE account_id = @AccountId", new { AccountId = accountId }, cancellationToken: ct));
+        return keys.ToList();
+    }
+
+    public async Task<long?> BuySkinAsync(long accountId, string itemKey, long price, string reason, CancellationToken ct = default)
+    {
+        await using var connection = await connectionFactory.OpenAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        var balance = await ChangeAsync(connection, transaction, accountId, -price, reason, ct);
+        if (balance is null)
+        {
+            await transaction.RollbackAsync(ct);
+            return null;
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition("INSERT INTO account_skins (account_id, item_key) VALUES (@AccountId, @ItemKey)",
+            new { AccountId = accountId, ItemKey = itemKey }, transaction, cancellationToken: ct));
+        await transaction.CommitAsync(ct);
+        return balance;
+    }
+
     public async Task<CoinTradeStore> TradeWithCharactersAsync(IReadOnlyList<CharacterRecord> characters, IReadOnlyList<CoinTransfer> transfers,
         CancellationToken ct = default)
     {

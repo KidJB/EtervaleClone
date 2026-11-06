@@ -80,6 +80,8 @@ public sealed partial class GameplayHud : IDisposable
     private readonly HudQuestTracker _questTracker = new();
     private readonly HudCoinShop _coinShop = new();
     private readonly Npc.HudItemBox _itemBox = new();
+    private readonly Npc.HudArenaEvent _arenaEvent = new();
+    private readonly Npc.HudCabinet _cabinet = new();
     private static readonly Color BagCoinColor = new(255, 214, 90);
     private bool _bagWasOpen;
     private int _iconSources;
@@ -143,7 +145,8 @@ public sealed partial class GameplayHud : IDisposable
         _settings = new HudSettingsPanel(context.Presentation);
         _sprites = new HudSprites(context.GraphicsDevice, context.AssetRoot, context.Log);
         _sprites.Request(HudArt.Static);
-        _sprites.Request([HudMinimap.BossAliveIcon, HudMinimap.BossWaitingIcon, .. HudQuestBook.Art, .. HudQuestTracker.Art, .. HudPetWindow.Art, .. Inventory.HudItemFrame.Art, Widgets.HudGroundLabels.BeamArt, .. HudCoinShop.Art, .. Npc.HudItemBox.Art]);
+        _sprites.Request([HudMinimap.BossAliveIcon, HudMinimap.BossWaitingIcon, .. Npc.HudArenaEvent.Art, .. Npc.HudCabinet.Art, .. HudQuestBook.Art, .. HudQuestTracker.Art, .. HudPetWindow.Art, .. Inventory.HudItemFrame.Art, Widgets.HudGroundLabels.BeamArt, .. HudCoinShop.Art, .. Npc.HudItemBox.Art]);
+        _arenaEvent.Teleport = () => _ = _chat.Send?.Invoke("/arena enter", false);
         _sprites.Request(HudNpcArt.All);
         _sprites.Request(HudCraftArt.All);
         _sprites.Request(HudArt.BlockText);
@@ -238,6 +241,11 @@ public sealed partial class GameplayHud : IDisposable
 
     // The local player's pet collection, for the pet window.
     public PristonTale.Client.Net.Presence.PetCollectionInfo PetCollection { get; set; } = new(0, 0);
+    public PristonTale.Client.Net.Presence.DailyQuestsInfo DailyQuests { get; set; } = PristonTale.Client.Net.Presence.DailyQuestsInfo.None;
+
+    // Sends a daily quest accept or claim; set by the screen.
+    public Func<ulong, int, byte, Task<byte>> DailyQuestRequest { get; set; }
+    private Task<byte> _dailyAnswer;
 
     // The names over the pets in view, filled by the scene each frame (GameScene.CollectPetLabels).
     public List<(HudOverheadPoint Point, string Text)> PetLabels { get; } = new();
@@ -263,7 +271,11 @@ public sealed partial class GameplayHud : IDisposable
 
     public Microsoft.Xna.Framework.Graphics.Texture2D ArmorPreview
     {
-        set => _inventoryPanel.ArmorPreview = value;
+        set
+        {
+            _inventoryPanel.ArmorPreview = value;
+            _cabinet.Picture = value;
+        }
     }
     public Action<Guid, Rectangle> GroundLabelPlaced { get; set; }
     public HudWorldView World { get; set; }
@@ -285,6 +297,7 @@ public sealed partial class GameplayHud : IDisposable
 
     public HudCoinShop CoinShop => _coinShop;
     public Npc.HudItemBox ItemBox => _itemBox;
+    public Npc.HudCabinet Cabinet => _cabinet;
 
     // The account's coins, shown by the bag, the trade window and the coin shop; the screen sets its request.
     public HudCoinBalance Coins => _coinShop.Coins;
@@ -425,6 +438,12 @@ public sealed partial class GameplayHud : IDisposable
         }
 
         // Escape leaves the distributor's name box first, then closes it.
+        if (_cabinet.Searching)
+        {
+            _cabinet.CancelSearch();
+            return true;
+        }
+
         if (_itemBox.Naming)
         {
             _itemBox.CancelNaming();
@@ -434,6 +453,18 @@ public sealed partial class GameplayHud : IDisposable
         if (_itemBox.Open)
         {
             _itemBox.Hide();
+            return true;
+        }
+
+        if (_arenaEvent.Open)
+        {
+            _arenaEvent.Hide();
+            return true;
+        }
+
+        if (_cabinet.Open)
+        {
+            _cabinet.Hide();
             return true;
         }
 
@@ -516,8 +547,11 @@ public sealed partial class GameplayHud : IDisposable
         _coinShop.OwnClass = _class;
         _coinShop.Update(_icons, _sprites);
         _itemBox.Update();
-        var iconSources = _itemBox.IconRevision + _coinShop.IconRevision * 7919 + _personalShop.Window.IconRevision * 104729
-            + (_itemBox.Open ? 1 : 0) + (_coinShop.Open ? 2 : 0) + (_personalShop.Window.IsOpen ? 4 : 0);
+        _cabinet.Jobs = (uint)JobBits.Of(_class);
+        _cabinet.Update(_state);
+        UpdateDailyQuests();
+        var iconSources = _cabinet.IconRevision * 31 + _itemBox.IconRevision + _coinShop.IconRevision * 7919 + _personalShop.Window.IconRevision * 104729
+            + (_cabinet.Open ? 8 : 0) + (_itemBox.Open ? 1 : 0) + (_coinShop.Open ? 2 : 0) + (_personalShop.Window.IsOpen ? 4 : 0);
         if (iconSources != _iconSources)
         {
             _iconSources = iconSources;
@@ -573,6 +607,10 @@ public sealed partial class GameplayHud : IDisposable
         {
             _petWindow.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
         }
+        else if (_cabinet.Open && Npc.HudCabinet.Window(layout).Contains(pointer))
+        {
+            _cabinet.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
+        }
         else if (_coinShop.Open && HudCoinShop.Window(layout).Contains(pointer))
         {
             _coinShop.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
@@ -616,7 +654,7 @@ public sealed partial class GameplayHud : IDisposable
         var clickTaken = clicked && Captures(layout, pointer, design);
         var typedText = _context.TypedText.Drain();
         // A count box or the shop's sign box takes the keyboard: neither the chat nor a game key sees what is typed there.
-        var boxTyping = _countBox.IsOpen || _personalShop.SignOpen || _petWindow.Naming || _itemBox.Naming;
+        var boxTyping = _countBox.IsOpen || _personalShop.SignOpen || _petWindow.Naming || _itemBox.Naming || _cabinet.Searching;
         if (_countBox.IsOpen)
         {
             _typingKeyboard = keyboard;
@@ -626,6 +664,10 @@ public sealed partial class GameplayHud : IDisposable
         {
             _typingKeyboard = keyboard;
             _personalShop.Type(typedText, _typedKey ??= key => Pressed(_typingKeyboard, key), _canDraw ??= _painter.CanDraw, _measure ??= _painter.Measure);
+        }
+        else if (_cabinet.Searching)
+        {
+            _cabinet.Type(typedText, elapsedSeconds);
         }
         else if (_itemBox.Naming)
         {
@@ -973,6 +1015,7 @@ public sealed partial class GameplayHud : IDisposable
         _petWindow.Draw(_painter, layout, PetCollection, CharacterName, _icons, pointer);
         _painter.Flush();
         _questTracker.Refresh(_painter, _questView, _weaponHunt);
+        _questTracker.RefreshDailies(_painter, DailyQuests);
         _questTracker.Visible = !_questBook.Open;
         _questTracker.Draw(_painter, layout, pointer);
         _questBook.Draw(_painter, layout, pointer);
@@ -980,6 +1023,8 @@ public sealed partial class GameplayHud : IDisposable
         _coinShop.Draw(_painter, layout, _icons, pointer);
         _painter.Flush();
         _itemBox.Draw(_painter, layout, _icons, _state, pointer);
+        _arenaEvent.Draw(_painter, layout, pointer);
+        _cabinet.Draw(_painter, layout, _icons, pointer);
         _painter.Flush();
         DrawMinimapName(layout, pointer);
         _actionBar.DrawOverlay(_painter, layout, _state, _icons, _skillHud, pointer);

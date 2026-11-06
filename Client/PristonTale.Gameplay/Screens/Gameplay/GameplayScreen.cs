@@ -87,6 +87,10 @@ public sealed class GameplayScreen : GameScreen
         _hud.Coins.Request = _scene.CoinBalanceAsync;
         _hud.ItemBox.ListRequest = _scene.OpenItemBoxAsync;
         _hud.ItemBox.ActRequest = _scene.ActItemBoxAsync;
+        _hud.Cabinet.ListRequest = _scene.OpenSkinsAsync;
+        _hud.Cabinet.BuyRequest = _scene.BuySkinAsync;
+        _hud.Cabinet.ApplyRequest = _scene.ApplySkinsAsync;
+        _hud.DailyQuestRequest = _scene.DailyQuestAsync;
         _hud.WingGate.RequiredLevel = _scene.FieldTravelLevel;
         _scene.WingGateEntered += _hud.WingGate.Open;
         _scene.WingGateLeft += _hud.WingGate.Close;
@@ -151,6 +155,7 @@ public sealed class GameplayScreen : GameScreen
         _hud.BossSpots = _scene.BossSpots;
         _hud.BossList = _scene.BossList;
         _hud.PetCollection = _scene.PetCollection;
+        _hud.DailyQuests = _scene.DailyQuests;
         _scene.CollectPetLabels(_hud.PetLabels);
         _hud.InCastleField = field?.State == Simulation.World.FieldState.Castle;
         _hud.InTown = field?.State == Simulation.World.FieldState.Village;
@@ -177,7 +182,16 @@ public sealed class GameplayScreen : GameScreen
             UpdateMotionKeys();
             UpdateDebugKeys();
         }
-        _scene.PreviewArmor(_hud.PreviewArmorKey);
+        if (_hud.Cabinet.Open)
+        {
+            _scene.PreviewLook(_hud.Cabinet.Preview);
+        }
+        else
+        {
+            _scene.PreviewLook(null);
+            _scene.PreviewArmor(_hud.PreviewArmorKey);
+        }
+
         _scene.Update(gameTime);
         _hud.TargetId = _scene.SelectedTargetId;
         _hud.HelperPet = _scene.SelfHelperPet();

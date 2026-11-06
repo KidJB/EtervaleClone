@@ -71,7 +71,7 @@ internal static class SkillAllyTests
         SkillFixtures.Accept("Virtual Life", field, priest, 0x07040004, ally.EntityId);
         SkillFixtures.Finish(field, priest);
         Assert.True(ally.Character.MaxLife == life * 130 / 100 && ally.Character.Effects.Totals.Percent(StatKind.DamageTaken) == -30, "Virtual Life values");
-        SkillFixtures.Wait(field, 20f);
+        SkillFixtures.Wait(field, 70f);
         SkillFixtures.Refuse(SkillCastVerdict.AlreadyActive, "Virtual Life stacked", field, priest, 0x07040004, ally.EntityId);
 
         var mage = SkillFixtures.Player(field, 4, PlayerClass.Magician, 60, new Vector3(0, 0, -60), SkillFixtures.Weapon(ItemKind.Staff));

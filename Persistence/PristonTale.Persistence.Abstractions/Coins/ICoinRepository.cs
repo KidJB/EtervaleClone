@@ -15,6 +15,13 @@ public interface ICoinRepository
     // The new balance, or null when the account holds too few coins or the character row was not written.
     Task<long?> BuyWithCharacterAsync(CharacterRecord character, long price, string reason, CancellationToken ct = default);
 
+    // The skins (item keys) an account owns.
+    Task<IReadOnlyList<string>> OwnedSkinsAsync(long accountId, CancellationToken ct = default);
+
+    // A skin purchase: takes the price and records the skin in one transaction; the new balance, or null when the account
+    // holds too few coins.
+    Task<long?> BuySkinAsync(long accountId, string itemKey, long price, string reason, CancellationToken ct = default);
+
     // A trade: writes the characters and moves each transfer's coins (the giver loses Amount, the receiver gains Received)
     // in one transaction, with log lines. NotEnoughCoins when a giver holds too few, Failed when a character row was not
     // written; nothing changes then.

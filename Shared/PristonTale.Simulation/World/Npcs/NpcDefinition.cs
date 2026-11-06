@@ -27,7 +27,22 @@ public sealed record NpcDefinition(
     string ModelInxPath,
     IReadOnlyList<NpcService> Services)
 {
-    public NpcServiceSet ServiceSet { get; } = NpcServiceSet.From(Services);
+    private IReadOnlyList<NpcService> _setOf;
+    private NpcServiceSet _set;
+
+    // Built again when a copy ("with") replaced the services.
+    public NpcServiceSet ServiceSet
+    {
+        get
+        {
+            if (!ReferenceEquals(_setOf, Services))
+            {
+                (_set, _setOf) = (NpcServiceSet.From(Services), Services);
+            }
+
+            return _set;
+        }
+    }
 
     public string DisplayName { get; init; } = "";
 

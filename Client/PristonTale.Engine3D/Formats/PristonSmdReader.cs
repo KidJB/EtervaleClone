@@ -168,6 +168,15 @@ public sealed class PristonSmdReader
         }
 
         var layout = ModelLayout.Of(header.Kind);
+        var objectsStart = cursor.Position;
+        // Some exporters sign the 0.64 layout as 0.66; its objects overrun the file when read with tangents.
+        if (header.Kind == PristonSmdHeaderKind.Version66Model && !FitsFile(cursor, infos, path, layout))
+        {
+            header = header with { Kind = PristonSmdHeaderKind.Version64Model };
+            layout = ModelLayout.Of(header.Kind);
+        }
+
+        cursor.Position = objectsStart;
         var objects = new List<PristonModelObject>(header.ObjectCount);
         var measuredEnd = cursor.Position;
         foreach (var info in infos)
@@ -933,7 +942,7 @@ public sealed class PristonSmdReader
     {
         for (var index = 0; index < count; index++)
         {
-            vertices.Add(layout.Floats ? ReadFloatVertex(cursor, layout.Tangents) : ReadModelVertex(cursor, normalEndpoints));
+            vertices.Add(layout.Floats ? ReadFloatVertex(cursor, layout.Tangents) : ReadModelVertex(cursor, normalEndpoints, layout.Reordered));
         }
     }
 
@@ -1030,6 +1039,24 @@ public sealed class PristonSmdReader
         return transform;
     }
 
+    private static bool FitsFile(BinaryCursor cursor, List<ObjectInfo> infos, string path, ModelLayout layout)
+    {
+        try
+        {
+            foreach (var info in infos)
+            {
+                cursor.Position = info.Offset;
+                ReadObject(cursor, info, path, layout);
+            }
+
+            return true;
+        }
+        catch (Exception exception) when (exception is InvalidDataException or ArgumentOutOfRangeException or EndOfStreamException)
+        {
+            return false;
+        }
+    }
+
     // How a model version lays out an object: section order (Reordered), float transform, vertices and bone weights
     // (Floats), and tangent-space vertices (Tangents).
     private readonly record struct ModelLayout(bool Reordered, bool Floats, bool Tangents)
@@ -1049,12 +1076,21 @@ public sealed class PristonSmdReader
 
     // With ObjHeadTypeNewNormal in the object's head the normal field holds the normal's end point (position + normal),
     // in the position's fixed-point units.
-    private static PristonModelVertex ReadModelVertex(BinaryCursor cursor, bool normalEndpoints)
+    // The reordered fixed layout (0.64) swaps each position's X and Z and offsets its Y by ScrambledYOffset; its normal is stored as is.
+    private const int ScrambledYOffset = 0x6A6B;
+
+    private static PristonModelVertex ReadModelVertex(BinaryCursor cursor, bool normalEndpoints, bool scrambled)
     {
         var start = cursor.Position;
         var fixedX = cursor.Int32();
         var fixedY = cursor.Int32();
         var fixedZ = cursor.Int32();
+        if (scrambled)
+        {
+            (fixedX, fixedZ) = (fixedZ, fixedX);
+            fixedY -= ScrambledYOffset;
+        }
+
         var position = ToMonoGameModelPosition(fixedX / GameUnits.FixedScale, fixedY / GameUnits.FixedScale,
             fixedZ / GameUnits.FixedScale);
         var normalX = (long)cursor.Int32();

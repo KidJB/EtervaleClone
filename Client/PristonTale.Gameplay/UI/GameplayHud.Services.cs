@@ -87,7 +87,7 @@ public sealed partial class GameplayHud
             keys = keys.Concat(_personalShop.Window.Offers.Select(static offer => offer.Item.CatalogKey));
         }
 
-        _icons.Request(keys.Concat(_itemBox.IconKeys).Concat(_coinShop.IconKeys));
+        _icons.Request(keys.Concat(_itemBox.IconKeys).Concat(_coinShop.IconKeys).Concat(_cabinet.IconKeys));
     }
 
     // Keys of the items seen in the pack or the warehouse, so a sold or stored item still has its sound once it is gone.
@@ -140,6 +140,30 @@ public sealed partial class GameplayHud
     // when a window opens or the request went out.
     private bool OpenNpcService(ulong npcId, string npcName, NpcServiceKind kind)
     {
+        if (kind == NpcServiceKind.Cabinet)
+        {
+            _npcOpen = false;
+            _npc.Dismiss();
+            _cabinet.Show();
+            return true;
+        }
+
+        if (kind == NpcServiceKind.BossArena)
+        {
+            _npcOpen = false;
+            _npc.Dismiss();
+            _arenaEvent.Show();
+            return true;
+        }
+
+        if (kind == NpcServiceKind.DailyQuest)
+        {
+            _npcOpen = false;
+            _npc.Dismiss();
+            _questBook.ShowDaily(npcId);
+            return true;
+        }
+
         if (kind != NpcServiceKind.GiftExpress)
         {
             return _services.Request(npcId, npcName, kind, NpcServiceAction.Open);

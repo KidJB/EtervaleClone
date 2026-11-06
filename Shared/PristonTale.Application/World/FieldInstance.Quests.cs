@@ -125,6 +125,7 @@ public sealed partial class FieldInstance
             }
 
             Publish(credited, context, revision);
+            credited.Character.DailyQuests.OnKill(killed.Def.Combat.Level, Simulation.Quests.DailyQuests.DayOf(DateTimeOffset.FromUnixTimeMilliseconds(QuestClock())));
         }
 
         if (killed is not null && killed.DuelPlayerId != 0)

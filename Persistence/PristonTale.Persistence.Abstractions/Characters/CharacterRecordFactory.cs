@@ -92,6 +92,8 @@ public static class CharacterRecordFactory
             PetSkins = unchecked((long)character.PetSkins),
             PetOut = (short)character.PetOut,
             PetName = character.PetName,
+            DailyQuests = DailyQuestCodec.Capture(character.DailyQuests),
+            Skins = SkinCodec.Capture(character.Skins),
             Mounts = unchecked((long)character.Mounts),
             MountChosen = (short)character.MountChosen,
             Strength = attributes.Strength,

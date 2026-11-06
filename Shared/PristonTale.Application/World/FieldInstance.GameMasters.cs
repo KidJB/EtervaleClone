@@ -61,6 +61,16 @@ public sealed partial class FieldInstance
         return monster;
     }
 
+    // A boss arena monster (WorldServer.BossArena): it stands on the floor there and never leaves on its own.
+    internal MonsterInstance SpawnArenaMonster(MonsterDefinition definition, Vector3 position)
+    {
+        var monster = ((ISpawnSink)this).Spawn(definition, Terrain.PlaceOnFloor(position), -1, FieldSpawner.RandomFacing(_rng));
+        monster.IdleDespawnMsLeft = float.MaxValue;
+        return monster;
+    }
+
+    internal void RemoveArenaMonster(ulong entityId) => _monsters.Remove(entityId, out _);
+
     internal MonsterInstance CallGameMasterPet(WorldPlayer owner, MonsterDefinition definition, float lifetimeMs, Vector3? position = null) =>
         _skills.CallGameMasterPet(owner, definition, lifetimeMs, position is { } at ? Terrain.PlaceOnFloor(at) : null);
 

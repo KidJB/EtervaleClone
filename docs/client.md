@@ -390,6 +390,9 @@ Renderer side of stage publication: [rendering.md](rendering.md).
 | `J` | `GameplayHud.UpdateKeys` | Open or close the stable (`HudPetWindow`: pets and mounts) |
 | `G` | `GameplayHud.UpdateKeys` | Get on or off the picked mount (sends `/mount`) |
 
+The Cabinet (`HudCabinet`, the U key or the `Cabinet` service of Knight Commander Derik) sells every worn-gear look for coins to the
+account (`SkinRules`, `SkinAppService`); the preview is `GameScene.PreviewLook`, and it lists and shows only looks of the worn item family and grip that the class can wear, plus the costumes of `Characters/Data/Costumes.json` (body files by class) , hair tints and numbered class heads (the `Hair` slot, `CharacterHead.CustomHair`; shown over the character's own hair while chosen) and its `gear` looks (weapons and off-hand items with a model but no world item; `like` names the item a CW look stands for).
+
 The Item Distributor (`HudItemBox`) opens instead of a server request when an NPC's `GiftExpress` service is chosen
 (`GameplayHud.OpenNpcService`), with the bag, on a dark frame with the art of `assets/Hud/Distributor/`: Retrieve Items
 shows the waiting items one at a time (sender and date, the item with its tooltip, arrows to page, Accept and Discard) or the

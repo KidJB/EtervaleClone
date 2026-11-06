@@ -82,6 +82,14 @@ public static class EtervaleOpcodes
     public const uint ItemBoxList = 0x45541202;
     public const uint ItemBoxAction = 0x45541203;
     public const uint ItemBoxResult = 0x45541204;
+    public const uint DailyQuestState = 0x45541300;
+    public const uint DailyQuestRequest = 0x45541301;
+    public const uint DailyQuestResult = 0x45541302;
+    public const uint SkinOpen = 0x45541400;
+    public const uint SkinCatalog = 0x45541401;
+    public const uint SkinBuy = 0x45541402;
+    public const uint SkinApply = 0x45541403;
+    public const uint SkinResult = 0x45541404;
 
     public const uint PresenceEntries = 0x45540900;
     public const uint DescribeEntity = 0x45540901;

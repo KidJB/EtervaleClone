@@ -43,4 +43,6 @@ public sealed record CharacterRecord(
     short PetOut = 0,
     string PetName = "",
     long Mounts = 0,
-    short MountChosen = 0);
+    short MountChosen = 0,
+    string DailyQuests = "",
+    string Skins = "");

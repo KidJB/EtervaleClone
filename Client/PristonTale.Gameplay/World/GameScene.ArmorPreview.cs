@@ -15,6 +15,11 @@ public sealed partial class GameScene
 {
     private const int PreviewWidth = 160;
     private const int PreviewHeight = 200;
+    private const int FullWidth = 188;
+    private const int FullHeight = 270;
+    private const float FullVisible = 1.1f;
+    private const float FullFocus = 0.5f;
+    private const float FullReach = 0.2f;
 
     // The picture shows the top PreviewVisible of the model's height, centred at PreviewFocus of it: head to waist.
     private const float PreviewVisible = 0.38f;
@@ -22,6 +27,9 @@ public sealed partial class GameScene
     private const float PreviewFocus = 0.74f;
 
     private CharacterSelectPortrait _previewPortrait;
+    private Simulation.Characters.SkinSet _previewLook;
+    private bool _skinsLoading;
+    private int _selfTier;
     private string _previewArmor = "";
     private CharacterVisualSet _previewVisuals;
     private Task _previewPreparation;
@@ -30,6 +38,34 @@ public sealed partial class GameScene
 
     // The picture of the player in the previewed armour, or null while none is ready.
     public Texture2D ArmorPreview { get; private set; }
+
+    // The Cabinet: the whole character in these looks, drawn at full height; null stops.
+    public void PreviewLook(Simulation.Characters.SkinSet look)
+    {
+        if (ReferenceEquals(look, _previewLook))
+        {
+            return;
+        }
+
+        _previewLook = look;
+        _previewArmor = "";
+        RemovePreviewActor();
+        _previewVisuals = null;
+        _previewPreparation = null;
+        if (look is null || _equipmentPresentation is null || _playerComposer is null || _equipmentPresentation.Wearing(look) is not { } visuals)
+        {
+            return;
+        }
+
+        // A hair look shows on the preview before it is applied.
+        if (Simulation.Characters.SkinRules.HairOf(look.Hair) is { } hair)
+        {
+            visuals = Simulation.Characters.CharacterHead.Apply(visuals, _player.Class.Class, _selfTier, visuals.FaceIndex, hair);
+        }
+
+        _previewVisuals = visuals;
+        _previewPreparation = _playerComposer.PrepareAsync(_assetRoot, visuals, visuals.FaceIndex);
+    }
 
     // The body item to preview ("" or null for none); a key without a body model shows nothing.
     public void PreviewArmor(string armorKey)
@@ -56,6 +92,12 @@ public sealed partial class GameScene
 
     private void UpdateArmorPreview()
     {
+        if (!_skinsLoading && _equipmentPresentation is { } presentation && _playChannel is not null)
+        {
+            _skinsLoading = true;
+            _ = LoadSkinsAsync(presentation);
+        }
+
         if (_previewPreparation is { IsCompleted: true } preparation)
         {
             _previewPreparation = null;
@@ -93,13 +135,15 @@ public sealed partial class GameScene
 
             // Framed by height alone: a narrow box, so a held weapon or wide shoulders never push the camera back.
             var size = bounds.Max - bounds.Min;
-            var reach = size.Y * PreviewReach;
+            var reach = size.Y * (_previewLook is null ? PreviewReach : FullReach);
             var center = (bounds.Min + bounds.Max) * 0.5f;
             _previewFraming = new BoundingBox(new Vector3(center.X - reach, bounds.Min.Y, center.Z - reach), new Vector3(center.X + reach, bounds.Max.Y, center.Z + reach));
         }
 
         _previewPortrait ??= new CharacterSelectPortrait(_graphicsDevice);
-        ArmorPreview = _previewPortrait.Render(_renderer, _previewHandles, PreviewWidth, PreviewHeight, _previewFraming, PreviewVisible, PreviewFocus);
+        ArmorPreview = _previewLook is null
+            ? _previewPortrait.Render(_renderer, _previewHandles, PreviewWidth, PreviewHeight, _previewFraming, PreviewVisible, PreviewFocus)
+            : _previewPortrait.Render(_renderer, _previewHandles, FullWidth, FullHeight, _previewFraming, FullVisible, FullFocus);
     }
 
     private void RemovePreviewActor()

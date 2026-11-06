@@ -46,6 +46,7 @@ public sealed record PresenceUpdate(
 
     // The local player's pet collection, when it entered the world or it changed.
     public PetCollectionInfo? PetCollection { get; init; }
+    public DailyQuestsInfo? DailyQuests { get; init; }
     public IReadOnlyList<ItemEffectInfo> ItemEffects { get; init; } = [];
 
     // The quest journal when it changed, quest notices and a quest dialog the world opened on its own.
@@ -94,6 +95,14 @@ public sealed record BossTimeInfo(string BossName, int SecondsLeft, bool Exact)
 
 // A boss of the player's field at its spot (wire x, z in world units) and whether it is alive now.
 // The pet skins the account unlocked (PetSkins bits) and the one out (0 none).
+// The local player's daily quests of the day: the accepted ones with their kills and the ones claimed.
+public sealed record SkinCatalogInfo(long Balance, PristonTale.Simulation.Characters.SkinSet Skins, IReadOnlyList<PristonTale.Contracts.Characters.SkinArticle> Articles);
+
+public sealed record DailyQuestsInfo(int Day, IReadOnlyDictionary<int, int> Accepted, IReadOnlySet<int> Claimed)
+{
+    public static readonly DailyQuestsInfo None = new(0, new Dictionary<int, int>(), new HashSet<int>());
+}
+
 public sealed record PetCollectionInfo(ulong Skins, int Out)
 {
     // The name the player gave its pet (empty: the skin's name shows).

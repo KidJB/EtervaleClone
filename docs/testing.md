@@ -198,6 +198,7 @@ when reading those assets is authorized. GPU probes:
 | `--capture-monster-skills <assets> <content> <output-dir> [<case,case,...>]` | yes | Real monsters' attack, skill and death clips with their effects, and monster statuses on a player |
 | `--capture-potions <assets> <content> <output-dir>` | yes | The three potions (`ItemVfx.Potion`) over a dark floor at night at 0.15, 0.45, 0.8 and 1.2 s |
 | `--capture-vfx <assets> <content> <output-dir> [<name,name,...>]` | yes | Plays named effects of `assets/Effect/Vfx` (see below) |
+| `--verify-costumes <assets>` | no | Loads every Cabinet costume body as the client does |
 | `--verify-skill-motions <assets>` | no | Every skill rule's motions (index, length, events, class tag) against the class motion tables |
 | `--verify-monster-skills <assets>` | no | Monster skill windup and duration from real models |
 | `--verify-vfx-lifetimes <assets>` | no | Plays every effect of `Effect/Vfx` (duration up to 60 s) with a moving caster and target and lists those still alive 30 s after their duration; prints `0 of N` when none lingers |

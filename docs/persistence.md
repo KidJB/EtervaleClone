@@ -172,6 +172,8 @@ FluentMigrator scans `PristonTale.Persistence` for `[Migration(n)]` classes. Ver
 | 39 | `M039Mounts` | `characters.mounts` (int64, default 0: the account's mounts, a bit per `Mounts` id; every row of the account joined at login) and `mount_chosen` (int16, default 0: the mount the character picked) |
 | 40 | `M040ItemBox` | `item_box` (`id` int64 identity, `account_id` FK, `sender` 64, `item` (a saved bag item, JSON), `created_at`; index on `account_id`): the Item Distributor's waiting items |
 | 41 | `M041Stalls` | `stalls` (`id` int64 identity, `account_id` unique FK, `character_id` FK, `field_id`, `x`, `y`, `z`, `facing`, `look` (`StallLook` JSON), `items` (`StallItem` JSON array: saved item, price, cell), `created_at`): offline stalls, one per account |
+| 43 | `M043Skins` | `account_skins` (`account_id` FK, `item_key`: the skins an account owns); `characters.skins` (text, default empty: `SkinCodec` JSON of the looks shown) |
+| 42 | `M042DailyQuests` | `characters.daily_quests` (text, default empty: `DailyQuestCodec` JSON of the day, the accepted quests with their kills and the claimed ones) |
 
 Upgrade path: databases from the earlier migration set at version 12 upgrade in place. Databases at
 versions 1-11 make `M013Baseline` throw; bring them to 12 with the previous release or back up and recreate them.
