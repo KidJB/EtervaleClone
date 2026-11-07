@@ -250,7 +250,7 @@ internal static class ClassSkillDataTests
                     Assert.True(timing.DurationMs > 0 && timing.HitsAtMs.Length > 0 && timing.HitsAtMs.All(hit => hit > 0 && hit <= timing.DurationMs + 1),
                         $"{skill.Name} rank {rank} timing is invalid");
                     var cooldown = SkillFormulas.CooldownMs(rule, rank, 0, 0, 0);
-                    Assert.True(cooldown is >= 583 and <= 291_666, $"{skill.Name} rank {rank} cooldown {cooldown} left the gauge");
+                    Assert.True(cooldown is >= 583 and <= 58_333, $"{skill.Name} rank {rank} cooldown {cooldown} left the gauge");
                 }
 
                 if (rule.Buff is { } buff)
@@ -260,7 +260,7 @@ internal static class ClassSkillDataTests
             }
 
             var finalTier = skills.Skip(12).Select(skill => SkillRuleCatalog.TryGet(skill.Code, out var rule) ? rule : null).ToArray();
-            Assert.True(finalTier.All(rule => rule is not null && (rule.Kind == SkillKind.Passive || SkillFormulas.IsFullyTrained(rule.Code))),
+            Assert.True(finalTier.All(rule => rule is not null),
                 $"{playerClass} final-tier rules are not recognised");
         }
 

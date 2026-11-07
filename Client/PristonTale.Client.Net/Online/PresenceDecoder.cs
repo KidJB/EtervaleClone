@@ -149,6 +149,7 @@ internal sealed class PresenceDecoder : IEventHandleReader
             EtervaleOpcodes.ContactList => OnContactList(ContactListPacket.Read(packet)),
             EtervaleOpcodes.Weather => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Weather = WeatherPacket.Read(packet).Weather },
             EtervaleOpcodes.BossTime => OnBossTime(BossTimePacket.Read(packet)),
+            EtervaleOpcodes.WorldBuffState => Update([], []) with { WorldBuffs = WorldBuffPacket.Read(packet).Buffs },
             EtervaleOpcodes.BossSpots => OnBossSpots(BossSpotsPacket.Read(packet)),
             EtervaleOpcodes.BossList => OnBossList(BossListPacket.Read(packet)),
             EtervaleOpcodes.PetCollection => OnPetCollection(PetCollectionPacket.Read(packet)),
@@ -711,7 +712,7 @@ internal sealed class PresenceDecoder : IEventHandleReader
 
     public PresenceUpdate? OnSkills(SkillsPacket skills)
     {
-        _skills = skills.Skills.Select(skill => new OwnedSkillView(skill.Code, skill.Rank)).ToArray();
+        _skills = skills.Skills.Select(skill => new OwnedSkillView(skill.Code, skill.Rank, skill.Uses)).ToArray();
         _skillsRevision = skills.Revision;
         return OwnerUpdate();
     }

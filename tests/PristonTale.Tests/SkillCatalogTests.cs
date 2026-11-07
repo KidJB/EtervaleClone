@@ -176,6 +176,8 @@ internal static class SkillCatalogTests
         Rule(0x02080002, out var berserker);
         Rule(0x02080003, out var cyclone);
         Assert.True(destroyer.MotionIndex == 141 && berserker.MotionIndex == 144 && cyclone.MotionIndex == 147, "Fighter final-tier skills play their own clips");
+        Rule(0x07020002, out var divine2);
+        Assert.True(divine2.ImpactNeedsTarget, "Divine Lightning draws bolts with nothing to strike");
         Rule(0x08080004, out var meteo);
         Assert.True(meteo.MotionFrames == 117 && SkillFormulas.HitCount(meteo, 10) == 2, "Meteo strikes twice over its whole clip");
         Rule(0x06040004, out var storm);

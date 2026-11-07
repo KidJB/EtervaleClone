@@ -250,6 +250,9 @@ public readonly struct WorldSnapshot
     // The field's weather (FieldInstance.Weather); the encoder sends it when it changes.
     public WeatherState Weather { get; init; }
 
+    // The running world buffs; a new array when they change.
+    public Simulation.World.WorldBuffEnd[] WorldBuffs { get; init; } = [];
+
     // The field's next boss pass (null without bosses); the encoder sends it when the pass or the field changes.
     public Simulation.World.Spawning.BossCountdown? NextBoss { get; init; }
 
@@ -288,6 +291,7 @@ public readonly struct WorldSnapshot
         FrameGeneration = FrameGeneration,
         Cooldowns = cooldowns,
         Weather = Weather,
+        WorldBuffs = WorldBuffs,
         NextBoss = NextBoss,
         BossSpots = BossSpots,
         BossList = BossList,
@@ -308,6 +312,7 @@ public readonly struct WorldSnapshot
         FrameGeneration = FrameGeneration,
         Cooldowns = Cooldowns,
         Weather = Weather,
+        WorldBuffs = WorldBuffs,
         NextBoss = NextBoss,
         BossSpots = BossSpots,
         BossList = BossList,

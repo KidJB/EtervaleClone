@@ -104,6 +104,8 @@ public static class HostingExtensions
             localizedData: services.GetRequiredService<WorldDataLanguagesHolder>()));
         builder.Services.AddHostedService<WorldTickService>();
         builder.Services.AddHostedService<PristonTale.Server.World.StallRestoreService>();
+        builder.Services.AddHostedService(services => new PristonTale.Server.World.WorldBuffService(services.GetRequiredService<WorldServer>(),
+            DataPath.Resolve(Path.Combine("data", "worldbuffs.json")), services.GetRequiredService<ILogger<PristonTale.Server.World.WorldBuffService>>()));
         builder.Services.AddHostedService<PristonTale.Server.World.BossArenaPrizeService>();
         AddChat(builder);
         builder.Services.AddSingleton(services =>

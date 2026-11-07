@@ -181,6 +181,62 @@ public sealed partial class GameScene : ISkillSceneHost
     }
 
     // A click on the scene with a skill in the clicked socket. Returns true when the click was taken by the skill.
+    // Auto skill: Shift + right click on a monster keeps the right-mouse skill casting at it for AutoSkillMs, so it cannot farm
+    // unattended; it ends sooner when the monster is gone.
+    public bool AutoSkill => _skillClockMs < _autoSkillUntilMs;
+
+    private const double SkillRepeatMs = 150;
+    private const double AutoSkillMs = 15000;
+    private double _nextSkillRepeatMs;
+    private double _autoSkillUntilMs;
+    private ulong _lastSkillTarget;
+
+    // A held right button casts the right-mouse skill again as soon as it is ready; auto skill does so unheld.
+    private void RepeatRightSkill(MouseState mouse)
+    {
+        var pressed = mouse.RightButton == ButtonState.Pressed;
+        var held = pressed && _lastMouseState.RightButton == ButtonState.Pressed;
+        if (pressed && !held && Keyboard.GetState().IsKeyDown(Keys.LeftShift) | Keyboard.GetState().IsKeyDown(Keys.RightShift))
+        {
+            StartAutoSkill(mouse);
+        }
+
+        if (AutoSkill && !AutoTargetAlive())
+        {
+            _autoSkillUntilMs = 0;
+        }
+
+        if ((!held && !AutoSkill) || WorldClicksBlocked || RightAttackEnabled || SelfCasting || _pendingCast is not null
+            || _skillClockMs < _nextSkillRepeatMs || !_skillFx.Cooldowns.Ready(RightSkill, _skillClockMs))
+        {
+            return;
+        }
+
+        _nextSkillRepeatMs = _skillClockMs + SkillRepeatMs;
+        if (AutoSkill && SkillRuleCatalog.TryGet(RightSkill, out var rule))
+        {
+            RequestCast(RightSkill, rule, _lastSkillTarget, null);
+        }
+        else
+        {
+            TryCastSkillClick(mouse, rightButton: true);
+        }
+    }
+
+    private void StartAutoSkill(MouseState mouse)
+    {
+        if (WorldClicksBlocked || RightAttackEnabled || !SkillRuleCatalog.TryGet(RightSkill, out var rule) || rule.Target != SkillTarget.Enemy
+            || !TryCursorRay(mouse, out var ray) || !_remote.TryPick(ray, _remote.SelfEntityId, out var picked, out var kind) || kind != EntityKind.Monster)
+        {
+            return;
+        }
+
+        _lastSkillTarget = picked;
+        _autoSkillUntilMs = _skillClockMs + AutoSkillMs;
+    }
+
+    private bool AutoTargetAlive() => _remote.TryGetTarget(_lastSkillTarget, out _, out var dead) && !dead;
+
     private bool TryCastSkillClick(MouseState mouse, bool rightButton)
     {
         var code = rightButton ? RightSkill : LeftSkill;
@@ -209,6 +265,7 @@ public sealed partial class GameScene : ISkillSceneHost
                 }
 
                 _targetSelection.Trace(target);
+                _lastSkillTarget = target;
                 return RequestCast(code, rule, target, null);
             case SkillTarget.Ally:
                 return RequestCast(code, rule, target != 0 && kind == EntityKind.Player ? target : 0, null);

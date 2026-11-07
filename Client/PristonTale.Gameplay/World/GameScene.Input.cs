@@ -76,6 +76,7 @@ public sealed partial class GameScene
             TryCastSkillClick(mouse, rightButton: true);
         }
 
+        RepeatRightSkill(mouse);
         UpdateActionKeys(gameTime);
         UpdateRunMode(mouse);
         if (!WorldClicksBlocked && mouse.LeftButton == ButtonState.Pressed && _lastMouseState.LeftButton == ButtonState.Released)

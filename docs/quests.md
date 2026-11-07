@@ -269,6 +269,14 @@ price) before the commit. The owner's state travels as `DailyQuestState` (protoc
 (`HudQuestBook.Daily`) lists the dailies of the player's level, and Messenger Ian's "Daily quests" button opens it with
 Accept and Claim.
 
+## World buffs
+
+`WorldBuffs` (Simulation) and `WorldServer.WorldBuffs`: ten buffs sold in the coin shop as items `WB101`-`WB110` (`data/coinshop.json`).
+with 24-hour versions `WB201`-`WB210`. Using one adds its time to every player's buff on one server end time, so it never pauses, a
+later login has the time left and items stack. The ends are kept in `data/worldbuffs.json`, read at start. `PremiumTimers.WorldBuffMask` carries
+them to the premium rules and `PremiumEffects`; the HUD shows them with `HudWorldBuffs`. `/@worldbuff [seconds] [kind]` starts them
+for a game master, 0 seconds ends them.
+
 ## Boss arena
 
 Every six hours of the server's clock a boss appears in the middle of Cursed Temple 2F (`BossArena`, Simulation; `WorldServer.BossArena`):

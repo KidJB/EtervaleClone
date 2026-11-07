@@ -714,6 +714,7 @@ public sealed partial class WorldServer
         RefreshParties(serverTick);
         var localNow = _clock.GetLocalNow();
         UpdateBossArena(localNow);
+        UpdateWorldBuffs();
         bool bossPassDue = _bossSchedule.TryBeginPass(localNow, _clock.GetElapsedTime(_clockOrigin));
         int? bossHour = bossPassDue ? localNow.Hour : null;
 
@@ -776,6 +777,7 @@ public sealed partial class WorldServer
             ActiveStatuses = field.Statuses.Snapshot,
             FieldNowMs = field.NowMs,
             Weather = field.Weather,
+            WorldBuffs = WorldBuffState,
             NextBoss = field.NextBoss(localNow, bossMinute),
             BossSpots = field.BossSpots(),
             BossList = _bossList,

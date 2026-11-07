@@ -812,6 +812,7 @@ public sealed partial class PlayerCharacter
                 }
 
                 Skills.Increase(command.SkillCode);
+                Skills.RecordUses(command.SkillCode, SkillFormulas.UsesAfterRankUp(Skills.UsesOf(command.SkillCode), Attributes.Talent));
                 break;
             default:
                 return false;

@@ -584,8 +584,28 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
     }
 
     // Once per pass: the client counts down by itself, so a pass is sent again only when it changes (or the field does).
+    private void SendWorldBuffs(in WorldSnapshot snapshot, IPacketSink connection)
+    {
+        if (ReferenceEquals(snapshot.WorldBuffs, _worldBuffs))
+        {
+            return;
+        }
+
+        _worldBuffs = snapshot.WorldBuffs;
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var buffs = new (int Kind, int SecondsLeft)[_worldBuffs.Length];
+        for (var index = 0; index < buffs.Length; index++)
+        {
+            buffs[index] = (_worldBuffs[index].Kind, (int)Math.Max(0, _worldBuffs[index].EndSeconds - now));
+        }
+
+        var packet = new WorldBuffPacket(buffs);
+        connection.Send(_scratch.AsSpan(0, packet.Write(_scratch)));
+    }
+
     private void SendBossTime(in WorldSnapshot snapshot, IPacketSink connection)
     {
+        SendWorldBuffs(snapshot, connection);
         var field = snapshot.FieldId ?? 0;
         var boss = snapshot.NextBoss;
         if (field == _bossField && boss?.Slot == _boss?.Slot && boss?.BossName == _boss?.BossName && boss?.Exact == _boss?.Exact)
@@ -1170,7 +1190,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         if (owner.SkillsRevision != _skillsRevision)
         {
             _skillsRevision = owner.SkillsRevision;
-            var skills = owner.Skills.Take(SkillsPacket.MaxSkills).Select(skill => (skill.Code, skill.Rank)).ToArray();
+            var skills = owner.Skills.Take(SkillsPacket.MaxSkills).Select(skill => (skill.Code, skill.Rank, skill.Uses)).ToArray();
             connection.Send(_scratch.AsSpan(0, new SkillsPacket(owner.SkillsRevision, skills).Write(_scratch)));
         }
     }
@@ -1188,6 +1208,8 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         var length = new PresenceClockPacket(_clockTick, TickIntervalMs).Write(_scratch);
         connection.Send(_scratch.AsSpan(0, length));
     }
+
+    private Simulation.World.WorldBuffEnd[]? _worldBuffs;
 
     private static int DescriptorHash(in EntityView view)
     {

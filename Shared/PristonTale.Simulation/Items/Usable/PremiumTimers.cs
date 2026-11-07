@@ -57,6 +57,22 @@ public sealed class PremiumTimers
 
     public long Revision { get; private set; }
 
+    // The running world buffs (World.WorldBuffs), which the world keeps the same for every player.
+    public int WorldBuffMask
+    {
+        get => _worldBuffMask;
+        set
+        {
+            if (value != _worldBuffMask)
+            {
+                _worldBuffMask = value;
+                Changed?.Invoke();
+            }
+        }
+    }
+
+    private int _worldBuffMask;
+
     // The real clock (Unix seconds) of the last expiry pass; a save records it so offline time can be measured.
     public long ClockSeconds { get; private set; }
 
@@ -228,6 +244,7 @@ public sealed class PremiumTimers
 
     public void CopyFrom(PremiumTimers other)
     {
+        _worldBuffMask = other._worldBuffMask;
         _timers.Clear();
         _timers.AddRange(other._timers);
         ClockSeconds = other.ClockSeconds;

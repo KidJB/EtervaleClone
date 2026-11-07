@@ -118,3 +118,4 @@ monogame/runtime/build/
 monogame/runtime/work/
 monogame/runtime/bin/
 monogame/pipeline/bin/
+data/worldbuffs.json

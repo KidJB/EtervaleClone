@@ -153,6 +153,8 @@ public sealed class GameplayScreen : GameScreen
             _scene.PlayerForward, _scene.TimeOfDay, _scene.RunFlag, mapHidden, neighbour, neighbourMap);
         _hud.PremiumTimers = _scene.PremiumTimers;
         _hud.NextBoss = _scene.NextBoss;
+        _hud.WorldBuffs = _scene.WorldBuffs;
+        _hud.AutoSkill = _scene.AutoSkill;
         _hud.BossSpots = _scene.BossSpots;
         _hud.BossList = _scene.BossList;
         _hud.PetCollection = _scene.PetCollection;

@@ -38,6 +38,7 @@ public sealed record PresenceUpdate(
 
     // The next boss pass of the local player's field, when it entered a field or the pass changed.
     public BossTimeInfo? BossTime { get; init; }
+    public IReadOnlyList<(int Kind, int SecondsLeft)>? WorldBuffs { get; init; }
 
     // The bosses of the local player's field at their spot, when it entered a field or a boss came alive or went.
     public IReadOnlyList<BossSpotInfo>? BossSpots { get; init; }

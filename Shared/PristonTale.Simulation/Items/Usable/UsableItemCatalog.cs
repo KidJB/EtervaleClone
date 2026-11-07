@@ -32,7 +32,10 @@ public enum UsableItemAction : byte
     // Unlocks the pet skin of the argument (PetSkins) for the account and sends that pet out.
     PetSkin,
     // Adds the mount of the argument (Mounts) to the account's stable and picks it.
-    Mount
+    Mount,
+
+    // Starts the world buff of the argument (World.WorldBuffs) for every player.
+    WorldBuff
 }
 
 // The three scroll effects; a scroll refuses while another scroll of the same effect, or the opposite offensive or
@@ -212,6 +215,12 @@ public static class UsableItemCatalog
         foreach (var mount in Characters.Mounts.All)
         {
             rules[mount.ItemKey] = new UsableItemRule(UsableItemAction.Mount, mount.Id);
+        }
+
+        foreach (var buff in World.WorldBuffs.All)
+        {
+            rules[buff.ItemKey] = new UsableItemRule(UsableItemAction.WorldBuff, World.WorldBuffs.Argument(buff.Kind, false));
+            rules[buff.DayItemKey] = new UsableItemRule(UsableItemAction.WorldBuff, World.WorldBuffs.Argument(buff.Kind, true));
         }
 
         // Packages run Third Eyes and an EXP potion together at the package's own percentages.

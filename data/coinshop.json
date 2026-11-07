@@ -68,6 +68,33 @@
         { "Id": 17, "Name": "Blue Dragon", "Description": "A legendary mount for your account's stable: +10 move speed while riding.", "ItemKey": "MT117", "Price": 1000 },
         { "Id": 18, "Name": "Red Dragon", "Description": "A legendary mount for your account's stable: +10 move speed while riding.", "ItemKey": "MT118", "Price": 1000 }
       ]
+    },
+    {
+      "Id": 30,
+      "Name": "World Buffs",
+      "Icon": "misc",
+      "Items": [
+        { "Id": 1, "Name": "World HP Regen", "Description": "+3 HP regen for all players for 1 hour", "ItemKey": "WB101", "Price": 200 },
+        { "Id": 2, "Name": "World SP Regen", "Description": "+3 SP regen for all players for 1 hour", "ItemKey": "WB102", "Price": 200 },
+        { "Id": 3, "Name": "World MP Regen", "Description": "+3 MP regen for all players for 1 hour", "ItemKey": "WB103", "Price": 200 },
+        { "Id": 4, "Name": "World MP Down", "Description": "10% less MP cost for all players for 1 hour", "ItemKey": "WB104", "Price": 200 },
+        { "Id": 5, "Name": "World SP Down", "Description": "10% less SP cost for all players for 1 hour", "ItemKey": "WB105", "Price": 200 },
+        { "Id": 6, "Name": "World Bonus Damage", "Description": "+5% damage for all players for 1 hour", "ItemKey": "WB106", "Price": 200 },
+        { "Id": 7, "Name": "World Bonus Absorb", "Description": "5% less damage taken for all players for 1 hour", "ItemKey": "WB107", "Price": 200 },
+        { "Id": 8, "Name": "World Move Speed", "Description": "+3 move speed for all players for 1 hour", "ItemKey": "WB108", "Price": 200 },
+        { "Id": 9, "Name": "World EXP Buff", "Description": "+5% EXP for all players for 1 hour", "ItemKey": "WB109", "Price": 200 },
+        { "Id": 10, "Name": "World Drop Buff", "Description": "15% chance of an extra drop for all players for 1 hour", "ItemKey": "WB110", "Price": 200 },
+        { "Id": 11, "Name": "World HP Regen (24h)", "Description": "+3 HP regen for all players for 24 hours", "ItemKey": "WB201", "Price": 4000 },
+        { "Id": 12, "Name": "World SP Regen (24h)", "Description": "+3 SP regen for all players for 24 hours", "ItemKey": "WB202", "Price": 4000 },
+        { "Id": 13, "Name": "World MP Regen (24h)", "Description": "+3 MP regen for all players for 24 hours", "ItemKey": "WB203", "Price": 4000 },
+        { "Id": 14, "Name": "World MP Down (24h)", "Description": "10% less MP cost for all players for 24 hours", "ItemKey": "WB204", "Price": 4000 },
+        { "Id": 15, "Name": "World SP Down (24h)", "Description": "10% less SP cost for all players for 24 hours", "ItemKey": "WB205", "Price": 4000 },
+        { "Id": 16, "Name": "World Bonus Damage (24h)", "Description": "+5% damage for all players for 24 hours", "ItemKey": "WB206", "Price": 4000 },
+        { "Id": 17, "Name": "World Bonus Absorb (24h)", "Description": "5% less damage taken for all players for 24 hours", "ItemKey": "WB207", "Price": 4000 },
+        { "Id": 18, "Name": "World Move Speed (24h)", "Description": "+3 move speed for all players for 24 hours", "ItemKey": "WB208", "Price": 4000 },
+        { "Id": 19, "Name": "World EXP Buff (24h)", "Description": "+5% EXP for all players for 24 hours", "ItemKey": "WB209", "Price": 4000 },
+        { "Id": 20, "Name": "World Drop Buff (24h)", "Description": "15% chance of an extra drop for all players for 24 hours", "ItemKey": "WB210", "Price": 4000 }
+      ]
     }
   ]
 }

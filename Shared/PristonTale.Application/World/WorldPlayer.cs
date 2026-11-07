@@ -399,6 +399,9 @@ public sealed class WorldPlayer
 
     public PlayerCharacter Character => _character;
 
+    // The world buff items this player used, waiting for the world's next pass.
+    public List<int> PendingWorldBuffs { get; } = [];
+
     // WorldServer serializes this with the tick. Height stays authoritative; client terrain samples are not trusted.
     public MovementVerdict ReportMovement(Vector3 position, float facing, bool moving, bool running, ulong actionTarget, long nowMs,
         FieldTerrain? terrain = null)

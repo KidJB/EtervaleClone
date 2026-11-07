@@ -58,7 +58,7 @@ public sealed record OwnedItemView(
         return null;
     }
 }
-public sealed record OwnedSkillView(uint Code, int Rank);
+public sealed record OwnedSkillView(uint Code, int Rank, int Uses = 0);
 
 public sealed record AgingProgressView(Guid InstanceId, int Count, int Goal);
 
@@ -128,6 +128,10 @@ public sealed record OwnerState(
     // so the capture the server makes every tick allocates nothing for it.
     private OwnerStamp Stamp { get; init; }
 
+    // Apart from Capture: a lambda over the character there would allocate its closure on every call, changed or not.
+    private static IReadOnlyList<OwnedSkillView> ProjectSkills(PlayerCharacter character) =>
+        Array.AsReadOnly(character.Skills.Ranks.Select(pair => new OwnedSkillView(pair.Key, pair.Value, character.Skills.UsesOf(pair.Key))).ToArray());
+
     // An unchanged owner returns the previous instance (which the encoder skips); otherwise the state is built in full and
     // compared as a record, the lists reused while their revision holds.
     public static OwnerState Capture(PlayerCharacter character, OwnerState previous = null, long nowSeconds = 0)
@@ -163,7 +167,7 @@ public sealed record OwnerState(
             WeaponSet = character.WeaponSet,
             EliteSkillPoints = character.EliteSkillPoints,
             Skills = previous is not null && previous.SkillsRevision == character.Skills.Revision ? previous.Skills
-                : Array.AsReadOnly(character.Skills.Ranks.Select(pair => new OwnedSkillView(pair.Key, pair.Value)).ToArray()),
+                : ProjectSkills(character),
             CarriedWeight = character.Derived.CarriedWeight,
             MaxWeight = character.Derived.MaxWeight,
             CriticalChance = Combat.CombatProfileFactory.CriticalChance(character),

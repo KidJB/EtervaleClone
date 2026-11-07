@@ -75,6 +75,9 @@ public sealed partial class GameplayHud : IDisposable
     private readonly HudSettingsPanel _settings;
     private readonly HudMinimap _minimap = new();
     private readonly HudBossTime _bossTime = new();
+    private const string AutoSkillArt = "Hud/autoskill.png";
+    private readonly HudWorldBuffs _worldBuffs = new();
+    private int _savedBuffs;
     private readonly HudBossList _bossList = new();
     private readonly HudPetWindow _petWindow = new();
     private readonly HudQuestBook _questBook = new();
@@ -151,7 +154,7 @@ public sealed partial class GameplayHud : IDisposable
         _settings = new HudSettingsPanel(context.Presentation);
         _sprites = new HudSprites(context.GraphicsDevice, context.AssetRoot, context.Log);
         _sprites.Request(HudArt.Static);
-        _sprites.Request([HudMinimap.BossAliveIcon, HudMinimap.BossWaitingIcon, .. Npc.HudArenaEvent.Art, .. Npc.HudCabinet.Art, .. HudQuestBook.Art, .. HudQuestTracker.Art, .. HudPetWindow.Art, .. Inventory.HudItemFrame.Art, Widgets.HudGroundLabels.BeamArt, .. HudCoinShop.Art, .. Npc.HudItemBox.Art]);
+        _sprites.Request([HudMinimap.BossAliveIcon, HudMinimap.BossWaitingIcon, .. Npc.HudArenaEvent.Art, .. Npc.HudCabinet.Art, .. HudWorldBuffs.Art, AutoSkillArt, .. HudQuestBook.Art, .. HudQuestTracker.Art, .. HudPetWindow.Art, .. Inventory.HudItemFrame.Art, Widgets.HudGroundLabels.BeamArt, .. HudCoinShop.Art, .. Npc.HudItemBox.Art]);
         _arenaEvent.Teleport = () => _ = _chat.Send?.Invoke("/arena enter", false);
         _sprites.Request(HudNpcArt.All);
         _sprites.Request(HudCraftArt.All);
@@ -238,6 +241,11 @@ public sealed partial class GameplayHud : IDisposable
     public Func<PristonTale.Simulation.Items.Usable.ItemUseCommand, Task<PristonTale.Simulation.Items.Usable.ItemUseOutcome>> UseItem { get; set; }
 
     // The field's next boss pass as the server last sent it; the minimap counts down from when it arrived.
+    public IReadOnlyList<(int Kind, int SecondsLeft)> WorldBuffs
+    {
+        set => _worldBuffs.Receive(value, _clock.Elapsed.TotalMilliseconds);
+    }
+
     public PristonTale.Client.Net.Presence.BossTimeInfo NextBoss
     {
         get => _bossTime.Info;
@@ -316,6 +324,9 @@ public sealed partial class GameplayHud : IDisposable
     public bool AssetsFailed => _sprites.Failed || _icons.Failed;
     public bool IconsIdle => _icons.IsIdle && _sprites.IsIdle && !_questDocuments.IsLoading && !_helpTexts.IsLoading;
     public long TextureBytes => _sprites.TextureBytes;
+    // While auto skill runs its ring circles the right skill socket.
+    public bool AutoSkill { get; set; }
+
     public bool RightAttackEnabled => _bindings.RightSkillId == HudSkillBindings.BasicAttackId;
     internal uint LeftSkillId => _bindings.LeftSkillId;
     internal HudItemUseController ItemUse => _itemUse;
@@ -759,6 +770,9 @@ public sealed partial class GameplayHud : IDisposable
         _questTracker.Update(layout, pointer, mouse, _previousMouse, !ModalOpen && !_settingsOpen && !_minimap.Dragging && _inventory.Dragging == Guid.Empty
             && _warehouse.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty);
 
+        _worldBuffs.Update(layout, pointer, mouse, _previousMouse, !ModalOpen && !_settingsOpen && !_minimap.Dragging && !_questTracker.Dragging
+            && _inventory.Dragging == Guid.Empty && _warehouse.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty);
+
         // The bar reads the skill window's press before the bindings forget it on its release.
         _actionBar.Update(layout, pointer, mouse, _previousMouse, _inventory.Dragging != Guid.Empty || _warehouse.Dragging != Guid.Empty,
             ModalOpen || _settingsOpen);
@@ -851,7 +865,7 @@ public sealed partial class GameplayHud : IDisposable
         {
             HudPlayerButtons.Draw(_painter, HudCombat.TargetFrame(layout), pointer);
         }
-        _premium.Draw(_painter, _clock.Elapsed.TotalMilliseconds);
+        _worldBuffs.Draw(_painter, layout, _clock.Elapsed.TotalMilliseconds, pointer, _premium);
         _personalShop.Draw(_painter);
         _chat.Window.Draw(_painter, layout, SideWindowOpen);
 
@@ -901,6 +915,12 @@ public sealed partial class GameplayHud : IDisposable
         _bar.Draw(_painter, layout, _state, new HudBarView(World.TimeOfDay, World.Running, _mapVisible, left, RightAttackEnabled,
             _hoveredButton, pressed && _hoveredButton is not null, _hoveredToggle));
         _inventoryPanel.DrawBelt(_painter, HudInventoryLayout.Origin(layout), _state, _inventory, _icons);
+        if (AutoSkill)
+        {
+            var socket = HudBar.Socket(true);
+            _painter.Stretch(AutoSkillArt, new Rectangle(socket.X - 6, socket.Y + layout.BottomOffset - 6, socket.Width + 12, socket.Height + 12));
+        }
+
         _skillHud.DrawSockets(_painter, layout.BottomOffset, _bindings.LeftSkillId, _bindings.RightSkillId, Cooldowns, SkillClockMs);
         if (Statuses is not null && SelfId != 0)
         {
@@ -1082,19 +1102,22 @@ public sealed partial class GameplayHud : IDisposable
             _minimap.Offset = new Point(saved.MapX, saved.MapY);
             _questTracker.Offset = new Point(saved.TrackerX, saved.TrackerY);
             _questTracker.Collapsed = saved.TrackerCollapsed;
+            _worldBuffs.Offset = new Point(saved.BuffsX, saved.BuffsY);
+            _worldBuffs.Collapsed = saved.BuffsCollapsed;
         }
 
         _savedSlots = _bindings.Slots.Revision;
         _savedBar = _actionBar.Revision;
         _savedMap = _minimap.Revision;
         _savedTracker = _questTracker.Revision;
+        _savedBuffs = _worldBuffs.Revision;
     }
 
     // Saves the bar when a shortcut, the page or the window changed (not while the character's file is still read).
     private void SaveActionBar()
     {
         if (_actionBarStore.Reading || _savedSlots == _bindings.Slots.Revision && _savedBar == _actionBar.Revision && _savedMap == _minimap.Revision
-            && _savedTracker == _questTracker.Revision)
+            && _savedTracker == _questTracker.Revision && _savedBuffs == _worldBuffs.Revision)
         {
             return;
         }
@@ -1103,12 +1126,16 @@ public sealed partial class GameplayHud : IDisposable
         _savedBar = _actionBar.Revision;
         _savedMap = _minimap.Revision;
         _savedTracker = _questTracker.Revision;
+        _savedBuffs = _worldBuffs.Revision;
         _actionBarStore.Save(new HudActionBarDocument(HudActionBarDocument.CurrentVersion, _actionBar.Open, _actionBar.Locked, _actionBar.Vertical,
             _actionBar.Anchor.X, _actionBar.Anchor.Y, _bindings.Slots.Page, _bindings.Slots.Save(), _minimap.Offset.X, _minimap.Offset.Y)
         {
             TrackerX = _questTracker.Offset.X,
             TrackerY = _questTracker.Offset.Y,
-            TrackerCollapsed = _questTracker.Collapsed
+            TrackerCollapsed = _questTracker.Collapsed,
+            BuffsX = _worldBuffs.Offset.X,
+            BuffsY = _worldBuffs.Offset.Y,
+            BuffsCollapsed = _worldBuffs.Collapsed
         });
     }
 

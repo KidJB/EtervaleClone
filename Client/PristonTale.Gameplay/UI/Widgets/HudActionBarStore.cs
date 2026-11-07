@@ -13,6 +13,9 @@ public sealed record HudActionBarDocument(int Version, bool Open, bool Locked, b
     public int TrackerX { get; init; }
     public int TrackerY { get; init; }
     public bool TrackerCollapsed { get; init; }
+    public int BuffsX { get; init; }
+    public int BuffsY { get; init; }
+    public bool BuffsCollapsed { get; init; }
 }
 
 // One file per character in action-bars/ beside the executable, read and written off the game thread: Load starts the

@@ -18,7 +18,7 @@ public sealed class HudItemIcons : IDisposable
     public Texture2D Find(string key) => _cache.Find(SpriteKey(key));
 
     // Pet skin items have no sprite of their own and show the helper pet's.
-    private static string SpriteKey(string key) => PetSkins.IsItem(key) || Mounts.IsItem(key) ? PetSkins.IconKey : key;
+    private static string SpriteKey(string key) => PetSkins.IsItem(key) || Mounts.IsItem(key) || Simulation.World.WorldBuffs.IsItem(key) ? PetSkins.IconKey : key;
 
     // Item bitmaps are authored at their cell size: drawn unscaled and centred, as in the inventory; a grey cell while the
     // icon is not loaded.

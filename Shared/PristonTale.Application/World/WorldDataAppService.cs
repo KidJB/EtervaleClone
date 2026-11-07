@@ -31,7 +31,8 @@ public sealed class WorldDataAppService
         [
             .. itemDefs,
             .. Simulation.Characters.PetSkins.ItemDefinitions().Where(item => !imported.Contains(item.Code)),
-            .. Simulation.Characters.Mounts.ItemDefinitions().Where(item => !imported.Contains(item.Code))
+            .. Simulation.Characters.Mounts.ItemDefinitions().Where(item => !imported.Contains(item.Code)),
+            .. Simulation.World.WorldBuffs.ItemDefinitions().Where(item => !imported.Contains(item.Code))
         ];
         var itemCodes = itemDefs.ToDictionary(item => item.CatalogKey, item => item.Code, StringComparer.OrdinalIgnoreCase);
         var monsterDefs = WorldDataFactory.ToMonsterDefinitions(monsterRecords, itemCodes);

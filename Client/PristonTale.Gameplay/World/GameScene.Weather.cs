@@ -26,6 +26,9 @@ public sealed partial class GameScene
     // The next boss pass of the player's field, as the server last sent it (null until it does).
     public BossTimeInfo NextBoss { get; private set; }
 
+    // The running world buffs, as the server last sent them.
+    public IReadOnlyList<(int Kind, int SecondsLeft)> WorldBuffs { get; private set; }
+
     // The bosses of the player's field at their spot, as the server last sent them.
     public IReadOnlyList<BossSpotInfo> BossSpots { get; private set; } = [];
 
@@ -36,6 +39,11 @@ public sealed partial class GameScene
 
     private void ObserveWeather(PresenceUpdate update)
     {
+        if (update.WorldBuffs is { } worldBuffs)
+        {
+            WorldBuffs = worldBuffs;
+        }
+
         if (update.BossTime is { } boss)
         {
             NextBoss = boss;

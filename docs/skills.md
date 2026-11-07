@@ -227,7 +227,7 @@ means absent); `SkillRule.At` clamps the rank into the table. Distances are worl
   `attackSpeedSteps[10]` and `motionSpeedSteps` (0..6; each step adds 0.125 to the rate), `motionRatePercent`,
   `motionSpeedPercent` (1..400, default 100).
 - Presentation: `projectile` (hits land after the flight), `projectileArc` (lob height at mid flight), `castEffect`,
-  `impactEffect`, `projectileEffect`, `buffEffect` (aura while the status runs), `companionEffect` (familiar or counter
+  `impactEffect`, `impactNeedsTarget` (no impact effect on a cast that struck nothing), `projectileEffect`, `buffEffect` (aura while the status runs), `companionEffect` (familiar or counter
   strike), `castSound`, `impactSound`, `companionSound` (game-data paths under `wav/`), `keepIcon` (buff-bar icon).
 - Presentation per hit and on actors (`SkillRulePresentation.cs`, ignored by the server): `impactSounds` with
   `impactSoundOrder` (`Sequence`: impact n of the cast plays entry n, wrapping; `Random`; `Final`: only the cast's last
@@ -351,8 +351,8 @@ Example (real entry, Mechanician window index 1):
 ## Shared formulas
 
 - Cooldown (`SkillFormulas.CooldownMs`): proficiency `P = min(min(talent / 3 + itemMastery, 50) x 100 + uses, 10000)`
-  (fourth- and fifth-tier skills always 10000, `IsFullyTrained`; `itemMastery` is the worn magic mastery, truncated); mastery `M = clamp(masteryBase + masteryPerRank x rank - P / 100, 2, 1000)`;
-  the cooldown lasts `M / 2 x 35 / 60` seconds.
+  (`Proficiency`; `itemMastery` is the worn magic mastery, truncated); mastery `M = clamp(masteryBase + masteryPerRank x rank - P / 100, 2, 200)`;
+  the cooldown lasts `M / 2 x 35 / 60` seconds. Learning a rank halves the uses (`UsesAfterRankUp`), and the skill window's green bar shows P.
 - Proficiency (`UsesAfterCast`): every `CastsPerStep[windowIndex] + (rank - 1) / 3` casts add 100 uses (max 10000).
   The cast counter (`WorldPlayer.SkillCasts`) is per session; uses persist.
 - Mana: `mana[rank]` scaled by `SkillManaCost` percent plus flat, not below 0. Stamina has no modifiers.
@@ -439,6 +439,8 @@ Presentation (`SkillPresentation`):
 
 - Own events run at once; another entity's events wait its playback delay (`ISkillSceneHost.PlaybackDelayMsOf`, the
   snapshot buffer's adaptive 150 to 600 ms) to match its interpolated motion.
+- A held right button casts the right-mouse skill again as soon as it is ready; auto skill (Shift + right click on a monster, `GameScene.AutoSkill`) does
+  so unheld at that monster for 15 seconds, or until it is gone.
 - `Start`: plays the motion plan at a rate that fits the server's `DurationMs` (weapon clips: per loop), spawns
   `castEffect`, plays `castSound`, launches `projectileEffect` at `HitAtMs` over the shared flight time and arc.
 - `Impact`: familiar/counter strikes fly `companionEffect` from above the caster; chain, familiar and ally impacts

@@ -225,6 +225,19 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
 
     private Rectangle Box(Point origin, int index) => ClassRow(origin, index - PageFirst);
 
+    private static int Uses(OwnerState state, uint code)
+    {
+        foreach (var skill in state.Skills)
+        {
+            if (skill.Code == code)
+            {
+                return skill.Uses;
+            }
+        }
+
+        return 0;
+    }
+
     public void Draw(HudPainter painter, Point origin, Point pointer, OwnerState state, HudSkillBindings bindings, ulong skillMaster, bool pressed,
         bool interactive)
     {
@@ -275,6 +288,12 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
                 painter.Sprite(usable ? entry.Button : entry.GrayButton, node.X, node.Y);
                 var mastery = HudSkillTreeLayout.MasteryGauge(origin, index - PageFirst);
                 painter.Sprite(entry.Skill.MouseUse == SkillMouseUse.None ? HudArt.SkillGaugePassive : HudArt.SkillGaugeBack, mastery.X, mastery.Y);
+                if (entry.Skill.MouseUse != SkillMouseUse.None && entry.Rank > 0)
+                {
+                    var trained = SkillFormulas.Proficiency(state.Talent, 0, Uses(state, entry.Skill.Code));
+                    var filled = mastery.Height * trained / LearnedSkills.MaxUses;
+                    painter.ColorBox(new Rectangle(mastery.X + 1, mastery.Bottom - filled, mastery.Width - 2, filled), 70, 210, 90, 230);
+                }
 
                 var rank = HudSkillTreeLayout.RankGauge(origin, index - PageFirst);
                 var length = Math.Clamp(entry.Rank, 0, SkillLearning.MaxRank) * rank.Height / SkillLearning.MaxRank;

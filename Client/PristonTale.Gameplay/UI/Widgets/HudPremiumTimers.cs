@@ -8,25 +8,25 @@ using PristonTale.Gameplay.Localization;
 
 namespace PristonTale.Gameplay.UI.Widgets;
 
-// The column of running premium timers on the left of the screen: one 32 px icon per timer at x 8, y 80 + 36 n, in
-// the order the items were used. The grey copy of the icon covers it from the bottom as the time runs out, measured
-// against the smallest of 1 h, 3 h, 1 day, 7 days and 30 days above the time left (helper pets and the Phoenix have no
-// grey cover). An icon fades in by one alpha step per 70 Hz frame, blinks between 255 and 50 in its last ten seconds
-// and climbs one pixel per frame when a slot above it frees. Hovering shows the name, the effect and the time left.
+// The running premium timers, in the order the items were used: the Personal rows of the Active Buffs panel (HudWorldBuffs).
+// Hovering a row shows the name, the effect and the time left.
 public sealed class HudPremiumTimers
 {
     public const int Left = 8;
     public const int Top = 80;
     public const int Step = 36;
     public const int Icon = 32;
-    private const double FrameMs = GameUnits.TickMs;
+    private const int RowIcon = 20;
+    private const int RowStep = 22;
+    private const int HoverReach = 250;
     private const string Folder = "image/Sinimage/Premium/";
     private static readonly long[] Tiers = [3600, 10800, 86400, 604800, 2592000];
     private static readonly Color Effect = new(50, 250, 50);
 
     private readonly HudSprites _sprites;
     private readonly List<Entry> _entries = new();
-    private double _lastMs = -1;
+    private int _left = Left;
+    private int _width = Icon;
     private long _revision = -1;
 
     public HudPremiumTimers(HudSprites sprites)
@@ -81,10 +81,11 @@ public sealed class HudPremiumTimers
 
     public bool Contains(Point pointer) => At(pointer) is not null;
 
-    public void Draw(HudPainter painter, double nowMs)
+    public int Count => _entries.Count;
+
+    // The Personal rows of the Active Buffs panel from (x, y): each timer's icon, name and time left. Answers the y below them.
+    public int Draw(HudPainter painter, int x, int y, int width, double nowMs)
     {
-        var frames = _lastMs < 0 ? 0d : Math.Max(0d, nowMs - _lastMs) / FrameMs;
-        _lastMs = nowMs;
         for (var index = _entries.Count - 1; index >= 0; index--)
         {
             if (_entries[index].EndMs <= nowMs)
@@ -93,19 +94,25 @@ public sealed class HudPremiumTimers
             }
         }
 
-        for (var index = 0; index < _entries.Count; index++)
+        _left = x;
+        _width = width;
+        foreach (var entry in _entries)
         {
-            var entry = _entries[index];
-            Animate(entry, index, frames, Remaining(entry, nowMs));
-            var bounds = new Rectangle(Left, (int)entry.Y, Icon, Icon);
-            var a = (int)Math.Clamp(entry.Alpha, 0d, 255d);
-            painter.Stretch(entry.Icon, bounds, null, new Color(a, a, a, a));
-            var cover = Cover(entry.Kind, Remaining(entry, nowMs));
-            if (!entry.Blinking && cover > 0 && entry.Back is { } back)
+            entry.Y = y;
+            painter.Stretch(entry.Icon, new Rectangle(x, y, RowIcon, RowIcon));
+            var remaining = Remaining(entry, nowMs);
+            if (entry.RowTime is null || entry.RowSeconds != remaining)
             {
-                painter.Sprite(back, bounds.X, bounds.Y + Icon - cover, new Rectangle(0, Icon - cover, Icon, cover));
+                entry.RowSeconds = remaining;
+                entry.RowTime = string.Create(CultureInfo.InvariantCulture, $"{remaining / 3600:00}:{remaining / 60 % 60:00}:{remaining % 60:00}");
             }
+
+            painter.Text(painter.Fit(entry.Name ??= ItemStatuses.PremiumName(entry.Kind), width - RowIcon - 72), x + RowIcon + 4, y + 2);
+            painter.Text(entry.RowTime, x + width - 64, y + 2, Effect);
+            y += RowStep;
         }
+
+        return y;
     }
 
     // The hover box and text, drawn late so they stay above the windows.
@@ -116,7 +123,7 @@ public sealed class HudPremiumTimers
             return;
         }
 
-        var x = Left;
+        var x = _left - HoverReach;
         var y = (int)entry.Y;
         // The lines are made again only when the time left reaches another second.
         var remaining = Remaining(entry, nowMs);
@@ -213,7 +220,7 @@ public sealed class HudPremiumTimers
     {
         foreach (var entry in _entries)
         {
-            if (pointer.X > Left && pointer.X < Left + 30 && pointer.Y > entry.Y && pointer.Y < entry.Y + 30)
+            if (pointer.X > _left && pointer.X < _left + _width && pointer.Y > entry.Y && pointer.Y < entry.Y + RowStep)
             {
                 return entry;
             }
@@ -223,33 +230,6 @@ public sealed class HudPremiumTimers
     }
 
     private static long Remaining(Entry entry, double nowMs) => (long)Math.Max(0d, Math.Ceiling((entry.EndMs - nowMs) / 1000d));
-
-    private static void Animate(Entry entry, int slot, double frames, long remaining)
-    {
-        var target = Top + Step * slot;
-        entry.Y = entry.Y > target ? Math.Max(target, entry.Y - frames) : target;
-        if (remaining <= 10)
-        {
-            if (entry.Alpha >= 255)
-            {
-                entry.Blinking = true;
-                entry.Rising = false;
-            }
-            else if (entry.Alpha <= 50 && entry.Blinking)
-            {
-                entry.Rising = true;
-            }
-        }
-
-        if (!entry.Blinking)
-        {
-            entry.Alpha = Math.Min(255d, entry.Alpha + frames);
-        }
-        else
-        {
-            entry.Alpha = entry.Rising ? Math.Min(255d, entry.Alpha + 5 * frames) : Math.Max(50d, entry.Alpha - 5 * frames);
-        }
-    }
 
     private sealed class Entry
     {
@@ -261,6 +241,9 @@ public sealed class HudPremiumTimers
         public int Value { get; set; }
         public double EndMs { get; set; }
         public double Y { get; set; }
+        public string Name { get; set; }
+        public string RowTime { get; set; }
+        public long RowSeconds { get; set; }
         public double Alpha { get; set; }
         public bool Blinking { get; set; }
         public bool Rising { get; set; }

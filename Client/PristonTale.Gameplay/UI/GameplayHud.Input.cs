@@ -510,7 +510,7 @@ public sealed partial class GameplayHud
         }
 
         if (_actionBar.Captures(layout, pointer) || _petWindow.Captures(layout, _minimap.Area(layout), pointer, MinimapShown)
-            || _questBook.Captures(layout, _minimap.Area(layout), pointer, MinimapShown) || _questTracker.Captures(layout, pointer)
+            || _questBook.Captures(layout, _minimap.Area(layout), pointer, MinimapShown) || _questTracker.Captures(layout, pointer) || _worldBuffs.Captures(layout, pointer)
             || _coinShop.Captures(layout, _minimap.Area(layout), pointer, MinimapShown) || _itemBox.Captures(layout, pointer) || _arenaEvent.Captures(layout, pointer) || _cabinet.Captures(layout, pointer) || HudBar.Captures(design) || MinimapShown && (_minimap.Area(layout).Contains(pointer) || _minimap.Dragging || _bossList.Captures(layout, _minimap.Area(layout), pointer)) || _skillHud.BuffAt(pointer) != 0
             || WindowContains(layout, _inventorySlide, pointer) || WindowContains(layout, _statusSlide, pointer) || WindowContains(layout, _skillSlide, pointer)
             || _skills.MasterBoxShown && HudSkillTreeLayout.MasterBox.Contains(pointer))

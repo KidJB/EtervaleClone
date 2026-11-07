@@ -26,13 +26,13 @@ public static partial class SkillFormulas
     // The original gauge advances once per 14 ms tick.
     public const int CooldownTickMs = 14;
     public const int MinMastery = 2;
-    public const int MaxMastery = 1000;
+    public const int MaxMastery = 200;
     private const int CooldownUnitsPerSecond = 120;
     private const int Gauge = 35;
     public const float FrameStepAtRateOne = 80f;
 
     // Proficiency = min(talent / 3 + item mastery, 50) x 100 + uses (100 per completed use streak), at most LearnedSkills.MaxUses.
-    // Mastery units M = base + perRank x rank - proficiency / 100, clamped to 2..1000; the cooldown is M / 2 x the 35-step gauge at 60 steps a second.
+    // Mastery units M = base + perRank x rank - proficiency / 100, clamped to 2..200; the cooldown is M / 2 x the 35-step gauge at 60 steps a second.
     public static int CooldownMs(SkillRule rule, int rank, int talent, int itemMastery, int uses)
     {
         if (rule.MasteryBase == 0 && rule.MasteryPerRank == 0)
@@ -40,13 +40,22 @@ public static partial class SkillFormulas
             return 0;
         }
 
-        // Fourth- and fifth-tier skills have no proficiency to train: they always count as fully trained.
-        var proficiency = IsFullyTrained(rule.Code) ? LearnedSkills.MaxUses : Math.Min(LearnedSkills.MaxUses, Math.Min(talent / 3 + itemMastery, 50) * 100 + Math.Max(0, uses));
-        var mastery = Math.Clamp(rule.MasteryBase + rule.MasteryPerRank * rank - proficiency / 100, MinMastery, MaxMastery);
+        var mastery = Math.Clamp(rule.MasteryBase + rule.MasteryPerRank * rank - Proficiency(talent, itemMastery, uses) / 100, MinMastery, MaxMastery);
         return mastery * Gauge * 1000 / CooldownUnitsPerSecond;
     }
 
-    public static bool IsFullyTrained(uint code) => (code >> 16 & 0xFF) is (uint)JobTier.Job4 or (uint)JobTier.Job5;
+    // The training of a skill, up to LearnedSkills.MaxUses: the head start of talent and item mastery plus the uses.
+    public static int Proficiency(int talent, int itemMastery, int uses) =>
+        Math.Min(LearnedSkills.MaxUses, HeadStart(talent, itemMastery) + Math.Max(0, uses));
+
+    private static int HeadStart(int talent, int itemMastery) => Math.Min(talent / 3 + itemMastery, 50) * 100;
+
+    // Learning a rank halves the training, so the skill trains again; the head start's share never counts twice.
+    public static int UsesAfterRankUp(int uses, int talent)
+    {
+        var limit = LearnedSkills.MaxUses - HeadStart(talent, 0);
+        return Math.Min(uses, limit) / 2;
+    }
 
     // Casts per proficiency step by skill-window position; higher ranks need one more cast every three ranks.
     private static ReadOnlySpan<int> CastsPerStep => [5, 5, 5, 5, 7, 7, 7, 7, 9, 9, 9, 9, 14, 15, 16, 17, 18, 19, 20, 21];
