@@ -40,6 +40,10 @@ internal static class ClientSettingsTests
             "a blank server address was kept");
         Assert.True(new ClientSettings { MultiSampleCount = 8 }.Validate(NullClientLog.Instance).MultiSampleCount == new ClientSettings().MultiSampleCount,
             "eight MSAA samples, which the renderer cannot run, were kept");
+        Assert.True(new ClientSettings { Language = "fr" }.Validate(NullClientLog.Instance).Language == ClientSettings.EnglishLanguage,
+            "unsupported language was kept");
+        Assert.True(new ClientSettings { Language = ClientSettings.BrazilianPortugueseLanguage }.Validate(NullClientLog.Instance).Language == ClientSettings.BrazilianPortugueseLanguage,
+            "Brazilian Portuguese was rejected");
         settings = new ClientSettings { WindowWidth = 3440, WindowHeight = 1440, RefreshRate = 165, MaxFps = 237, Monitor = 2 };
         Assert.True(settings.Validate(NullClientLog.Instance) == settings, "valid custom mode or frame limit was lost");
         Assert.True(settings.HasSameDisplay(settings with { MaxFps = 60, UiScale = 1.2f, MusicEnabled = false, SoundEnabled = false }), "non-device settings triggered display reset");

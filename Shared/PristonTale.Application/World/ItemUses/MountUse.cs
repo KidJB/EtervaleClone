@@ -1,3 +1,4 @@
+using PristonTale.Contracts.Texts;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
 using PristonTale.Simulation.Items.Usable;
@@ -17,7 +18,7 @@ internal sealed class MountUse : ItemUseAction
     public override ItemUseExtra Extend(in ItemUseRequest use, PlayerCharacter candidate) =>
         candidate.UnlockMount(use.Rule.Argument) ? ItemUseExtra.None : new ItemUseExtra(ItemUseStatus.NothingToChange);
 
-    public override string Message(ItemDefinition item) => $"{item.Name} joined your stable";
+    public override GameText Message(ItemDefinition item) => GameText.Of(GameTextId.MountJoined, item.Name);
 
     public override ItemUseEffect Apply(in ItemUseInWorld use)
     {

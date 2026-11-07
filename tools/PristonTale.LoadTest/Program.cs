@@ -116,7 +116,7 @@ internal static class Bot
         try
         {
             await using var connection = new GameServerConnection(options.Address);
-            var login = await connection.LoginAsync(account, options.Password, stop);
+            var login = await connection.LoginAsync(account, options.Password, "en", stop);
             if (!login.Ok)
             {
                 throw new InvalidOperationException($"login: {login.Message}");
@@ -211,7 +211,7 @@ internal static class Bot
                     var started = Stopwatch.GetTimestamp();
                     var outcome = await play.ApplyInventoryAsync(
                         new InventoryCommand(Guid.NewGuid(), revision, InventoryAction.SwitchBagPage, Guid.Empty, page ^ 1, 0, default), stop);
-                    stats.RecordItem(Stopwatch.GetElapsedTime(started), outcome.Ok ? null : outcome.Message);
+                    stats.RecordItem(Stopwatch.GetElapsedTime(started), outcome.Ok ? null : outcome.Message.ToString());
                     // A refusal before the world (save gate busy) answers no revision; the expected one still holds.
                     if (outcome.Revision > 0)
                     {

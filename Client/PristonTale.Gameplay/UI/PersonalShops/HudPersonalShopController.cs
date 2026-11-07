@@ -6,6 +6,8 @@ using PristonTale.Gameplay.UI.Widgets;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.PersonalShops;
 using PristonTale.Simulation.World.Npcs;
+using PristonTale.Gameplay.Localization;
+using PristonTale.Contracts.Texts;
 
 namespace PristonTale.Gameplay.UI.PersonalShops;
 
@@ -17,8 +19,6 @@ namespace PristonTale.Gameplay.UI.PersonalShops;
 // whether to buy it.
 public sealed class HudPersonalShopController(IClientLog log)
 {
-    private const string NoRoom = "The shop has no room for this item";
-    private const string NothingToSell = "No more items to sell";
     // How long an opened shop waits for its sign (the player's description) before it counts as closed again: 300 of the
     // game's ticks.
     private const double SignWaitMs = 300 * 1000d / PristonTale.Contracts.Units.GameUnits.TicksPerSecond;
@@ -62,7 +62,7 @@ public sealed class HudPersonalShopController(IClientLog log)
     {
         if (!inTown && !Selling)
         {
-            Notify(PersonalShopMessages.Of(PersonalShopStatus.NotInTown));
+            Notify(ClientText.Format(PersonalShopMessages.Of(PersonalShopStatus.NotInTown)));
             return;
         }
 
@@ -123,7 +123,7 @@ public sealed class HudPersonalShopController(IClientLog log)
 
         if (!PersonalShopRules.IsListable(item.Kind, item.CatalogKey))
         {
-            Notify(PersonalShopMessages.Of(PersonalShopStatus.NotListable));
+            Notify(ClientText.Format(PersonalShopMessages.Of(PersonalShopStatus.NotListable)));
             return true;
         }
 
@@ -131,16 +131,18 @@ public sealed class HudPersonalShopController(IClientLog log)
         var highest = Math.Min(PersonalShopRules.MaxPrice, room / Math.Max(1, item.Count));
         if (highest < 1)
         {
-            Notify(PersonalShopMessages.Of(PersonalShopStatus.GoldLimit));
+            Notify(ClientText.Format(PersonalShopMessages.Of(PersonalShopStatus.GoldLimit)));
             return true;
         }
 
-        var (first, second) = item.Count > 1 ? ("Selling price per unit", "of the item?") : ("Do you wanna register", "your item money?");
+        var (first, second) = item.Count > 1
+            ? (ClientText.Get("PersonalShop.UnitPrice"), ClientText.Get("PersonalShop.UnitPrice2"))
+            : (ClientText.Get("PersonalShop.Register"), ClientText.Get("PersonalShop.Register2"));
         AskCount(first, second, highest, price =>
         {
             if (!Window.TryList(item, price))
             {
-                Notify(NoRoom);
+                Notify(ClientText.Get("PersonalShop.NoRoom"));
             }
         });
         return true;
@@ -244,7 +246,7 @@ public sealed class HudPersonalShopController(IClientLog log)
         }
         else if (_confirm is { } confirm)
         {
-            HudMessageBox.Draw(painter, "Do you wanna", Window.Buying ? "buy the item?" : "cancel the Register?", pointer, confirm.Item.Name);
+            HudMessageBox.Draw(painter, ClientText.Get("Count.DoYouWant"), ClientText.Get(Window.Buying ? "PersonalShop.BuyItem" : "PersonalShop.CancelRegister"), pointer, confirm.Item.Name);
         }
     }
 
@@ -252,7 +254,7 @@ public sealed class HudPersonalShopController(IClientLog log)
     {
         if (Window.Offers.Count == 0)
         {
-            Notify(NothingToSell);
+            Notify(ClientText.Get("PersonalShop.NothingToSell"));
             return;
         }
 
@@ -272,13 +274,13 @@ public sealed class HudPersonalShopController(IClientLog log)
         var affordable = offer.UnitPrice > 0 ? (_state?.Money ?? 0) / offer.UnitPrice : 0;
         if (affordable < 1)
         {
-            Notify(PersonalShopMessages.Of(PersonalShopStatus.NotEnoughGold));
+            Notify(ClientText.Format(PersonalShopMessages.Of(PersonalShopStatus.NotEnoughGold)));
             return;
         }
 
         if (offer.Item.Count > 1)
         {
-            AskCount("How many items", "do you wanna buy?", Math.Min(offer.Item.Count, affordable), count => Buy(offer, count));
+            AskCount(ClientText.Get("Count.HowManyItems"), ClientText.Get("Count.ToBuy"), Math.Min(offer.Item.Count, affordable), count => Buy(offer, count));
             return;
         }
 
@@ -298,12 +300,12 @@ public sealed class HudPersonalShopController(IClientLog log)
     {
         if (_request.Pending)
         {
-            Notify(PersonalShopMessages.Of(PersonalShopStatus.Busy));
+            Notify(ClientText.Format(PersonalShopMessages.Of(PersonalShopStatus.Busy)));
             return;
         }
 
         (_sent, _sentTo) = (action, sellerId);
-        _request.Start(send, _ => new PersonalShopReply(new PersonalShopOutcome(false, PersonalShopStatus.Rejected, 0, HudRequest.ConnectionError)));
+        _request.Start(send, _ => new PersonalShopReply(new PersonalShopOutcome(false, PersonalShopStatus.Rejected, 0, GameText.None)));
     }
 
     // A view shows the shop unless the player's own listing took the window meanwhile; a purchase refreshes the shop it was
@@ -337,7 +339,8 @@ public sealed class HudPersonalShopController(IClientLog log)
 
         if (!reply.Outcome.Ok)
         {
-            Notify(reply.Outcome.Message);
+            // A refusal without a line is the client's own: the server was not reached.
+            Notify(reply.Outcome.Message.IsNone ? HudRequest.ConnectionError : ClientText.Format(reply.Outcome.Message));
         }
     }
 }

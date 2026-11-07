@@ -32,10 +32,15 @@ internal static class CharacterHeadTests
         Assert.True(CharacterHead.Resolve(PlayerClass.Atalanta, 1, 9) == "char/tmABCD/Mfh-B10a.inx", "hair variant above three was truncated");
         Assert.True(CharacterHead.Resolve(PlayerClass.Assassin, 2, 2) == "char/tmABCD/tfh-e03b.inx", "Assassin advanced face path changed");
         Assert.True(CharacterHead.Resolve(PlayerClass.Shaman, 3, 2) == "char/tmABCD/Mmh-E03c.inx", "Shaman advanced face path changed");
+        Assert.True(CharacterHead.Resolve(PlayerClass.MartialArtist, 0, 2) == "char/tmABCD/tfh-f03.inx", "Martial Artist creation face path changed");
         Assert.True(CharacterHead.Resolve(PlayerClass.Mechanician, 4, 0) == "char/tmABCD/Tmh-A01d.inx"
             && CharacterHead.Resolve(PlayerClass.Priestess, 4, 5) == "char/tmABCD/Mfh-C006d.inx"
             && CharacterHead.Resolve(PlayerClass.Priestess, 4, 9) == "char/tmABCD/Mfh-C10d.inx"
-            && CharacterHead.Resolve(PlayerClass.Assassin, 4, 2) == "char/tmABCD/tfh-e03d.inx", "fifth-tier heads changed");
+            && CharacterHead.Resolve(PlayerClass.Assassin, 4, 2) == "char/tmABCD/tfh-e03d.inx"
+            && CharacterHead.Resolve(PlayerClass.MartialArtist, 4, 2) == "char/tmABCD/tfh-f03d.inx", "fifth-tier heads changed");
+        Assert.True(CharacterHead.Resolve(PlayerClass.MartialArtist, 2, 2) == "char/tmABCD/tfh-f03b.inx"
+            && CharacterHead.Apply(new CharacterClassRegistry().Get(PlayerClass.MartialArtist).Definition.DefaultVisuals, PlayerClass.MartialArtist, 1, 1, 7)
+                .Head.InxExtensionPath == "char/tmABCD/tfh-f02a.inx", "a Martial Artist job head names a file no client ships");
         var defaults = new CharacterClassRegistry().Get(PlayerClass.Mechanician).Definition.DefaultVisuals;
         var resolved = CharacterHead.Apply(defaults, PlayerClass.Mechanician, 2, 2, 7);
         Assert.True(CharacterFace.ResolveHeadPath(resolved, 2) == "char/tmABCD/tmh_a08b.inx", "face selection overwrote the hair override");
@@ -71,6 +76,18 @@ internal static class CharacterHeadTests
         }
 
         Assert.True(unavailableVariantRejected, "missing Shaman advanced-tier crown produced a nonexistent filename");
+        var martialArtistCrownRejected = false;
+        try
+        {
+            _ = CharacterHead.Resolve(PlayerClass.MartialArtist, 4, 3);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            martialArtistCrownRejected = true;
+        }
+
+        Assert.True(martialArtistCrownRejected, "missing Martial Artist crown produced a nonexistent filename");
+        Assert.True(CharacterHead.SoccerHead(PlayerClass.MartialArtist) == "char/tmABCD/Tfh-f18t.inx", "Martial Artist soccer head path changed");
 
         return Task.CompletedTask;
     }

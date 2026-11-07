@@ -226,7 +226,7 @@ public sealed partial class WorldServer
         var name = target.Player.Character.Name;
         if (!InTradeReach(player, target.Player))
         {
-            Reply(player, TradeMessages.Format(TradeMessages.TooFar, name));
+            Reply(player, TradeMessages.TooFar(name));
             return;
         }
 
@@ -238,7 +238,7 @@ public sealed partial class WorldServer
             return;
         }
 
-        Reply(player, TradeMessages.Format(TradeMessages.Requested, name));
+        Reply(player, TradeMessages.Requested(name));
         target.Player.TradeRequest = new TradeRequest(player.EntityId, player.Character.Name, nowMs + TradeLimits.RequestMs);
     }
 
@@ -258,7 +258,7 @@ public sealed partial class WorldServer
 
         if (!InTradeReach(player, from.Player))
         {
-            Reply(player, TradeMessages.Format(TradeMessages.TooFar, from.Player.Character.Name));
+            Reply(player, TradeMessages.TooFar(from.Player.Character.Name));
             return;
         }
 

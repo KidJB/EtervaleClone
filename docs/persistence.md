@@ -30,7 +30,7 @@ FluentMigrator migrations, the schema, and the SQLite and PostgreSQL providers. 
 | `.../Security/PasswordHasher.cs` | PBKDF2-SHA256 hashes: `pbkdf2-sha256$<iterations>$<salt b64>$<key b64>` |
 | `Persistence/PristonTale.Persistence/Repositories/` | `Dapper*Repository` implementations shared by both providers |
 | `Persistence/PristonTale.Persistence/PersistenceServiceCollectionExtensions.cs` | `AddPristonRepositories`: the repositories and the migration runner both providers register, given the provider's migration processor |
-| `Persistence/PristonTale.Persistence/Migrations/` | `M013Baseline`, `M014PortraitData`, `M015NpcServices`, `M016QuestData`, `M019GameMasters`, `M021MonsterSkillData`, `M022MonsterExperience64`, `M023ItemFootprints`, `M024WorldDataFields`, `M026Contacts`, `M027CatalogIdentities`, `M028WorldCatalog`, `M029NpcPlacementFacts`, `M030CharacterSaveSequence`, `M031GameLogs`, `M032StarterGifts`, `M033HelpPet`, `M034StarterOffHand`, `M035FieldOrder`, `FluentMigratorDatabaseMigrator` |
+| `Persistence/PristonTale.Persistence/Migrations/` | `M013Baseline`, `M014PortraitData`, `M015NpcServices`, `M016QuestData`, `M019GameMasters`, `M021MonsterSkillData`, `M022MonsterExperience64`, `M023ItemFootprints`, `M024WorldDataFields`, `M026Contacts`, `M027CatalogIdentities`, `M028WorldCatalog`, `M029NpcPlacementFacts`, `M030CharacterSaveSequence`, `M031GameLogs`, `M032StarterGifts`, `M033HelpPet`, `M034StarterOffHand`, `M035FieldOrder`, `M044CatalogPortuguese`, `FluentMigratorDatabaseMigrator` |
 | `Persistence/PristonTale.Persistence.Sqlite/` | `AddPristonSqlite`, connection factory (WAL), Dapper type handlers |
 | `Persistence/PristonTale.Persistence.Postgres/` | `AddPristonPostgres`, `NpgsqlDataSource` factory, `jsonb` handler for `JsonText` |
 | `docker-compose.yml` | Local PostgreSQL 17 for development |
@@ -63,18 +63,18 @@ Consumers: `Server/PristonTale.Server/Hosting/HostingExtensions.cs` (provider se
   older capture never replaces a newer one (writing the same capture again is harmless). `UpdateAsync` returns false when no row
   took the record.
 - Child collections are loaded with one query per child table and joined in memory with `ToLookup` on the parent key
-  (`definition_id`, `monster_id`, `npc_id`, `stage`). Names and dialog lines are read in English (`CatalogLanguages.English`)
-  by a `LEFT JOIN` on the `*_texts` table; a record's `Name` is null when the entity has no text in that language.
+  (`definition_id`, `monster_id`, `npc_id`, `stage`). Names and dialog lines are read in the requested catalog language,
+  with English (`CatalogLanguages.English`) as fallback; a record's `Name` is null when the entity has no text in either.
 
 ### Runtime catalog build
 
-`WorldDataAppService.BuildAsync` reads all six catalog sets and converts them with `WorldDataFactory`:
+`WorldDataAppService.BuildAsync` reads all six catalog sets for one language and converts them with `WorldDataFactory`:
 
 | Factory method | Contract |
 | --- | --- |
-| `ToItemDefinitions`, `ToQuestVariantDefinitions`, `ToNamedUniqueDefinitions` | The regular, quest and named-unique definitions (`variant`); a code `ItemCodes` cannot parse is skipped. Runtime item code = `ItemCodes.Parse(code)`; `CatalogKey` = `code`; `Name` = the English name, else the code. The shop form takes the low end of every range; a named unique's `UniqueVariant` is its `variant_ordinal` |
-| `ToMonsterDefinitions` | Runtime code = the record's `id`; event forms take the codes after the highest id. `Key` = `key`, `Name` = the English name, else the key. The stored model path keeps its authored extension; the definition uses the `.inx` sibling (also for NPCs). A drop line of items splits its weight among them with integer division; an item the runtime catalog lacks keeps its share as an empty slot. Bonus drops whose item is missing are dropped |
-| `ToNpcDefinitions` | Runtime code = the record's `id`; `Name` = `key`, `DisplayName` = the English name (empty without one). Services from `npc_services` ordered by `ordinal`; unknown kinds skipped; `Shop` removed when no stock code maps to a runtime item; `Dialog` = the English `npc_dialog_lines` |
+| `ToItemDefinitions`, `ToQuestVariantDefinitions`, `ToNamedUniqueDefinitions` | The regular, quest and named-unique definitions (`variant`); a code `ItemCodes` cannot parse is skipped. Runtime item code = `ItemCodes.Parse(code)`; `CatalogKey` = `code`; `Name` = the selected-language name, else the code. The shop form takes the low end of every range; a named unique's `UniqueVariant` is its `variant_ordinal` |
+| `ToMonsterDefinitions` | Runtime code = the record's `id`; event forms take the codes after the highest id. `Key` = `key`, `Name` = the selected-language name, else the key. The stored model path keeps its authored extension; the definition uses the `.inx` sibling (also for NPCs). A drop line of items splits its weight among them with integer division; an item the runtime catalog lacks keeps its share as an empty slot. Bonus drops whose item is missing are dropped |
+| `ToNpcDefinitions` | Runtime code = the record's `id`; `Name` = `key`, `DisplayName` = the selected-language name (empty without one). Services from `npc_services` ordered by `ordinal`; unknown kinds skipped; `Shop` removed when no stock code maps to a runtime item; `Dialog` = the selected-language `npc_dialog_lines` |
 | `ToFieldSpawnData` | Only stages with a field code. Spawns, bosses, escorts and placements carry the monster and NPC ids, which are the runtime codes; boss hours from `field_boss_hours` |
 | `ToMotionTimings` | Groups `motion_slots` by table in row order, then maps each `motion_models.model_key` to its table |
 
@@ -174,6 +174,7 @@ FluentMigrator scans `PristonTale.Persistence` for `[Migration(n)]` classes. Ver
 | 41 | `M041Stalls` | `stalls` (`id` int64 identity, `account_id` unique FK, `character_id` FK, `field_id`, `x`, `y`, `z`, `facing`, `look` (`StallLook` JSON), `items` (`StallItem` JSON array: saved item, price, cell), `created_at`): offline stalls, one per account |
 | 43 | `M043Skins` | `account_skins` (`account_id` FK, `item_key`: the skins an account owns); `characters.skins` (text, default empty: `SkinCodec` JSON of the looks shown) |
 | 42 | `M042DailyQuests` | `characters.daily_quests` (text, default empty: `DailyQuestCodec` JSON of the day, the accepted quests with their kills and the claimed ones) |
+| 44 | `M044CatalogPortuguese` | Adds `pt-BR` (Portuguese (Brazil)) to `languages` |
 
 Upgrade path: databases from the earlier migration set at version 12 upgrade in place. Databases at
 versions 1-11 make `M013Baseline` throw; bring them to 12 with the previous release or back up and recreate them.
@@ -221,7 +222,9 @@ them holds the id. No Korean text is stored.
 
 Player-facing text lives in `*_texts` tables, one row per entity and language (`languages`, BCP-47 codes). Every
 entity has its English name (`en`, `CatalogLanguages.English`); another language is an optional translation added as
-`languages` and `*_texts` rows. The runtime reads English, and an entity without a name shows its code or key.
+`languages` and `*_texts` rows (the world importer writes them from its `Translations`, [world-import.md](world-import.md#pipeline)).
+The server loads supported languages once and selects the session's language, falling back
+to English; an entity without a name in either language shows its code or key.
 
 | Table | Columns and constraints |
 | --- | --- |

@@ -1,6 +1,7 @@
 using PristonTale.Application.Saves;
 using PristonTale.Application.Sessions;
 using PristonTale.Application.World;
+using PristonTale.Contracts.Texts;
 
 namespace PristonTale.Application.Services;
 
@@ -17,15 +18,15 @@ public enum DurableFailure
 
 public static class DurableFailures
 {
-    // The text a refused durable operation answers with.
-    public static string Message(DurableFailure failure) => failure switch
+    // The line a refused durable operation answers with.
+    public static GameText Text(DurableFailure failure) => GameText.Of(failure switch
     {
-        DurableFailure.NoSession => "invalid session",
-        DurableFailure.Busy => "save or character operation pending; retry",
-        DurableFailure.StorageFailed => "storage rejected operation; character unchanged",
-        DurableFailure.Conflict => "the warehouse changed elsewhere; open it again",
-        _ => "character is not playing"
-    };
+        DurableFailure.NoSession => GameTextId.NoSession,
+        DurableFailure.Busy => GameTextId.CharacterBusy,
+        DurableFailure.StorageFailed => GameTextId.CharacterUnchanged,
+        DurableFailure.Conflict => GameTextId.WarehouseChanged,
+        _ => GameTextId.NotPlaying
+    });
 }
 
 // The path of every character change. The session's save gate admits one change per character at a time (saves share

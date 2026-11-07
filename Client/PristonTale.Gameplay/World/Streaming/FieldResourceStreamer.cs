@@ -36,32 +36,111 @@ internal sealed class FieldResourceStreamer : IDisposable
         PristonCollisionWorld Collision,
         long Started);
     private readonly Dictionary<string, Task<PreparedField>> _fieldLoads = new();
+    private readonly Dictionary<string, CancellationTokenSource> _fieldCancellations = new();
     private readonly HashSet<string> _failedFieldLoads = new();
+    // The destination a teleport or warp waits for; it prepares and uploads ahead of the neighbours, of which at most one is
+    // in flight beside it.
+    private string _priorityFieldId;
 
     public void Request(FieldDef field)
     {
-        if (_fieldLoads.Count + (_stageUpload is null ? 0 : 1) >= FieldStreamingPolicy.MaximumPendingFields
-            || _fieldLoads.ContainsKey(field.Id)
+        if (InFlight(field.Id)
             || _failedFieldLoads.Contains(field.Id)
-            || _uploadingField?.Definition.Id == field.Id)
+            || NeighbourInFlight()
+            || _fieldLoads.Count + (_stageUpload is null ? 0 : 1) >= FieldStreamingPolicy.MaximumPendingFields)
         {
             return;
         }
 
+        Start(field);
+    }
+
+    public void Prioritize(FieldDef field)
+    {
+        if (_failedFieldLoads.Contains(field.Id))
+        {
+            return;
+        }
+
+        _priorityFieldId = field.Id;
+        CancelOtherLoads(field.Id);
+        if (!InFlight(field.Id))
+        {
+            Start(field);
+        }
+    }
+
+    private bool InFlight(string fieldId) => _fieldLoads.ContainsKey(fieldId) || _uploadingField?.Definition.Id == fieldId;
+
+    private bool NeighbourInFlight()
+    {
+        if (_uploadingField is not null && _uploadingField.Definition.Id != _priorityFieldId)
+        {
+            return true;
+        }
+
+        foreach (var id in _fieldLoads.Keys)
+        {
+            if (id != _priorityFieldId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void Start(FieldDef field)
+    {
         _log.Info($"[Stream] preparing {field.Id}.");
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var root = _assetRoot;
         var renderer = _renderer;
+        var cancellation = new CancellationTokenSource();
+        var token = cancellation.Token;
+        _fieldCancellations.Add(field.Id, cancellation);
         _fieldLoads.Add(field.Id, Task.Run(async () =>
         {
+            token.ThrowIfCancellationRequested();
             var stage = _reader.ReadStage(AssetFiles.Combine(root, field.StageSmd));
             var models = field.StageObjectSmds.Select(path => _reader.ReadModel(AssetFiles.Combine(root, path))).ToArray();
             var collision = new PristonCollisionWorld(stage);
-            await renderer.PrepareStageTexturesAsync(stage, models);
+            token.ThrowIfCancellationRequested();
+            await renderer.PrepareStageTexturesAsync(stage, models, token);
+            token.ThrowIfCancellationRequested();
             var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             _log.Info($"[Stream] CPU ready {field.Id}: {elapsed:F1} ms; {stage.Faces.Count} faces, {models.Length} models.");
             return new PreparedField(field, stage, models, collision, started);
         }));
+    }
+
+    private void CancelOtherLoads(string keepFieldId)
+    {
+        foreach (var id in _fieldLoads.Keys.ToArray())
+        {
+            if (id != keepFieldId)
+            {
+                CancelLoad(id);
+            }
+        }
+
+        if (_stageUpload is not null && _uploadingField.Definition.Id != keepFieldId)
+        {
+            AbandonUpload();
+        }
+    }
+
+    private void CancelLoad(string fieldId)
+    {
+        if (!_fieldLoads.Remove(fieldId, out var preparation))
+        {
+            return;
+        }
+
+        var cancellation = _fieldCancellations[fieldId];
+        _fieldCancellations.Remove(fieldId);
+        cancellation.Cancel();
+        _ = ObservePreparationAsync(preparation, cancellation);
     }
 
     private PreparedField _uploadingField;
@@ -71,17 +150,41 @@ internal sealed class FieldResourceStreamer : IDisposable
 
     public LoadedField Update()
     {
+        // A destination that is no longer preparing or uploading (published, failed or cancelled) holds nothing back.
+        if (_priorityFieldId is not null && !InFlight(_priorityFieldId))
+        {
+            _priorityFieldId = null;
+        }
+
         if (_stageUpload is null)
         {
             string completed = null;
-            foreach (var (id, preparation) in _fieldLoads)
+            if (_priorityFieldId is not null)
             {
-                if (!preparation.IsCompleted)
+                if (_fieldLoads.TryGetValue(_priorityFieldId, out var priorityPreparation) && priorityPreparation.IsCompleted)
                 {
-                    continue;
+                    completed = _priorityFieldId;
                 }
+            }
+            else
+            {
+                foreach (var (id, preparation) in _fieldLoads)
+                {
+                    if (preparation.IsCompleted)
+                    {
+                        completed = id;
+                        break;
+                    }
+                }
+            }
 
-                completed = id;
+            if (completed is not null)
+            {
+                var preparation = _fieldLoads[completed];
+                _fieldLoads.Remove(completed);
+                var cancellation = _fieldCancellations[completed];
+                _fieldCancellations.Remove(completed);
+                cancellation.Dispose();
                 if (preparation.IsCompletedSuccessfully)
                 {
                     _uploadingField = preparation.Result;
@@ -90,18 +193,11 @@ internal sealed class FieldResourceStreamer : IDisposable
                     _fieldUploadFrames = 0;
                     _stageUpload = _renderer.AddStageIncrementally(_uploadingField.Stage, _uploadingField.Models);
                 }
-                else
+                else if (!preparation.IsCanceled)
                 {
-                    _failedFieldLoads.Add(id);
-                    _log.Error($"[Stream] field preparation failed for {id}: {preparation.Exception}");
+                    _failedFieldLoads.Add(completed);
+                    _log.Error($"[Stream] field preparation failed for {completed}: {preparation.Exception}");
                 }
-
-                break;
-            }
-
-            if (completed is not null)
-            {
-                _fieldLoads.Remove(completed);
             }
         }
 
@@ -146,8 +242,9 @@ internal sealed class FieldResourceStreamer : IDisposable
         }
         catch (Exception ex)
         {
-            _failedFieldLoads.Add(_uploadingField.Definition.Id);
-            _log.Error($"[Stream] GPU publication failed for {_uploadingField.Definition.Id}: {ex}");
+            var failedId = _uploadingField.Definition.Id;
+            _failedFieldLoads.Add(failedId);
+            _log.Error($"[Stream] GPU publication failed for {failedId}: {ex}");
             _stageUpload.Dispose();
             _stageUpload = null;
             _uploadingField = null;
@@ -162,15 +259,29 @@ internal sealed class FieldResourceStreamer : IDisposable
         return null;
     }
 
-    private async Task ObservePreparationAsync(Task preparation)
+    private void AbandonUpload()
+    {
+        _stageUpload.Dispose();
+        _stageUpload = null;
+        _uploadingField = null;
+    }
+
+    private async Task ObservePreparationAsync(Task preparation, CancellationTokenSource cancellation)
     {
         try
         {
             await preparation;
         }
+        catch (OperationCanceledException)
+        {
+        }
         catch (Exception ex)
         {
             _log.Error($"[Stream] abandoned preparation failed: {ex}");
+        }
+        finally
+        {
+            cancellation.Dispose();
         }
     }
 
@@ -178,9 +289,10 @@ internal sealed class FieldResourceStreamer : IDisposable
     {
         _stageUpload?.Dispose();
         _stageUpload = null;
-        foreach (var preparation in _fieldLoads.Values)
+        _uploadingField = null;
+        foreach (var fieldId in _fieldLoads.Keys.ToArray())
         {
-            _ = ObservePreparationAsync(preparation);
+            CancelLoad(fieldId);
         }
 
         _fieldLoads.Clear();

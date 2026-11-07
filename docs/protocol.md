@@ -21,6 +21,7 @@ The codecs live in `Shared/PristonTale.Protocol`; the server edge is `Server/Pri
 | `Binary/FrameCodec.cs` | `FrameCodec`: the `{size, code}` header and the 8192-byte limit. |
 | `Binary/PacketReader.cs`, `Binary/PacketWriter.cs` | Little-endian sequential reader/writer; the writer patches the size in `Finish()`. |
 | `Binary/Utf8Text.cs` | Text fields: `{uint16 ByteLength, UTF-8}`, cut at a whole character. |
+| `Binary/GameTextWire.cs` | Game text fields: `{uint16 Id, uint16 Count, texts}`. |
 | `Binary/WireHeader.cs` | `{uint16 Version, uint16 Flags = 0}` body header: `Write(version)`, `Read(name, minimumVersion = 1)` (newer versions append fields). Domain helpers (`NpcWire.Header`, `ItemUseWire.ReadHeader`...) delegate to it. |
 | `Binary/WireList.cs` | `IWireEntry<T>` (static `Size`, `Read`, instance `Write`) and `WireList`: `{int32 Count, entries}` with the entries filling the rest exactly; the cooldown, timer, item effect, shop quote and item detail lists use it (the skill list, the object removals and the aging progress still check their counts themselves). |
 | `Packets/IFramePacket.cs` | `IFramePacket`: a message that writes itself as one frame; every client-to-server message implements it. |
@@ -61,6 +62,7 @@ search finds; they are not part of the build.
 | Angles | Skill messages: 4096 per turn (`GameUnits.ToAngle`); movement reports: `uint16`, 65536 per turn; presence: `uint8`, 256 per turn. |
 | Entity ids | 64-bit (`uint64` or `varuint`) on the wire and in memory; players count from 1, monsters, NPCs and summons from `2^32`. |
 | Text | UTF-8 with a `uint16` byte length, cut at a whole character to the field's byte limit (`Utf8Text`); malformed UTF-8 is refused. |
+| Game text | A line for the player, worded by the client in its language: `{uint16 Id, uint16 Count, Count texts (64 B)}` (`GameTextWire`), at most 4 texts. `Id` is `GameTextId` (append only), the texts fill its phrase's placeholders in order. |
 | Item identity | Item codes derived from the item key (`ItemCodes`), e.g. gold is `GG101`. |
 | Reading | `PacketReader` requires `size == span length` and `size >= minimum`; trailing bytes are accepted. Overruns throw `InvalidDataException`. |
 | Versioned bodies | Messages with `{uint16 Version, uint16 Flags}` reject version 0. Fixed-size bodies accept newer versions that append fields; list bodies check their length exactly. |
@@ -91,7 +93,7 @@ Bodies start with `uint16 Version = 1`; text is UTF-8 with a `uint16` byte lengt
 | Step | Packet | Notes |
 | --- | --- | --- |
 | Connect | S→C `ServerHello` (`0x45540F00`) | `{uint16 Version, uint16 0, uint32 Protocol, MinimumProtocol, int32 FullPlayers, text ServerName (32 B)}`: `FullPlayers` = players in the world when the player limit (`server.max_users` or `/user_limit`) is reached, else 0 (then only game masters may log in); `ServerName` is `server.name`. |
-| Log in | C→S `Login` (`0x45540F01`) | `{uint16 Version, uint16 0, uint32 Protocol, text Account (64 B), text Password (128 B)}`. `Protocol` is `ProtocolVersion.Current` (3); a change of any message's layout raises it and `ProtocolVersion.Minimum`, so a client built before it is refused instead of misreading the world. |
+| Log in | C→S `Login` (`0x45540F01`) | `{uint16 Version, uint16 0, uint32 Protocol, text Account (64 B), text Password (128 B), text Language (16 B)}`. `Protocol` is `ProtocolVersion.Current` (11); a change of any message's layout raises it and `ProtocolVersion.Minimum`, so a client built before it is refused instead of misreading the world (a login without the language, from a client before protocol 4, is still read so the server can answer it is outdated). `Language` is the client's language (`en` or `pt-BR`; any other value is English): the server sends names and NPC dialog in it, falling back to English. |
 | Result | S→C `CharacterList` (`0x45540F03`), then `LoginResult` (`0x45540F02`) | `LoginResult` = `{uint16 Version, uint8 Status, uint8 0}`: 0 ok, 1 bad credentials (also unknown accounts), 2 account blocked, 3 already logged in on this connection, 4 busy (throttled, full or storage failure), 5 client protocol older than the server's minimum. A failed login sends no list. |
 | Character list | S→C `CharacterList` | `{uint16 Version, uint16 0, int32 Count (at most 6)}`, then `{text Name, uint32 Class (PlayerClass), int32 Level, uint8 Tier, Face, Hair, Flags (1 in a village), uint32 WeaponCode, ArmorCode, OffHandCode, uint32 0}`. |
 | Create, delete | C→S `CharacterCommand` (`0x45540F04`), S→C `CharacterResult` (`0x45540F05`) | Command `{uint16 Version, uint8 Action (1 create, 2 delete), uint8 0, int32 Class (PlayerClass), FaceIndex, text Name}`; result `{uint16 Version, uint8 Action, uint8 Ok, int32 Failure (CreateCharacterFailure), text Name}`. |
@@ -240,7 +242,7 @@ These bodies have no version header, except the combat event list's (see [Event 
 | --- | --- | --- |
 | `InventoryCommand` | `Guid OperationId, int64 ExpectedRevision, int32 Action, Guid ItemId, int32 Destination, Count, Slot` | 64 |
 | `ProgressionCommand` | `Guid OperationId, int64 ExpectedRevision, int32 Action, Attribute, Amount, uint SkillCode, uint64 NpcId` | 56 |
-| `InventoryResult` / `ProgressionResult` | `Guid OperationId, int32 Ok, int64 Revision, text Message (128 B)` | 38 + text |
+| `InventoryResult` / `ProgressionResult` | `Guid OperationId, int32 Ok, int64 Revision, game text Message` (none for a plain success) | 40 + texts |
 | `Inventory` | `int64 Revision, int32 Part, Parts, Count`, then items `{Guid, uint Code, int32 Kind, Count, Anchor, Slot, int16 Width, Height, text Name (64 B)}` (at most 64 per part) | 28 + up to 106n |
 | `Skills` | `int64 Revision, int32 Count`, then `{uint Code, int32 Rank}` | 20 + 8n |
 | `CombatEvents` | `uint16 Version (1), uint16 Count`, then compact entries (see [Event lists](#event-lists)) | 12 + 4 to 65 per entry |
@@ -344,7 +346,7 @@ Every body starts with `{uint16 Version = 1, uint16 Flags = 0}`; text is UTF-8 w
 | Message | Layout after the header | Size |
 | --- | --- | --- |
 | `ItemUseCommand` | `Guid OperationId, int64 ExpectedRevision, Guid ItemId, int32 Argument, text Text (64 B)` | 58 + text |
-| `ItemUseResult` | `Guid OperationId, int32 Ok, int64 Revision, uint16 Status, uint16 0, uint32 ItemCode, text Message (128 B)` | 50 + text |
+| `ItemUseResult` | `Guid OperationId, int32 Ok, int64 Revision, uint16 Status, uint16 0, uint32 ItemCode, game text Message` | 52 + texts |
 | `PremiumTimers` | `int64 Revision, int32 Count`, then `{uint8 Kind, uint8 0, uint16 0, int32 Value, uint32 RemainingSeconds, DurationSeconds}` (at most 32) | 24 + 16n |
 | `ItemEffects` | `int32 Count`, then `{uint64 Entity, uint32 ItemCode, uint8 Effect, uint8 0, uint16 0, int32 X, Y, Z, Variant, uint64 Target}` (at most 64) | 16 + 40n |
 
@@ -430,7 +432,7 @@ list length is checked exactly. Text is UTF-8 with a `uint16` byte length (names
 to 64 bytes, item names 40, messages 128, dialog lines 256), and counts are 32-bit. The click itself is an
 `AttackRequest` on the NPC id; the server answers with `NpcResult`.
 
-- `NpcResult`: `{uint64 NpcId, int32 Ok, text Name, text Message, int32 ServiceCount, services {uint8 Kind, uint8
+- `NpcResult`: `{uint64 NpcId, int32 Ok, text Name, game text Message, int32 ServiceCount, services {uint8 Kind, uint8
   Available, uint16 PricePercent, int32 Value}, int32 LineCount, text lines}` (at most 32 services and 20 lines). `Kind` is
   `NpcServiceKind`, `Value` the authored argument (class-change group, teleport route, mix mode, quest code...). One
   dialog line is sent, chosen at random as the original does.
@@ -441,7 +443,7 @@ to 64 bytes, item names 40, messages 128, dialog lines 256), and counts are 32-b
   index or the materials; it never sends an item, a price or a total. The original buy and warehouse layouts, which carry a whole client-built item
   or warehouse, are not used.
 - `NpcServiceResult`: `{Guid OperationId, uint64 NpcId, uint8 Service, uint8 Action, uint16 Status, int32 Ok, int64
-  Revision, int64 StorageRevision, text Message}`. `Status` is `NpcServiceStatus` (`NotAvailable` for services Etervale
+  Revision, int64 StorageRevision, game text Message}`. `Status` is `NpcServiceStatus` (`NotAvailable` for services Etervale
   does not run, `OutOfReach`, `Rejected`, `Stale`, `NotEnoughGold`, `NoSpace`, `GoldLimit`, `Busy`, `StorageFailed`,
   `Conflict`, `NotOpen`, `OverWeight`, `WrongPuzzle`, `WrongMaterials`). The state messages a request produces
   (`ShopCatalog`, `ShopQuotes`, `Warehouse`, `TeleportList`, `ItemWork`) carry the same operation id and precede the
@@ -467,7 +469,7 @@ Every body starts with `{uint16 Version = 1, uint16 Flags = 0}`; text is UTF-8 w
 | `PersonalShopClose` | `Guid OperationId` |
 | `PersonalShopView` | `Guid OperationId, uint64 SellerId` |
 | `PersonalShopBuy` | `Guid OperationId, uint64 SellerId, Guid ItemId, int64 UnitPrice, int32 Count, int32 0, int64 ExpectedRevision` (the buyer's inventory) |
-| `PersonalShopResult` | `Guid OperationId, uint8 Action (0 open, 1 close, 2 view, 3 buy), uint8 0, uint16 Status, int32 Count, int64 Revision, int64 UnitPrice, text Message` |
+| `PersonalShopResult` | `Guid OperationId, uint8 Action (0 open, 1 close, 2 view, 3 buy), uint8 0, uint16 Status, int32 Count, int64 Revision, int64 UnitPrice, game text Message` |
 | `PersonalShopListing` | `Guid OperationId, uint64 SellerId, int32 Count, offers {StoreItemEntry, int64 UnitPrice}`; a store item entry is `{Guid, uint32 Code, uint8 Kind, uint8 0, uint16 0, int32 Count, int32 Cell, int16 Width, int16 Height, text Name}` (the warehouse's too) |
 | `PersonalShopDetails` | `Guid OperationId, uint64 SellerId, int32 Count, ItemDetailEntry entries` |
 
@@ -534,17 +536,17 @@ Bodies start with `{uint16 Version = 1, uint16 Flags = 0}`.
 
 ### Quests
 
-Quest bodies start with the NPC header `{uint16 Version = 3, uint16 Flags = 0}` (`NpcWire`); text is UTF-8 with a `uint16` byte length (64 bytes,
-notices 128). A dialog is `{uint16 Code, uint8 Followup, uint8 0, int32 State, int32 Choice, text Document, Title,
-ConfirmLine1, ConfirmLine2, ConfirmDetail, int32 ChoiceCount, (text Choice, text ChoiceDocument)...}` (at most 16
-choices); a notice list is `{int32 Count, (uint8 Kind, uint8 0, text)...}` (at most 32). Codes and enums are
+Quest bodies start with the NPC header `{uint16 Version = 3, uint16 Flags = 0}` (`NpcWire`); text is UTF-8 with a `uint16` byte length (64 bytes).
+A dialog is `{uint16 Code, uint8 Followup, uint8 0, int32 State, int32 Choice, text Document, game text Title,
+ConfirmLine1, ConfirmLine2, ConfirmDetail, Subject (what the document's `$$%s` names), int32 ChoiceCount, (text Choice, text ChoiceDocument)...}` (at most 16
+choices); a notice list is `{int32 Count, (uint8 Kind, uint8 0, game text)...}` (at most 32). Codes and enums are
 `QuestCode`, `QuestAction`, `QuestStatus`, `QuestFollowup`, `QuestNoticeKind`, `QuestTimerKind` (see
 [quests.md](quests.md)).
 
 - `QuestRequest` (48 bytes): `{Guid OperationId, uint64 NpcId, uint8 Action, uint8 0, uint16 Code, int32 State,
   int32 Choice}`. `NpcId` is 0 only for the redistribution offer and the victory dialog of a duel.
 - `QuestResult`: `{Guid OperationId, uint8 Status, uint8 Flags (1 ok, 2 class change offered, 4 redistribution
-  offered, 8 dialog follows), uint16 0, int64 Revision, text Message, [dialog], notices}`.
+  offered, 8 dialog follows), uint16 0, int64 Revision, game text Message, [dialog], notices}`.
 - `QuestJournal`: `{int64 Revision, uint16 Code, uint8 Timer, uint8 RedistributionOffered, int32 State, text
   TargetName, int32 Kills, KillsNeeded, int64 TimerMs, int32 WeaponStage, WeaponKillsLeft, uint32 LevelLog, ElementaryLog, int32 ProgressCount,
   (text Title, text Description)..., int32 FinishedCount, lines}` (at most 16 running and 32 finished lines; a

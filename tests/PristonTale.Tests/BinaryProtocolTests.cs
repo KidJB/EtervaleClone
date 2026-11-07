@@ -11,6 +11,7 @@ using PristonTale.Protocol.Packets;
 using PristonTale.Protocol.Transport;
 using PristonTale.Contracts.Motion;
 using PristonTale.Contracts.Characters;
+using PristonTale.Contracts.Texts;
 
 namespace PristonTale.Tests;
 
@@ -27,6 +28,7 @@ internal static class BinaryProtocolTests
         yield return ("a connection counts its backlog until the stream takes it, and a batch of sends leaves in one write", BacklogAsync);
         yield return ("a connection whose backlog stops draining closes as stalled", StallAsync);
         yield return ("a server address takes a host, host:port or tcp:// form, the game port when none is given", ServerAddressAsync);
+        yield return ("operation results carry their line as a game text, and more arguments than its field holds are refused", GameTextAsync);
     }
 
     private static Task MalformedAsync()
@@ -98,8 +100,13 @@ internal static class BinaryProtocolTests
         var buffer = new byte[FrameCodec.MaxFrameSize];
         var hello = new ServerHelloPacket(ProtocolVersion.Current, ProtocolVersion.Minimum, 12);
         Assert.True(ServerHelloPacket.Read(buffer.AsSpan(0, hello.Write(buffer))) == hello, "server hello round trip changed fields");
-        var login = new LoginPacket(ProtocolVersion.Current, "conta", "sênha✓");
-        Assert.True(LoginPacket.Read(buffer.AsSpan(0, login.Write(buffer))) == login, "login round trip changed the account or password");
+        var login = new LoginPacket(ProtocolVersion.Current, "conta", "sênha✓", "pt-BR");
+        Assert.True(LoginPacket.Read(buffer.AsSpan(0, login.Write(buffer))) == login, "login round trip changed the account, password or language");
+        // A client before protocol 4 sends no language; its login still reads, so the server can tell it is outdated.
+        var outdated = buffer.AsSpan(0, login.Write(buffer) - 2 - "pt-BR".Length).ToArray();
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(outdated, outdated.Length);
+        var read3 = LoginPacket.Read(outdated);
+        Assert.True(read3.Language == "" && read3.Password == "sênha✓", "a login without the language did not read");
         Assert.True(LoginResultPacket.Read(buffer.AsSpan(0, new LoginResultPacket(Contracts.Sessions.LoginFailure.Busy).Write(buffer))).Status == Contracts.Sessions.LoginFailure.Busy,
             "login result lost its status");
 
@@ -242,6 +249,21 @@ internal static class BinaryProtocolTests
 
         async Task<FrameConnection> AcceptAsync() =>
             await TlsTransport.AcceptAsync(await listener.AcceptAsync(timeout.Token), context, TlsTransport.DefaultHandshakeTimeout, timeout.Token);
+    }
+
+    private static Task GameTextAsync()
+    {
+        var buffer = new byte[OperationResultPacket.MaxSize + 64];
+        var named = new OperationResultPacket(EtervaleOpcodes.InventoryResult, Guid.NewGuid(), false, 12, GameText.Of(GameTextId.ItemsReceived, "Ração", "3"));
+        Assert.True(OperationResultPacket.Read(buffer.AsSpan(0, named.Write(buffer))) == named, "an operation result with arguments changed");
+        var none = named with { Ok = true, Message = GameText.None };
+        var size = none.Write(buffer);
+        Assert.True(size == OperationResultPacket.MinSize && OperationResultPacket.Read(buffer.AsSpan(0, size)).Message.IsNone, "an operation result without a line changed");
+        var full = named with { Message = GameText.Of(GameTextId.RequestRefused, "a", "b", "c", "d") };
+        size = full.Write(buffer);
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(8 + 16 + 4 + 8 + 2), GameTextWire.MaxArgs + 1);
+        Assert.Throws<InvalidDataException>(() => OperationResultPacket.Read(buffer.AsSpan(0, size).ToArray()), "a game text past its argument limit was read");
+        return Task.CompletedTask;
     }
 
     private static Task ServerAddressAsync()

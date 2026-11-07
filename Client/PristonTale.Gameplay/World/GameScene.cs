@@ -135,11 +135,11 @@ public sealed partial class GameScene : IDisposable, IHudPortraitScene
     private const double DoubleClickMs = 350.0;
     private double _leftPressMs;
     private double _lastGroundClickMs = double.NegativeInfinity;
-    private bool _autoFollow;
     // The walk/run setting (R or the bar's button), running at first as in the original.
     private bool _runFlag = true;
     // After a double click on the ground the player keeps walking toward the cursor until it is blocked or clicks again.
     private bool _followCursor;
+    private bool _holdCursorMovement;
 
     private readonly AttackInputController _attackInput = new();
     private readonly TargetSelection _targetSelection = new();
@@ -261,13 +261,10 @@ public sealed partial class GameScene : IDisposable, IHudPortraitScene
     private float PlayerYaw => InActionField ? ActionFieldView.Facing(WorldSpace.RenderYaw(_playerForward)) : WorldSpace.RenderYaw(_playerForward);
     public event Action<PresenceUpdate> PresenceObserved;
 
-    // What a request answers when the scene has no world connection.
-    private const string NoConnection = "world connection unavailable";
-
     public Task<PristonTale.Simulation.Items.InventoryOutcome> ApplyInventoryAsync(PristonTale.Simulation.Items.InventoryCommand command)
     {
         return _playChannel is not null ? _playChannel.ApplyInventoryAsync(command, _presenceCts.Token)
-            : Task.FromResult(new PristonTale.Simulation.Items.InventoryOutcome(false, 0, NoConnection));
+            : Task.FromResult(new PristonTale.Simulation.Items.InventoryOutcome(false, 0, PristonTale.Contracts.Texts.GameText.None));
     }
     public event Action<ulong> NpcSelected;
     // Asked as a ground item's pickup leaves, with its item code: whether it comes to the inventory's cursor; that
@@ -288,27 +285,27 @@ public sealed partial class GameScene : IDisposable, IHudPortraitScene
     public Task<PristonTale.Simulation.Progression.ProgressionOutcome> ApplyProgressionAsync(PristonTale.Simulation.Progression.ProgressionCommand command)
     {
         return _playChannel is not null ? _playChannel.ApplyProgressionAsync(command, _presenceCts.Token)
-            : Task.FromResult(new PristonTale.Simulation.Progression.ProgressionOutcome(false, 0, NoConnection));
+            : Task.FromResult(new PristonTale.Simulation.Progression.ProgressionOutcome(false, 0, PristonTale.Contracts.Texts.GameText.None));
     }
 
     public Task<PristonTale.Simulation.World.Npcs.NpcInteraction> InteractNpcAsync(ulong entityId)
     {
         return _playChannel is not null ? _playChannel.InteractNpcAsync(entityId, _presenceCts.Token)
-            : Task.FromResult(PristonTale.Simulation.World.Npcs.NpcInteraction.Rejected(NoConnection));
+            : Task.FromResult(PristonTale.Simulation.World.Npcs.NpcInteraction.Rejected(PristonTale.Contracts.Texts.GameText.None));
     }
 
     public Task<PristonTale.Simulation.World.Npcs.NpcServiceReply> RequestNpcServiceAsync(PristonTale.Simulation.World.Npcs.NpcServiceCommand command)
     {
         return _playChannel is not null ? _playChannel.RequestNpcServiceAsync(command, _presenceCts.Token)
             : Task.FromResult(new PristonTale.Simulation.World.Npcs.NpcServiceReply(PristonTale.Simulation.World.Npcs.NpcServiceOutcome.Failed(
-                PristonTale.Simulation.World.Npcs.NpcServiceStatus.Rejected, NoConnection)));
+                PristonTale.Simulation.World.Npcs.NpcServiceStatus.Rejected, PristonTale.Contracts.Texts.GameText.None)));
     }
 
     public Task<PristonTale.Simulation.Quests.QuestOutcome> RequestQuestAsync(PristonTale.Simulation.Quests.QuestCommand command)
     {
         return _playChannel is not null ? _playChannel.RequestQuestAsync(command, _presenceCts.Token)
             : Task.FromResult(PristonTale.Simulation.Quests.QuestOutcome.Failed(PristonTale.Simulation.Quests.QuestStatus.Rejected,
-                NoConnection));
+                PristonTale.Contracts.Texts.GameText.Of(PristonTale.Contracts.Texts.GameTextId.ConnectionError)));
     }
 
     public void PlayItemSound(string catalogKey) => _fieldAudio?.PlayItem(catalogKey);
@@ -412,6 +409,9 @@ public sealed partial class GameScene : IDisposable, IHudPortraitScene
     private float _warpCooldown;
     private FieldWarpGate _pendingWarp;
     private WarpInfo _pendingFieldWarp;
+    private const double PreparedDestinationHoldMs = 10_000d;
+    private string _preparedDestinationId;
+    private double _preparedDestinationUntilMs;
     // The server settles teleports within twice the drop tolerance of their height.
     private const float WarpFloorTolerance = 64f;
     // A warp landing farther than this from the server's place is corrected to it.
@@ -479,7 +479,7 @@ public sealed partial class GameScene : IDisposable, IHudPortraitScene
     private void UpdateMovementReport(float dt)
     {
         _reports.Advance(dt);
-        if (_playChannel == null || _activeField == null || _playerBody == null)
+        if (_pendingFieldWarp is not null || _playChannel == null || _activeField == null || _playerBody == null)
         {
             return;
         }

@@ -304,7 +304,7 @@ internal static class GameMasterCommandTests
         await fixture.SayAsync(gm, "/@get_perf WA101 cooks");
         Assert.True(gm.Link.Last.StartsWith("Unknown spec cooks", StringComparison.Ordinal), gm.Link.Last);
         Assert.True(GmItemCommands.SpecJobCode("Assassin") == 9 && GmItemCommands.SpecJobCode("shaman") == 10 && GmItemCommands.SpecJobCode("10") == 10
-            && GmItemCommands.SpecJobCode("9") == 9 && GmItemCommands.SpecJobCode("11") < 0 && GmItemCommands.SpecJobCode("KS") == 6,
+            && GmItemCommands.SpecJobCode("9") == 9 && GmItemCommands.SpecJobCode("12") < 0 && GmItemCommands.SpecJobCode("KS") == 6,
             "the Assassin and the Shaman are not specs by name and number");
         await fixture.SayAsync(gm, "/@get_perf ZZ999");
         Assert.True(gm.Link.Last == "Unknown item code ZZ999", gm.Link.Last);

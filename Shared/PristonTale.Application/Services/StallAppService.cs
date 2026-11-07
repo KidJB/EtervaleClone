@@ -1,3 +1,4 @@
+using PristonTale.Contracts.Texts;
 using System.Numerics;
 using PristonTale.Application.Chat;
 using PristonTale.Application.Saves;
@@ -92,7 +93,7 @@ public sealed class StallAppService(ISessionRegistry sessions, ICharacterSaves s
         PlayerSession? ownerSession = sessions.TryGetCharacterSession(owner.CharacterId, out var playing) ? playing : null;
         if (owner.AccountId == buyer.AccountId)
         {
-            return new PersonalShopReply(new PersonalShopOutcome(false, PersonalShopStatus.Rejected, 0, StallMessages.OwnStall));
+            return new PersonalShopReply(new PersonalShopOutcome(false, PersonalShopStatus.Rejected, 0, GameText.Plain(StallMessages.OwnStall)));
         }
 
         using var ownerLease = ownerSession is null ? null : await _durable.AdmitAsync(ownerSession, TimeSpan.Zero, ct);
@@ -139,7 +140,7 @@ public sealed class StallAppService(ISessionRegistry sessions, ICharacterSaves s
 
         if (chat.TryGet(buyer.EntityId, out var member))
         {
-            member.Link.Deliver(new ChatLine(ChatKind.Trade, 0, PersonalShopMessages.Sold(prepared.Original.Name, count, prepared.ItemName, prepared.Price)));
+            member.Link.Deliver(new ChatLine(ChatKind.Trade, 0, "", PersonalShopMessages.Sold(prepared.Original.Name, count, prepared.ItemName, prepared.Price)));
         }
 
         if (owner is not null && chat.TryGet(owner.EntityId, out var seller))

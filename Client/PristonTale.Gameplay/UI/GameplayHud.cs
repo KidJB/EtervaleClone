@@ -19,6 +19,7 @@ using PristonTale.Simulation.Progression;
 using PristonTale.Simulation.Quests;
 using PristonTale.Simulation.World.Npcs;
 using PristonTale.Contracts.Characters;
+using PristonTale.Gameplay.Localization;
 
 namespace PristonTale.Gameplay.UI;
 
@@ -131,7 +132,11 @@ public sealed partial class GameplayHud : IDisposable
     private int _serviceCompletions;
     private int _bindingRefusals;
     private int _serviceOpened;
+    private int _hoveredTeleportFieldCode = -1;
+    private double _hoveredTeleportSince;
+    private bool _teleportFieldPrepared;
     private double _lastUpdate;
+    private readonly Action<int> _prepareField;
 
     public GameplayHud(ScreenContext context, Func<InventoryCommand, Task<InventoryOutcome>> applyInventory,
         Func<ProgressionCommand, Task<ProgressionOutcome>> applyProgression = null,
@@ -139,6 +144,7 @@ public sealed partial class GameplayHud : IDisposable
         Action<NpcInteraction> npcOpened = null,
         Action npcClosed = null,
         Func<NpcServiceCommand, Task<NpcServiceReply>> requestNpcService = null,
+        Action<int> prepareField = null,
         Func<QuestCommand, Task<QuestOutcome>> requestQuest = null)
     {
         _context = context;
@@ -164,6 +170,7 @@ public sealed partial class GameplayHud : IDisposable
         _npc = new HudNpcPanel(interactNpc, context.Log, npcOpened, npcClosed);
         _portrait = new HudTargetPortrait(context.GraphicsDevice);
         _services = new HudNpcServiceController(requestNpcService, context.Log);
+        _prepareField = prepareField;
         _itemUse = new HudItemUseController(UseItemAsync, context.Log);
         _actionBar = new HudActionBar(_bindings);
         _actionBarStore = new HudActionBarStore(HudActionBarStore.DefaultDirectory, context.Log);
@@ -203,7 +210,8 @@ public sealed partial class GameplayHud : IDisposable
         _sprites.Request(HudChatWindow.Art);
         _sprites.Request(HudChatBubbles.Art);
         _chat.Lookup = id => (Combat.KindOf(id, out var owner), owner);
-        _helpPet = new HudHelpPet(HelpPetMessages.LoadAsync(context.AssetRoot, context.Log), new Random(), context.Log);
+        _helpPet = new HudHelpPet(HelpPetMessages.LoadAsync(context.AssetRoot, context.Log, ClientText.Language), new Random(), context.Log,
+            language => HelpPetMessages.LoadAsync(context.AssetRoot, context.Log, language));
         _sprites.Request(HudHelpPet.Art);
         SetUpParty();
         SetUpTrade();
@@ -370,7 +378,7 @@ public sealed partial class GameplayHud : IDisposable
             _syncedSkills = null;
             _skillHud.SetClass(value);
             _skills.SetClass(value);
-            _status.ClassName = ClassProfiles.Of(value).Titles[0];
+            _status.ClassName = DataText.ClassTitle(value, 0);
             _status.Invalidate();
         }
     }
@@ -587,6 +595,7 @@ public sealed partial class GameplayHud : IDisposable
         HudMessageBox.Place(layout);
         var pointer = layout.ToLogical(mouse.Position);
         var design = new Point(pointer.X, pointer.Y - layout.BottomOffset);
+        UpdateTeleportPrefetch(pointer);
         if (_quests.Dialog is not null && HudQuestDialog.Box.Contains(pointer))
         {
             _questDialog.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
@@ -1002,7 +1011,8 @@ public sealed partial class GameplayHud : IDisposable
         else if (_quests.SkillResetBox)
         {
             _painter.Flush();
-            HudQuestDialog.DrawBox(_painter, QuestTexts.SkillPointName, QuestTexts.Redistribute.Item1, QuestTexts.Redistribute.Item2, pointer);
+            HudQuestDialog.DrawBox(_painter, ClientText.Format(QuestTexts.SkillPointName), ClientText.Format(QuestTexts.Redistribute.Item1),
+                ClientText.Format(QuestTexts.Redistribute.Item2), pointer);
         }
 
         _painter.Flush();

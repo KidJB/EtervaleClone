@@ -42,7 +42,7 @@ progression, regeneration and movement rates. `World/`, `Physics/` and `Skills/`
 | `Items/EquipmentTotals.cs` | What the usable worn items and their specializations add (`EquipmentTotals.Sum`) |
 | `Items/ItemUsability.cs`, `CarriedWeight.cs` | Requirement and class checks; carried weight and the weight limit checks |
 | `Items/ItemAbsorbCorrection.cs` | Absorb added to armor, robes, boots, gloves and shields by catalog number |
-| `Items/ItemDetailView.cs`, `ItemRuleMessages.cs` | Owner view of one copy; the texts of item refusals |
+| `Items/ItemDetailView.cs` | Owner view of one copy |
 | `Items/Inventory.cs` | Bitmask grid with anchors, stacking, move/split/merge/exchange; an item added without a place goes to the first free space down each column from the left |
 | `Items/StoreGrid.cs` | The 9x9 store grid of the warehouse and the shops |
 | `Items/InventoryCommand.cs` | `InventoryCommand` and `InventoryCommands.Apply` |
@@ -124,8 +124,9 @@ The class also loads its skill window from `ClassSkillCatalog.For(class)` (see [
 | Knight | 6 | 0x10000 | Morion | 26/13/17/19/24 | 190 | 2/2/2/1/2/0 |
 | Magician | 7 | 0x80000 | Morion | 16/29/19/14/21 | 190 | 5/1/3/3/2/1 |
 | Priestess | 8 | 0x40000 | Morion | 15/28/21/15/20 | 200 | 4/1/3/3/2/2 |
-| Assassin | 9 | 0x10 | Tempskron | 25/10/22/20/22 | 80 | 3/3/2/3/1/0 |
-| Shaman | 10 | 0x100000 | Morion | 15/27/20/15/22 | 190 | 5/1/3/3/2/1 |
+| Assassin | 9 | 0x10 | Tempskron | 25/10/22/20/22 | 80 | 3/3/2/1/2/0 |
+| Shaman | 10 | 0x100000 | Morion | 15/27/20/15/22 | 200 | 2/1/2/3/2/1 |
+| Martial Artist | 11 | 0x20 | Tempskron | 26/9/20/20/24 | 80 | 3/3/2/1/2/0 |
 
 - Two job masks exist: `JobBitCode` (non-sequential bits) is used for item class restrictions and item specialization;
   `CharacterClassDef.MotionJobMask = 1 << (Class - 1)` is used for animation tables. Do not mix them. A class's
@@ -136,7 +137,7 @@ The class also loads its skill window from `ClassSkillCatalog.For(class)` (see [
   quests (see [quests.md](quests.md)).
 - Head models: `CharacterHead.Resolve` builds `char/tmABCD/<prefix><variant 01..13><suffix>.inx` from the per-class,
   per-tier pattern in `CharacterHeadModels` (the fifth tier's heads end in `d`; the Priestess's 6 to 9 are spelled
-  `006`..`009`). Assassin and Shaman tiers 1-4 have only the three creation faces;
+  `006`..`009`). Assassin, Shaman and Martial Artist tiers 1-4 have only the three creation faces;
   `Apply` falls back to the face index instead of inventing a file name.
 
 ## Character aggregate
@@ -149,6 +150,7 @@ a transaction candidate) is the only writer.
 | `Level`, `Experience`, `Money`, point counters, `Tier` | Loaded by `RestoreProgress` (non-negative, tier 0..4) |
 | `Life`, `Mana`, `Stamina` | Plain settable pools; clamped to maxima by every recompute and by `Equip` |
 | `Attributes` | Base plus allocated points; equipment never changes them |
+| `EffectiveAttributes` | `Attributes` with Strength, Spirit and Agility raised by their percent modifiers (`StatKind.Strength`, `Spirit`, `Agility`; Hard Training), each truncated once; the derived stats, the weapon damage and the skill formulas read them, item requirements and the status window the allocated ones |
 | `Derived` | Cached `DerivedStats`; reading it recomputes when `Effects.Revision` changed |
 | `Equipment`, `Inventory` | 10 equipment slots and the 12x6 carried grid |
 | `Effects` | `EffectContainer` with every timed and permanent modifier |
@@ -179,7 +181,7 @@ a transaction candidate) is the only writer.
    their own.
 4. `ArmorDefence` percent: if non-zero and the worn armor is specialized for the class, the armor's own defence
    (specialization included) grows by that percent before it feeds defence and absorption.
-5. `DerivedStats.Compute(attributes, level, functionProfile, totals, carriedWeight)` (formulas below).
+5. `DerivedStats.Compute(EffectiveAttributes, level, functionProfile, totals, carriedWeight)` (formulas below).
 6. `PassiveSkills.Apply` (table-driven passives, see [skills.md](skills.md)), then `ModifierRules.Apply` with
    `Effects.Totals`; `MaxWeight` gains the premium weight bonus (Might of Awell, Gravity Scrolls). `PremiumEffects.Sync`
    runs with `PassiveSkillEffects.Sync` and keeps Mana Reduce, Terry and Mute as permanent system modifiers.
@@ -234,7 +236,8 @@ nothing):
 - `min = 2 + wMin*(primary+divisor)/divisor + secondary + job + (wMin+wMax)/16`
 - `max = 4 + wMax*(primary+divisor)/divisor + secondary + job + items.LevelDamage`
 - `job = Level / 6` when the weapon is the class's favoured kind (Fighter axe, Archer bow, Pikeman pole, Knight sword,
-  Atalanta javelin, Assassin dagger, Magician/Priestess staff, Shaman phantom; Mechanician: weapon specialized for
+  Atalanta javelin, Assassin dagger, Magician/Priestess staff, Shaman phantom, Martial Artist vambrace; Mechanician:
+  weapon specialized for
   Mechanician).
 - Adds the passive weapon mastery bonuses (`PassiveSkills.WeaponBonus`, `PassiveSkillEffects.WeaponBonus`), then
   `ModifierRules.ApplyDamage` (DamageMin/DamageMax totals; max is never below min).
@@ -353,7 +356,7 @@ totals.
   | --- | --- | --- |
   | `WA1 WC1 WH1 WM1 WP1 WS1 WS2 WT1` | axe, claw, hammer, staff, pole, bow, sword, javelin | Weapon |
   | `WD1 WN1 WV1` | dagger, phantom, vambrace | Weapon (one-handed) |
-  | `DA1 DA2` | armor (robes are `DA2`) | Armor |
+  | `DA1 DA2 DA3 DA4` | armor (robes are `DA2`) | Armor |
   | `DB1`, `DG1` | boots, gloves | Boots, Gloves |
   | `DS1`, `OM1` | shield, orb | OffHand |
   | `OA1`, `OA2` | amulet, bracelet | Amulet, Bracelet |
@@ -363,7 +366,8 @@ totals.
   Two-handed weapons are the listed keys of the item table (axes, hammers, staves, poles, bows and swords; claws,
   javelins, daggers, phantoms and vambraces have none). Force orbs (`FO1`) and other families are not wearable.
 - `AllowedJobs` (0 = any class): `DA1` armor for non-casters, `DA2` robes and `OM1` for casters, with fixed key
-  numbers restricted to male-only or female-only classes. A specialization never restricts who may wear an item.
+  numbers restricted to male-only or female-only classes; daggers for the Assassin, phantoms for the Shaman and
+  vambraces for the Martial Artist alone, who wields no other weapon. A specialization never restricts who may wear an item.
 - `ItemInstance`: `InstanceId` (Guid, preserved across moves and copies with `preserveId`), `Count`, `UpgradeLevel`,
   durability, and `Roll` (`ItemRoll`): damage range, attack rating, defence, absorb (one decimal), block (two
   decimals), move speed, life/mana/stamina regeneration, added life/mana/stamina, resistances, requirements, price,
@@ -430,13 +434,13 @@ totals.
 - `TryEquipFromInventory(anchor, slot)`: the copy must pass `CanWear`. A two-handed weapon first sends the off-hand item
   to the bag (first free place); an off-hand item first sends a held two-handed weapon there; then the item in the
   slot takes the bag cell. Without room nothing changes. `InventoryCommands.Refusal` names an unusable item
-  (`ItemRuleMessages.CannotUse`).
+  (the `CannotUseYet` game text).
 - An item the character receives (`TryReceive`: a pickup, a starter or game master's gift, a quest grant, a prize)
   goes on the first empty slot that `CanEquip` allows (`TryWearReceived`), as the original's client wears what it
   receives: an armour on an empty armour slot, rings on either free ring slot, never a two-handed weapon beside an
   off-hand item or an item whose requirements are not met. A full bag does not keep it off an empty slot; otherwise
   it goes to the bag.
-- `TryUnequip` needs inventory space and is refused while the character is overweight (`ItemRuleMessages.OverWeight`).
+- `TryUnequip` needs inventory space and is refused while the character is overweight (the `OverWeight` game text).
 - `ReceiveGroundLoot` refuses an item that would carry the character over the weight limit. With `intoBag` (a pickup
   with the inventory open, `InventoryCommand.PickupToBag`) the item goes into the page shown's first free cells as a
   stack of its own, for the client to carry, or with no room there to the hand (`PlayerCharacter.Held`), as the

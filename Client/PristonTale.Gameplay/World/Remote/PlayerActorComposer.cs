@@ -144,12 +144,14 @@ public sealed class PlayerActorComposer(IActorScene scene, PristonActorLoader ac
     }
 
     // A held item without a model in the equipment table is not drawn, as an armour without a body keeps the class body:
-    // one unknown item cannot stop the frame that draws its wearer.
+    // one unknown item cannot stop the frame that draws its wearer. The off-hand part is the off-hand item, or the weapon's
+    // second copy of a class that holds it twice.
     private static (string Body, string Head, string Weapon, string OffHand) PartPaths(string root, CharacterVisualSet visuals, int face) => (
         Path.Combine(root, visuals.Body.InxExtensionPath),
         Path.Combine(root, CharacterFace.ResolveHeadPath(visuals, face)),
         HeldPath(root, visuals.WeaponKey),
-        HeldPath(root, visuals.OffHandKey));
+        !string.IsNullOrEmpty(visuals.OffHandKey) ? HeldPath(root, visuals.OffHandKey)
+            : EquipmentVisuals.TwinMeshPath(visuals) is { } twin ? Path.Combine(root, twin) : null);
 
     private static string HeldPath(string root, string key) =>
         string.IsNullOrEmpty(key) || !EquipmentVisuals.HasModel(key) ? null : Path.Combine(root, EquipmentVisuals.MeshPath(key));
@@ -243,11 +245,12 @@ public sealed class PlayerActorComposer(IActorScene scene, PristonActorLoader ac
                     _scene.SetActorAttachOffset(handles.Weapon, hover.Offset, hover.Lift);
                 }
 
-                if (prepared.OffHand is null && EquipmentVisuals.TwinBone(visuals, visuals.InVillage) is { } twinHeld)
+                if (string.IsNullOrEmpty(visuals.OffHandKey) && prepared.OffHand is not null
+                    && EquipmentVisuals.TwinBone(visuals, visuals.InVillage) is { } twinHeld)
                 {
                     handles = handles with
                     {
-                        OffHand = _scene.AddActor(new PristonActorInstance(prepared.Weapon, world, MotionCode.Stand)
+                        OffHand = _scene.AddActor(new PristonActorInstance(prepared.OffHand, world, MotionCode.Stand)
                         {
                             VisibleInMainPass = visibleInMainPass
                         }),
@@ -258,7 +261,7 @@ public sealed class PlayerActorComposer(IActorScene scene, PristonActorLoader ac
                 }
             }
 
-            if (prepared.OffHand is not null)
+            if (!string.IsNullOrEmpty(visuals.OffHandKey) && prepared.OffHand is not null)
             {
                 handles = handles with
                 {

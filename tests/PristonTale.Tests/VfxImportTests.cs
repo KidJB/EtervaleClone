@@ -81,6 +81,13 @@ internal static class VfxImportTests
             }
         }
 
+        // Concentration's and Swift Axe's cast lights hold to the Fighter; Rage of Zecram's burst stays where it began.
+        var heldCasts = definitions.Where(static definition => definition.Name is "vfx.fighter.concentration.cast" or "vfx.fighter.swiftaxe.cast").ToArray();
+        var zecram = definitions.Single(static definition => definition.Name == "vfx.fighter.zecram.cast");
+        Assert.True(heldCasts.Length == 2 && heldCasts.All(static definition =>
+            definition.Parts.Length > 0 && definition.Parts.All(static part => part.Anchor == VfxAnchor.Caster && part.Follow))
+            && zecram.Parts.All(static part => !part.Follow), "a Fighter cast effect follows its caster otherwise than the original's");
+
         static bool Converted(string name) => name.StartsWith("script.", StringComparison.Ordinal) || name.StartsWith("particle.", StringComparison.Ordinal);
         var started = definitions
             .SelectMany(static definition => definition.Children.Select(static child => child.Effect)

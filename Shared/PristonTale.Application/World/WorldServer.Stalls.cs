@@ -1,3 +1,4 @@
+using PristonTale.Contracts.Texts;
 using PristonTale.Application.Sessions;
 using PristonTale.Application.World.Stalls;
 using PristonTale.Persistence.Abstractions.Characters;
@@ -128,7 +129,7 @@ public sealed partial class WorldServer
             if (original.ShopPurchases.Find(purchase.OperationId) is { } applied)
             {
                 return applied.Purchase == purchase
-                    ? new PreparedStallPurchase(original, null, null, new PersonalShopOutcome(true, PersonalShopStatus.Ok, applied.Revision, "already committed"))
+                    ? new PreparedStallPurchase(original, null, null, new PersonalShopOutcome(true, PersonalShopStatus.Ok, applied.Revision, GameText.None))
                     : StallRefused(original, PersonalShopStatus.Conflict);
             }
 
@@ -189,7 +190,7 @@ public sealed partial class WorldServer
             }
 
             return new PreparedStallPurchase(original, candidate, CharacterRecordFactory.Capture(buyer.Loaded, candidate, connection.FieldId, player.Position),
-                new PersonalShopOutcome(true, PersonalShopStatus.Ok, candidate.InventoryRevision, ""), stall, StallRules.Remaining(stall.Shop, stock), stock,
+                new PersonalShopOutcome(true, PersonalShopStatus.Ok, candidate.InventoryRevision, GameText.None), stall, StallRules.Remaining(stall.Shop, stock), stock,
                 ownerPlayer?.Character, ownerCandidate, ownerSnapshot, price, item!.DisplayName);
         });
     }
@@ -250,7 +251,7 @@ public sealed partial class WorldServer
 
         var revision = viewer.Player.Character.InventoryRevision;
         reply = !viewer.Player.IsDead && NpcInteraction.WithinReach(viewer.Player.Position, stall.Position)
-            ? new PersonalShopReply(new PersonalShopOutcome(true, PersonalShopStatus.Ok, revision, ""), stall.Listing(viewer.Player.Character))
+            ? new PersonalShopReply(new PersonalShopOutcome(true, PersonalShopStatus.Ok, revision, GameText.None), stall.Listing(viewer.Player.Character))
             : new PersonalShopReply(PersonalShopOutcome.Failed(PersonalShopStatus.OutOfReach, revision));
         return true;
     }

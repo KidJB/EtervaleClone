@@ -7,6 +7,7 @@ using PristonTale.Engine3D.Rendering;
 using PristonTale.Gameplay.Audio;
 using PristonTale.Gameplay.Effects;
 using PristonTale.Gameplay.Screens.Framework;
+using PristonTale.Gameplay.Localization;
 using PristonTale.Gameplay.Screens.Gameplay;
 using PristonTale.Gameplay.Screens.Opening;
 using PristonTale.Gameplay.UI;
@@ -90,7 +91,7 @@ public sealed class CharacterSelectScreen : GameScreen
         _actorLoader = new PristonActorLoader(_assetCache);
     }
 
-    public override string StatusText => "Character select";
+    public override string StatusText => ClientText.Get("Status.CharacterSelect");
 
     public override void Enter()
     {
@@ -239,7 +240,7 @@ public sealed class CharacterSelectScreen : GameScreen
 
         Context.Log.Error("[CharSelect] character-list request failed", _rosterTask.Exception?.GetBaseException());
         _rosterTask = null;
-        _errorMessage = "Could not load characters.";
+        _errorMessage = ClientText.Get("CharSelect.LoadFailed");
         _busy = Busy.None;
         _state = State.CharacterSelect;
     }
@@ -259,7 +260,7 @@ public sealed class CharacterSelectScreen : GameScreen
         else
         {
             Context.Log.Error("[CharSelect] roster actor preparation failed", _rosterPreparationTask.Exception?.GetBaseException());
-            _errorMessage = "Could not load character models.";
+            _errorMessage = ClientText.Get("CharSelect.ModelsFailed");
         }
 
         _pendingRoster = null;
@@ -397,8 +398,8 @@ public sealed class CharacterSelectScreen : GameScreen
             return;
         }
         _errorMessage = _enterTask.IsCompletedSuccessfully
-            ? Fallback(_enterTask.Result.Message, "Could not enter the world.")
-            : "Could not reach server.";
+            ? ClientText.Get("CharSelect.EnterFailure." + _enterTask.Result.Failure)
+            : ClientText.Get("CharSelect.Unreachable");
         _enterTask = null;
         _busy = Busy.None;
         _state = State.CharacterSelect;
@@ -426,7 +427,6 @@ public sealed class CharacterSelectScreen : GameScreen
         }
 
         var ok = _deleteTask.IsCompletedSuccessfully && _deleteTask.Result.Ok;
-        var message = _deleteTask.IsCompletedSuccessfully ? _deleteTask.Result.Message : "delete failed";
         _deleteTask = null;
         if (ok)
         {
@@ -435,7 +435,7 @@ public sealed class CharacterSelectScreen : GameScreen
         }
         else
         {
-            _errorMessage = Fallback(message, "Could not delete the character.");
+            _errorMessage = ClientText.Get("CharSelect.DeleteFailed");
             _busy = Busy.None;
             _state = State.CharacterSelect;
         }
@@ -511,7 +511,7 @@ public sealed class CharacterSelectScreen : GameScreen
         else
         {
             Context.Log.Error("[CharSelect] job-lineup actor preparation failed", _jobPreparationTask.Exception?.GetBaseException());
-            _errorMessage = "Could not load class models.";
+            _errorMessage = ClientText.Get("CharSelect.ClassModelsFailed");
         }
 
         _jobPreparationTask = null;
@@ -653,7 +653,7 @@ public sealed class CharacterSelectScreen : GameScreen
         switch (_state)
         {
             case State.RaceSelect:
-                _errorMessage = "Choose a tribe.";
+                _errorMessage = ClientText.Get("CharSelect.ChooseTribe");
                 break;
             case State.JobSelect:
                 if (_jobSelected >= 0)
@@ -662,7 +662,7 @@ public sealed class CharacterSelectScreen : GameScreen
                 }
                 else
                 {
-                    _errorMessage = "Choose a class.";
+                    _errorMessage = ClientText.Get("CharSelect.ChooseClass");
                 }
 
                 break;
@@ -702,13 +702,13 @@ public sealed class CharacterSelectScreen : GameScreen
     {
         if (_jobSelected < 0 || _jobSelected >= _scene.JobCount)
         {
-            _errorMessage = "Choose a class.";
+            _errorMessage = ClientText.Get("CharSelect.ChooseClass");
             return;
         }
         var name = _nameField.Text.Trim();
         if (string.IsNullOrEmpty(name))
         {
-            _errorMessage = "Enter a name.";
+            _errorMessage = ClientText.Get("CharSelect.EnterName");
             return;
         }
         _audio.Play(LoginCue.GameStart);
@@ -726,7 +726,7 @@ public sealed class CharacterSelectScreen : GameScreen
         }
 
         var ok = _createTask.IsCompletedSuccessfully && _createTask.Result.Ok;
-        var message = _createTask.IsCompletedSuccessfully ? _createTask.Result.Message : "create failed";
+        var failure = _createTask.IsCompletedSuccessfully ? _createTask.Result.Failure : CreateCharacterFailure.Rejected;
         _createTask = null;
         if (ok)
         {
@@ -736,7 +736,7 @@ public sealed class CharacterSelectScreen : GameScreen
         }
         else
         {
-            _errorMessage = Fallback(message, "That name is taken.");
+            _errorMessage = ClientText.Get("CharSelect.CreateFailure." + failure);
             _busy = Busy.None;
         }
     }

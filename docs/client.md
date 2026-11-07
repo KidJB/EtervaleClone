@@ -327,9 +327,12 @@ The client owns its own locomotion; the server validates and corrects.
 - Only `FieldWarp` moves the avatar: a forced warp (server rejected a report), a warp that activates another field, or a
   difference above 200 units snaps the body and camera and stands it on the floor nearest the warp's height (within 64
   units, else the highest floor). A warp to another field code activates that field if loaded; otherwise it requests the
-  field and holds the warp (`_pendingFieldWarp`, the player stops) until the field is in the world, then applies it. The
-  held warp can be replaced by the unforced warp that confirms the field (which keeps the force of the held one), and a
-  restart can move the player across before the field loads, so activating the field always places the height. A body
+  field and holds the warp (`_pendingFieldWarp`, stopping movement and attack) until the field is in the world, then
+  applies it; the presence updates after it wait in their queue meanwhile and apply, in order, once it landed, so the
+  new field's entities, removals and drops land on its ground and none is lost. A teleporter destination hovered for
+  250 ms starts preparation for that one field, and selecting it requests it at once (`PrepareField`). The held warp
+  can be replaced by the unforced warp that confirms the field (which keeps the force of the held one), and a restart can
+  move the player across before the field loads, so activating the field always places the height. A body
   left with no floor under it (placed before its field's ground was there) is put on the floor nearest the server's
   height each frame (`KeepOnFloor`). A warp gate's authored destination height is a hint: the body stands on the floor
   nearest it.
@@ -368,9 +371,13 @@ The client owns its own locomotion; the server validates and corrects.
 
 The active field is the loaded field with the highest floor under the player. Every 8 frames `ScanStreaming` requests
 neighbours whose gate seam, or warp-gate destinations whose gate, is within 1024 units, or ahead of a move target
-within `PrefetchDistance(speed)` (1400 to 4500 units); fields beyond `RetentionDistance` (prefetch + 1200) unload. At
-most 2 fields prepare at once; a field that failed once is not retried. `Warp` unloads every field but the destination.
-Renderer side of stage publication: [rendering.md](rendering.md).
+within `PrefetchDistance(speed)` (1400 to 4500 units); fields beyond `RetentionDistance` (prefetch + 1200) unload, except a destination `PrepareField` asked for in
+the last 10 s. The streamer keeps at most one neighbour in flight (preparing or uploading). A destination requested by
+`PrepareField` or a warp goes first: it cancels the other preparations and abandons another field's GPU upload, a
+neighbour may start beside it, and nothing else completes before it; one that failed before is not prioritized, and a
+destination no longer in flight stops holding the others back. Shared prepared and uploaded textures remain in `PristonTextureLoader`'s cache, including
+when a field preparation is cancelled. A field that failed once is not retried. `Warp` unloads every field but the
+destination. Renderer side of stage publication: [rendering.md](rendering.md).
 
 ## Input
 
@@ -378,13 +385,14 @@ Renderer side of stage publication: [rendering.md](rendering.md).
 |---|---|---|
 | Left click | `GameScene.UpdatePlayerInput` | In order: pick ground loot, cast the left socket skill, pick a monster (attack) or NPC (approach and talk), move. A skill motion is never cut: a click during it casts nothing; a picked monster or NPC is kept and approached once the motion ends, and a ground point is walked to then (`SelfCasting` holds the attack approach, the NPC approach and the walk, and `StopPredictedMovement` leaves the skill clip playing) |
 | Hold left on the ground | same | Walk toward the cursor from the press while the button is held (until blocked); releasing it stops the walk where the player is |
+| Left click | `GameScene.UpdatePlayerInput` | In order: pick ground loot, cast the left socket skill, pick a monster (attack) or NPC (approach and talk), move. Holding on the ground keeps updating the move target under the cursor; while the button remains pressed, a point within the player's body radius extends movement in the current facing direction, and releasing continues to the last target. A skill motion is never cut: a click during it casts nothing; a picked monster or NPC is kept and approached once the motion ends, and a ground point is walked to then (`SelfCasting` holds the attack approach, the NPC approach and the walk, and `StopPredictedMovement` leaves the skill clip playing) |
 | Double left click (350 ms) on the ground | same | Keep walking toward the cursor without holding the button, until blocked or the next click |
 | `R`, or the bar's walk/run button | `GameplayHud.RunToggleRequested` -> `GameScene.ToggleRun` | Walk/run setting (running at first) for every move: clicks, monster, NPC and item approaches. A player tracing a target or holding the button keeps its pace while its stamina is at a quarter or less and walks once it runs out; overweight only walks |
 | Shift held while running (game masters) | `GameScene.MovementSpeed` | Dash at 3000/256 units per original tick; `WorldJoined` carries the game master level and the server allows game masters that speed |
 | Shift + click on a monster | same | Automatic attack (keeps attacking after release); a ground click, a cast, a loot pick or a warp leaves it and tells the server to stop chasing (`AttackInputController.Stop`: an attack on no one as the next gesture) |
 | Right click | same | Attack if the right socket holds the basic attack, otherwise cast the right socket skill |
 | Hold `A` | `GameScene.CollectGroundLabels`, `TryPickLoot` | Show and pick every ground item label |
-| Middle drag, cursor at screen edge, wheel | `PristonCamera.UpdateOrbit` (Engine3D) | Orbit, edge orbit, zoom; ignored while the HUD captures the pointer |
+| Middle drag, cursor at screen edge, wheel, Left/Right, Up/Down | `PristonCamera.UpdateOrbit` (Engine3D) | Orbit (drag, edge, Left/Right at the edge orbit's speed), zoom (wheel; Up/Down at 300 units a second); the mouse is ignored while the HUD captures the pointer, the arrows while a text input has the keyboard |
 | `I` or `V`, `C`, `S`, `X`, `Q`, `D` | `GameplayHud.UpdateKeys` | Inventory, status, skills, system menu, quest window, party window (ignored with Ctrl held) |
 | `F1`-`F8`, `F10`, `4`-`0`, `-`, `=` | `HudSkillBindings` | The action bar's keys: select the skill or use the item on the shown page's key; while pressing a skill in the tree, bind it ([skills.md](skills.md)) |
 | `J` | `GameplayHud.UpdateKeys` | Open or close the stable (`HudPetWindow`: pets and mounts) |
@@ -810,7 +818,7 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
 - `MusicEnabled`/`SoundEnabled` come from client settings each frame (`ApplySettings`) and apply in the world.
 - Skill sounds: `SkillSoundBank` ([skills.md](skills.md)).
 - Character sounds (`CombatSounds`): `CharacterSoundBanks` maps every character sound code to its folder (monsters and
-  summons by sound code, NPCs, player classes 1 to 10 by class code); a file plays for the motion its name starts with
+  summons by sound code, NPCs, player classes 1 to 11 by class code); a file plays for the motion its name starts with
   (`attack`, `damage`, `dead`, `neutral`, `move`, `disappear`/`change`, `skill`, `hammer`). Every folder is listed
   once on a worker when `CombatSounds` is built (the game thread never enumerates one); a character's files are
   decoded through a `SkillSoundBank` when it first appears, and a sound not ready yet is skipped.
@@ -829,17 +837,21 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
 - Equipment looks (`EquipmentVisuals`, `EquipmentVisualTables`): every item with a model has its motion index (the
   weapon index the character motion files list; items newer than those files take the first item of their family and
   hand class), model (`image/sinimage/Items/DropItem/it<model>.smd`, also its ground model), hand and village bone. An
+  equipment item without an imported client model is kept by the server but omitted from the rendered look, so it cannot
+  abort character entry or remote-player preparation. An
   armour or robe wears the body of its catalog ordinal (`ArmorSlots`: ordinals from 26 sit sixteen slots further, so
   DA126-129 wear the 25th-28th bodies, DA301/401 the 29th, DA302-304/402-404 the 30th-32nd and DA131+ the costume
-  bodies) from its class row (A, B, C, D, mA, mB, mC, mD, E, mE; 75 slots each); premium costumes (`CA`) keep the class
-  body and wear wings, and an armour missing from `ArmorSlots` keeps the class body. The phantoms and daggers take the
-  motion indices of the Shaman's and the Assassin's own motion files (phantoms 101-129 and 151-153 from 261, daggers
-  from 293). The Assassin holds a dagger in each hand (`Bip weapon01` and `Bip weapon05`, the left copy being the
-  off-hand actor with the weapon's glow) and hangs the two on `Bip in07` and `Bip in08` in a village; the Shaman's
-  phantom hovers behind its back at all times (`Bip in01`, turned 2250 angle units about the bone, moved 10 back and
+  bodies) from its class row (A, B, C, D, mA, mB, mC, mD, E, mE, f; 75 slots each); premium costumes (`CA`) keep the
+  class body and wear wings, and an armour missing from `ArmorSlots` keeps the class body. The phantoms, daggers and
+  vambraces use the Shaman's, the Assassin's and the Martial Artist's motion indices (phantoms 101-129 and 151-153 from
+  261, daggers from 293, vambraces 101-137 from 325). The Assassin holds a dagger in each hand (`Bip weapon01` and
+  `Bip weapon05`) and hangs the two on `Bip in07` and `Bip in08` in a village; the Martial Artist wears a vambrace on
+  each forearm (`Bip01 R Forearm` and `Bip01 L Forearm`), in a village too, the left one its own model
+  (`Lit<model>.smd`); the left copy is the off-hand actor and carries the weapon's glow
+  (`EquipmentVisuals.TwinBone`, `TwinMeshPath`). The Shaman's phantom hovers behind its back at all times (`Bip in01`, turned 2250 angle units about the bone, moved 10 back and
   raised 1000 fixed units, `SetActorAttachOffset`).
-- Progression (`GameScene.Progression`): a `LevelUp` combat event plays `vfx.player.levelup` (with the level-up chime) at
-  the player, a `SkillLearned` event the skill-learn light (`ItemVfx.Learn`) and sound, for every client near.
+- Progression (`GameScene.Progression`): a `LevelUp` combat event plays `vfx.player.levelup` (with the level-up chime)
+  at the player, a `SkillLearned` event the skill-learn light (`ItemVfx.Learn`) and sound, for every client near.
 - Item sounds (`ItemSoundRules`, `image/Sinimage/Sound`): an item sounds by catalog family (three characters of its key,
   then two: axes, claws, hammers, staves, spears, bows, swords, throwing weapons, armour, boots, gloves, shields,
   amulets, armlets, rings, sheltoms, potions...) with per-item exceptions; gold rings the coin. They play for the local

@@ -11,12 +11,15 @@ public sealed class WorldDataAppService
 
     public WorldDataAppService(IWorldDataRepository repository) => _repository = repository;
 
-    public async Task<WorldData> BuildAsync(CancellationToken ct = default)
+    public Task<bool> HasTextsAsync(string language, CancellationToken ct = default) => _repository.HasCatalogTextsAsync(language, ct);
+
+    public async Task<WorldData> BuildAsync(string language = CatalogLanguages.English, CancellationToken ct = default)
     {
-        var itemRecords = await _repository.GetAllItemTemplatesAsync(ct);
+        language = CatalogLanguages.Normalize(language);
+        var itemRecords = await _repository.GetAllItemTemplatesAsync(language, ct);
         var itemSets = await _repository.GetAllItemSetsAsync(ct);
-        var monsterRecords = await _repository.GetAllMonstersAsync(ct);
-        var npcRecords = await _repository.GetAllNpcsAsync(ct);
+        var monsterRecords = await _repository.GetAllMonstersAsync(language, ct);
+        var npcRecords = await _repository.GetAllNpcsAsync(language, ct);
         var fieldRecords = await _repository.GetAllFieldSpawnsAsync(ct);
         var motionModels = await _repository.GetAllMotionModelsAsync(ct);
         var motionSlots = await _repository.GetAllMotionSlotsAsync(ct);

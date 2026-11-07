@@ -23,6 +23,8 @@ using PristonTale.Contracts.World;
 using PristonTale.Contracts.Skills;
 using PristonTale.Contracts.Sessions;
 using PristonTale.Contracts.Units;
+using PristonTale.Persistence.Abstractions.WorldData;
+using PristonTale.Contracts.Texts;
 
 namespace PristonTale.Server.Net;
 
@@ -33,6 +35,7 @@ internal sealed record SessionServices(
     ISessionRegistry Registry,
     WorldServer World,
     WorldDataHolder WorldData,
+    WorldDataLanguagesHolder LocalizedWorldData,
     ILogger Logger,
     NetworkLimits Limits,
     LoginThrottle LoginThrottle,
@@ -414,6 +417,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         }
 
         throttle.RecordSuccess(request.Account);
+        session.Language = CatalogLanguages.Normalize(request.Language);
         if (session.GmLevel == 0 && _services.Control.Full(_services.World.PlayerCount))
         {
             // Only game masters may join a full server.
@@ -529,7 +533,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
 
         _player = player;
         _outbox = outbox;
-        _encoder = new PresenceEncoder(session.EntityId, _services.WorldData);
+        _encoder = new PresenceEncoder(session.EntityId, _services.WorldData, _services.LocalizedWorldData, session.Language);
         SendLarge(new WorldJoinedPacket(session.EntityId, Environment.TickCount64, (byte)Math.Clamp(session.GmLevel, 0, 255),
             _services.World.GameClockMs).Write, WorldJoinedPacket.Size);
         _pump = PumpAsync(outbox, _encoder);
@@ -720,14 +724,14 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         {
             AdmitStoredOperation();
             reply = session is null || _player is null
-                ? new NpcServiceReply(NpcServiceOutcome.Failed(NpcServiceStatus.Rejected, "enter the world first"))
+                ? new NpcServiceReply(NpcServiceOutcome.Failed(NpcServiceStatus.Rejected, GameText.Of(GameTextId.EnterWorldFirst)))
                 : await _services.Npc.RequestAsync(RequireToken(), command);
         }
         catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException or System.Data.Common.DbException)
         {
             reply = new NpcServiceReply(ex is WorldBusyException
-                ? NpcServiceOutcome.Failed(NpcServiceStatus.Busy, ex.Message)
-                : NpcServiceOutcome.Failed(NpcServiceStatus.StorageFailed, ex.Message));
+                ? NpcServiceOutcome.Failed(NpcServiceStatus.Busy, Refusal(ex))
+                : NpcServiceOutcome.Failed(NpcServiceStatus.StorageFailed, Refusal(ex)));
         }
 
         NpcWireMapping.SendState(request, reply, packet => SendLarge(packet, FrameCodec.MaxFrameSize));
@@ -745,12 +749,12 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         {
             AdmitStoredOperation();
             outcome = session is null || _player is null
-                ? QuestOutcome.Failed(QuestStatus.Rejected, "enter the world first")
+                ? QuestOutcome.Failed(QuestStatus.Rejected, GameText.Of(GameTextId.EnterWorldFirst))
                 : await _services.Quests.RequestAsync(RequireToken(), QuestWireMapping.ToCommand(request));
         }
         catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException)
         {
-            outcome = QuestOutcome.Failed(ex is WorldBusyException ? QuestStatus.Busy : QuestStatus.StorageFailed, ex.Message);
+            outcome = QuestOutcome.Failed(ex is WorldBusyException ? QuestStatus.Busy : QuestStatus.StorageFailed, Refusal(ex));
         }
 
         var result = QuestWireMapping.ToResult(request.OperationId, outcome);
@@ -781,7 +785,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         }
         catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException or System.Data.Common.DbException)
         {
-            outcome = new InventoryOutcome(false, request.ExpectedRevision, ex.Message);
+            outcome = new InventoryOutcome(false, request.ExpectedRevision, Refusal(ex));
         }
 
         var result = new OperationResultPacket(EtervaleOpcodes.InventoryResult, request.OperationId, outcome.Ok, outcome.Revision, outcome.Message);
@@ -891,7 +895,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         }
         catch (Exception ex) when (ex is InvalidSessionException or InvalidOperationException)
         {
-            outcome = new ProgressionOutcome(false, request.ExpectedRevision, ex.Message);
+            outcome = new ProgressionOutcome(false, request.ExpectedRevision, Refusal(ex));
         }
 
         var result = new OperationResultPacket(EtervaleOpcodes.ProgressionResult, request.OperationId, outcome.Ok, outcome.Revision, outcome.Message);
@@ -947,6 +951,15 @@ internal sealed partial class ClientSession : IMovementVerdictSink
     }
 
     private string RequireToken() => _token ?? throw new InvalidOperationException("Log in first.");
+
+    // The line a client reads for an operation the server refused by an exception before its domain rules.
+    private static GameText Refusal(Exception refusal) => GameText.Of(refusal switch
+    {
+        WorldBusyException => GameTextId.TooManyRequests,
+        InvalidSessionException => GameTextId.NoSession,
+        System.Data.Common.DbException => GameTextId.CharacterUnchanged,
+        _ => GameTextId.RequestRefused
+    });
 
     private void LogRejected(uint code, string reason)
     {

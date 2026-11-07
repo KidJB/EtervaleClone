@@ -10,6 +10,7 @@ using PristonTale.Simulation.World.Loot;
 using PristonTale.Contracts.Motion;
 using PristonTale.Engine3D;
 using PristonTale.Contracts.Units;
+using PristonTale.Gameplay.Localization;
 
 namespace PristonTale.Gameplay.World.Remote;
 
@@ -409,6 +410,6 @@ public sealed class GroundLootPresentation(IActorScene scene, PristonActorLoader
         public int FloorRevision { get; set; } = -1;
         public bool FloorFound { get; set; }
         public bool PublishFailed { get; set; }
-        public string Label { get; } = drop.Gold ? $"{drop.Amount} Gold" : drop.Name;
+        public string Label { get; } = drop.Gold ? ClientText.Format("Loot.Gold", drop.Amount) : drop.Name;
     }
 }

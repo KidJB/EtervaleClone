@@ -63,7 +63,7 @@ into it is described in [server.md](server.md); skill resolution details are in 
 | `World/FieldStatusBook.cs` | The statuses running on the field's entities, for viewers that start seeing an entity later |
 | `World/WorldServer.Movement.cs` | Movement reports queued as values (`TryReportMovement`) with an `IMovementVerdictSink` |
 | `World/PlayerSkillCooldowns.cs` | Cooldowns on the field clock, rebased on field change, revisioned for snapshots |
-| `World/WorldData*.cs`, `FieldTerrainCatalog.cs` | Catalogs loaded at startup (`WorldDataAppService.BuildAsync`), held in volatile holders |
+| `World/WorldData*.cs`, `FieldTerrainCatalog.cs` | Authoritative and localized catalogs loaded at startup (`WorldDataAppService.BuildAsync`), held in immutable volatile holders |
 | `World/EntityIdAllocator.cs` | Thread-safe, monotonic 64-bit monster/NPC/summon ids from `2^32` |
 
 The project references only `PristonTale.Simulation` and `PristonTale.Persistence.Abstractions`, and exposes internals
@@ -342,7 +342,7 @@ summon status ends. Charmed wild monsters become summons for the charm duration.
   the nearest gold, and potions it guesses from their key unless `petPicksUpPotions` is off), leaving a refused drop
   alone for 5 s.
 - The reserved copy keeps the rolled values of the drop under the drop's id. A pickup that would carry the character
-  over the weight limit is refused with `ItemRuleMessages.OverWeight`.
+  over the weight limit is refused with the `OverWeight` game text.
 
 ## Durable operations
 
@@ -392,7 +392,7 @@ Revisions and idempotency:
 - Applied operations are kept per character in five histories (inventory, service, progression, item use, quests),
   each an `OperationHistory<T>` capped at the last 64 and looked up with `Find(operationId)`; storage keeps the newest 16
   of each (a reloaded client retries only what it sent last). The same id with an identical command replays as success
-  ("already committed") with the recorded revision; the same id with a different command is an "operation identity
+  ("already committed"; inventory, progression, item use, NPC services, personal shops and quests answer the `AlreadyApplied` game text) with the recorded revision; the same id with a different command is an "operation identity
   conflict". This makes a retry after a lost reply safe and never charges twice.
 - Commit merges only the transaction's domain into the live character (inventory, equipment, histories, money
   delta). Life, experience, skill use counters and position keep changing on the tick and are not overwritten; the

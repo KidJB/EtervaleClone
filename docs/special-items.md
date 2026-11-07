@@ -26,7 +26,7 @@ and draws the result.
 | `.../Usable/PremiumPets.cs` | Pet damage, elements, helper chance, strike timings, Nepsys slow |
 | `.../Usable/UsableItemEffects.cs` | The character part of a use (timers, resets, mastery, aging, Gravity Scroll, big head) |
 | `.../Usable/ItemScrolls.cs`, `ForceOrbs.cs`, `TeleportCoreDestinations.cs` | Scroll effects, force orb tables, the Teleport Core fields |
-| `.../Usable/ItemUseCommand.cs`, `ItemUseMessages.cs`, `ItemEffectKind.cs` | Command, statuses, outcome and history; the effect kinds sent to clients |
+| `.../Usable/ItemUseCommand.cs`, `ItemUseMessages.cs`, `ItemEffectKind.cs` | Command, statuses, outcome and history; the game text of each status (the client words it); the effect kinds sent to clients |
 | `Shared/PristonTale.Application/Services/ItemUseAppService.cs` | Prepare and commit under the session's `SaveGate`, then the save queue |
 | `Shared/PristonTale.Application/World/ItemUseTransactions.cs` | Tick-side shared checks and the candidate of a use |
 | `Shared/PristonTale.Application/World/ItemUses/ItemUseAction.cs` | `ItemUseAction`, one per `UsableItemAction` (`ItemUseActions.For`): `ForTheDead`, `Consumes`, `ReappliesAtCommit`, `Check`, `Arrival`, `Extend`, `Message`, `Store`, `Commit` (session), `Apply` (world, returns the effect viewers see) |
@@ -227,7 +227,7 @@ clan and refuses (`ClanOnly`).
 - Scrolls and force orbs are status effects (codes `0xF0000001..3`, `0xF0000200 + icon`) and show in the
   running-effects bar with their keep icons; castle items use `0xF0000400 + index` and their keep icons, boosters and
   the skill-delay item show there from the premium timers (`HudPremiumKeeps`, codes `0xF0000110 + kind`) with their
-  full duration under the gauge. The hover box adds the effect line (`ItemStatuses.Effect`).
+  full duration under the gauge. The hover box adds the effect line (`DataText.StatusEffect`, in the shown language).
 - Ether cores, crystal summons (at the called monster) and the Restoration play the return sparkle with the learn
   sound; the soccer-ball head starts and ends with the learn light; boosters and lucky bags play the drink sound; a gift
   box the eat sound under an orange light. Foods show the potion effects of their restored resources.

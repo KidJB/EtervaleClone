@@ -1,5 +1,6 @@
 using PristonTale.Contracts.Characters;
 using PristonTale.Simulation.Items;
+using PristonTale.Contracts.Texts;
 
 namespace PristonTale.Simulation.Characters;
 
@@ -31,6 +32,7 @@ public static class StarterGifts
         PlayerClass.Magician or PlayerClass.Priestess => "WM101",
         PlayerClass.Assassin => "WD101",
         PlayerClass.Shaman => "WN101",
+        PlayerClass.MartialArtist => "WV101",
         _ => throw new ArgumentOutOfRangeException(nameof(playerClass), playerClass, "A class without a starter weapon.")
     };
 
@@ -68,7 +70,7 @@ public static class StarterGifts
         return ItemRoller.CreatePerfect(definition, 1, ItemRoller.CanTakeSpec(definition, spec) ? spec : 0);
     }
 
-    public static string Message(string itemName) => $"You received {itemName} as a gift.";
+    public static GameText Message(string itemName) => GameText.Of(GameTextId.StarterGift, itemName);
 
     private static string OffHandKey(ItemCatalog items, PlayerClass playerClass)
     {

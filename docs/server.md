@@ -23,7 +23,7 @@ layouts live in [protocol.md](protocol.md).
 | `Hosting/GameLogService.cs` | Hosted service: the item transfer writer, the currency sinks every `Logs:CurrencyMinutes`, the server's start and stop, the daily prune. |
 | `Hosting/CharacterSaveService.cs` | Hosted service: stores the save journal on start, runs `CharacterSaveQueue` until the host stops, logs its counts every `Server:ReportSeconds`. |
 | `Hosting/ReportInterval.cs` | The period of the report lines (`Server:ReportSeconds`), read once by the world tick, the TCP server and the character saves. |
-| `Hosting/WorldDataLoadService.cs` | Hosted service: `WorldDataAppService.BuildAsync` into `WorldDataHolder.Current`; logs catalog counts. |
+| `Hosting/WorldDataLoadService.cs` | Hosted service: builds the English authoritative catalog into `WorldDataHolder` and, for every other supported language that has stored text (`HasCatalogTextsAsync`), a catalog in that language into `WorldDataLanguagesHolder`; a session in a language without text reads the English catalog. A session reading another catalog than the English one encodes its own entity descriptions instead of the frame's shared ones (`PresenceEncoder.SharesDescriptions`). Logs catalog counts. |
 | `Hosting/FieldTerrainLoadService.cs` | Hosted service: reads every field's stage `.smd` collision in parallel into `FieldTerrainCatalog`. |
 | `World/WorldTickService.cs` | `BackgroundService` calling `WorldServer.Tick(1/20 s, tick)` on its own thread, on the absolute timeline of `TickSchedule` (owed ticks run back to back, a stall past 5 ticks is skipped); logs tick percentiles, ticks caught up and skipped, the command and field phases, process CPU, allocation rate, collections, heap and working set. |
 | `World/StarterGiftService.cs`, `World/SessionWork.cs` | `BackgroundService` reading `WorldServer.StarterGiftRequests` and running `StarterGiftAppService.GiveAsync`; `SessionWork` is the loop it shares with `QuestUpkeepService` (a few sessions at a time, a failure logged). |
@@ -94,7 +94,7 @@ All registrations are singletons in `HostingExtensions.AddPristonServer`.
 | `AuthAppService`, `CharacterAppService`, `SessionAppService`, `NpcAppService`, `QuestAppService` | types | Use cases called by `ClientSession` (and `QuestUpkeepService`). |
 | `WorldCatalog` (`PristonTale.Simulation.World`) | `_ => new WorldCatalog()` | Factory so DI does not pick the collection constructor with an empty field set. |
 | Persistence | `AddPristonSqlite(path)` or `AddPristonPostgres(connectionString, Database:MaxPoolSize)` | Repositories, `IDbConnectionFactory`, `IDatabaseMigrator`, FluentMigrator runner. See [persistence.md](persistence.md). |
-| `WorldDataAppService`, `WorldDataHolder` | types | Catalog build and the swap-in holder read by the world and the encoders. |
+| `WorldDataAppService`, `WorldDataHolder`, `WorldDataLanguagesHolder` | types | Catalog build and the immutable holders read by the world and the encoders. |
 | `FieldTerrainCatalog` | type | Filled by `FieldTerrainLoadService`. |
 | `WorldServer` | factory with `WorldServerOptions` (`World:MaxPendingCommandsPerPlayer` and `World:CheckpointSeconds` from the host), the save queue and the game log | The game settings arrive from the settings table through `ApplyOptionsAsync`. |
 | `GameLogQueue`, `IGameLog` | factory: `IGameLogRepository` | The item transfer writer ([application.md](application.md#game-logs)); a failed batch is logged as an error. |
@@ -347,7 +347,7 @@ of the regression suite ([testing.md](testing.md#multiplayer-propagation)):
 | `ConnectionLimiter` | per remote address, process-wide | Refuses sockets above `MaxConnectionsPerIp`; released when the session ends. |
 | `PacketRateLimiter` | per connection, fixed window | Counts every decoded packet except `DescribeEntity`; exceeding it closes with `packet flood`. |
 | `TokenBucket` | per connection | `DescribeEntity` beyond the bucket is dropped (a few-byte request costs a description of up to a few hundred bytes). |
-| Stored operations | per connection | A request that copies the character on the tick beyond `StoredOperationBurst` / `StoredOperationsPerSecond` is answered busy (`too many requests`). |
+| Stored operations | per connection | A request that copies the character on the tick beyond `StoredOperationBurst` / `StoredOperationsPerSecond` is answered busy (the `TooManyRequests` game text). |
 | `LoginThrottle` | per account (case-insensitive) and per address | Only `BadCredentials` counts. A blocked attempt gets `LoginResult` busy before the password hash is computed. Success clears the account counter only. At most 65536 keys per map. |
 | Login timeout | per connection | Unauthenticated sockets close after `LoginTimeoutSeconds`. |
 | Second login | per connection | `Login` after a successful login gets `LoginResult` 3 (already logged in). |

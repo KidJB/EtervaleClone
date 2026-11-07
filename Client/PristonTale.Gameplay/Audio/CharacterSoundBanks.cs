@@ -171,6 +171,7 @@ public static class CharacterSoundBanks
         (0x5130, "wav/Effects/monster/Watermelon"),
         (0x0009, "wav/Effects/Player/Assassin"),
         (0x000A, "wav/Effects/Player/Shaman"),
+        (0x000B, "wav/Effects/Player/Martial"),
         (0x6000, "wav/Effects/monster/Acero"),
         (0x6010, "wav/Effects/monster/Arcuda"),
         (0x6020, "wav/Effects/monster/Arhdyra"),

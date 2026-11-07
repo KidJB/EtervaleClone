@@ -23,6 +23,7 @@ using PristonTale.Contracts.Sessions;
 using PristonTale.Contracts.World;
 using PristonTale.Contracts.Units;
 using PristonTale.Contracts.Characters;
+using PristonTale.Contracts.Texts;
 
 namespace PristonTale.Client.Net;
 
@@ -116,13 +117,14 @@ public sealed class GameServerConnection : IGameBackend
 
     public long BytesSent => _connection?.BytesSent ?? 0;
 
-    public async Task<LoginOutcome> LoginAsync(string account, string password, CancellationToken ct = default)
+    public async Task<LoginOutcome> LoginAsync(string account, string password, string language, CancellationToken ct = default)
     {
         await ConnectAsync(ct);
         await _requestGate.WaitAsync(ct);
         try
         {
-            if (!Fits(account, AccountWire.MaxAccountBytes) || !Fits(password, AccountWire.MaxPasswordBytes))
+            if (!Fits(account, AccountWire.MaxAccountBytes) || !Fits(password, AccountWire.MaxPasswordBytes)
+                || !Fits(language, AccountWire.MaxLanguageBytes))
             {
                 return LoginOutcome.Denied(LoginFailure.BadCredentials);
             }
@@ -130,7 +132,7 @@ public sealed class GameServerConnection : IGameBackend
             var pending = new PendingLogin();
             _login = pending;
             _account = account;
-            Send(new LoginPacket(ProtocolVersion.Current, account, password));
+            Send(new LoginPacket(ProtocolVersion.Current, account, password, language));
             var outcome = await pending.Completion.Task.WaitAsync(ct);
             if (outcome.Ok)
             {
@@ -408,7 +410,7 @@ public sealed class GameServerConnection : IGameBackend
         ThrowIfDisconnected();
         if (_npcDialogs.IsWaiting(entityId))
         {
-            return NpcInteraction.Rejected("already talking to this NPC");
+            return NpcInteraction.Rejected(GameText.Of(GameTextId.AlreadyTalking));
         }
 
         return await _npcDialogs.RequestAsync(entityId, () => SendAttackRequest(entityId, sustained: false, 0), ct);
@@ -792,7 +794,7 @@ public sealed class GameServerConnection : IGameBackend
     }
 
     private void AddServicePart(Guid operationId, Func<NpcServiceReply, NpcServiceReply> add) =>
-        _serviceParts.AddOrUpdate(operationId, _ => add(new NpcServiceReply(NpcServiceOutcome.Failed(NpcServiceStatus.Rejected, ""))), (_, reply) => add(reply));
+        _serviceParts.AddOrUpdate(operationId, _ => add(new NpcServiceReply(NpcServiceOutcome.Failed(NpcServiceStatus.Rejected, GameText.None))), (_, reply) => add(reply));
 
     private void OnServiceMessage(uint code, ReadOnlySpan<byte> packet)
     {

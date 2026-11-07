@@ -3,6 +3,11 @@ using Microsoft.Xna.Framework;
 using PristonTale.Engine3D.Diagnostics;
 using PristonTale.Gameplay.UI.Help;
 using PristonTale.Gameplay.UI.Rendering;
+using PristonTale.Gameplay.Localization;
+using PristonTale.Engine3D.Rendering;
+using PristonTale.Simulation.Quests;
+using PristonTale.Gameplay.UI.Quests;
+using PristonTale.Gameplay.UI.HelpPet;
 
 namespace PristonTale.Tests;
 
@@ -15,6 +20,8 @@ internal static class HelpGuideTests
         yield return ("the guide reads each level's page for the faction, the starter pages and the levels without a picture", BookAsync);
         yield return ("the level guide offers a page on reaching its level or entering fresh, and its notice opens a summary that closes", NoticeAsync);
         yield return ("the help window moves between help, the guide's list of reached subjects and a page, and switches the level guide", WindowAsync);
+        yield return ("a text of the data is read from its translation in the shown language, English included, and from the data without one", TranslationAsync);
+        yield return ("the Brazilian Portuguese texts translate the help, the level guide's subjects, the helper pet, the quest dialogs and every quest window description, and English the dialogs the data holds in Portuguese, in UTF-8", TranslationsAsync);
     }
 
     private const string Subjects = """
@@ -102,6 +109,90 @@ internal static class HelpGuideTests
         var close = new Point(HudPainter.GuideBoxRight(5, 28) - 16, 98);
         Assert.True(notice.Click(close, blocked: false, out _) && !notice.Showing, "Close did not close the summary");
         return Task.CompletedTask;
+    }
+
+    private static async Task TranslationAsync()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"priston-texts-{Guid.NewGuid():N}");
+        var translations = Path.Combine(root, "Texts");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "help"));
+            Directory.CreateDirectory(Path.Combine(translations, ClientSettings.BrazilianPortugueseLanguage, "help"));
+            await File.WriteAllTextAsync(Path.Combine(root, "help", "a.msg"), "Hunt twenty Bargons", Encoding.ASCII);
+            await File.WriteAllTextAsync(Path.Combine(root, "help", "b.msg"), "Only English", Encoding.ASCII);
+            await File.WriteAllTextAsync(Path.Combine(root, "help", "c.msg"), "Cace os Bargons", Encoding.ASCII);
+            Directory.CreateDirectory(Path.Combine(translations, ClientSettings.EnglishLanguage, "help"));
+            await File.WriteAllTextAsync(Path.Combine(translations, ClientSettings.EnglishLanguage, "help", "c.msg"), "Hunt the Bargons", new UTF8Encoding(false));
+            await File.WriteAllTextAsync(Path.Combine(translations, ClientSettings.BrazilianPortugueseLanguage, "help", "a.msg"), "Cace vinte Bargons à noite",
+                new UTF8Encoding(false));
+            var texts = new HudTextFiles(root, Encoding.ASCII, ConsoleClientLog.Instance, "Help", translations);
+            try
+            {
+                Assert.True(await Read(texts, "help/a.msg") == "Hunt twenty Bargons" && await Read(texts, "help/c.msg") == "Hunt the Bargons",
+                    "English did not read the data, or a datum written in another language did not read its English translation");
+                ClientText.Use(ClientSettings.BrazilianPortugueseLanguage);
+                Assert.True(await Read(texts, "help/a.msg") == "Cace vinte Bargons à noite" && await Read(texts, "help/b.msg") == "Only English",
+                    "Brazilian Portuguese did not read the translation, or a text without one did not read the data");
+            }
+            finally
+            {
+                ClientText.Use(ClientSettings.EnglishLanguage);
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static Task TranslationsAsync()
+    {
+        var root = Path.Combine(LocalizationTests.RepositoryRoot(), "Client", "PristonTale", "Texts", ClientSettings.BrazilianPortugueseLanguage);
+        var files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(root, path).Replace(Path.DirectorySeparatorChar, '/'))
+            .ToHashSet(StringComparer.Ordinal);
+        var board = QuestBoard.Documents.Select(HudQuestDocuments.BoardPath).ToArray();
+        var missing = board.Append(HudHelpWindow.HelpFile).Append(LevelGuideBook.SubjectsFile).Append(HelpPetMessages.FilePath).Where(path => !files.Contains(path)).ToArray();
+        Assert.True(missing.Length == 0, "texts without a translation: " + string.Join(", ", missing));
+        var strange = files.Where(path => !board.Contains(path) && path != HudHelpWindow.HelpFile && path != HelpPetMessages.FilePath
+            && !path.StartsWith(HudQuestDocuments.DialogFolder + "/", StringComparison.Ordinal)
+            && !path.StartsWith(LevelGuideBook.Folder, StringComparison.Ordinal)).ToArray();
+        Assert.True(strange.Length == 0, "translations of no text the client reads: " + string.Join(", ", strange));
+        var dialogs = files.Where(static path => path.StartsWith(HudQuestDocuments.DialogFolder + "/", StringComparison.Ordinal)).ToArray();
+        Assert.True(dialogs.Length > 0 && dialogs.All(static path => path.EndsWith(".sin", StringComparison.Ordinal)), "the quest dialogs are not translated as .sin files");
+        var strict = new UTF8Encoding(false, true);
+        foreach (var file in files)
+        {
+            _ = strict.GetString(File.ReadAllBytes(Path.Combine(root, file)));
+        }
+
+        // English translates only the dialogs the data holds in another language, each also in Brazilian Portuguese.
+        var english = Path.Combine(LocalizationTests.RepositoryRoot(), "Client", "PristonTale", "Texts", ClientSettings.EnglishLanguage);
+        var englishFiles = Directory.EnumerateFiles(english, "*", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(english, path).Replace(Path.DirectorySeparatorChar, '/')).ToArray();
+        Assert.True(englishFiles.Length > 0 && englishFiles.All(path => dialogs.Contains(path)), "an English translation is not a translated quest dialog");
+        foreach (var file in englishFiles)
+        {
+            _ = strict.GetString(File.ReadAllBytes(Path.Combine(english, file)));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static async Task<string?> Read(HudTextFiles texts, string path)
+    {
+        for (var attempt = 0; attempt < 200; attempt++)
+        {
+            if (texts.Lines(path) is { } lines)
+            {
+                return string.Join(' ', lines);
+            }
+
+            await Task.Delay(10);
+        }
+
+        return null;
     }
 
     private static async Task WindowAsync()

@@ -7,6 +7,7 @@ using PristonTale.Gameplay.UI.Rendering;
 using PristonTale.Simulation.World.Monsters;
 using PristonTale.Contracts.World;
 using PristonTale.Contracts.Combat;
+using PristonTale.Gameplay.Localization;
 
 namespace PristonTale.Gameplay.UI.Widgets;
 
@@ -294,7 +295,7 @@ public sealed partial class HudCombat
         if (level != _levelValue)
         {
             _levelValue = level;
-            _levelText = level > 0 ? $"Lv. {level}" : "";
+            _levelText = level > 0 ? ClientText.Format("Hud.TargetLevel", level) : "";
         }
 
         return _levelText;
@@ -318,7 +319,7 @@ public sealed partial class HudCombat
     {
         if (!_entities.TryGetValue(id, out var entity))
         {
-            return "Target";
+            return ClientText.Get("Hud.Target");
         }
 
         if (entity.Spawn.Player is { } player)
@@ -332,7 +333,7 @@ public sealed partial class HudCombat
         }
 
         return entity.Spawn.Kind == EntityKind.Npc
-            ? _catalog.GetNpc(entity.Spawn.TemplateId)?.Name ?? "NPC"
-            : _catalog.GetMonster(entity.Spawn.TemplateId)?.Name ?? "Monster";
+            ? _catalog.GetNpc(entity.Spawn.TemplateId)?.Name ?? ClientText.Get("Hud.Npc")
+            : _catalog.GetMonster(entity.Spawn.TemplateId)?.Name ?? ClientText.Get("Hud.Monster");
     }
 }

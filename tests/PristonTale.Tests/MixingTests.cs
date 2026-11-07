@@ -7,6 +7,7 @@ using PristonTale.Simulation.Items.Mixing;
 using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World.Npcs;
 using PristonTale.Contracts.Characters;
+using PristonTale.Contracts.Texts;
 
 namespace PristonTale.Tests;
 
@@ -60,7 +61,7 @@ internal static class MixingTests
         MixFormulas.Apply(axe, organic!, [5, 0, 0, 0, 0, 0, 0, 0, 0]);
         Assert.True(axe.Roll.Resistances.Bionic == 5 && axe.MixSheltom == 1 && axe.MixStats == MixStat.Organic && axe.Mixed, "the bonus was not added");
 
-        var percent = new MixFormula(["WA1"], new int[9], [new(MixStat.DamageMax, 10f, true), new(MixStat.Critical, 2f, false)], []);
+        var percent = new MixFormula(["WA1"], new int[9], [new(MixStat.DamageMax, 10f, true), new(MixStat.Critical, 2f, false)]);
         var other = new ItemInstance(AxeDef);
         MixFormulas.Apply(other, percent, [0, 0, 0, 0, 0, 0, 1, 0, 0]);
         Assert.True(other.Roll.DamageMax == 22 && other.Critical == 2 && other.MixSheltom == 7, "percent and whole bonuses differ");
@@ -152,7 +153,7 @@ internal static class MixingTests
         Assert.True(HeldItemGlow.For(glowing).Glows && !HeldItemGlow.For(dull).Glows, "the mixed glow starts elsewhere than Devine");
 
         var buffer = new byte[4096];
-        var dialog = new NpcDialogPacket(3, true, "Mixer", "", [new NpcServiceEntry((byte)NpcServiceKind.ItemMix, true, 1, 50)], []);
+        var dialog = new NpcDialogPacket(3, true, "Mixer", GameText.None, [new NpcServiceEntry((byte)NpcServiceKind.ItemMix, true, 1, 50)], []);
         var read = NpcDialogPacket.Read(buffer.AsSpan(0, dialog.Write(buffer)));
         Assert.True(read.Services[0].PricePercent == 50 && read.Services[0].Value == 1, "the price setting did not reach the dialog");
         return Task.CompletedTask;

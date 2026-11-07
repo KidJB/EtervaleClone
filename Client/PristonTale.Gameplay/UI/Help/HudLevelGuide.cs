@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using PristonTale.Gameplay.UI.Rendering;
+using PristonTale.Gameplay.Localization;
 
 namespace PristonTale.Gameplay.UI.Help;
 
@@ -12,7 +13,7 @@ public sealed class HudLevelGuide(HudTextFiles texts, Action<string> requestArt)
 {
     public const double BlinkMs = 700;
     public const int SummaryLines = 6;
-    public const string More = ">>more...";
+    public static string More => ClientText.Get("Guide.More");
     private static readonly Rectangle Icon = new(9, 12, 64, 64);
     private static readonly Point LabelAt = new(49, 19);
     private static readonly Rectangle IconArea = new(9, 12, 104, 64);
@@ -36,6 +37,7 @@ public sealed class HudLevelGuide(HudTextFiles texts, Action<string> requestArt)
     private LevelGuidePage _page;
     private bool _summary;
     private string[] _lines;
+    private string _language = ClientText.Language;
 
     public bool Showing => _page is not null;
 
@@ -104,6 +106,12 @@ public sealed class HudLevelGuide(HudTextFiles texts, Action<string> requestArt)
             painter.Sprite(HudHelpArt.Notice[(int)(nowMs / BlinkMs) % 2], Icon.X, Icon.Y);
             painter.Sprite(HudHelpArt.GuideLabel, LabelAt.X, LabelAt.Y);
             return;
+        }
+
+        if (_language != ClientText.Language)
+        {
+            _language = ClientText.Language;
+            _lines = null;
         }
 
         _lines ??= Wrap(painter);

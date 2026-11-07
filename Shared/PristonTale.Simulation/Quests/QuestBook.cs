@@ -212,7 +212,7 @@ public static class QuestBook
             GiverNpcs = [Derik, Ray],
             LevelBit = LevelQuestLog.Level90Bonus
         });
-        entries.Add(new QuestBookEntry(QuestTexts.FuryTitle, FuryOfPhantomQuest.MinimumLevel, QuestBookSide.Both,
+        entries.Add(new QuestBookEntry("Fury of Phantom", FuryOfPhantomQuest.MinimumLevel, QuestBookSide.Both,
             "Two field hunts and three duels with Fury in the arena.", ["One weapon of your choice: " + string.Join(", ", QuestTexts.FuryRewardNames)])
         {
             Codes = [QuestCode.FuryOfPhantom],

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Numerics;
 using PristonTale.Contracts.Social;
+using PristonTale.Contracts.Texts;
 using PristonTale.Persistence.Abstractions.ItemBoxes;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
@@ -51,7 +52,7 @@ public sealed partial class WorldServer
             var open = BossArena.EntryOpen(now, start);
             if (!enter)
             {
-                Reply(connection.Player, BossArenaMessages.Next(arena, start, open));
+                Reply(connection.Player, GameText.Plain(BossArenaMessages.Next(arena, start, open)));
                 return true;
             }
 
@@ -63,12 +64,12 @@ public sealed partial class WorldServer
                 : null;
             if (refusal is not null)
             {
-                Reply(player, refusal);
+                Reply(player, GameText.Plain(refusal));
                 return false;
             }
 
             MoveTo(connection, BossArena.FieldCode, BossArena.Arrival);
-            Reply(player, $"Boss Arena> You entered the arena. {arena.Name} appears at {start:HH:mm}.");
+            Reply(player, GameText.Plain($"Boss Arena> You entered the arena. {arena.Name} appears at {start:HH:mm}."));
             return true;
         });
 
@@ -218,7 +219,7 @@ public sealed partial class WorldServer
                 prize = item.Count > 1 ? $"{item.Count} x {definition.Name}" : definition.Name;
             }
 
-            Reply(connection.Player, BossArenaMessages.Rewarded(experience, gold, prize));
+            Reply(connection.Player, GameText.Plain(BossArenaMessages.Rewarded(experience, gold, prize)));
         }
     }
 
@@ -276,7 +277,7 @@ public sealed partial class WorldServer
     {
         foreach (var id in _connections.Keys)
         {
-            Notify(id, ChatKind.Notice, text);
+            Notify(id, ChatKind.Notice, GameText.Plain(text));
         }
     }
 }

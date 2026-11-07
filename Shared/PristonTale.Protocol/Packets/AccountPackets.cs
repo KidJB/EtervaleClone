@@ -8,8 +8,8 @@ namespace PristonTale.Protocol.Packets;
 // of any message's layout raises both.
 public static class ProtocolVersion
 {
-    public const uint Current = 3;
-    public const uint Minimum = 3;
+    public const uint Current = 11;
+    public const uint Minimum = 11;
 }
 
 // Account messages: the server greets every connection, the client logs in, manages its characters and keeps the
@@ -19,6 +19,7 @@ public static class AccountWire
     public const ushort CurrentVersion = 1;
     public const int MaxAccountBytes = 64;
     public const int MaxPasswordBytes = 128;
+    public const int MaxLanguageBytes = 16;
     public const int MaxNameBytes = 64;
 }
 
@@ -52,10 +53,11 @@ public readonly record struct ServerHelloPacket(uint Protocol, uint MinimumProto
     }
 }
 
-// C->S {header, uint16 Version = 1, uint16 0, uint32 Protocol, text Account (64 B), text Password (128 B)}.
-public readonly record struct LoginPacket(uint Protocol, string Account, string Password) : IFramePacket
+// C->S {header, uint16 Version = 1, uint16 0, uint32 Protocol, text Account (64 B), text Password (128 B), text Language
+// (16 B)}. A login without the language is read only so that a client older than protocol 4 is told it is outdated.
+public readonly record struct LoginPacket(uint Protocol, string Account, string Password, string Language) : IFramePacket
 {
-    public const int MaxSize = 8 + 4 + 4 + 2 + AccountWire.MaxAccountBytes + 2 + AccountWire.MaxPasswordBytes;
+    public const int MaxSize = 8 + 4 + 4 + 2 + AccountWire.MaxAccountBytes + 2 + AccountWire.MaxPasswordBytes + 2 + AccountWire.MaxLanguageBytes;
 
     public int Write(Span<byte> destination)
     {
@@ -64,6 +66,7 @@ public readonly record struct LoginPacket(uint Protocol, string Account, string 
         writer.UInt32(Protocol);
         Utf8Text.Write(ref writer, Account, AccountWire.MaxAccountBytes);
         Utf8Text.Write(ref writer, Password, AccountWire.MaxPasswordBytes);
+        Utf8Text.Write(ref writer, Language, AccountWire.MaxLanguageBytes);
         return writer.Finish();
     }
 
@@ -74,7 +77,9 @@ public readonly record struct LoginPacket(uint Protocol, string Account, string 
         reader.Skip(2);
         var protocol = reader.UInt32();
         var account = Utf8Text.Read(ref reader, AccountWire.MaxAccountBytes, "Login");
-        return new LoginPacket(protocol, account, Utf8Text.Read(ref reader, AccountWire.MaxPasswordBytes, "Login"));
+        var password = Utf8Text.Read(ref reader, AccountWire.MaxPasswordBytes, "Login");
+        var language = reader.Remaining > 0 ? Utf8Text.Read(ref reader, AccountWire.MaxLanguageBytes, "Login") : "";
+        return new LoginPacket(protocol, account, password, language);
     }
 }
 

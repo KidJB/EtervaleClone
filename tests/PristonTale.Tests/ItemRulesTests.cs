@@ -16,6 +16,7 @@ using PristonTale.WorldImport.Parsers;
 using PristonTale.Contracts.Motion;
 using PristonTale.Assets;
 using PristonTale.Contracts.Characters;
+using PristonTale.Contracts.Texts;
 
 namespace PristonTale.Tests;
 
@@ -93,14 +94,24 @@ internal static class ItemRulesTests
             ("OR101", EquipmentSlot.RingLeft, ItemKind.Ring), ("OR201", EquipmentSlot.RingRight, ItemKind.Ring),
             ("OS101", EquipmentSlot.Sheltom, ItemKind.Sheltom)
         ];
-        var character = Fighter();
+        var fighter = Fighter();
         foreach (var (code, slot, kind) in families)
         {
             var definition = Def(code);
             Assert.True(definition.Kind == kind && definition.IsEquippable, $"{code} is not a wearable {kind}");
             var item = new ItemInstance(definition) { UpgradeLevel = code == "OA101" ? 3 : 0 };
+            // A class weapon is worn by its own class.
+            var character = kind switch
+            {
+                ItemKind.Dagger => new CharacterClassRegistry().CreatePlayer(PlayerClass.Assassin, "Items", 50),
+                ItemKind.Phantom => new CharacterClassRegistry().CreatePlayer(PlayerClass.Shaman, "Items", 50),
+                ItemKind.Vambrace => new CharacterClassRegistry().CreatePlayer(PlayerClass.MartialArtist, "Items", 50),
+                _ => fighter
+            };
             Assert.True(Equip(character, item, slot) && character.GetEquipped(slot)?.InstanceId == item.InstanceId, $"{code} did not equip in {slot}");
         }
+
+        Assert.True(!Equip(fighter, new ItemInstance(Def("WV102")), EquipmentSlot.Weapon), "a Fighter equipped a vambrace");
 
         var orb = Def("OM101");
         Assert.True(orb.Kind == ItemKind.Orb && orb.EquipSlot == EquipmentSlot.OffHand && orb.AllowedJobs != 0, "orbs are not off-hand caster items");
@@ -149,7 +160,7 @@ internal static class ItemRulesTests
         var heavy = new ItemInstance(Def("WA110", record => record with { ReqLevel = 40, AttackRatingMin = 50 }));
         Assert.True(character.Inventory.TryPlace(heavy, 0) && !character.TryEquipFromInventory(0, EquipmentSlot.Weapon), "an item above the level equipped");
         var command = new InventoryCommand(Guid.NewGuid(), character.InventoryRevision, InventoryAction.Equip, heavy.InstanceId, 0, 0, EquipmentSlot.Weapon);
-        Assert.True(InventoryCommands.Refusal(character, command) == ItemRuleMessages.CannotUse, "the refusal does not name the unmet requirement");
+        Assert.True(InventoryCommands.Refusal(character, command) == GameText.Of(GameTextId.CannotUseYet), "the refusal does not name the unmet requirement");
         var robe = new ItemInstance(Def("DA201"));
         Assert.True(character.Inventory.TryPlace(robe, 20) && !character.TryEquipFromInventory(20, EquipmentSlot.Armor), "a fighter wore a robe");
 
@@ -368,7 +379,7 @@ internal static class ItemRulesTests
         character.Inventory.TryPlace(new ItemInstance(stone), 60);
         Assert.True(CarriedWeight.IsOverweight(character) && !character.TryUnequip(EquipmentSlot.RingLeft), "unequipping while overweight was allowed");
         var command = new InventoryCommand(Guid.NewGuid(), character.InventoryRevision, InventoryAction.Unequip, ring.InstanceId, 0, 0, EquipmentSlot.RingLeft);
-        Assert.True(InventoryCommands.Refusal(character, command) == ItemRuleMessages.OverWeight, "the refusal does not name the weight");
+        Assert.True(InventoryCommands.Refusal(character, command) == GameText.Of(GameTextId.OverWeight), "the refusal does not name the weight");
 
         var drain = -Regeneration.StaminaPerSecond(character, RegenerationPosture.Running);
         var expected = (1000 + character.CarriedWeight) / (character.Derived.MaxWeight + character.Attributes.Strength / 2 + 500) + 0.4f;
@@ -489,7 +500,7 @@ internal static class ItemRulesTests
         try
         {
             var parsed = new ItemTxtParser().Parse(path);
-            Assert.True(parsed.JobRandom.SequenceEqual([(long)JobBitCode.Assassin, (long)JobBitCode.Fighter]), "unknown classes were stored or known ones lost");
+            Assert.True(parsed.JobRandom.SequenceEqual([(long)JobBitCode.Assassin, (long)JobBitCode.MartialArtist, (long)JobBitCode.Fighter]), "unknown classes were stored or known ones lost");
             Assert.True(parsed.JobMask == (long)JobBitCode.Atalanta, "the fixed specialization did not keep the last class, or the misspelled Atalanter was not Atalanta");
             var record = Record("WD120") with
             {
@@ -500,7 +511,7 @@ internal static class ItemRulesTests
             var template = WorldDataFactory.ToItemTemplate(record);
             Assert.True(template.Spec.LevelDamage == 6 && template.Spec.LevelAttackRating == new ItemRange(1, 3) && template.Spec.Critical == 4
                 && template.Spec.LifeRegenRange == new ItemFloatRange(2.6f, 2.8f), "special bonuses were not mapped");
-            Assert.True(template.RandomSpecJobs.SequenceEqual([(uint)JobBitCode.Assassin, (uint)JobBitCode.Fighter]), "random classes were not kept in order");
+            Assert.True(template.RandomSpecJobs.SequenceEqual([(uint)JobBitCode.Assassin, (uint)JobBitCode.MartialArtist, (uint)JobBitCode.Fighter]), "random classes were not kept in order");
         }
         finally
         {

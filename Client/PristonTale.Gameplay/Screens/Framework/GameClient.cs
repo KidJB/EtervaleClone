@@ -8,6 +8,7 @@ using PristonTale.Gameplay.Screens.Opening;
 using PristonTale.Gameplay.UI.Rendering;
 using PristonTale.Gameplay.UI;
 using PristonTale.Gameplay.Audio;
+using PristonTale.Gameplay.Localization;
 
 namespace PristonTale.Gameplay.Screens.Framework;
 
@@ -40,6 +41,7 @@ public sealed class GameClient : IDisposable
         _assetRoot = assetRoot;
         _serverAddress = serverAddress;
         _presentation = presentation ?? new PresentationSettings();
+        ClientText.Use(_presentation.Requested.Language);
     }
 
     public string StatusText
@@ -48,10 +50,10 @@ public sealed class GameClient : IDisposable
         {
             if (_shutdown is not null)
             {
-                return "Saving and disconnecting…";
+                return ClientText.Get("Status.SavingAndDisconnecting");
             }
 
-            return _screen?.StatusText ?? "Loading…";
+            return _screen?.StatusText ?? ClientText.Get("Status.Loading");
         }
     }
 
@@ -103,6 +105,7 @@ public sealed class GameClient : IDisposable
 
     public void Update(GameTime gameTime, bool isWindowActive = true)
     {
+        ClientText.Use(_presentation.Requested.Language);
         _audio?.ApplySettings(_presentation.Requested);
         if (_context is not null)
         {

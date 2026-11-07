@@ -7,7 +7,10 @@
         <TieredCompilation>true</TieredCompilation>
         <TieredPGO>true</TieredPGO>
         <PublishReadyToRun>true</PublishReadyToRun>
+        <!-- Formatting and parsing stay culture-invariant whatever the system's culture; the client text resources are
+             looked up by the BCP 47 name of client-settings.json's language, which needs cultures created by name. -->
         <InvariantGlobalization>true</InvariantGlobalization>
+        <PredefinedCulturesOnly>false</PredefinedCulturesOnly>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <MonoGamePlatform>DesktopVK</MonoGamePlatform>
     </PropertyGroup>
@@ -18,6 +21,10 @@
     <ItemGroup>
         <None Remove="Icon.ico"/>
         <None Remove="Icon.bmp"/>
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Translations of the data's texts, read beside the executable (HudTextFiles). -->
+        <None Update="Texts\**\*" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
         <EmbeddedResource Include="Icon.ico">

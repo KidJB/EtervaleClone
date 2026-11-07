@@ -95,6 +95,14 @@ internal static class CharacterHeadModels
             new("Mmh-E", "b", CharacterFace.FaceCount),
             new("Mmh-E", "c", CharacterFace.FaceCount),
             new("Mmh-E", "d", CharacterFace.FaceCount)
+        ],
+        [PlayerClass.MartialArtist] =
+        [
+            new("tfh-f", ""),
+            new("tfh-f", "a", CharacterFace.FaceCount),
+            new("tfh-f", "b", CharacterFace.FaceCount),
+            new("tfh-f", "c", CharacterFace.FaceCount),
+            new("tfh-f", "d", CharacterFace.FaceCount)
         ]
     };
 

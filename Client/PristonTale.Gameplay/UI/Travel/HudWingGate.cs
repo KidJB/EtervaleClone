@@ -8,6 +8,7 @@ using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.World;
 using PristonTale.Contracts.World;
 using PristonTale.Contracts.Units;
+using PristonTale.Gameplay.Localization;
 
 namespace PristonTale.Gameplay.UI.Travel;
 
@@ -170,7 +171,7 @@ public sealed class HudWingGate(IClientLog log)
         }
 
         LastOutcome = outcome;
-        Message = WingGates.Message(outcome.Status);
+        Message = ClientText.Format(WingGates.Message(outcome.Status));
         Completions++;
     }
 
@@ -186,7 +187,7 @@ public sealed class HudWingGate(IClientLog log)
         if (_confirm is not null)
         {
             painter.Flush();
-            HudMessageBox.Draw(painter, _confirm.Name, "Do you want to", pointer, "move there?");
+            HudMessageBox.Draw(painter, _confirm.Name, ClientText.Get("ItemUse.Confirm"), pointer, ClientText.Get("WingGate.MoveThere"));
         }
     }
 
@@ -195,7 +196,7 @@ public sealed class HudWingGate(IClientLog log)
         painter.HelpBox(HudNpcPanel.BoxX, HudNpcPanel.BoxY, HudNpcPanel.SizeW, HudNpcPanel.SizeH);
         var title = HudNpcPanel.Title;
         painter.Sprite(HudArt.HelpTitle, title.X, title.Y);
-        painter.TextCentered(hovered?.Name ?? "Warp gate", title.Left, title.Right, title.Y + 7, TitleColor);
+        painter.TextCentered(hovered?.Name ?? ClientText.Get("WingGate.Title"), title.Left, title.Right, title.Y + 7, TitleColor);
         var lines = HelpLines(font, documents, hovered);
         var capacity = (HudNpcPanel.OkButton.Y - 8 - TextY) / HudPainter.LineHeight;
         for (var line = 0; line < lines.Length && line < capacity; line++)
@@ -294,7 +295,7 @@ public sealed class HudWingGate(IClientLog log)
     private void Report(WingGateStatus status)
     {
         LastOutcome = new WingGateOutcome(status, -1);
-        Message = WingGates.Message(status);
+        Message = ClientText.Format(WingGates.Message(status));
         Completions++;
     }
 

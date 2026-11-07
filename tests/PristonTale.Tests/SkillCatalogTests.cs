@@ -158,7 +158,8 @@ internal static class SkillCatalogTests
         Assert.True(elemental.Kind == SkillKind.Summon && elemental.At(elemental.Summon.Life, 10) == 3800 && elemental.Summon.Monster == "Fire Elemental",
             "Fire Elemental");
         Rule(0x08080004, out var meteo);
-        Assert.True(meteo.EndHit && meteo.Damage.ResistanceDivisor == 2 && meteo.Damage.SpellPower && meteo.At(meteo.Damage.Min, 10) == 224, "Meteo");
+        Assert.True(meteo.MotionEvents.SequenceEqual([17, 83]) && !meteo.EndHit && meteo.Damage.ResistanceDivisor == 2 && meteo.Damage.SpellPower
+            && meteo.At(meteo.Damage.Min, 10) == 224, "Meteo does not strike on its clip's two events");
         Rule(0x07080004, out var muspell);
         Assert.True(muspell.Buff.Companion is { } companion && muspell.At(companion.IntervalMs, 10) == 4000
             && SkillFormulas.RankValue(companion.Choices[0].Max, 10) == 140 && muspell.Buff.Guard is { OnBlock: false }, "Summon Muspell");

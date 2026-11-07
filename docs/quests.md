@@ -38,6 +38,7 @@ quest data the importer reads, and the client's quest dialog, quest window, clas
 | `Shared/PristonTale.Simulation/Quests/QuestItems.cs`, `QuestMonsters.cs`, `QuestClasses.cs`, `QuestInventory.cs` | Item and monster codes, class facts (tribe, home town; the quest weapon, hunt and ring come from the class's `ClassProfile`), pack helpers and `QuestGrant` |
 | `Shared/PristonTale.Simulation/Quests/QuestSteps.cs`, `QuestTexts.cs`, `QuestBoard.cs`, `QuestView.cs` | Dialog helpers and the one-quest rule, English texts, quest window lines, the journal view sent to the owner |
 | `Shared/PristonTale.Simulation/Quests/QuestBook.cs` | The quest book: every quest with its level, side, task and rewards, and its status for a character (`QuestBookFacts`) |
+| `Shared/PristonTale.Simulation/Quests/QuestSteps.cs`, `QuestTexts.cs`, `QuestBoard.cs`, `QuestView.cs` | Dialog helpers and the one-quest rule, the quest texts as game texts (notices, dialog titles, confirmation lines, refusals), quest window lines, the journal view sent to the owner |
 | [QuestTransactions.cs](../Shared/PristonTale.Application/World/QuestTransactions.cs) | Prepare a request or an upkeep on the tick against a candidate copy; follow-up validation; travel destination |
 | `Shared/PristonTale.Application/World/WorldServer.Quests.cs`, `PreparedQuestOperation.cs` | Prepare and commit on the tick, upkeep requests channel, travel, opening the duel |
 | `Shared/PristonTale.Application/World/FieldInstance.Quests.cs`, `PlayerQuestState.cs` | Kill credit and quest drops, deaths, timers, the periodic upkeep check, duels; per-player quest state and the snapshot `QuestUpdate` |
@@ -86,7 +87,8 @@ quest data the importer reads, and the client's quest dialog, quest window, clas
   vamps for a recommendation; the first turns it into +2 stat points per level from 80, paid back for the levels
   already reached.
 - Level 90 bonus chain (1012, then 1013, from level 90): the second NPC draws Omega, D-Machine or Mountain; fifty kills
-  under a curse of -30% damage; a death restarts the hunt; +3 more stat points per level from 90.
+  under a curse of -30% damage; a death restarts the hunt; +3 more stat points per level from 90. The dialogs that tell
+  the hunt name the drawn prey: the prompt's `Subject` replaces the document's `$$%s` (`HudQuestDocuments.WithSubject`).
 - Beginner quests A..G (`ElementaryQuests`): the instructor (1014) offers them in order up to level 39; finishers
   1015-1022 serve one tribe or both. Cake to the warehouse keeper, 5 Hopy or Rabie, candy to the smith, 5 Hobgoblin or
   North Goblin, 10 Skeleton or Corrupt, 10 Cyclops, the lost hammer dropped by Bargons while the quest runs. Rewards are
@@ -144,7 +146,7 @@ again at the next login.
   tick against `CloneForInventoryOperation()`, the snapshot is stored with `CancellationToken.None`, and
   `CommitQuestAsync` applies the candidate's journal and items, the progression deltas, travel and the duel. A request
   that changes nothing (a talk) answers without a write. The operation id is recorded with the journal; a retried id
-  answers "already committed", the same id with another command `Conflict`.
+  answers the `AlreadyApplied` game text, the same id with another command `Conflict`.
 - A follow-up (`Proceed`, `Accept`, `ChooseReward`) must answer a step the NPC still offers: the server re-runs the talk
   (or the class-change button for the start of a rank-up) on a scratch copy and compares code and state. The victory
   dialog of a duel is the only step answered without an NPC.

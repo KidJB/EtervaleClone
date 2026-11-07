@@ -15,12 +15,40 @@ using PristonTale.Simulation.Progression;
 using PristonTale.Simulation.Quests;
 using PristonTale.Simulation.World.Npcs;
 using PristonTale.Contracts.Characters;
+using PristonTale.Gameplay.Localization;
+using PristonTale.Contracts.Texts;
 
 namespace PristonTale.Gameplay.UI;
 
 // NPC services: opening their windows, the shop, warehouse and workbench actions, item drops from the bag and the icons they need.
 public sealed partial class GameplayHud
 {
+    private const double TeleportPrefetchDelaySeconds = 0.25;
+
+    private void UpdateTeleportPrefetch(Point pointer)
+    {
+        var destination = _npcOpen ? _npc.DestinationAt(pointer) : null;
+        if (destination is null)
+        {
+            _hoveredTeleportFieldCode = -1;
+            _teleportFieldPrepared = false;
+            return;
+        }
+
+        if (destination.FieldCode != _hoveredTeleportFieldCode)
+        {
+            _hoveredTeleportFieldCode = destination.FieldCode;
+            _hoveredTeleportSince = _clock.Elapsed.TotalSeconds;
+            _teleportFieldPrepared = false;
+        }
+
+        if (!_teleportFieldPrepared && _clock.Elapsed.TotalSeconds - _hoveredTeleportSince >= TeleportPrefetchDelaySeconds)
+        {
+            _prepareField?.Invoke(destination.FieldCode);
+            _teleportFieldPrepared = true;
+        }
+    }
+
     // A service the server opened shows its window; the NPC dialog gives way to it, as the original opens services directly.
     private void ApplyServices(OwnerState state)
     {
@@ -271,11 +299,11 @@ public sealed partial class GameplayHud
         var affordable = offer.Price > 0 ? state.Money / offer.Price : offer.MaxStack;
         if (affordable < 1)
         {
-            _notice.Show(ItemRuleMessages.NotEnoughGold);
+            _notice.Show(ClientText.Get(GameTextId.NotEnoughGold));
             return;
         }
 
-        _countBox.Open("How many items", "do you wanna buy?", Math.Min(offer.MaxStack, affordable), count => BuyFromShop(offer, count));
+        _countBox.Open(ClientText.Get("Count.HowManyItems"), ClientText.Get("Count.ToBuy"), Math.Min(offer.MaxStack, affordable), count => BuyFromShop(offer, count));
     }
 
     private void BuyFromShop(ShopOffer offer, int count) =>
@@ -291,7 +319,7 @@ public sealed partial class GameplayHud
             return;
         }
 
-        _countBox.Open("How many items", "do you wanna sell?", item.Count, count => SellToShop(item, count));
+        _countBox.Open(ClientText.Get("Count.HowManyItems"), ClientText.Get("Count.ToSell"), item.Count, count => SellToShop(item, count));
     }
 
     private void SellToShop(OwnedItemView item, int count) =>
@@ -345,12 +373,11 @@ public sealed partial class GameplayHud
             return true;
         }
 
-        _countBox.Open("How many items", "to drop?", item.Count, count => _inventory.Drop(item, count));
+        _countBox.Open(ClientText.Get("Count.HowManyItems"), ClientText.Get("Count.ToDrop"), item.Count, count => _inventory.Drop(item, count));
         return true;
     }
 
     // The first line of the count box's gold questions; the second says what the gold is for.
-    private const string GoldQuestion = "How much gold";
 
     // The coin by the gold: with the warehouse open it stores gold there (as much as is carried and the warehouse still
     // holds), otherwise it drops gold on the ground, not while a work window or the wing gate is open, as the original
@@ -364,7 +391,7 @@ public sealed partial class GameplayHud
 
         if (_warehouse.FullyOpen && _warehouse.View is { } view)
         {
-            _countBox.Open(GoldQuestion, "to store?", Math.Min(_state.Money, WarehouseStorage.MaxMoney - view.Money),
+            _countBox.Open(ClientText.Get("Count.HowMuchGold"), ClientText.Get("Count.ToStore"), Math.Min(_state.Money, WarehouseStorage.MaxMoney - view.Money),
                 amount => _services.Request(_services.NpcId, _services.NpcName, NpcServiceKind.Warehouse, NpcServiceAction.DepositGold,
                     _state?.InventoryRevision ?? 0, amount: amount));
             return;
@@ -372,7 +399,7 @@ public sealed partial class GameplayHud
 
         if (!ServiceWindowOpen(blockingOnly: true) && !_wingGate.IsOpen)
         {
-            _countBox.Open(GoldQuestion, "to drop?", _state.Money, amount => _inventory.Drop(null, amount));
+            _countBox.Open(ClientText.Get("Count.HowMuchGold"), ClientText.Get("Count.ToDrop"), _state.Money, amount => _inventory.Drop(null, amount));
         }
     }
 
@@ -448,7 +475,7 @@ public sealed partial class GameplayHud
                 break;
             case HudWarehouseActionKind.WithdrawGold when state is not null && _warehouse.View is { } view:
                 // As much as is stored and the character may still carry, as the original bounds the count.
-                _countBox.Open(GoldQuestion, "to take out?", Math.Min(view.Money, MoneyLimits.CarryLimit(state.Level, state.Tier) - state.Money),
+                _countBox.Open(ClientText.Get("Count.HowMuchGold"), ClientText.Get("Count.ToTakeOut"), Math.Min(view.Money, MoneyLimits.CarryLimit(state.Level, state.Tier) - state.Money),
                     amount => _services.Request(_services.NpcId, _services.NpcName, NpcServiceKind.Warehouse, NpcServiceAction.WithdrawGold,
                         _state?.InventoryRevision ?? 0, amount: amount));
                 break;
@@ -468,7 +495,7 @@ public sealed partial class GameplayHud
             case HudWorkActionKind.Start when state is not null:
                 if (state.Money < bench.Price(state))
                 {
-                    _notice.Show(ItemRuleMessages.NotEnoughGold);
+                    _notice.Show(ClientText.Get(GameTextId.NotEnoughGold));
                     break;
                 }
 
@@ -517,10 +544,10 @@ public sealed partial class GameplayHud
 
         if (_shop.Mode == HudShopMode.Repair)
         {
-            return quote.RepairCost > 0 ? $"Repair: {quote.RepairCost:N0} gold" : "Not damaged";
+            return quote.RepairCost > 0 ? ClientText.Format("Shop.RepairCost", quote.RepairCost.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)) : ClientText.Get("Shop.NotDamaged");
         }
 
-        return quote.SellPrice >= 0 ? $"Sells for {quote.SellPrice:N0} gold" : "The shop does not buy this";
+        return quote.SellPrice >= 0 ? ClientText.Format("Shop.SellsFor", quote.SellPrice.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)) : ClientText.Get("Shop.DoesNotBuy");
     }
 
     private Task<PristonTale.Simulation.Items.Usable.ItemUseOutcome> UseItemAsync(PristonTale.Simulation.Items.Usable.ItemUseCommand command) =>

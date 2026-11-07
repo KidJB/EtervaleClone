@@ -54,16 +54,32 @@ Monster skills are a separate system (see [world.md](world.md)); they share only
 - Code: `group << 24 | tierBit << 16 | slot`, written as a hex string (`"0x01020001"`). `tierBit` is the `JobTier`
   value (`Job1` 0x1, `Job2` 0x2, `Job3` 0x4, `Job4` 0x8, `Job5` 0x10) and must match `tier`; `slot` is 1..4.
 - Class groups: Mechanician 0x01, Fighter 0x02, Pikeman 0x03, Archer 0x04, Knight 0x05, Atalanta 0x06,
-  Priestess 0x07, Magician 0x08, Assassin 0x10, Shaman 0x50.
+  Priestess 0x07, Magician 0x08, Assassin 0x10, Martial Artist 0x20, Shaman 0x50.
 - The file name is the `PlayerClass` enum name. The array order is the skill-window order (window index 0..19): it
   drives learning order, price, tier gates, proficiency streaks and HUD placement. It is not always the slot order:
   Mechanician lists `0x01010004` before `0x01010003`.
 - `CharacterClass` takes its skill list from `ClassSkillCatalog.For`, so `character.Class.Skills[index]` is the window
   entry at `index`. A code is unique across all files (load fails otherwise).
-- The eight original classes, the Assassin and the Shaman have a rule for all 20 skills of their five tiers (the fifth
-  at levels 80, 83, 86, 90). The Assassin's and the Shaman's skill clips are those of their motion tables tagged from 163 and 183 (the class motion table numbers tags per
-  class: first tag + 4 x tier + slot - 1, tier 0 to 4); the Assassin Mastery grants its critical chance with daggers,
-  which the original's empty weapon list never allowed.
+- Martial Artist skill entries use the `TMA` button-art family under the `Martial` HUD directory, so the skill window
+  resolves their icons independently of the Fighter button family.
+- Every class has a rule for all 20 skills of its five tiers (the fifth at levels 80, 83, 86, 90). The Assassin's, the
+  Shaman's and the Martial Artist's skill clips are those of their motion tables tagged from 163, 183 and 203 (the
+  class motion table numbers tags per class: first tag + 4 x tier + slot - 1, tier 0 to 4); the Assassin Mastery grants
+  its critical chance with daggers, which the original's empty weapon list never allowed.
+- The Martial Artist strikes with vambraces: Low Kick adds its table to the kick (30% more on mutant and mechanic
+  monsters); Double Backspin Blow, Hyper Punch, Twister Kick, Tiger Cannon (reaching 150), Barrage, Shoulder Charge,
+  Typhoon Kick and Hunting Hawk strike once per clip event with their percent (Hyper Punch and Typhoon Kick with a
+  percent attack rating, Twister Kick and Shoulder Charge with a relative critical, Twister Kick 30% more on normal
+  monsters); Leap Smash strikes as it leaps, without an accuracy roll, and again on landing (30% more on demons);
+  Elbow Rush raises the attack in a 100-wide box 120 ahead; Line Break strikes its target twice and, with the second
+  strike, up to its rank's count of enemies around the target with its table raised by its rate plus the attack (a
+  `followArea`). War Cry weakens up to 32 monsters around its target for 15 s (their damage down, the critical chance
+  of their attackers up), without an accuracy roll or damage, turned away only by a full bionic resistance; a monster
+  already weakened keeps its running War Cry, whoever casts it again. Rage raises the vambrace's attack speed, Deep
+  Breath maximum life, Nerves of Steel defence and absorption (the buff starts with the clip, which has no event), and
+  Hard Training the strength, agility and spirit the formulas read for the caster and the party within its range,
+  kept on a member who already has it. Strength, Stamina and Defense Mastery are passives (Defense Mastery with a
+  vambrace held). Leap Smash and Hunting Hawk play at four fifths of the attack speed.
 - The Shaman's spells roll base + level x `levelPercent` / 100 + weapon item damage x `weaponTimes` + spirit / the
   rank's divisor, never critically. Haunt drains a share of its target's maximum life (bosses spared) and returns it
   up to 40% of the caster's maximum life; Soul Manacle holds a monster (bosses spared, hits do not end it); Chasing
@@ -190,10 +206,12 @@ means absent); `SkillRule.At` clamps the rank into the table. Distances are worl
 - Accuracy and critical: `attackRating[10]`, `attackRatingPlusLevel`, `attackRatingPercent[10]`, `criticalAdd[10]`,
   `criticalPercent[10]` (relative: crit + crit x pct / 100), `borrowedCritical` {`skill`, `values[10]` indexed by that
   skill's rank, `divisor`}, `borrowedRating` {`skill`, `values[10]`, `fromHit`}: attack rating percent from that
-  skill's rank on the hits from `fromHit` (1-based) on, `noAccuracy`, `stopAfterMiss`, `noCriticalHits` (1-based hit numbers), `forceFlinch`,
+  skill's rank on the hits from `fromHit` (1-based) on, `noAccuracy`, `noAccuracyHits` (1-based hit numbers that skip the
+  accuracy roll), `stopAfterMiss`, `noCriticalHits` (1-based hit numbers), `forceFlinch`,
   `volley[10]` (shots per strike, each rolls accuracy, damage adds up).
 - Damage: `damage` (damage rule, below); `burst` {`afterHit`, `radius`, `percent` (100), `element`}: a burst around the
-  caster after that weapon hit; `lifeCost[10]`: weapon skills pay tenths of a percent of max life per landed hit,
+  caster after that weapon hit; `followArea` (an `Area` rule) with `followAreaFromHit` (1-based, default 1): weapon skills
+  strike that area after the weapon hit of every hit from that one on (the skill's own effects apply); `lifeCost[10]`: weapon skills pay tenths of a percent of max life per landed hit,
   `LifeToMana` converts that percent of max life into the same percent of max mana.
 - Effects: `buff`, `casterBuff` (buff rules, below; `casterBuff` applies on the first hit, for areas only when a target
   was hit; a weapon attack's harmful `buff` lands on the monster each of its hits struck); `healMin[10]`, `healMax[10]` (plus weapon item damage / 3 and spirit / 8 on the minimum, / 6 on the
@@ -263,6 +281,8 @@ means absent); `SkillRule.At` clamps the rank into the table. Distances are worl
 | `endsOnHit`, `endsOnAreaAttack`, `endsOnDamage` | Stealth consumed by the next single-target hit; ended by an area attack; stun broken by damage |
 | `weaponBound`, `requiresWeapon` | Modifiers count only with a listed main-hand weapon; effect ends when none is wielded |
 | `sparesBosses` | Boss monsters never take the effect |
+| `fullResistanceOnly` | Only a full resistance (100) turns the effect away; a lower one does not shorten it |
+| `keptWhileRunning` | A running copy, from any caster, is kept: a new cast neither refreshes nor stacks it |
 | `lifeCut[10]` | A monster loses this percent of its maximum life while the effect lasts and draws smaller; one with no more life dies |
 | `companion` | Familiar, see below |
 | `counter` {`borrowSkill`, `percent[10]`, `element`, `bonusBroods`, `bonusPercent`} | Strike back when the shield blocks a monster's normal attack |
@@ -308,7 +328,8 @@ server and client start. Required per kind: `WeaponAttack`/`MagicBolt` need `dam
 (`radius[10]`, `radiusTargetPad`, or a box with `reachPercent`/`reachBonus`) and one of `damage`, `buff`, `taunt`,
 `casterBuff`; `SelfBuff`/`Debuff` need `buff`; `Heal` needs `healMin`/`healMax`; `Summon` a valid `summon`; `Charm`
 `charm` and `buff`; `Resurrect` `resurrect`; `Passive` a `passive` with `values[10]` or `modifiers`. Castable
-`Skill`-motion rules need `motionFrames` and `motionEvents`, and every event frame must lie within the clip.
+`Skill`-motion rules need `motionFrames` and hit frames (`motionEvents`, `extraEvents` or `hitFramesByRank`), and every
+event frame must lie within the clip. A `followArea` is an `Area` rule of a `WeaponAttack` with the data an area needs.
 
 Example (real entry, Mechanician window index 1):
 
@@ -468,7 +489,8 @@ Add or change a skill with an existing mechanic:
    unique across files) and run `ptvfx import <assetRoot>`. Format: [effects.md](effects.md).
 3. Sounds: `wav/...` asset paths that exist in the game data (`SkillPresentationTests` checks when assets are found).
 4. Motion: `motionIndex`/`motionFrames`/`motionEvents` must match the class motion table; check with
-   `--verify-skill-motions <assets>` and preview with `--capture-skills` ([testing.md](testing.md)).
+   `--verify-skill-motions <assets>` and preview with `--capture-skills` ([testing.md](testing.md)). If a shipped model
+   lacks an authored skill index, the client selects a valid skill clip from that model instead of terminating.
 5. Tests: a case in the matching `tests/PristonTale.Tests/Skill<Mechanic>Tests.cs` using `SkillScenario`.
 
 Add a new mechanic or rule field:
