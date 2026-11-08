@@ -27,12 +27,19 @@ public static class ItemUseMessages
         ItemUseStatus.Conflict => GameTextId.OperationConflict,
         ItemUseStatus.StorageFailed => GameTextId.CharacterUnchanged,
         ItemUseStatus.ClanOnly => GameTextId.ClanOnly,
+        ItemUseStatus.RegisteredClanOnly => GameTextId.RegisteredClanOnly,
+        ItemUseStatus.UnionCoreOwn => GameTextId.UnionCoreOwn,
+        ItemUseStatus.UnionCoreAway => GameTextId.UnionCoreAway,
+        ItemUseStatus.UnionCoreWrongClan => GameTextId.UnionCoreWrongClan,
+        ItemUseStatus.ClanPetOwned => GameTextId.ClanPetOwned,
+        ItemUseStatus.ClanPetsNearby => GameTextId.ClanPetsNearby,
         ItemUseStatus.NoSpace => GameTextId.NoSpace,
         ItemUseStatus.OverWeight => GameTextId.OverWeight,
         ItemUseStatus.MaleCannotUse => GameTextId.MaleCannotUse,
         ItemUseStatus.FemaleCannotUse => GameTextId.FemaleCannotUse,
         ItemUseStatus.NotEnoughGold => GameTextId.NotEnoughGold,
         ItemUseStatus.CrystalRefused => GameTextId.CrystalRefused,
+        ItemUseStatus.MercenaryLimit => GameTextId.MercenaryLimit,
         _ => GameTextId.ItemNotUsed
     };
 }

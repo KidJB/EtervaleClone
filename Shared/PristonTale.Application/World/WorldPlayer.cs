@@ -380,8 +380,15 @@ public sealed class WorldPlayer
         PetSkin = _character.PetOut,
         PetName = _character.PetName,
         Mount = _character.MountRidden,
-        ShopSign = Shop?.Sign ?? ""
+        
+        ShopSign = Shop?.Sign ?? "",
+        ClanId = Clan?.ClanId ?? 0,
+        ClanName = Clan?.Name ?? "",
+        ClanMark = Clan?.MarkVersion ?? 0
     };
+
+    // The clan the player shows over its head (ClanAppService keeps it), null for none.
+    public Simulation.Social.Clans.ClanTag? Clan { get; set; }
 
     // A hair tint changes the head every viewer draws.
     public void ChangeHair(int hairIndex)

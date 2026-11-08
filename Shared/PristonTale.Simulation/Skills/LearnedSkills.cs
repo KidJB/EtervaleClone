@@ -50,7 +50,7 @@ public sealed class LearnedSkills
         Changed?.Invoke();
     }
 
-    // Proficiency changes no derived stat, so it announces no change; the revision shows the owner its training bar.
+    // Proficiency changes no derived stat, so it announces no change; the revision sends the owner its skill window gauge.
     public void RecordUses(uint code, int uses)
     {
         if (RankOf(code) == 0)

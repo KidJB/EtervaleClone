@@ -5,26 +5,33 @@ using PristonTale.Contracts.Texts;
 
 namespace PristonTale.Persistence.Abstractions.Characters;
 
-// Saved operation results hold a game text as {Id, Args}; characters saved before game texts hold the line as plain text.
+// A saved operation's answer holds its line as {Id, Args}. Characters saved before the lines were game texts hold the
+// line as plain text, and a later version may drop an id: both read as no line, which only a replay of that already
+// answered operation would have shown.
 public sealed class GameTextJsonConverter : JsonConverter<GameText>
 {
     public override GameText Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        if (reader.TokenType == JsonTokenType.String)
+        if (reader.TokenType != JsonTokenType.StartObject)
         {
-            var line = reader.GetString();
-            return string.IsNullOrEmpty(line) ? GameText.None : GameText.Plain(line);
+            reader.Skip();
+            return GameText.None;
         }
 
         using var document = JsonDocument.ParseValue(ref reader);
         var root = document.RootElement;
-        var id = root.TryGetProperty(nameof(GameText.Id), out var saved) ? Enum.Parse<GameTextId>(saved.ToString()) : GameTextId.None;
+        if (!root.TryGetProperty(nameof(GameText.Id), out var saved) || saved.ValueKind != JsonValueKind.String
+            || !Enum.TryParse<GameTextId>(saved.GetString(), out var id) || !Enum.IsDefined(id))
+        {
+            return GameText.None;
+        }
+
         var args = ImmutableArray.CreateBuilder<string>();
-        if (root.TryGetProperty(nameof(GameText.Args), out var list))
+        if (root.TryGetProperty(nameof(GameText.Args), out var list) && list.ValueKind == JsonValueKind.Array)
         {
             foreach (var arg in list.EnumerateArray())
             {
-                args.Add(arg.GetString() ?? "");
+                args.Add(arg.ValueKind == JsonValueKind.String ? arg.GetString() ?? "" : arg.ToString());
             }
         }
 

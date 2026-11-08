@@ -56,13 +56,15 @@ and draws the result.
 ## Use flow
 
 1. Right click on a carried item whose catalog key has a rule (`HudInventoryController.UseRequested`). The Teleport
-   Core opens its field list first and asks to confirm the field; the mobile shop asks to confirm the use.
+   Core opens its field list first and asks to confirm the field; the mobile shop and an unbound Union Core (binding it)
+   ask to confirm the use.
 2. `ItemUseCommand {OperationId, ExpectedRevision, ItemId, Argument, Text}` goes to the server
    (`ItemUseAppService.UseAsync`). `Argument` is the Teleport Core destination index. A dead player's client sends its
    Restoration by itself ten seconds after death in a castle field.
 3. Tick (`ItemUseTransactions.Prepare`): replay check (the same id answers its recorded outcome), inventory revision,
    carried item with a rule, then the rule's checks (dead, village ban, level, conflicts, field, target). A refusal is
-   final and consumes nothing. Otherwise a candidate consumes one item (a puzzle bag stays and is unsealed), adds what
+   final and consumes nothing. Otherwise a candidate consumes one item (a puzzle bag stays and is unsealed; an unbound
+   Union Core stays and is bound), adds what
    the family adds (a box's prize, the crystal's drawn monster, the gold a reveal takes), applies the character part and
    records the use.
 4. The candidate's save snapshot is stored (hair tints also store `hair_index`), then `CommitItemUseAsync` applies the
@@ -75,16 +77,18 @@ and draws the result.
 | --- | --- |
 | `AlreadyRunning` | The same timer, scroll or force orb runs, or a package's timers run |
 | `SameAttribute` | Vampiric Cuspid and its Super version exclude each other; one helper pet at a time |
-| `NotHere` | Village for scrolls and force orbs, a room field, Bellatra or the quest arena for travel, towns and the castle for the mobile shop, Fatal Edge against a running Avert Scroll and the reverse |
-| `LevelTooLow` | Helper pets need level 10; Teleport Core destinations and force orbs have their own levels |
+| `NotHere` | Village for scrolls and force orbs, a room field, Bellatra or the quest arena for travel (the quest arena for a Union Core user), towns and the castle for the mobile shop, Fatal Edge against a running Avert Scroll and the reverse |
+| `LevelTooLow` | Helper pets need level 10; Teleport Core destinations and force orbs have their own levels; a Union Core's member stands in a field above the user's entry level |
+| `UnionCoreOwn`, `UnionCoreAway`, `UnionCoreWrongClan` | A Union Core used by its binder; its member out of the world, in a room, the castle, the quest arena or Bellatra; its member of another clan |
 | `NothingToChange` | Nothing to reset or train, the same hair, no aged item worn, five Gravity Scrolls used, a revealed piece |
 | `Delay` | A billing crystal or soul stone within three seconds of the last crystal; eating while eating; Restoration early |
-| `ClanOnly` | Clan crystals and the Union Core (Etervale has no clans, so they always refuse) |
+| `ClanOnly`, `RegisteredClanOnly` | Clan crystals and the Union Core without a clan, or in a clan still registering |
 | `NoSpace`, `OverWeight` | A gift box without room for a 2 x 2 item or within ten weight (five for the capsule) of the limit |
 | `MaleCannotUse`, `FemaleCannotUse` | A chocolate meant for the other gender |
 | `NotEnoughGold` | A lucky bag without 1000 gold |
-| `CrystalRefused` | Castle mercenaries outside a siege of the castle-master clan (Etervale runs no siege) |
+| `CrystalRefused` | Castle mercenaries outside a running siege (until the Tower of Valhalla falls) or for a player outside the clan holding the castle |
 | `SummonLimit` | A pet crystal while the user keeps ten pets ("You can only have 10 crystal summons at a time") |
+| `MercenaryLimit` | A castle mercenary while the caller's own stands, five of its kind or twenty of the clan's called mercenaries stand ("You have exceeded your summon limit") |
 
 ## Items and effects
 
@@ -127,8 +131,8 @@ from the inventory. Items without a rule keep the generic tooltip.
 | GP121 Marvel | Bargon 20, Head Cutter 20, Figon 15, King Hopy 15, Hulk 12, Web 10, Dark Specter 5, Iron Guard 3 (event: their event monsters) |
 | GP117-119 | One of four skeletons, chaos or Inferna monsters, uniformly |
 | GP120 Extreme | Omicron 35, Spider Trooper 30, Mountain 20, Omega 15 |
-| GP110, GP122 | Guardian Saint, Guardian Divine for the clan; refused (`ClanOnly`) |
-| GP114-116 | Ricarten militia, Ricarten guard, Bless royal guard as castle mercenaries; refused (`CrystalRefused`) |
+| GP110, GP122 | Guardian Saint, Guardian Divine for a registered clan's member: one a member (`ClanPetOwned`), refused while three of the clan's monsters stand near (`ClanPetsNearby`, `ClanRules.NearbyMonsters`), within the pet slots; the pet belongs to the caller's clan (`MonsterInstance.ClanId`) and never picks that clan's players |
+| GP114-116 | Ricarten militia, Ricarten guard, Bless royal guard as castle mercenaries, of the kind of the crystal's monster: during a siege until the Tower of Valhalla falls, for a member of the clan holding the castle (`CrystalRefused` otherwise), one a character (a relog keeps it), five of a kind, twenty of the clan (`MercenaryLimit`; `CastleSiegeRules.MayCall`, `FieldInstance.MercenaryRoom`). The mercenary stands where its caller stands as one of the siege's defenders with all its potions (one life in an easy siege), counts with the siege's mercenaries and leaves with the siege. At the use's commit only the siege is checked again: two calls prepared together may pass a limit by one, and a siege that ended meanwhile takes the crystal without a mercenary |
 | GP201-209 | Soul stones: a hostile "soul of" monster for 4 min from seven per stone, uniformly |
 
 Monsters are named by their key (`MonsterDefinition.Key`, the unique English name; a crystal pet is the crystal
@@ -165,9 +169,9 @@ drawn monster the world data lacks is refused and kept; the data's soul monsters
 
 One castle scroll, one Defiance Stone and one Might Stone run at a time; a new one replaces the running one of its
 kind, and every castle item ends when its holder leaves the castle. The same code refuses while it runs. A dead player
-in a castle field may use a Restoration after 10 s down (players stay down until they restart). Crystal towers spawn
-only with a siege and Might Stones need castle player combat; neither exists in Etervale, so those stones have no
-target.
+in a castle field may use a Restoration after 10 s down (players stay down until they restart). Crystal towers stand
+during a siege, and Might Stones count on the blows players trade in the castle's battle zone
+([application.md](application.md#combat-resolution)).
 
 ### Boosters and skill delay
 
@@ -216,8 +220,13 @@ SP183, SP185, SP186, the SP2xx keys, BC104, BC117-120, BC136, BC137, BC141, GP12
 GP141-144, GP301-313, GP342-344, EC106, EC107, BI195-198, BI240-244, BI248-257, BI260, BI263-277, BI284-299, every
 BI5xx key, FO113-115, FO133-137 and FO151-163. GF, SD and QT items are exchange, quest or pick-up items, not used from
 the inventory. The Field Core (BI193, BI194) has no rule beyond its level-20 gate and no item data. EC103 returns to
-no town: it guards for 10 s with the return sparkle where the player stands. EC105, the Union Core, needs a regular
-clan and refuses (`ClanOnly`).
+no town: it guards for 10 s with the return sparkle where the player stands. EC105, the Union Core (`UnionCoreUse`),
+gathers a registered clan and never works in a room (`ClanOnly`, `RegisteredClanOnly`). Its first use, confirmed first,
+binds it to its user (`ItemInstance.Link`, the character's name, saved with the item and shown in its tooltip); the
+binder cannot use it (`UnionCoreOwn`). Another member using a bound core goes to the bound member's place and the core is
+spent: the member must be in the world outside a room, the castle, the quest arena and Bellatra (`UnionCoreAway`), of
+the same clan (`UnionCoreWrongClan`), in a field the user's level may enter (`LevelTooLow`), and the user outside the
+quest arena. Like the Teleport Core, the place is the one the use was checked at.
 
 ## Client presentation
 

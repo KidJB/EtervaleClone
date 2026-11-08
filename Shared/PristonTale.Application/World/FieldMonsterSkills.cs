@@ -524,8 +524,23 @@ internal sealed class FieldMonsterSkills
     // A skill blow never misses and is never blocked: the power less the player's absorption, at least 1.
     private void SkillOnPlayer(MonsterInstance attacker, WorldPlayer target, bool applyRiders)
     {
-        if (target.IsDead || target.Life <= 0)
+        if (target.IsDead || target.Life <= 0 || FieldCombat.OwnClan(target, attacker))
         {
+            return;
+        }
+
+        // The skill always hits, but the player may still evade or block it, as a normal blow.
+        var defender = CombatProfileFactory.ForPlayerDefender(target.Character);
+        if (Combat?.SkillCombat?.Evades(attacker.EntityId, target) == true)
+        {
+            return;
+        }
+
+        if (CombatResolver.RollBlock(_rng, defender, attacker.Def.Combat.Level, CombatProfileFactory.HasShield(target.Character)))
+        {
+            _host.EmitCombatEvent(new CombatEventView(attacker.EntityId, target.EntityId, CombatEventKind.Block));
+            Combat?.SkillCombat?.Blocked(attacker, target);
+            FieldInstance.AgingBlock(target, attacker);
             return;
         }
 
@@ -540,7 +555,6 @@ internal sealed class FieldMonsterSkills
             }
         }
 
-        var defender = CombatProfileFactory.ForPlayerDefender(target.Character);
         var damage = (int)Math.Clamp((long)power - defender.Absorption, 1, int.MaxValue);
         damage = ModifierRules.AgainstUndead(damage, attacker.Def.Brood == MonsterBrood.Undead, target.Character.Effects.Totals);
         damage = Combat?.SkillCombat?.Defend(attacker, target, damage, true) ?? damage;

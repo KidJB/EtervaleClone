@@ -39,7 +39,7 @@ public sealed partial class GameplayHud
                 _questWindow.Close();
                 _partyWindow.Show();
             }
-            else if (released && !_partyWindow.ShowsFriends)
+            else if (released && _partyWindow.Page == HudPartyPage.Party)
             {
                 _partyWindow.Close();
             }
@@ -89,9 +89,13 @@ public sealed partial class GameplayHud
             return true;
         }
 
-        if (ShowsPlayerButtons && HudPlayerButtons.At(HudCombat.TargetFrame(layout), pointer) is { } button)
+        if (ShowsPlayerButtons && HudPlayerButtons.At(HudCombat.TargetFrame(layout), pointer, ClanButton) is { } button)
         {
-            if (button == HudPlayerButton.Party)
+            if (button == HudPlayerButton.Clan)
+            {
+                InviteToClan(ButtonsPlayerId);
+            }
+            else if (button == HudPlayerButton.Party)
             {
                 Parties?.InviteToPartyAsync(ButtonsPlayerId);
             }
@@ -113,7 +117,7 @@ public sealed partial class GameplayHud
 
     private bool CapturesParty(HudLayout layout, Point pointer) =>
         _partyRequest.Captures(pointer) || _partyWindow.Contains(layout, pointer)
-        || ShowsPlayerButtons && HudPlayerButtons.At(HudCombat.TargetFrame(layout), pointer) is not null;
+        || ShowsPlayerButtons && HudPlayerButtons.At(HudCombat.TargetFrame(layout), pointer, ClanButton) is not null;
 
     // The other members' last known places, for the minimap.
     // The NPCs and players in view and the other party members, who are marked as members rather than as players; a

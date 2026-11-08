@@ -127,6 +127,8 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         _combat.MonsterSkills = _monsterSkills;
         Premium = new FieldPremium(fieldId, this);
         _combat.PlayerHitLanded = Premium.RecordHit;
+        _combat.DamageDealt = RecordSiegeDamage;
+        _combat.PlayerHurtPlayer = RecordSiegeBlow;
         _combat.HammerLanded = OnHammerLanded;
         foreach (var placement in spawnData.FixedNpcs)
         {
@@ -202,8 +204,21 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
             return false;
         }
 
+        if (_players.TryGetValue(targetEntityId, out var foe))
+        {
+            if (!MayFight(attacker, foe))
+            {
+                attacker.ClearAttackTarget();
+                return false;
+            }
+
+            attacker.SetAttackTarget(targetEntityId, sustained);
+            return true;
+        }
+
         if (!_monsters.TryGetValue(targetEntityId, out var monster) || !monster.IsAlive || monster.IsSummon
-            || monster.Effects.Has(Simulation.Modifiers.ControlFlags.Charmed) || monster.DuelPlayerId != 0 && monster.DuelPlayerId != attackerEntityId)
+            || monster.Effects.Has(Simulation.Modifiers.ControlFlags.Charmed) || monster.DuelPlayerId != 0 && monster.DuelPlayerId != attackerEntityId
+            || FieldCombat.OwnClan(attacker, monster))
         {
             attacker.ClearAttackTarget();
             return false;
@@ -217,6 +232,8 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
 
     // A used item's timed effect on a player of this field; it starts with the next step.
     internal void QueueItemEffect(ulong entityId, EffectSpec spec, float durationMs, int rank = 1) => _skills.QueueItemEffect(entityId, spec, durationMs, rank);
+
+    internal void EndItemEffect(WorldPlayer player, uint code) => _skills.EndItemEffect(player, code);
 
     // The field's combat resolution, for scenario tests that drive single monster attacks.
     internal FieldCombat Combat => _combat;
@@ -270,6 +287,7 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         ApplyEventForms();
         StepSummons(dtMs);
         ExpireSoulMonsters();
+        StepSiege();
 
         // Authoritative NPC movement keeps interaction range and presentation aligned.
         foreach (var npc in _npcs.Values)
@@ -308,9 +326,9 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
                     timing.DurationMs, timing.HitAtMs));
             }
 
-            if (player.HasPendingYahoo && !player.IsBusy)
+            if (player.HasPendingYahoo && !player.IsBusy && player.BeginPendingYahoo(PlayerActionTiming(player, MotionCode.Yahoo, 1f).DurationMs))
             {
-                player.BeginPendingYahoo(PlayerActionTiming(player, MotionCode.Yahoo, 1f).DurationMs);
+                HealClanMonsters(player);
             }
 
             _combat.StepPlayerAttack(player);
@@ -347,6 +365,14 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
 
     private bool IsPresent(ulong entityId) => _players.ContainsKey(entityId) || _monsters.ContainsKey(entityId) || _npcs.ContainsKey(entityId);
 
+    // Dead at once, lives in reserve and all, leaving a corpse.
+    private void KillOutright(MonsterInstance monster)
+    {
+        monster.VirtualLives = 0;
+        monster.ApplyDamage(monster.Life);
+        _combat.BeginCorpse(monster.EntityId);
+    }
+
     private void PlaceLoot(KillPayout reward, long nowMs)
     {
         reward = CreditQuests(reward);
@@ -354,6 +380,11 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         {
             var dropPosition = Terrain.SettleNear(killed.Position, FieldTerrain.DropTolerance);
             GroundLoot.Place(reward, dropPosition, killed.Def.Drops.AllPlayersSeeDrops, nowMs, _rng, killed.Def.IsBoss);
+            if (reward.CreditedPlayerId != 0)
+            {
+                CallKillSummons(killed, reward.CreditedPlayerId);
+                ScoreBellatra(killed, reward.CreditedPlayerId);
+            }
         }
     }
 
@@ -700,10 +731,14 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         }
     }
 
-    MonsterInstance ISpawnSink.Spawn(MonsterDefinition definition, Vector3 position, int spawnPointIndex, float facing)
+    MonsterInstance ISpawnSink.Spawn(MonsterDefinition definition, Vector3 position, int spawnPointIndex, float facing) =>
+        Place(definition, Terrain.PlaceOnFloor(position), spawnPointIndex, facing);
+
+    // A new monster at exactly this position, with its potions or lives.
+    private MonsterInstance Place(MonsterDefinition definition, Vector3 position, int spawnPointIndex, float facing)
     {
         ulong id = _ids.NextMonsterId();
-        var monster = new MonsterInstance(id, definition, Terrain.PlaceOnFloor(position), facing, spawnPointIndex);
+        var monster = new MonsterInstance(id, definition, position, facing, spawnPointIndex);
         _monsters[id] = monster;
         _monsterSkills.Prepare(monster);
         return monster;

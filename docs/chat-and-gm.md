@@ -77,10 +77,12 @@ Kinds: 0 server, 1 whisper, 2 system, 3 notice, 4 party, 5 clan, 6 trade, 9 assi
 - A line that is only `yahoo`, `/yahoo` or `Yes!` (any case) is not spoken: the player cheers (the Yahoo motion, the
   weapon on the back) from standing, walking or running. For a minute after, Space (`YahooKey`) cheers again for 3% of
   the maximum stamina, refused while stamina is not above that (`YahooRules`). A firecracker cheers after the motion in
-  progress, and the tiger capsule cheers at its eating event.
+  progress, and the tiger capsule cheers at its eating event. A clan member's cheer heals up to three of the clan's
+  monsters (its clan pets) within range by a quarter of the player's level shared among them, at least 1 each
+  (`FieldInstance.HealClanMonsters`, `YahooRules`, `ClanRules.NearbyMonsters`).
 - Party and clan lines go through `IPartyRoster` and `IClanRoster`: the party roster is the world's parties
-  ([application.md](application.md#parties)); Etervale has no clan system yet, so the empty clan roster refuses clan
-  lines.
+  ([application.md](application.md#parties)), the clan roster the clan service's online members
+  ([application.md](application.md#clans)); `/CLAN> text` reaches the online members of the speaker's clan.
 - `//party name` (or `//PARTY`) asks that player to group, as the button under a player's portrait does; an unknown
   name answers `name is currently offline, or cannot be found`.
 - English builds had no chat profanity filter, so none is applied.
@@ -133,10 +135,13 @@ Commands match by exact, case-sensitive prefix in table order. Levels:
 | Guide | `/usercode`, `/userid`, `/username`, `/user`, `/sockets`, `/area_users`, `/dm_info`, `/get_guid` |
 | Guide | `/specific`, `/Performance`, `/talk`, `/monster`, `/mymonster`, `/event_monster`, `/area_monster` |
 | Guide | `/show_blackuser`, `/reset_blackuser`, `/free_blackuser`, `/hide`, `/show`, `/grant` |
+| Guide | `/start_castle`, `/end_castle`, `/set_castle_time`, `/set_castle_master`, `/get_castle_info` |
+| Guide | `/get_fountain_info`, `/reset_fountain_time`, `/set_castle_tax` |
 | Moderator | `/>`, `/>>`, `/user_limit`, `/kick`, `/kill`, `/open_warehouse`, `/shutdown`, `/weather`, `/insert`, `/near`, `/call`, `/where` |
 | Moderator | `/field`, `/player_location` |
 | Operator | `/get_money`, `/AgingSetting` |
-| Administrator | `/init_premiumitem`, `/@get_perf`, `/@get`, `/@put`, `/@coins`, `/@coinshop_reload`, `/GiveMeExp!`, `/expup`, `/GiveMeMoney!`, `/reload_settings`, `/setting`, `/set_absorb` |
+| Administrator | `/easy_castle` |
+| Administrator | `/init_premiumitem`, `/@get_perf`, `/@get`, `/@put_perf`, `/@put`, `/@coins`, `/@coinshop_reload`, `/GiveMeExp!`, `/expup`, `/GiveMeMoney!`, `/reload_settings`, `/setting`, `/set_absorb` |
 
 - Information: local time, boss minute, the issuer's force orb and premium timers, gold spent per sink, carried potions,
   connection packet counts, players and monsters, a player by entity id, account or name, damage range, session.
@@ -145,9 +150,9 @@ Commands match by exact, case-sensitive prefix in table order. Levels:
   the field (each move carries the running statuses), `/hide` and `/show` make the issuer invisible to other players' presence, `/grant` lends the issuer's level to a
   player until that player leaves the world.
 - Items: `/@get code` or `/@get "name"` drops an item (`code#U<n>` or a named unique's name makes that named unique,
-  `code#Q` the quest variant), `/@get_perf code [class] [+level] [rarity]` its best copy (the class by name, number 1-10 or short name: every class with a class bit, the
-  Assassin and the Shaman included) (aged to the level, 1-20, when its family takes game-master aging: `AgingRules.GameMasterAges`; otherwise unaged, and the reply says so; a grade name, common to legendary, gives it that rarity: `ItemRarities.Apply`), `/@put name code` writes
-  a copy into a player's bag before delivering it, `/AgingSetting code level [class 1-8]` drops a weapon or armour aged
+  `code#Q` the quest variant), `/@get_perf code [class] [aging]` its best copy, aged to the level when one is given
+  (0 to 20, `AgingRules.MaxLevel`; the class may be `none`), `/@put name code` writes
+  a copy into a player's bag before delivering it, `/@put_perf name code [class] [aging]` the same with the best copy, `/AgingSetting code level [class 1-8]` drops a weapon or armour aged
   to the level; `/specific job` and `/Performance value` force the class and middle
   roll of items made in the next minute; `/init_premiumitem n` ends a premium timer.
 - Monsters: `/monster name [count]` spawns up to 21 (only the highest level drops items), `/mymonster name [count]` as
@@ -160,6 +165,12 @@ Commands match by exact, case-sensitive prefix in table order. Levels:
   until `/weather auto` gives it back to the schedule, and `/weather` tells the weather now.
 - Accounts: `/insert account character` moves an offline character to the account's first free slot;
   `/open_warehouse [account]` lists the stored warehouse in the chat.
+- Bless Castle: `/start_castle [minutes]` starts a siege (120 minutes by default, never past a league's end),
+  `/end_castle` ends it and a running league (the owner stays), `/set_castle_time minutes` sets the running siege's
+  end, `/set_castle_master [clan]` gives the castle to a clan outside a siege (the issuer's own clan without a name),
+  `/get_castle_info` and `/get_fountain_info` read the castle and the soul fountain, `/reset_fountain_time` restarts
+  the fountain's minute, `/set_castle_tax` makes the next tax and the chosen clan skill take effect now,
+  `/easy_castle` leaves every standing defender of the running siege one life.
 - Experience: `/GiveMeExp! level` raises to a level, `/expup n` adds n points as a monster's award would.
 - `server.test` or `server.debug` (settings table) lower `/GiveMeExp!`, `/expup` and `/GiveMeMoney!` to Guide; on a debug
   server `/` and an item code drops that item; `gm.potion_monitor` (default on) enables `/get_potion`.
@@ -180,12 +191,12 @@ Commands match by exact, case-sensitive prefix in table order. Levels:
 
 ## Pitfalls
 
-- Command matching is a prefix match: `/show` must come after `/show_blackuser`, `/@get` after `/@get_perf`.
+- Command matching is a prefix match: `/show` must come after `/show_blackuser`, `/@get` after `/@get_perf`, `/@put` after `/@put_perf`.
 - The client shows its own spoken and party lines at once; the server never echoes them back.
 - The standing notice is delivered on the heartbeat, not on the command.
-- Not ported because Etervale has no such system: siege and castle commands, billing and PC-room time, event levels,
-  client checksum commands, item-age revision, the wishing fountain, Bellatra (`/sod_view`, `/sod_enter`), billing time (`/time`), couple rings and
-  only one game master pet at a time. The classic password elevation is replaced by the stored level.
+- Not ported because Etervale has no such system: billing and PC-room time, event levels, client checksum commands,
+  item-age revision, the wishing fountain, Bellatra (`/sod_view`, `/sod_enter`), billing time (`/time`), couple rings
+  and only one game master pet at a time. The classic password elevation is replaced by the stored level.
 - The classic client's own commands: `/field` and `/player_location` (and `/expup`) are server commands here, since the
   server owns position and experience; `/save` has no counterpart (every change is stored as it happens); the lighting
   and model debug commands (`/dark`, `/color`, `/time_offset`, `/load`, `/body`, `/mymodel`, ...) and `/latency` are

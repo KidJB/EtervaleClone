@@ -274,7 +274,7 @@ public sealed partial class GameplayHud
             return;
         }
 
-        if (ClickQuests(layout, pointer) || ClickTrade(pointer) || ClickParty(layout, pointer))
+        if (ClickClan(pointer) || ClickCastle(pointer) || ClickBellatra(pointer) || ClickQuests(layout, pointer) || ClickTrade(pointer) || ClickParty(layout, pointer))
         {
             return;
         }
@@ -361,8 +361,11 @@ public sealed partial class GameplayHud
         var current = _npc.Current;
         if (_npc.DestinationAt(pointer) is { } destination && state is not null)
         {
-            if (_services.Request(current.EntityId, current.Name, NpcServiceKind.Teleporter, NpcServiceAction.Teleport, state.InventoryRevision,
-                    anchor: destination.Index))
+            // A Bellatra team booth offers its ticket as its one destination.
+            var (kind, action) = _services.Open == NpcServiceKind.EventBooth
+                ? (NpcServiceKind.EventBooth, NpcServiceAction.EnterBellatra)
+                : (NpcServiceKind.Teleporter, NpcServiceAction.Teleport);
+            if (_services.Request(current.EntityId, current.Name, kind, action, state.InventoryRevision, anchor: destination.Index))
             {
                 _prepareField?.Invoke(destination.FieldCode);
             }
@@ -503,7 +506,7 @@ public sealed partial class GameplayHud
             return true;
         }
 
-        if (_helpPet.Captures(pointer) || CapturesHelp(pointer) || CapturesParty(layout, pointer) || _tradeRequest.Captures(pointer) || _personalShop.Captures(pointer)
+        if (_helpPet.Captures(pointer) || CapturesHelp(pointer) || CapturesParty(layout, pointer) || CapturesClan(pointer) || CapturesCastle(pointer) || CapturesBellatra(pointer) || _tradeRequest.Captures(pointer) || _personalShop.Captures(pointer)
             || _itemUse.Captures(pointer) || _wingGate.Captures(pointer) || _puzzle.Captures(pointer) || _crystalDismiss.Captures(pointer) || _premium.Contains(pointer))
         {
             return true;

@@ -64,6 +64,23 @@ public sealed record PresenceUpdate(
     public PartyInfo? Party { get; init; }
     public PartyRequestInfo? PartyRequest { get; init; }
 
+    // The local player's clan (ClanInfo.None when it has none), an invitation to one and a request's result.
+    public ClanInfo? Clan { get; init; }
+    public ClanInvitationInfo? ClanInvitation { get; init; }
+    public ClanResultInfo? ClanResult { get; init; }
+
+    // Bless Castle, at world entry and on every change.
+    public CastleInfo? Castle { get; init; }
+
+    // The owner's window at the castle's butler and how a request of it ended.
+    public CastleOwnerInfo? CastleOwner { get; init; }
+    public CastleOwnerResultInfo? CastleOwnerResult { get; init; }
+
+    // The local player's Bellatra board, the secretary's window and how a request of it ended.
+    public BellatraBoardInfo? Bellatra { get; init; }
+    public BellatraClanInfo? BellatraClan { get; init; }
+    public BellatraClanResultInfo? BellatraClanResult { get; init; }
+
     // The local player's trade window when it changed (TradeInfo.None once it ended), and a player's request to trade.
     public TradeInfo? Trade { get; init; }
     public TradeRequestInfo? TradeRequest { get; init; }

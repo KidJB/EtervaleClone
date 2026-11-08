@@ -45,7 +45,10 @@ internal static class WireMapping
                     ShopSign = appearance.ShopSign,
                     PetSkin = appearance.PetSkin,
                     PetName = appearance.PetName,
-                    Mount = appearance.Mount
+                    Mount = appearance.Mount,
+                    ClanId = (ulong)Math.Max(0, appearance.ClanId),
+                    ClanName = appearance.ClanName,
+                    ClanMark = appearance.ClanMark
                 };
                 return new EntityDescriptionPacket(view.EntityId, revision, EntityKind.Player, view.Level, view.MoveSpeed, view.AttackRate,
                     appearance.Name ?? "", appearance.ModelName ?? "", looks);
@@ -85,7 +88,8 @@ internal static class WireMapping
         ItemCode(summary.WeaponKey),
         ItemCode(summary.ArmorKey),
         ItemCode(summary.OffHandKey),
-        summary.InVillage);
+        summary.InVillage,
+        summary.ClanName);
 
     public static OwnerStatusPacket Status(OwnerState owner) => new(
         owner.Level, owner.Experience, owner.LevelStart, owner.NextLevel, owner.Money,
@@ -96,7 +100,7 @@ internal static class WireMapping
         (byte)owner.WeaponSet);
 
     public static InventoryItemEntry Item(OwnedItemView item) => new(
-        item.InstanceId, item.Code, (int)item.Kind, item.Count, item.Anchor, item.Slot, (short)item.Width, (short)item.Height, item.Name);
+        item.InstanceId, item.Code, (int)item.Kind, item.Count, item.Anchor, item.Slot, (short)item.Width, (short)item.Height, item.Name, item.Link);
 
     public static CombatEventEntry Event(in CombatEventView view)
     {

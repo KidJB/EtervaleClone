@@ -199,6 +199,32 @@ internal sealed class OnlinePlayChannel : IPlayChannel
         _connection.SendDismissCrystalPets(statusCode);
     }
 
+    public async Task SendClanAsync(ClanAction action, ulong id, string name, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        _connection.SendSocial(new ClanRequestPacket(action, id, name ?? ""));
+    }
+
+    public async Task SendCastleOwnerAsync(CastleOwnerAction action, ulong npcId, Simulation.Social.Castle.CastleSetup setup, long amount,
+        CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        _connection.SendSocial(new CastleOwnerRequestPacket(action, npcId, (byte)setup.Tax, (byte)setup.Skill, [.. setup.Towers.Select(static tower => (byte)tower)],
+            [.. setup.Mercenaries.Select(static count => (byte)Math.Clamp(count, 0, byte.MaxValue))], (ulong)Math.Max(0, amount)));
+    }
+
+    public async Task SendBellatraClanAsync(BellatraClanAction action, ulong npcId, long amount, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        _connection.SendSocial(new BellatraClanRequestPacket(action, npcId, (ulong)Math.Max(0, amount)));
+    }
+
+    public async Task SendClanMarkAsync(byte[] pixels, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        _connection.SendSocial(new ClanMarkPacket(pixels));
+    }
+
     public async Task InviteToPartyAsync(ulong targetId, CancellationToken ct = default)
     {
         await _start.WaitAsync(ct);

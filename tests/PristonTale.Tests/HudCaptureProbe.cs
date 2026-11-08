@@ -9,6 +9,7 @@ using PristonTale.Engine3D.IO;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Gameplay.Screens.Framework;
 using PristonTale.Gameplay.UI;
+using PristonTale.Gameplay.UI.Chat;
 using PristonTale.Gameplay.UI.Help;
 using PristonTale.Gameplay.UI.Inventory;
 using PristonTale.Gameplay.UI.Npc;
@@ -16,6 +17,7 @@ using PristonTale.Gameplay.UI.Quests;
 using PristonTale.Gameplay.UI.Rendering;
 using PristonTale.Gameplay.UI.Widgets;
 using PristonTale.Simulation.Characters;
+using PristonTale.Simulation.Social.Clans;
 using PristonTale.Simulation.Skills;
 using PristonTale.Simulation.Combat;
 using PristonTale.Simulation.Items;
@@ -28,6 +30,7 @@ using PristonTale.Contracts.Skills;
 using PristonTale.Assets;
 using PristonTale.Contracts.Characters;
 using PristonTale.Contracts.Texts;
+using PristonTale.Gameplay.UI.Parties;
 
 namespace PristonTale.Tests;
 
@@ -99,13 +102,35 @@ internal sealed class HudCaptureProbe : Game
     private const uint TeleporterNpc = 10;
     private const uint MixerNpc = 11;
     private const uint AlchemistNpc = 12;
+    private const uint SmelterNpc = 13;
+    private const uint CraftsmanNpc = 14;
+    private const uint ResetterNpc = 15;
+    private const uint ClanMasterNpc = 16;
+    private const uint ButlerNpc = 17;
+    private const uint SecretaryNpc = 18;
+
+    private enum ProbePlates
+    {
+        None,
+        Compact,
+        Classic
+    }
+
+    // A clan mate and the target monster stand side by side in the middle of the frame.
+    private static HudOverheadPoint? PlateAnchor(ulong id) => id switch
+    {
+        4 => new HudOverheadPoint(new Vector2(300, 300), 1f),
+        2 => new HudOverheadPoint(new Vector2(500, 300), 1f),
+        _ => null
+    };
 
     private sealed record Scenario(string Name, int Width, int Height, Keys Panel = Keys.None, Hover Hover = Hover.None, int HealthPercent = 100,
         PlayerClass Class = PlayerClass.Mechanician, bool Npc = false, bool Settings = false, bool SystemMenu = false, bool Learned = false,
         bool Training = false, bool LowHealth = false, float Hour = 13, bool ClassicTarget = false, ulong Target = 2, ulong NpcId = SkillMasterNpc,
         int ServiceButton = -1, bool SellMode = false, int ServiceCount = 2, int RightSelect = -1, bool Buffs = false, bool Block = false,
         ProbeQuest Quest = ProbeQuest.None, bool Dead = false, bool FieldOpen = true, ProbeCarry Carry = ProbeCarry.None,
-        ProbeHelp Help = ProbeHelp.None, bool TrainingEnter = false, bool FifthTier = false, bool SecondPage = false);
+        ProbeHelp Help = ProbeHelp.None, bool TrainingEnter = false, bool FifthTier = false, bool SecondPage = false, bool Clan = false, ProbePlates Plates = ProbePlates.None, bool ClanPage = false,
+        bool Siege = false, int CastleButton = -1, bool CastleChief = true, bool Bellatra = false, int BellatraButton = -1);
 
     private static readonly Scenario[] Scenarios =
     [
@@ -138,6 +163,13 @@ internal sealed class HudCaptureProbe : Game
         new("inventory-1600x1200-scale2", 1600, 1200, Keys.I),
         new("inventory-1920", 1920, 1080, Keys.I),
         new("status-800", 800, 600, Keys.C),
+        new("status-clan-800", 800, 600, Keys.C, Clan: true),
+        new("plates-clan-800", 800, 600, Clan: true, Plates: ProbePlates.Compact),
+        new("plates-clan-classic-800", 800, 600, Clan: true, Plates: ProbePlates.Classic),
+        new("siege-board-800", 800, 600, Clan: true, Siege: true),
+        new("siege-board-1280x720", 1280, 720, Clan: true, Siege: true),
+        new("party-clan-800", 800, 600, Keys.D, Clan: true),
+        new("party-clan-page-800", 800, 600, Keys.D, Clan: true, ClanPage: true),
         new("status-arrow-hover-800", 800, 600, Keys.C, Hover.AllocateArrow),
         new("status-1280", 1280, 720, Keys.C),
         new("skills-800", 800, 600, Keys.S),
@@ -175,6 +207,20 @@ internal sealed class HudCaptureProbe : Game
         new("npc-aging-1600x1200-scale2", 1600, 1200, Npc: true, NpcId: TeleporterNpc, ServiceButton: 2, ServiceCount: 4),
         new("npc-mix-800", 800, 600, Npc: true, NpcId: MixerNpc, ServiceButton: 1),
         new("npc-alchemy-800", 800, 600, Npc: true, NpcId: AlchemistNpc, ServiceButton: 1),
+        new("npc-smelting-800", 800, 600, Npc: true, NpcId: SmelterNpc, ServiceButton: 0, ServiceCount: 1),
+        new("npc-manufacture-800", 800, 600, Npc: true, NpcId: CraftsmanNpc, ServiceButton: 0, ServiceCount: 1),
+        new("npc-mixture-reset-800", 800, 600, Npc: true, NpcId: ResetterNpc, ServiceButton: 0, ServiceCount: 1),
+        new("clan-intro-800", 800, 600, Npc: true, NpcId: ClanMasterNpc, ServiceButton: 0, ServiceCount: 1),
+        new("clan-chief-800", 800, 600, Npc: true, NpcId: ClanMasterNpc, ServiceButton: 0, ServiceCount: 1, Clan: true),
+        new("castle-owner-800", 800, 600, Npc: true, NpcId: ButlerNpc, ServiceButton: 0, ServiceCount: 1),
+        new("castle-owner-member-800", 800, 600, Npc: true, NpcId: ButlerNpc, ServiceButton: 0, ServiceCount: 1, CastleChief: false),
+        new("castle-owner-towers-800", 800, 600, Npc: true, NpcId: ButlerNpc, ServiceButton: 0, ServiceCount: 1, CastleButton: 2),
+        new("castle-owner-tax-800", 800, 600, Npc: true, NpcId: ButlerNpc, ServiceButton: 0, ServiceCount: 1, CastleButton: 0),
+        new("castle-owner-mercenaries-1280", 1280, 720, Npc: true, NpcId: ButlerNpc, ServiceButton: 0, ServiceCount: 1, CastleButton: 3),
+        new("bellatra-board-800", 800, 600, Bellatra: true),
+        new("bellatra-board-1280x720", 1280, 720, Bellatra: true),
+        new("bellatra-secretary-800", 800, 600, Npc: true, NpcId: SecretaryNpc, ServiceButton: 0, ServiceCount: 1),
+        new("bellatra-ranking-800", 800, 600, Npc: true, NpcId: SecretaryNpc, ServiceButton: 0, ServiceCount: 1, BellatraButton: 1),
         new("system-menu-800", 800, 600, SystemMenu: true),
         new("settings-800", 800, 600, Hover: Hover.SettingsRow, Settings: true),
         new("settings-1600x1200-scale2", 1600, 1200, Settings: true),
@@ -293,6 +339,8 @@ internal sealed class HudCaptureProbe : Game
         [
             new(1, EntityKind.Player, true, default, 0, MotionState.Stand, 64, 64,
                 new PlayerAppearanceInfo("Panzer", PlayerClass.Fighter, 0, 0, 0, "", "", 1), 0),
+            new(4, EntityKind.Player, false, default, 0, MotionState.Stand, 64, 64,
+                new PlayerAppearanceInfo("Panzer", PlayerClass.Mechanician, 0, 0, 0, "", "", 175) { ClanId = 7, ClanName = "GM" }, 0),
             new(2, EntityKind.Monster, false, default, 0, MotionState.Stand, 31, 50, null, 1, Level: 7),
             new(3, EntityKind.Npc, false, new System.Numerics.Vector3(center.X + 300, 0, center.Z - 200), 0, MotionState.Stand, 0, 0, null, 1,
                 Name: "Lena")
@@ -341,7 +389,12 @@ internal sealed class HudCaptureProbe : Game
             _hud.SummonAutomatic = code => code == MetalGolem ? true : null;
             _hud.PlayerDead = scenario.Dead;
             _hud.RestartOffer = scenario.Dead ? new PristonTale.Simulation.Progression.RestartOffer(scenario.FieldOpen, false, 0, 0) : null;
-            _presentation.Requested = _presentation.Requested with { ClassicTargetHealthBar = scenario.ClassicTarget };
+            _presentation.Requested = _presentation.Requested with
+            {
+                ClassicTargetHealthBar = scenario.ClassicTarget,
+                ClassicNamePlates = scenario.Plates == ProbePlates.Classic
+            };
+            _hud.Overhead = scenario.Plates == ProbePlates.None ? static _ => null : PlateAnchor;
             var state = ScenarioState(scenario);
             var layout = HudLayout.Create(scenario.Width, scenario.Height);
             _quest = scenario.Quest;
@@ -363,11 +416,89 @@ internal sealed class HudCaptureProbe : Game
                 Click(state, layout, layout.Bottom(HudSystemMenu.Entry(HudSystemEntry.Settings)).Center);
             }
 
+            if (scenario.Clan)
+            {
+                _hud.ObserveClan(new PresenceUpdate(1, [], [], [], [])
+                {
+                    Clan = new ClanInfo(7, "Lions", ClanState.Registering, DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 3 * 86400 + 5 * 3600, ClanRank.Chief, 22, "", 0,
+                    [
+                        new ClanMemberInfo("Founder", PlayerClass.Knight, 42, ClanRank.Chief, true),
+                        new ClanMemberInfo("Ann", PlayerClass.Priestess, 38, ClanRank.Vice, true),
+                        new ClanMemberInfo("Bob", PlayerClass.Archer, 41, ClanRank.Member, false),
+                        new ClanMemberInfo("Cid", PlayerClass.Fighter, 35, ClanRank.Member, true)
+                    ])
+                });
+            }
+
+            // Boards of an earlier scenario stay on the shared HUD otherwise.
+            _hud.InCastleField = false;
+            _hud.ObserveBellatra(new PresenceUpdate(1, [], [], [], []) { Bellatra = BellatraBoardInfo.Hidden });
+            if (scenario.Siege)
+            {
+                _hud.InCastleField = true;
+                _hud.ObserveCastle(new PresenceUpdate(1, [], [], [], [])
+                {
+                    Castle = new CastleInfo(8, "Eagles", 5, Simulation.Social.Castle.SiegeState.Running, false, 75 * 60 + 12, true, 4,
+                    [
+                        new CastleClanInfo(9, "Tigers", 52_000), new CastleClanInfo(7, "Lions", 31_000), new CastleClanInfo(11, "Wolves", 9_500),
+                        new CastleClanInfo(12, "Hawks", 4_100)
+                    ], 96_600)
+                });
+            }
+
+            if (scenario.Bellatra)
+            {
+                _hud.ObserveBellatra(new PresenceUpdate(1, [], [], [], [])
+                {
+                    Bellatra = new BellatraBoardInfo(true, 5, 1, 48_250, [31_200, 96_400, 12_050, 0], Contracts.Social.BellatraOutcome.GoesOn)
+                });
+            }
+
+            if (scenario.ClanPage)
+            {
+                _hud.Update(state, default, default);
+                Click(state, layout, HudPartyWindow.ClanTab(HudSidePanel.Origin(layout)).Center);
+            }
+
             if (scenario.ServiceButton >= 0)
             {
                 Click(state, layout, HudNpcPanel.ServiceButton(scenario.ServiceButton, scenario.ServiceCount).Center);
                 _hud.Update(state, default, default);
                 _hud.Update(state, default, default);
+            }
+
+            if (scenario.NpcId == ButlerNpc)
+            {
+                _hud.ObserveCastle(new PresenceUpdate(1, [], [], [], [])
+                {
+                    CastleOwner = new CastleOwnerInfo(true, 12_345_678, 3,
+                        new Simulation.Social.Castle.CastleSetup(5, Simulation.Social.Castle.CastleClanSkill.Damage,
+                        [
+                            Simulation.Social.Castle.CastleTower.Fire, Simulation.Social.Castle.CastleTower.Ice, Simulation.Social.Castle.CastleTower.None,
+                            Simulation.Social.Castle.CastleTower.Lightning, Simulation.Social.Castle.CastleTower.None, Simulation.Social.Castle.CastleTower.None
+                        ], [8, 4, 2]),
+                        Simulation.Social.Castle.CastleClanSkill.Evasion, scenario.CastleChief),
+                    CastleOwnerResult = new CastleOwnerResultInfo(Protocol.Packets.CastleOwnerAction.Open, Simulation.Social.Castle.CastleOwnerStatus.Ok)
+                });
+                if (scenario.CastleButton >= 0)
+                {
+                    Click(state, layout, HudNpcPanel.ServiceButton(scenario.CastleButton, 5).Center);
+                    Click(state, layout, new Point(HudNpcPanel.TextLeft + 30, HudNpcPanel.TextTop + 2 * HudPainter.LineHeight + 4));
+                }
+            }
+
+            if (scenario.NpcId == SecretaryNpc)
+            {
+                _hud.ObserveBellatra(new PresenceUpdate(1, [], [], [], [])
+                {
+                    BellatraClan = new BellatraClanInfo(true, 7, "Lions", "Founder", 5, 1_234_567, true,
+                        [new BellatraClanRankInfo("Lions", 412_000), new BellatraClanRankInfo("Tigers", 288_500), new BellatraClanRankInfo("Wolves", 97_300)]),
+                    BellatraClanResult = new BellatraClanResultInfo(Protocol.Packets.BellatraClanAction.Open, Contracts.Social.BellatraClanStatus.Ok)
+                });
+                if (scenario.BellatraButton >= 0)
+                {
+                    Click(state, layout, HudNpcPanel.ServiceButton(scenario.BellatraButton, 2).Center);
+                }
             }
 
             if (scenario.SellMode)
@@ -599,6 +730,18 @@ internal sealed class HudCaptureProbe : Game
             AlchemistNpc => new NpcInteraction(true, id, "Alchemist Lisa",
                 [Offer(NpcServiceKind.QuestGiver, 1017, false), Offer(NpcServiceKind.ItemMix, Simulation.Items.Mixing.MixingWork.AlchemyMode, true)],
                 ["Sheltoms become force orbs here."], GameText.None),
+            ClanMasterNpc => new NpcInteraction(true, id, "Clan Master", [Offer(NpcServiceKind.Clan, 0, true)],
+                ["All matters of clans are handled by me!"], GameText.None),
+            ButlerNpc => new NpcInteraction(true, id, "Butler Anders", [Offer(NpcServiceKind.BlessCastle, 0, true)],
+                ["How may I serve the lords of Bless Castle?"], GameText.None),
+            SecretaryNpc => new NpcInteraction(true, id, "Secretary Karina", [Offer(NpcServiceKind.EventBooth, Simulation.World.Bellatra.BellatraRules.SecretaryBooth, true)],
+                ["I manage Bellatra's operation."], GameText.None),
+            SmelterNpc => new NpcInteraction(true, id, "Smelter Ruby", [Offer(NpcServiceKind.QuestGiver, 1019, false), Offer(NpcServiceKind.Smelting, 0, true)],
+                ["Three ores or crystals of one colour and their sheltom."], GameText.None),
+            CraftsmanNpc => new NpcInteraction(true, id, "Craftsman Salon",
+                [Offer(NpcServiceKind.QuestGiver, 2200, false), Offer(NpcServiceKind.Manufacture, 0, true)], ["A recipe and its runes."], GameText.None),
+            ResetterNpc => new NpcInteraction(true, id, "Mixer Rayon",
+                [Offer(NpcServiceKind.QuestGiver, 1016, false), Offer(NpcServiceKind.MixtureReset, 0, true)], ["A mixed item and the stone."], GameText.None),
             _ => new NpcInteraction(true, id, "Skill Master, Verkan", [Offer(NpcServiceKind.QuestGiver, 1003, false), Offer(NpcServiceKind.SkillMaster, 4, true)],
                 ["Welcome to the school of skills. Choose a skill to learn or improve.", "Choose a skill."], GameText.None)
         };
@@ -610,8 +753,8 @@ internal sealed class HudCaptureProbe : Game
     private QuestOutcome QuestReply(QuestCommand command)
     {
         var rewards = new[] { "Minotaur Axe", "Extreme Talon", "Dragon Bone Hammer", "Hellfire Scythe", "Revenge Bow", "Immortal Sword", "Salamander Javelin",
-            "Gothic Staff" };
-        var documents = Enumerable.Range(1, 8).Select(index => $"haQuestFuryItem{index}").ToArray();
+            "Gothic Staff", "Enigma Dagger", "Kahsehtha Phantom", "Arina Vambrace" };
+        var documents = Enumerable.Range(1, 11).Select(index => $"haQuestFuryItem{index}").ToArray();
         QuestPrompt? prompt = _quest switch
         {
             ProbeQuest.Dialog or ProbeQuest.Confirm => QuestSteps.Confirm(QuestCode.Level30, 0, "LevelQuest30start", QuestTexts.SearchQuest),
@@ -710,7 +853,7 @@ internal sealed class HudCaptureProbe : Game
             {
                 Level = 24,
                 SkillPoints = 4,
-                Skills = new OwnedSkillView[] { new(0x01010001, 3), new(0x01010002, 1), new(0x01010004, 1) }
+                Skills = new OwnedSkillView[] { new(0x01010001, 3, 6000), new(0x01010002, 1, 2500), new(0x01010004, 1) }
             };
         }
 

@@ -23,6 +23,9 @@ internal static class MonsterCrystalTests
         yield return ("a crystal calls an owned pet beside its user, consumes itself and plays the return sparkle", SummonAsync);
         yield return ("billing crystals wait for the shared delay; towns, clan crystals, mercenaries and unknown souls refuse", RefusalsAsync);
         yield return ("a crystal pet hunts the nearest wild monster, credits its owner and dies when it expires", PetHuntsAsync);
+        yield return ("a clan crystal needs a registered clan; its pet belongs to the clan and a member's cheer heals up to three of them", ClanPetsAsync);
+        yield return ("a member calls one clan pet while fewer than three of the clan stand near; a clan monster never picks its clan's players",
+            ClanPetLimitsAsync);
         yield return ("a crystal pet follows its owner, shows in the owner's status bar and dies when dismissed, with the owner's death or left behind",
             FollowsAndDismissesAsync);
         yield return ("every pet has its own icon, a mixed crystal's pet shows its monster's crystal, and pets do not stand in each other", PetsApartAsync);
@@ -108,9 +111,15 @@ internal static class MonsterCrystalTests
         var clan = harness.Use(new ItemUseCommand(Guid.NewGuid(), character.InventoryRevision, harness.Id("GP110")));
         await harness.AdvanceAsync(clan);
         Assert.True((await clan).Outcome.Status == ItemUseStatus.ClanOnly && harness.Item("GP110") is not null, "clan crystal without a clan");
+        harness.Player.Clan = new Simulation.Social.Clans.ClanTag(7, "Lions", 0);
+        var registering = harness.Use(new ItemUseCommand(Guid.NewGuid(), character.InventoryRevision, harness.Id("GP110")));
+        await harness.AdvanceAsync(registering);
+        Assert.True((await registering).Outcome.Status == ItemUseStatus.RegisteredClanOnly && harness.Item("GP110") is not null,
+            "clan crystal in a clan still registering");
+        harness.Player.Clan = null;
         var mercenary = harness.Use(new ItemUseCommand(Guid.NewGuid(), character.InventoryRevision, harness.Id("GP114")));
         await harness.AdvanceAsync(mercenary);
-        Assert.True((await mercenary).Outcome.Status == ItemUseStatus.CrystalRefused && harness.Item("GP114") is not null, "mercenary without a siege");
+        Assert.True((await mercenary).Outcome.Status == ItemUseStatus.CrystalRefused && harness.Item("GP114") is not null, "a mercenary was called without a siege");
         harness.Clock.Now = harness.Clock.Now.AddSeconds(3);
         var soul = harness.Use(new ItemUseCommand(Guid.NewGuid(), character.InventoryRevision, harness.Id("GP201")));
         await harness.AdvanceAsync(soul);
@@ -137,6 +146,60 @@ internal static class MonsterCrystalTests
         pet.ExpiresAtMs = 0;
         scenario.Run(2);
         Assert.True(!pet.IsAlive, "an expired pet kept fighting");
+        return Task.CompletedTask;
+    }
+
+    private static Task ClanPetsAsync()
+    {
+        var scenario = SkillScenario.Create(PlayerClass.Fighter, 20, null, null, Hopy());
+        scenario.Player.Clan = new Simulation.Social.Clans.ClanTag(7, "Lions", 0, Registered: true);
+        scenario.Field.CallCrystalMonster(scenario.Player, "GP110", "HOPY 2");
+        scenario.Field.CallCrystalMonster(scenario.Player, "GP101", "HOPY 2");
+        var pets = scenario.Field.MonstersForInspection.Where(monster => monster.OwnerId == scenario.Player.EntityId).ToArray();
+        var clanPet = pets.Single(monster => monster.ClanId == 7);
+        var pet = pets.Single(monster => monster.ClanId == 0);
+        clanPet.Life = 1;
+        pet.Life = 1;
+        scenario.Player.QueueYahoo();
+        scenario.Run(1);
+        Assert.True(clanPet.Life == 1 + Simulation.Social.YahooRules.ClanMonsterHeal(20, 1) && pet.Life == 1,
+            $"the cheer did not heal the clan pet alone ({clanPet.Life}, {pet.Life})");
+        Assert.True(Simulation.Social.YahooRules.ClanMonsterHeal(20, 3) == 1 && Simulation.Social.YahooRules.ClanMonsterHeal(100, 3) == 8,
+            "the cheer's heal is not a quarter of the level shared");
+        return Task.CompletedTask;
+    }
+
+    private static Task ClanPetLimitsAsync()
+    {
+        var hunter = SkillScenario.Enemy("Clan guard", sight: 600);
+        var scenario = SkillScenario.Create(PlayerClass.Fighter, 20, null, null, Hopy(), hunter);
+        var player = scenario.Player;
+        player.Clan = new Simulation.Social.Clans.ClanTag(7, "Lions", 0, Registered: true);
+        Assert.True(scenario.Field.ClanPetRoom(player) == ItemUseStatus.Used, "a member without a clan pet was refused");
+        scenario.Field.CallCrystalMonster(player, "GP110", "HOPY 2");
+        Assert.True(scenario.Field.ClanPetRoom(player) == ItemUseStatus.ClanPetOwned, "a member called a second clan pet");
+
+        var others = Enumerable.Range(0, 2).Select(index => scenario.Spawn(Hopy(), player.Position + new Vector3(80f * (index + 1), 0f, 0f))).ToArray();
+        foreach (var other in others)
+        {
+            other.ClanId = 7;
+            other.OwnerId = 999;
+        }
+
+        scenario.Field.MonstersForInspection.Single(monster => monster.OwnerId == player.EntityId).ApplyDamage(int.MaxValue);
+        Assert.True(scenario.Field.ClanPetRoom(player) == ItemUseStatus.Used, "two of the clan nearby refused a third");
+        others[0].Position = player.Position + new Vector3(40f, 0f, 0f);
+        var third = scenario.Spawn(Hopy(), player.Position + new Vector3(0f, 0f, 60f));
+        (third.ClanId, third.OwnerId) = (7, 998);
+        Assert.True(scenario.Field.ClanPetRoom(player) == ItemUseStatus.ClanPetsNearby, "three of the clan nearby allowed a fourth");
+
+        var guard = scenario.Spawn(hunter, player.Position + new Vector3(100f, 0f, 0f));
+        guard.ClanId = 7;
+        scenario.Run(20);
+        Assert.True(guard.TargetId != player.EntityId, "a clan monster picked a player of its clan");
+        player.Clan = null;
+        scenario.Run(20);
+        Assert.True(guard.TargetId == player.EntityId, "the monster did not pick a player outside its clan");
         return Task.CompletedTask;
     }
 

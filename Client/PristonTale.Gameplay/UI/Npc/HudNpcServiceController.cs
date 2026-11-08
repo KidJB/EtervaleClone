@@ -50,6 +50,12 @@ public sealed class HudNpcServiceController(Func<NpcServiceCommand, Task<NpcServ
             NpcName = npcName;
         }
 
+        // A recipe's product list replaces the last one; none shows until it arrives.
+        if (service == NpcServiceKind.Manufacture && action == NpcServiceAction.Refresh)
+        {
+            Catalog = [];
+        }
+
         _pendingCommand = command;
         _request.Start(() => request(command),
             _ => new NpcServiceReply(NpcServiceOutcome.Failed(NpcServiceStatus.Rejected, GameText.None)));
@@ -117,10 +123,14 @@ public sealed class HudNpcServiceController(Func<NpcServiceCommand, Task<NpcServ
             Destinations = reply.Destinations ?? [];
             Opened++;
         }
+        else if (command.Action == NpcServiceAction.Refresh && reply.Catalog is { } refreshed)
+        {
+            Catalog = refreshed;
+        }
 
         Quotes = reply.Quotes ?? Quotes;
         Warehouse = reply.Warehouse ?? Warehouse;
-        if (command.Action == NpcServiceAction.Teleport)
+        if (command.Action is NpcServiceAction.Teleport or NpcServiceAction.EnterBellatra)
         {
             Open = null;
         }
@@ -131,7 +141,7 @@ public sealed class HudNpcServiceController(Func<NpcServiceCommand, Task<NpcServ
         NpcServiceAction.Buy => ClientText.Get("Npc.Bought"),
         NpcServiceAction.Sell => ClientText.Get("Npc.Sold"),
         NpcServiceAction.Repair or NpcServiceAction.RepairAll => ClientText.Get("Npc.Repaired"),
-        NpcServiceAction.Teleport => ClientText.Get("Npc.Teleporting"),
+        NpcServiceAction.Teleport or NpcServiceAction.EnterBellatra => ClientText.Get("Npc.Teleporting"),
         _ => ClientText.Format(outcome.Message)
     };
 

@@ -98,7 +98,8 @@ OpeningScreen --login ok--> CharacterSelectScreen --enter world ok--> GameplaySc
   succeeded or the connection closed) the controller first calls `ScreenContext.RenewBackend`: `GameClient` installs a
   new `GameServerConnection` and disposes the old one off the game thread.
 - `CharacterSelectScreen`: sub-states `CharacterSelect`, `RaceSelect`, `JobSelect`, `FaceSelect`, `Name`. The roster
-  shows each character in its armour, empty-handed. `CharacterSelectCamera` dollies along the original's rail (300 to
+  shows each character in its armour, empty-handed; the hovered one's box lists name, level, tribe and class, with its
+  clan on a line above them for a character in one (the list's `ClanName`). `CharacterSelectCamera` dollies along the original's rail (300 to
   720 units per sub-state) with its vertical angle of pi / 4.4, whatever the settings' field of view; the stage is lit by
   an even ambient only, without lamps (`ConfigureLighting`). While a
   `Busy` operation (roster load, roster/job actor preparation, enter, delete, create) runs, input is ignored and
@@ -204,7 +205,7 @@ Correlation rules (requests without an operation id):
   throw `IOException`.
 
 Sends from any thread take `_sendGate` only to serialise into the shared scratch buffer; `FrameConnection` appends to
-a pending buffer flushed by a single writer task (a backlog above 512 KiB closes the connection).
+a pending buffer flushed by a single writer task (a backlog above 576 KiB closes the connection).
 
 ### Presence decoding
 
@@ -383,9 +384,8 @@ destination. Renderer side of stage publication: [rendering.md](rendering.md).
 
 | Input | Where | Effect |
 |---|---|---|
-| Left click | `GameScene.UpdatePlayerInput` | In order: pick ground loot, cast the left socket skill, pick a monster (attack) or NPC (approach and talk), move. A skill motion is never cut: a click during it casts nothing; a picked monster or NPC is kept and approached once the motion ends, and a ground point is walked to then (`SelfCasting` holds the attack approach, the NPC approach and the walk, and `StopPredictedMovement` leaves the skill clip playing) |
 | Hold left on the ground | same | Walk toward the cursor from the press while the button is held (until blocked); releasing it stops the walk where the player is |
-| Left click | `GameScene.UpdatePlayerInput` | In order: pick ground loot, cast the left socket skill, pick a monster (attack) or NPC (approach and talk), move. Holding on the ground keeps updating the move target under the cursor; while the button remains pressed, a point within the player's body radius extends movement in the current facing direction, and releasing continues to the last target. A skill motion is never cut: a click during it casts nothing; a picked monster or NPC is kept and approached once the motion ends, and a ground point is walked to then (`SelfCasting` holds the attack approach, the NPC approach and the walk, and `StopPredictedMovement` leaves the skill clip playing) |
+| Left click | `GameScene.UpdatePlayerInput` | In order: pick ground loot, cast the left socket skill, pick a monster (attack), a player of another clan where both stand in the castle's battle zone (attack; the server decides, `CastleSiegeRules.MayFight`), or an NPC or another player (approach), move. Holding on the ground keeps updating the move target under the cursor; while the button remains pressed, a point within the player's body radius extends movement in the current facing direction, and releasing continues to the last target. A skill motion is never cut: a click during it casts nothing; a picked monster or NPC is kept and approached once the motion ends, and a ground point is walked to then (`SelfCasting` holds the attack approach, the NPC approach and the walk, and `StopPredictedMovement` leaves the skill clip playing) |
 | Double left click (350 ms) on the ground | same | Keep walking toward the cursor without holding the button, until blocked or the next click |
 | `R`, or the bar's walk/run button | `GameplayHud.RunToggleRequested` -> `GameScene.ToggleRun` | Walk/run setting (running at first) for every move: clicks, monster, NPC and item approaches. A player tracing a target or holding the button keeps its pace while its stamina is at a quarter or less and walks once it runs out; overweight only walks |
 | Shift held while running (game masters) | `GameScene.MovementSpeed` | Dash at 3000/256 units per original tick; `WorldJoined` carries the game master level and the server allows game masters that speed |
@@ -472,13 +472,26 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   32 walking (8 ahead), 16 running (14 ahead), attacking or casting. Out of the water, each step in an ice field leaves a
   footprint on an ice floor (`image/mk-r.tga` 3 units right and 5 ahead, `mk-l.tga` left), 12 x 12 units, tilted with
   the ice, fading to a fifth over five seconds; at most 20 lie at a time. Local player only, as in the original.
+- Bless Castle's tax (from `CastleState`) is added to the prices the client works out itself: the skill window's
+  training price (`HudSkillsPanel.Tax`), the wing warp map's fees and fee table (`HudWingGate.Tax`, the table made
+  again for a new tax) and the aging and mixing benches' prices after their percents (`HudWorkbench.Tax`); the shop
+  and teleport prices come from the server with it.
+- The butler's window (`HudCastleWindow`, in the NPC panel; the NPC's Bless Castle service opens it and asks the
+  server for it): the treasury, the tax and the clan skill now and from the next day, the crystal towers bought and the
+  mercenaries, and, for the chief, pages to pick the tax, the skill, each tower's element (a click gives the next one)
+  and one more mercenary per click, with the cost (`CastleOwnerRules`), Save, Undo and Back, and Withdraw (the count
+  box, at most the treasury). A refused request shows its reason in the notice strip.
+- Bless Castle's crown (`CrownPresentation`): every player of the clan holding the castle within 12 x 64 units of the
+  player, the player included, wears `weapons/Crown.smd` floating 20 units over its head bone (the top of the head and
+  10 more; 36 units over the feet without one), bobbing half a unit once a second and turning once every 16.4 s.
 - Held items (`GameScene.HeldItems.cs`): the weapon and off-hand glow and the class-up lights of every drawn player
   ([effects.md](effects.md#held-item-glow)).
 - Wing warp map (`HudWingGate`): `WG_map.tga` (256 x 256) at (472, 120) with the icon of each stone the carried wing
-  reaches, three rings growing and fading from the hovered icon, the help box at (50, 45) with the hovered stone's name
-  and `WarpGateDoc` document (the fee table of `Default.sin`, its `%d` filled with the wings' fees, while none is
-  hovered), and the cancel button at the map's lower right. A click checks the level and the gold, then asks for
-  confirmation before `IPlayChannel.TravelWingGateAsync`; a refusal shows as a notice.
+  reaches (and Bless Castle's for a member of the clan holding it), three rings growing and fading from the hovered
+  icon, the help box at (50, 45) with the hovered stone's name and `WarpGateDoc` document (the fee table of
+  `Default.sin`, its `%d` filled with the wings' fees, while none is hovered), and the cancel button at the map's lower
+  right. A click checks the level and the gold, then asks for confirmation before `IPlayChannel.TravelWingGateAsync`; a
+  refusal shows as a notice.
 - Restart window (`HudRestartPanel`): opens 100 death-motion frames (about 1.4 s) after the local player falls, centred
   100 pixels above the middle; field, town and exit buttons light up under the pointer with their help lines; the field
   button stays dark with red help where the server's `RestartOffer` says the field restart is closed (nothing in the
@@ -617,8 +630,24 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   (119, 200, 254). A mixed copy's name is cyan (150, 255, 255) and the stats its mix raised are blue (110, 165, 250).
 - Premium timers (`HudPremiumTimers`) form the column at x 8 under the running-effects bar; usable items have their
   own tooltips (`HudUsableTooltip`). Details: [special-items.md](special-items.md).
+- Bless Castle (`GameplayHud.Castle`, `HudSiegeBoard`): the server's `CastleState` is kept; while a siege runs and the
+  player is in the castle field, a board on the right under the target frame (below the windows) shows the time left
+  (counted down on the HUD clock, set again only when the server's drifts by more than 1.5 s), the clan holding the
+  castle, the castle door, the crystal towers standing and the best clans with their share of the damage (the player's
+  own clan in gold). When a siege ends, players in the castle field see a notice that their clan holds the castle or
+  that the siege is over. While the server runs the league mode, clicks on other players never attack
+  (`GameScene.CastleLeague`), as the server lets nobody fight then. The siege board and Bellatra's draw their lines the
+  same way (`HudSideBoard`).
+- Bellatra (`GameplayHud.Bellatra`): a team booth answers its refusal or the ticket's price in the notice strip and
+  offers the ticket as the NPC panel's one destination (a click buys it with `EnterBellatra`). While the server shows
+  the board (`BellatraBoard`, the player in the arena), `HudBellatraBoard` on the right under the target frame shows
+  the round, the player's score and the four teams' scores (the player's team in gold); a notice tells a round's start,
+  the team going on, the team out and the game over. The secretary (`EventBooth` value 5) opens `HudBellatraWindow`:
+  the operating clan, its chief, the tax, the clan's income with Redeem for its chief (the count box asks how much),
+  and the Ranking page of yesterday's best clans; a refused request shows its reason. The butler's and the secretary's
+  windows share their frame, lines and buttons (`HudPanelPage`).
 - Status window: attribute buttons send `ProgressionCommand` with `ProgressionRevision`; the organic, poison, fire,
-  lightning and ice resistance boxes show the owner's resistances.
+  lightning and ice resistance boxes show the owner's resistances; the Clan box shows the owner's clan mark and name.
 - Block feedback (`HudStringEffect`): when the player blocks a blow, the original `block.tga` word shows at (354, 488)
   of the 800x600 frame, opaque for 26 interface frames at 70 per second, then fades by 10 alpha per frame while it
   grows 3 pixels and drifts up-left.
@@ -635,7 +664,10 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   training mode the skills the master can teach now in colour and a skill at rank 10 gray. The arrows at (765, 482) and
   (12, 482), or `P` once the class reached the fifth tier, turn to the second page (`Skil25.bmp`) and back: the fifth
   tier's title on the first title's place and its four skills (window indices 16-19) on the first tier's boxes, with
-  the basic attack, the points and the training box as on the first page.
+  the basic attack, the points and the training box as on the first page. Beside each skill two 5 x 35 gauges, as the
+  original's: left the training (`Gage-3` frame, a passive's `Gage-4`; once learned the green `Gage-2` fill of its
+  proficiency out of 10,000 with `Gage-22` as its top, full for the fourth and fifth tiers), right the readiness
+  (`Gage.bmp` filling as the cooldown runs out, full when the skill is ready).
 - Training box (`HudSkillsPanel.DrawMasterBox`): while a skill master trains the pupil (no skill being confirmed), the
   item-info frame of 13 by 21 tiles stands at (90, 100) of the screen's top left (`HudSkillTreeLayout.MasterBox`):
   "Train Skill/Magic", then "Select a Skill or Magic / To learn or train" with the skill points (pale yellow) and elite
@@ -698,7 +730,13 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   and title; an item in the item box (mixing only), sheltoms or seals in the twelve cells (alchemy: sheltoms up to the
   eleventh), the respec stone in the stone cell. The plate shows the item's price or the alchemy prices, both scaled by
   the offer's `PricePercent`; the result shows what the mix added (the formula's lines), the reconstruction, the
-  refining or the failure. Server rules: [application.md](application.md), [world.md](world.md).
+  refining or the failure. Smelting (`HudSmeltingWindow`): three ores or crystals of one colour in the left panel's three
+  boxes and their sheltom (its grey hint shows) in the right box; the plate shows 25,000 or 50,000. Manufacture
+  (`HudManufactureWindow`): a recipe in the item box (fixed while runes are placed), each rune only in the box that asks
+  for it; a placed recipe sends a `Refresh` whose catalog lists its products, and the window shows the product the runes
+  pick (or "Random") under the recipe with its fee on the plate. Mixture reset (`HudMixtureResetWindow`): a mixed item in
+  the item box, then the stone in the stone box; its own start button, no price. The benches share `_benches` in
+  `GameplayHud`. Server rules: [application.md](application.md), [world.md](world.md).
 - Target frame (`HudCombat.DrawTarget`, `TargetSelection`): a clicked monster or NPC owns the frame; otherwise the
   hovered entity. The frame stays after an attack is cancelled and closes when the entity is removed or has been dead
   for 0x50 frames at 70 Hz. With `classicTargetHealthBar` false (default) the bar shows with level and life
@@ -707,7 +745,10 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
 - Name boxes over the scene (`HudCombat.DrawNamePlates`, drawn right after the drop names in `GameplayHud.Draw`, at
   the speech bubbles' head point): an NPC's name always within 768 units of the camera (180, 180, 255, as in the chat);
   a monster's only while hovered or the clicked target (`TargetSelection.HoveredId`, `TracedId`), in (255, 210, 210),
-  or (255, 230, 200) when clicked. A summon or crystal pet's box shows within the NPC range in (220, 255, 160), with
+  or (255, 230, 200) when clicked. Another player's box shows while hovered or clicked, a clan mate's always
+  (`HudCombat.OwnClan`, the player's `ClanId` in its looks); a player's clan is a "[Clan]" line over its name in
+  (150, 255, 200) (`HudNameColors.Clan`) after its 16x16 mark (`ClanMarks`: every clan shows the default crest until
+  marks can be uploaded), for another clan only while hovered or clicked, as in the original. A summon or crystal pet's box shows within the NPC range in (220, 255, 160), with
   its owner's name in parentheses on a second line in (255, 255, 200) (the box grows upwards); the viewer's own also
   carries the life bar. Farther boxes draw first, the hovered and clicked ones last; a box that would leave
   the screen is skipped. Every box is `HudPainter.NameBox`: the speech bubble's dark translucent fill and gold rim (its
@@ -785,8 +826,22 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
     OK or cancel and closes after 20 s; a request is not shown while the warehouse is open.
   - A click on another player (not selling) approaches it as an NPC; once reached, its portrait shows the trade, party
     and friend buttons (`HudPlayerButtons`, on `cw-1.tga`) instead of the life bar while it stays the target within
-    `TradeLimits.Reach`. Trade asks it to trade, party to group; friend puts it on the friends list and opens the
-    friends page there.
+    `TradeLimits.Reach`; the hovered button's tip shows 60 px to its left and 18 px below it, clear of the cursor. Trade asks it to trade, party to group; friend puts it on the friends list and opens the
+    friends page there. A clan chief or vice chief beside a player without a clan also gets the clan invitation
+    (`icon_clan.bmp`, tip `ButtonInfo-c10.bmp`): the box widens to 120 px and the four buttons start 10 px further left.
+  - Clans (`GameplayHud.Clans.cs`, `GameScene.Clans.cs`): an invitation opens the party's request box (30 s) with the
+    chief's name and "invites you to the clan ..."; OK accepts, cancel refuses. The Clan Master's "Clan" service opens
+    `HudClanWindow` in the NPC dialog's help box: without a clan the founding text (cost, level, the six members in ten
+    days) and "Form a clan", then the name typed (Enter or Confirm sends `Found`); with one the state (registered, or
+    days and hours left to reach six members), members of capacity and the members (chief and vice first, green online,
+    grey offline), with Leave for members and Expel, Appoint or Discharge vice, Entrust and Disband for the chief. Expel,
+    appoint and entrust pick a member from the list; every action asks yes or no first and waits for its own
+    `ClanResult` (OK and Escape still close the window meanwhile); the `ClanState` that follows replaces the view.
+    Refusals come as chat lines. The chief's Clan mark button lists the PNG, JPG and BMP pictures of the `ClanMarks`
+    folder beside the game (`ClanMarkPicture`, read off the game thread through `HudRequest`, files up to 8 MiB); a
+    picked one is fitted (its centred square averaged down to 32x32 and to the 16x16 that name boxes draw), shown at both
+    sizes and sent as `ClanMark` once confirmed. The founding text's numbers come from `ClanRules`; the rows are built again only when
+    the page, the typed name or the clan changes.
   - The party window has two tabs at (60, 2) and (120, 2): the party and the friends page (`HudFriendsPage`, art
     `HudContactArt`, title `title-NoClan_chatting.tga`; `GameplayHud.Contacts.cs`, `GameScene.Contacts.cs` as
     `IContactClient`). Its buttons at (85, 220) show the recent players, the friends (an online or offline mark each,
@@ -794,6 +849,12 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
     list "make friend" and "ignore" move the picked name onto a list, elsewhere the arrows page and "delete" takes it
     off. A click picks a name and a click on the picked one whispers to it (marked red). The recent players are the
     last seven whispered (either way), traded with or befriended, kept by the client for the session.
+  - A clan's member gets a third tab at (180, 2), the clan page (`HudClanPage`, art `HudClanArt`; the party and friends
+    titles then show the three tabs): "[Clan]" at (115, 30) over the members, eight rows from (81, 49) at 20 px steps
+    (chief, vice, then by name; a scroll bar at (231, 38) past eight, the wheel scrolls it). Each row has its mark (the
+    clan's for the chief, the vice's own, a figure for a member) and the name 35 px on, grey while offline. A click picks
+    a member (green), a double click whispers to an online one (red, with the whisper mark); the chat button at (86, 220)
+    opens the chat on its clan tab (`HudChatWindow.TalkOn`), close at (201, 220). Leaving the clan leaves the page.
   - Members show on the minimap (`image/party.tga`, red past `PartyLimits.NearRange`), in name boxes with their life
     bar and in the bubbles' party colour.
 

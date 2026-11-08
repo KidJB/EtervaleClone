@@ -7,6 +7,8 @@ using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Npcs;
 using PristonTale.Contracts.Texts;
 
+using PristonTale.Simulation.Social.Castle;
+
 namespace PristonTale.Application.World;
 
 // Runs on the world tick. Every request is checked against the NPC in the player's field: alive, within reach, offering
@@ -51,8 +53,9 @@ internal static class NpcServiceTransactions
         return new NpcServiceOutcome(true, NpcServiceStatus.Ok, player.Character.InventoryRevision, 0, GameText.None);
     }
 
+    // booth: Bellatra as it stands, for its team booths.
     public static PreparedNpcOperation Prepare(PlayerSession session, WorldPlayer player, FieldInstance field, NpcServiceCommand command,
-        ItemCatalog items, WorldCatalog world)
+        ItemCatalog items, WorldCatalog world, BellatraBooth? booth = null)
     {
         if (MobileShopTransactions.Handles(command))
         {
@@ -74,11 +77,21 @@ internal static class NpcServiceTransactions
 
         if (!NpcServiceActions.IsDurable(command.Action))
         {
-            var shown = Show(command, npc!, service!, original, storage, items, world, Done(original, storage, GameText.None));
+            var team = Simulation.World.Bellatra.BellatraRules.TeamOfBooth(service!.Value);
+            TeleportOffer? ticket = null;
+            var answer = command.Service == NpcServiceKind.EventBooth && command.Action == NpcServiceAction.Open && booth is not null && team >= 0
+                ? booth.Answer(original, team, world, out ticket)
+                : GameText.None;
+            var shown = Show(command, npc!, service!, original, storage, items, world, Done(original, storage, answer), field.CastleTax);
+            if (ticket is not null)
+            {
+                shown = shown with { Destinations = [ticket] };
+            }
+
             return new PreparedNpcOperation(original, null, null, shown);
         }
 
-        return Settled(original, storage, command) ?? Apply(session, player, field, command, npc!, service!, items, world);
+        return Settled(original, storage, command) ?? Apply(session, player, field, command, npc!, service!, items, world, booth);
     }
 
     // A durable request already answered: its replay (the same command) or an identity conflict, and a request made
@@ -116,7 +129,7 @@ internal static class NpcServiceTransactions
     };
 
     private static PreparedNpcOperation Apply(PlayerSession session, WorldPlayer player, FieldInstance field, NpcServiceCommand command,
-        WorldNpc npc, NpcService service, ItemCatalog items, WorldCatalog world)
+        WorldNpc npc, NpcService service, ItemCatalog items, WorldCatalog world, BellatraBooth? booth)
     {
         var original = player.Character;
         var candidate = original.CloneForInventoryOperation();
@@ -130,7 +143,7 @@ internal static class NpcServiceTransactions
         {
             case NpcServiceAction.Buy:
                 status = npc.Definition.Shop.Contains(command.ItemCode) && items.TryGet(command.ItemCode, out var definition)
-                    ? NpcShopRules.TryBuy(candidate, definition, command.Count, command.Anchor, out _)
+                    ? NpcShopRules.TryBuy(candidate, definition, command.Count, command.Anchor, out _, field.CastleTax)
                     : NpcServiceStatus.Rejected;
                 break;
             case NpcServiceAction.Sell or NpcServiceAction.Repair or NpcServiceAction.RepairAll:
@@ -152,7 +165,7 @@ internal static class NpcServiceTransactions
                 status = storage!.TryWithdrawGold(candidate, command.Amount);
                 break;
             case NpcServiceAction.Teleport:
-                status = TryTeleport(candidate, service, command.Anchor, world, out arrival);
+                status = TryTeleport(candidate, service, command.Anchor, world, field.CastleTax, out arrival);
                 if (arrival is not null)
                 {
                     fieldId = arrival.FieldCode;
@@ -175,6 +188,27 @@ internal static class NpcServiceTransactions
                 status = Simulation.Items.Mixing.MixingWork.TryRefine(candidate, command.Materials ?? [], items, field.ItemRng, out work, out _,
                     field.Mixing);
                 break;
+            case NpcServiceAction.Smelt:
+                status = Simulation.Items.Smelting.SmeltingWork.TrySmelt(candidate, command.Materials ?? [], items, field.ItemRng, out work, out _);
+                break;
+            case NpcServiceAction.Manufacture:
+                status = Simulation.Items.Manufacture.ManufactureWork.TryManufacture(candidate, command.ItemId, command.Materials ?? [], items,
+                    field.ItemRng, out work, out _);
+                break;
+            case NpcServiceAction.ResetMix:
+                status = Simulation.Items.Mixing.MixtureReset.TryReset(candidate, command.ItemId, command.Materials ?? [], field.ItemRng, out work);
+                break;
+            case NpcServiceAction.EnterBellatra:
+                status = Simulation.World.Bellatra.BellatraRules.TeamOfBooth(service.Value) is var team and >= 0 && booth is not null
+                    ? booth.Admit(candidate, team, out arrival)
+                    : NpcServiceStatus.Rejected;
+                if (arrival is not null)
+                {
+                    fieldId = arrival.FieldCode;
+                    position = arrival.Position;
+                }
+
+                break;
             default:
                 status = NpcServiceStatus.Rejected;
                 break;
@@ -190,10 +224,11 @@ internal static class NpcServiceTransactions
         var outcome = Done(candidate, storage ?? session.Warehouse, GameText.None);
         var reply = State(command, candidate, storage, outcome) with { Arrival = arrival, Work = work };
         return new PreparedNpcOperation(original, candidate, snapshot, reply, candidate.Money - original.Money, storage,
-            session.Warehouse?.Revision ?? 0);
+            session.Warehouse?.Revision ?? 0, field.CastleTax,
+            command.Action == NpcServiceAction.EnterBellatra ? Simulation.World.Bellatra.BellatraRules.TeamOfBooth(service.Value) : -1);
     }
 
-    private static NpcServiceStatus TryTeleport(PlayerCharacter candidate, NpcService service, int index, WorldCatalog world, out TeleportArrival? arrival)
+    private static NpcServiceStatus TryTeleport(PlayerCharacter candidate, NpcService service, int index, WorldCatalog world, int tax, out TeleportArrival? arrival)
     {
         arrival = null;
         if (!TeleportRoutes.TryGet(service.Value, index, out var destination) || !world.TryGetFieldByCode(destination.FieldCode, out var target))
@@ -201,23 +236,23 @@ internal static class NpcServiceTransactions
             return NpcServiceStatus.Rejected;
         }
 
-        if (candidate.Level < target.TravelLevel)
+        if (candidate.Level < target.LimitLevel)
         {
             return NpcServiceStatus.Rejected;
         }
 
-        if (!candidate.TryChangeMoney(-destination.Price))
+        if (!candidate.TryChangeMoney(-CastleRules.WithTax(destination.PriceFor(candidate.Level), tax)))
         {
             return NpcServiceStatus.NotEnoughGold;
         }
 
-        var start = target.Arrival;
+        var start = target.ArrivalFor(Random.Shared);
         arrival = new TeleportArrival(target.FieldCode, new Vector3(start.X, 0f, start.Z));
         return NpcServiceStatus.Ok;
     }
 
     private static NpcServiceReply Show(NpcServiceCommand command, WorldNpc npc, NpcService service, PlayerCharacter character,
-        WarehouseStorage? storage, ItemCatalog items, WorldCatalog world, NpcServiceOutcome outcome)
+        WarehouseStorage? storage, ItemCatalog items, WorldCatalog world, NpcServiceOutcome outcome, int tax)
     {
         if (command.Action == NpcServiceAction.Close)
         {
@@ -228,13 +263,41 @@ internal static class NpcServiceTransactions
         {
             NpcServiceKind.Shop => new NpcServiceReply(outcome)
             {
-                Catalog = command.Action == NpcServiceAction.Open ? Catalog(npc.Definition.Shop, items) : null,
+                Catalog = command.Action == NpcServiceAction.Open ? Catalog(npc.Definition.Shop, items, tax) : null,
                 Quotes = Quotes(character)
             },
             NpcServiceKind.Warehouse => new NpcServiceReply(outcome) { Warehouse = storage!.View() },
-            NpcServiceKind.Teleporter => new NpcServiceReply(outcome) { Destinations = Destinations(service, world) },
+            NpcServiceKind.Teleporter => new NpcServiceReply(outcome) { Destinations = Destinations(service, world, character.Level, tax) },
+            NpcServiceKind.Manufacture when command.Action == NpcServiceAction.Refresh => new NpcServiceReply(outcome)
+            {
+                Catalog = ManufactureProducts(character, command.ItemId, items)
+            },
             _ => new NpcServiceReply(outcome)
         };
+    }
+
+    // What the recipe the player holds makes, one offer per product with its rune combination as Ordinal (the random
+    // armour of all B runes lists every candidate under one combination) and its fee as Price.
+    private static IReadOnlyList<ShopOffer> ManufactureProducts(PlayerCharacter character, Guid recipeId, ItemCatalog items)
+    {
+        var inventory = character.Inventory;
+        var at = inventory.Find(recipeId);
+        var armour = false;
+        var recipe = at >= 0 && inventory[at] is { } held ? Simulation.Items.Manufacture.ManufactureWork.RecipeOf(held.Definition.CatalogKey, out armour) : 0;
+        var offers = new List<ShopOffer>();
+        for (var combination = 0; recipe > 0 && combination < 1 << Simulation.Items.Manufacture.ManufactureWork.Runes; combination++)
+        {
+            foreach (var key in Simulation.Items.Manufacture.ManufactureWork.Products(recipe, armour, combination, character.Class.Class))
+            {
+                if (items.TryGet(ItemCodes.Parse(key), out var made))
+                {
+                    offers.Add(new ShopOffer(made.Code, 0, combination, made.Name, made.Kind, Simulation.Items.Manufacture.ManufactureWork.Fee(made),
+                        made.GridWidth, made.GridHeight, made.MaxStack, made.CatalogKey));
+                }
+            }
+        }
+
+        return offers;
     }
 
     private static NpcServiceReply State(NpcServiceCommand command, PlayerCharacter character, WarehouseStorage? storage, NpcServiceOutcome outcome) =>
@@ -245,7 +308,7 @@ internal static class NpcServiceTransactions
             _ => new NpcServiceReply(outcome)
         };
 
-    public static IReadOnlyList<ShopOffer> Catalog(NpcShopStock stock, ItemCatalog items)
+    public static IReadOnlyList<ShopOffer> Catalog(NpcShopStock stock, ItemCatalog items, int tax = 0)
     {
         var offers = new List<ShopOffer>();
         for (var tab = 0; tab < 3; tab++)
@@ -255,7 +318,7 @@ internal static class NpcServiceTransactions
             {
                 if (items.TryGet(codes[ordinal], out var definition))
                 {
-                    offers.Add(new ShopOffer(definition.Code, tab, ordinal, definition.Name, definition.Kind, NpcShopRules.BuyPrice(definition, 1),
+                    offers.Add(new ShopOffer(definition.Code, tab, ordinal, definition.Name, definition.Kind, NpcShopRules.BuyPrice(definition, 1, tax),
                         definition.GridWidth, definition.GridHeight, definition.MaxStack, definition.CatalogKey));
                 }
             }
@@ -282,13 +345,13 @@ internal static class NpcServiceTransactions
         return new ShopQuotes(character.InventoryRevision, quotes);
     }
 
-    private static IReadOnlyList<TeleportOffer> Destinations(NpcService service, WorldCatalog world)
+    private static IReadOnlyList<TeleportOffer> Destinations(NpcService service, WorldCatalog world, int level, int tax)
     {
         var offers = new List<TeleportOffer>();
         foreach (var destination in TeleportRoutes.For(service.Value))
         {
-            var level = world.TryGetFieldByCode(destination.FieldCode, out var field) ? field.TravelLevel : 0;
-            offers.Add(new TeleportOffer(destination.Index, destination.FieldCode, destination.Name, destination.Price, level));
+            var limit = world.TryGetFieldByCode(destination.FieldCode, out var field) ? field.LimitLevel : 0;
+            offers.Add(new TeleportOffer(destination.Index, destination.FieldCode, destination.Name, CastleRules.WithTax(destination.PriceFor(level), tax), limit));
         }
 
         return offers;
@@ -297,7 +360,7 @@ internal static class NpcServiceTransactions
     private static bool Accepts(NpcServiceKind service, NpcServiceAction action) => action switch
     {
         NpcServiceAction.Open or NpcServiceAction.Close => true,
-        NpcServiceAction.Refresh => service is NpcServiceKind.Shop or NpcServiceKind.Warehouse,
+        NpcServiceAction.Refresh => service is NpcServiceKind.Shop or NpcServiceKind.Warehouse or NpcServiceKind.Manufacture,
         NpcServiceAction.Buy or NpcServiceAction.Sell or NpcServiceAction.Repair or NpcServiceAction.RepairAll => service == NpcServiceKind.Shop,
         NpcServiceAction.Deposit or NpcServiceAction.Withdraw or NpcServiceAction.Move or NpcServiceAction.DepositGold
             or NpcServiceAction.WithdrawGold => service == NpcServiceKind.Warehouse,
@@ -305,10 +368,23 @@ internal static class NpcServiceTransactions
         NpcServiceAction.Exchange => service == NpcServiceKind.QuestEvent,
         NpcServiceAction.Age => service == NpcServiceKind.ItemAging,
         NpcServiceAction.Mix or NpcServiceAction.Refine => service == NpcServiceKind.ItemMix,
+        NpcServiceAction.Smelt => service == NpcServiceKind.Smelting,
+        NpcServiceAction.Manufacture => service == NpcServiceKind.Manufacture,
+        NpcServiceAction.ResetMix => service == NpcServiceKind.MixtureReset,
+        NpcServiceAction.EnterBellatra => service == NpcServiceKind.EventBooth,
         _ => false
     };
 
-    internal static GameText Describe(NpcServiceStatus status, GameTextId refusal = GameTextId.NpcRefused) => GameText.Of(status switch
+    internal static GameText Describe(NpcServiceStatus status, GameTextId refusal = GameTextId.NpcRefused) => status switch
+    {
+        NpcServiceStatus.BellatraLevel => GameText.Of(GameTextId.BellatraLevel, Simulation.World.Bellatra.BellatraRules.MinLevel),
+        NpcServiceStatus.BellatraNoTickets => GameText.Of(GameTextId.BellatraNoTickets,
+            Simulation.World.Bellatra.BellatraRules.TicketHour.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            (Simulation.World.Bellatra.BellatraRules.TicketHour + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        _ => GameText.Of(RefusalText(status, refusal))
+    };
+
+    private static GameTextId RefusalText(NpcServiceStatus status, GameTextId refusal) => status switch
     {
         NpcServiceStatus.NotEnoughGold => GameTextId.NotEnoughGold,
         NpcServiceStatus.NoSpace => GameTextId.NoSpace,
@@ -316,8 +392,11 @@ internal static class NpcServiceTransactions
         NpcServiceStatus.OverWeight => GameTextId.OverWeight,
         NpcServiceStatus.WrongPuzzle => GameTextId.WrongPuzzle,
         NpcServiceStatus.WrongMaterials => GameTextId.WrongMaterials,
+        NpcServiceStatus.BellatraClosed => GameTextId.BellatraClosed,
+        NpcServiceStatus.BellatraTeamFull => GameTextId.BellatraTeamFull,
+        NpcServiceStatus.BellatraEntered => GameTextId.BellatraEntered,
         _ => refusal
-    });
+    };
 
     internal static NpcServiceOutcome Done(PlayerCharacter character, WarehouseStorage? storage, GameText message) =>
         new(true, NpcServiceStatus.Ok, character.InventoryRevision, storage?.Revision ?? 0, message);

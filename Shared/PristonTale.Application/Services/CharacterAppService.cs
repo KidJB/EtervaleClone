@@ -12,6 +12,7 @@ namespace PristonTale.Application.Services;
 public sealed class CharacterAppService
 {
     private readonly ISessionRegistry _sessions;
+    private readonly Persistence.Abstractions.Clans.IClanRepository? _clans;
     private readonly ICharacterRepository _characters;
     private readonly CharacterClassRegistry _classes;
     private readonly WorldDataHolder _worldData;
@@ -22,8 +23,10 @@ public sealed class CharacterAppService
         ICharacterRepository characters,
         CharacterClassRegistry classes,
         WorldDataHolder worldData,
-        WorldCatalog world)
+        WorldCatalog world,
+        Persistence.Abstractions.Clans.IClanRepository? clans = null)
     {
+        _clans = clans;
         _sessions = sessions;
         _characters = characters;
         _classes = classes;
@@ -36,10 +39,12 @@ public sealed class CharacterAppService
         var session = Authenticate(sessionToken);
 
         var rows = await _characters.ListByAccountAsync(session.AccountId, ct);
+        var clans = _clans is null ? null : await _clans.ClanNamesAsync(session.AccountId, ct);
         var summaries = new List<CharacterSummary>(rows.Count);
         foreach (var row in rows)
         {
-            summaries.Add(BuildSummary(row));
+            var summary = BuildSummary(row);
+            summaries.Add(clans is not null && clans.TryGetValue(row.Id, out var clan) ? summary with { ClanName = clan } : summary);
         }
 
         return summaries;
@@ -90,6 +95,12 @@ public sealed class CharacterAppService
         if (found is null)
         {
             return DeleteCharacterOutcome.Denied("character not found");
+        }
+
+        // A clan keeps its members: a member leaves (a chief entrusts or disbands) before the character can be deleted.
+        if (_clans is not null && await _clans.IsMemberAsync(found.Id, ct))
+        {
+            return DeleteCharacterOutcome.Denied("the character is in a clan");
         }
 
         // A character in play (by this session or another of the account) is claimed: it cannot be deleted under its saves.

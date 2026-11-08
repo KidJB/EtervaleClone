@@ -55,7 +55,14 @@ public sealed class GameplayScreen : GameScreen
         _scene.PickupToCursorAnswered += _hud.PickupAnswered;
         _hud.PersonalShops = _scene;
         _scene.PresenceObserved += _hud.ObserveParty;
+        _scene.PresenceObserved += _hud.ObserveClan;
+        _scene.PresenceObserved += _hud.ObserveCastle;
+        _scene.PresenceObserved += _hud.ObserveBellatra;
         _hud.Parties = _scene;
+        _hud.SendClan = _scene.SendClan;
+        _hud.SendCastleOwner = _scene.SendCastleOwner;
+        _hud.SendBellatraClan = _scene.SendBellatraClan;
+        _hud.SendClanMark = _scene.SendClanMark;
         _scene.PresenceObserved += _hud.ObserveTrade;
         _hud.Trades = _scene;
         _scene.PresenceObserved += _hud.ObserveContacts;
@@ -92,7 +99,7 @@ public sealed class GameplayScreen : GameScreen
         _hud.Cabinet.BuyRequest = _scene.BuySkinAsync;
         _hud.Cabinet.ApplyRequest = _scene.ApplySkinsAsync;
         _hud.DailyQuestRequest = _scene.DailyQuestAsync;
-        _hud.WingGate.RequiredLevel = _scene.FieldTravelLevel;
+        _hud.WingGate.RequiredLevel = _scene.FieldLimitLevel;
         _scene.WingGateEntered += _hud.WingGate.Open;
         _scene.WingGateLeft += _hud.WingGate.Close;
 
@@ -161,6 +168,9 @@ public sealed class GameplayScreen : GameScreen
         _hud.DailyQuests = _scene.DailyQuests;
         _scene.CollectPetLabels(_hud.PetLabels);
         _hud.InCastleField = field?.State == Simulation.World.FieldState.Castle;
+        _scene.OwnClanId = _hud.Combat.OwnClan;
+        _scene.CastleLeague = _hud.Castle.League;
+        _scene.CastleOwnerClanId = _hud.Castle.OwnerClanId;
         _hud.InTown = field?.State == Simulation.World.FieldState.Village;
         _hud.ShopSigns = _scene.ShopSigns;
         _hud.PlayerDead = _scene.PlayerDead;
@@ -307,6 +317,9 @@ public sealed class GameplayScreen : GameScreen
             _scene.NpcSelected -= _hud.OpenNpc;
             _scene.ShopSellerSelected -= _hud.ViewPersonalShop;
             _scene.PresenceObserved -= _hud.ObserveParty;
+            _scene.PresenceObserved -= _hud.ObserveClan;
+            _scene.PresenceObserved -= _hud.ObserveCastle;
+            _scene.PresenceObserved -= _hud.ObserveBellatra;
             _scene.PresenceObserved -= _hud.ObserveTrade;
             _scene.PresenceObserved -= _hud.ObserveContacts;
             _hud.PlayerButtonsUsed -= _scene.DismissPlayerButtons;

@@ -39,6 +39,7 @@ How the tick calls these rules belongs to [application.md](application.md).
 | `World/Loot/` | `DropTable`, `DropRoller`, `KillReward` (experience and kill credit), `GroundDropView` |
 | `World/Motion/` | `MotionClip`, `MotionTiming`, `MotionTimingSet`/`MotionTimingCatalog`, player fallbacks |
 | `World/Motion/PlayerEquipmentTiming.cs`, `World/Motion/Data/PlayerEquipmentTiming.json` | Player attack clips by class and weapon key, loaded from the generated embedded JSON (one entry per class and clip with its keys); do not hand-edit |
+| `World/Bellatra/` | Bellatra's rules: the arena and its rooms (`BellatraArena`), the rounds' tables (`BellatraRounds`), the open hours, tickets, score, prize, ranking and hours reached (`BellatraRules`) ([application.md](application.md#bellatra)) |
 | `World/Npcs/` | `NpcDefinition`, `NpcCatalog`, typed services (`NpcServiceKind`), service commands and replies, shop and warehouse rules, teleport routes, sound code map |
 | `Physics/EntityCollision.cs` | Circle-vs-circle blocking between bodies (players, monsters, NPCs) along a swept segment |
 | `Physics/EntityCollisionRadii.cs`, `EntityNeighbour.cs` | Body radii (by `EntityKind`) and neighbour records |
@@ -97,9 +98,8 @@ the Land of Nurwn. The action fields are reached by no gate; a kill in `fall_gam
 | `ActionCamera` | An action field's camera: fixed-point height (the camera rises 80 units above it), depth `Z` and the `LeftX`-`RightX` range it follows the player along x; it looks along +z |
 | `Center`, `StartPoints` | `StartPoints[0]` is the NPC teleport arrival; a field restart stands up at the start point nearest to the fall, a town restart at a random one; `Center` is the fallback |
 | `Gates` | Seamless boundaries to an adjacent field (`DestinationFieldId`, X/Z, angle) |
-| `WarpGates` | Portals: trigger X/Z/Y and Width/Height, destination field and X/Z/Y, `MoreExits` (further destination points: the traveller comes out at one of them, picked at random; Cursed Temple 1F to 2F, 2F to 3F and back, Ancient Prison 3F to 2F, Endless Tower 2F to 3F, Kelvezu's Lair to the Heart of Fire, Stemple to the Sea of Abyss), `LimitLevel`, `SpecialEffect` (1: a delayed warp with the return sparkle; 2: a wing warp stone, its destination point the stone's exit in its own field; see [Wing warp gates](#wing-warp-gates)) |
-| `LimitLevel` | Minimum character level to walk in through a gate: Desert 3 (11) 55, Greedy Lake (34) 70, Iron 1 (27) 80, Iron 2 (28) 85, Eura (29), Ice 1 (31) and Ice 2 (35) 90, the Lost Temple (38) and the Endless Tower's first two floors (40, 41) 100, the deep fields 46-53 108 to 132 |
-| `TravelLevel` | Minimum level to be sent there by a wing stone or a teleporter: `LimitLevel` unless the field sets its own: Forbidden Land (12) 55, Ancient Prison 1F-3F (13-15) 40, 50, 60, the office (16) 1000, Cursed Temple 1F-3F (22, 23, 42) 70, 75, 80, the caves (24-26) 55, 55, 65, Kelvezu's Lair (36) 90, Lost Island (37) 95, Endless Tower 3F (43) 102, Ice Mine (44) 105 |
+| `WarpGates` | Portals: trigger X/Z/Y and Width/Height, destination field and X/Z/Y, `MoreExits` (further destination points: the traveller comes out at one of them, picked at random; Cursed Temple 1F to 2F, 2F to 3F and back, Ancient Prison 3F to 2F, Endless Tower 2F to 3F, Kelvezu's Lair to the Heart of Fire, Stemple to the Sea of Abyss), `LimitLevel` (set by `WorldCatalog`: the destination field's), `SpecialEffect` (1: a delayed warp with the return sparkle; 2: a wing warp stone, its destination point the stone's exit in its own field; see [Wing warp gates](#wing-warp-gates)) |
+| `LimitLevel` | Minimum character level to walk, warp or be sent (a wing stone, a teleporter, a Teleport Core) into the field, from one table, `FieldEntryLevels` by field code, which `WorldCatalog` gives the shipped fields: Desert 3 and 4 (11, 12) 55, Ancient Prison 1F-3F (13-15) 40, 50, 60, the office (16) 1000 (`Closed`), Cursed Temple 1F-3F (22, 23, 42) 70, 75, 80, the caves (24-26) 55, 55, 65, Iron 1 (27) 80, Iron 2 (28) 85, Eura (29), Ice 1 (31), Ice 2 (35) and Kelvezu's Lair (36) 90, Greedy Lake (34) 70, Lost Island (37) 95, the Lost Temple (38) and the Endless Tower's first two floors (40, 41) 100, its third (43) 102, Ice Mine (44) 105, Secret Laboratory (46) 108, Ancient Weapons (48) 110; the later fields follow their monsters' levels stretched to the cap of 180: Sea of Abyss (49) 115, Deep Sea Temple (50) 124, Heart of Fire (51) 129, Crystal Nest (52) 133, Land of Nurwn (53) 143. `SendsAway(level)`: a character of a lower level saved in the field logs in at its home town (`SessionAppService.EnterWorldAsync`); a `Closed` field keeps one a game master placed there |
 | `Ambients`, `Lighting`, `Camera`, `DayNight`, `Backdrop`, `BackMusicCode` | Client presentation |
 | `FieldEvent` | `Nightmare` (Navisko): see Night and day |
 | `HazeReduction`, `SightCells` | The share of the distance haze the field clears (Ricarten 0.2) and the 64-unit cells of sight added before it starts (Ice Ura 1); client presentation |
@@ -116,7 +116,7 @@ server position; the requested position only chooses among a warp's authored exi
 
 - Refused for an invalid origin or the same field.
 - Warp: a source warp gate to the destination, not a wing warp stone, `level >= warp.LimitLevel` (the destination's
-  `LimitLevel` is not asked), origin within `FieldWarpGate.ServerReach` (`max(Width, 48) + 64`) planar units of the
+  level, on the gate), origin within `FieldWarpGate.ServerReach` (`max(Width, 48) + 64`) planar units of the
   trigger. The client picks one of the gate's exits at random and arrives there; the server takes the exit nearest the
   reported position, settled on the floor within 64 units.
 - Gate: `level >= destination.LimitLevel` and a gate between the two fields (either direction) within 1810 planar units
@@ -220,8 +220,9 @@ first `Order`; `Query` returns candidates sorted by `Order`, which keeps neighbo
   radius; `Ai.Iq` enables running; `Ai.GroupSize` the spawn group. `Ai.MoveSpeed` is only sent to clients for
   presentation; `Ai.MoveRange`, `Ai.Nature` and `Ai.ActiveHour` are imported but no rule reads them.
 - `SoundCode` is the original sound family code and doubles as a behaviour key (see Pitfalls).
-- `PotionCount`/`PotionPercent`: potions a spawn may carry (Valento, Kelvezu, Mokova and Hestian use the count as lives, see
-  Monster skills). `Skill` keeps curse-only skills (no damage, no area, a rating and a curse code).
+- `PotionCount`/`PotionPercent`: potions a spawn may carry (Valento, Kelvezu, Mokova, Hestian and the castle's door,
+  Tower of Valhalla and crystal towers use the count as lives, see Monster skills). `Skill` keeps curse-only skills (no
+  damage, no area, a rating and a curse code).
 - `MonsterCatalog.TryFindKey(key)` matches the key case-insensitively; `TryFind(name)` (game-master commands, skill
   summons) matches the key, else the display name, and returns the lowest code (an event form shares its key).
 
@@ -266,7 +267,8 @@ Behaviour, in tick order:
 2. Flinch (`Damage` motion) blocks everything until `FlinchMsLeft` drains, then chase (target alive) or idle.
 3. Attack state advances the swing (see below).
 4. Target scan: nearest live prey by 3D distance within sight (scaled by the prey's `SightPercent` for stealth unless
-   the monster is one of the four unyielding bosses), skipping prey beyond the vertical gate.
+   the monster is one of the four unyielding bosses), skipping prey beyond the vertical gate and, for a clan's monster
+   (`MonsterInstance.ClanId`), the players of its clan (`PreyCandidate.ClanId`).
 5. Clip bookkeeping for `Chase`/`Leash`: the progress probe can start a stuck manoeuvre (turn toward home ±45 degrees,
    run if able, 10 clips); a moving monster beyond the leash radius starts a leash manoeuvre (head home, 6 clips). Both
    keep the target and end in chase.
@@ -297,7 +299,9 @@ Host-called rules:
 - `ApplyBossRetargetOnHit`: a boss without an active lock takes the attacker as target for 4000 ms.
 - `MonsterAiTuning.IsUnyielding`: the four great bosses by sound code; skills never knock back or taunt them and they
   see through stealth.
-- A definition with `MeleeRange == 0` is immobile and never attacks (`IsImmobile`).
+- A definition with `MeleeRange == 0` is immobile and never attacks (`IsImmobile`). The castle's door, Tower of
+  Valhalla and crystal towers never move either; those with a reach strike the prey in it without turning
+  (`StrikesInPlace`) and let go of prey out of it.
 
 Speed (`MonsterLocomotion`): 70 units/s per step; a Dark Knight boss has 2 base steps; running adds one step (Greven 4,
 Wolverlin 2). The brain integrates toward its target at this speed; terrain then accepts or slides the step.
@@ -313,8 +317,10 @@ like skill statuses.
 
 Generic skill: `SkillRange == 0` strikes the swing's target only (within 460 units); otherwise a circle of radius
 `SkillRange` around the caster (3D distance, height below 140) or, with `SkillDistance`, a square of half-size
-`SkillRange` centred `SkillDistance` ahead. A skill blow never misses and is not blocked: the power roll less the
-player's absorption, at least 1 (a curse skill with no damage strikes for 1). The mystic's skill deals none.
+`SkillRange` centred `SkillDistance` ahead. A skill blow never misses, but the player evades and blocks it as a normal
+blow (evasion, then the shield's block, at most 50%; a block plays the block reactions and deals nothing): otherwise the
+power roll less the player's absorption, at least 1 (a curse skill with no damage strikes for 1). The mystic's skill
+deals none.
 
 Statuses on struck players (durations in 70 Hz frames; a resisted one lasts `frames x (100 - resistance) / 100`, at
 least 4 frames):
@@ -341,11 +347,11 @@ Boss and special rules:
   half its damage roll, and then a target farther than 200 units takes 70 %. While hunting a player it regenerates once
   per clip that runs 120 frames: a table row per player within 260 units beyond six (at most nine), 1800..2800, or
   2300..3300 below 20 % life.
-- Valento, Kelvezu, Mokova, Hestian: `PotionCount` lives; at 10 % life or less one is spent and life refills (a lethal
-  blow included). On every even number of lives left after a spend, Kelvezu calls two Chaos Cara, Mokova two Dark Guards
-  and Hestian two Xetans of level 117 (her duel's player's) within ±100 units, at most 8 monsters on the boss's spawn
-  point. Views show one bar of `(lives + 1) x 100` points.
-  Reinforcements and bees are the family's ordinary definition of the lowest level.
+- Valento, Kelvezu, Mokova, Hestian and the castle's standing defenders: `PotionCount` lives; at 10 % life or less one
+  is spent and life refills (a lethal blow included). On every even number of lives left after a spend, Kelvezu calls
+  two Chaos Cara, Mokova two Dark Guards and Hestian two Xetans of level 117 (her duel's player's) within ±100 units, at
+  most 8 monsters on the boss's spawn point. Views show one bar of `(lives + 1) x 100` points. Reinforcements and bees
+  are the family's ordinary definition of the lowest level.
 - Potions: a spawn carries `rand[1, PotionCount]` potions with `PotionPercent` chance; below 30 % life at a clip end it
   drinks one (`Eat` clip) and heals half its life when the clip ends (`PotionApplied` event). Quest duel opponents keep
   their own potion rules ([quests.md](quests.md)). The magic master drinks a mana potion instead of 20 % of its casts.
@@ -460,10 +466,10 @@ shape; unresolved bonus drops are omitted.
 Quest and ingredient items (`QuestItems.IsQuestDrop`) are flagged `ToInventory` with `FromMainTable` set for main-table
 picks; the field hands them to the credited player's quest upkeep instead of the ground ([quests.md](quests.md)).
 
-`KillReward.ExpForKill(baseExp, monsterLevel, playerLevel, multiplier)`: `baseExp * multiplier`, then 100 / 85 / 70 /
-55 percent for a level gap of at most 10 / 20 / 30 / more, computed in 128 bits and saturated at `ulong.MaxValue` (no
-award wraps or throws). The server passes `experience.multiplier` and the experience event (`experience.event_percent`: +100% up to 199, then
-+200%, +300%, +400% from 400).
+`KillReward.ExpForKill(baseExp, monsterLevel, playerLevel, multiplier, eventPercent)`: `baseExp * multiplier`, then the
+experience event's percent (`experience.event_percent`: 100 = x1, 500 = x5; a value that is not positive is x1), then
+100 / 85 / 70 / 55 percent for a level gap of at most 10 / 20 / 30 / more, computed in 128 bits and saturated at
+`ulong.MaxValue` (no award wraps or throws).
 `FirstAttackerStealsCredit`: the first attacker gets the kill over another killer if it dealt at least 40% of max life
 and hit within the last 15 s (`FirstAttackerDisengageMs`).
 
@@ -472,6 +478,13 @@ local date, shared by all fields) and adds the monster's death gold when its cha
 
 Drops settle on the floor within 32 units of the corpse. `DropTable.AllPlayersSeeDrops` makes a drop public at once;
 lifetimes and the owner window live in `FieldGroundLoot` ([application.md](application.md)).
+
+A player's kill may call more monsters (`KillSummons`, `FieldInstance.CallKillSummons`, each with the return sparkle):
+a Wanted Morif calls three Mini Morifs within 64 units (x and z) of where it fell, free to roam. During a siege in
+Bless Castle a fallen crystal tower calls ten guards of one kind (Course Ricarten militia, guard or Bless royal guard,
+at random) and the fallen door six door soldiers at each guard post within 300 units of where it fell (by the door,
+the two towers near it, mid-castle and the Tower of Valhalla), each within 64 units of its post; they are defenders of
+the owner clan, wander around where they stand and leave with the siege ([application.md](application.md#bless-castle)).
 
 ## Motion timing
 
@@ -510,7 +523,7 @@ only with `MoveRange > 0` and a walk clip, with a 25% chance at the end of each 
 | Type | Contract |
 |---|---|
 | `NpcServiceKind` | Stored in `npc_services.kind`, sent in the dialog and as bit `1 << kind`; append only. Argument meanings per member. |
-| `NpcServiceAvailability.IsAvailable` | Running services: `Shop`, `Warehouse`, `SkillMaster`, quest givers and scripts, `ItemAging`, `ItemMix`, the wing exchange, the puzzle collector, `Teleporter` with a known route. Others are offered but unavailable. |
+| `NpcServiceAvailability.IsAvailable` | Running services: `Shop`, `Warehouse`, `SkillMaster`, quest givers and scripts, `ItemAging`, `ItemMix`, `Smelting`, `Manufacture`, `MixtureReset`, the wing exchange, the puzzle collector, `Teleporter` with a known route, `EventBooth` of a Bellatra team (value 1 to 4) or its secretary (value 5). Others are offered but unavailable. |
 | `NpcInteraction` | Dialog reply; `Reach = 96` planar units for NPC service requests |
 | `NpcServiceCommand` | `OperationId` (idempotency), NPC, service, action, expected revisions, item, `Anchor`, `Count`, `Amount`, `Materials` (compared by value) |
 | `NpcServiceAction` | Persisted in the operation history and sent on the wire; append only. `IsDurable` is false for Open, Close, Refresh. |
@@ -519,7 +532,8 @@ only with `MoveRange > 0` and a walk clip, with a 25% chance at the end of each 
 
 Shop rules (`NpcShopRules`):
 
-- Buy: catalog price times count (count 1, or 1 to `MaxStack` for stackables); needs gold, a free cell and room under
+- Buy: catalog price times count (count 1, or 1 to `MaxStack` for stackables), the catalog's price carrying Bless
+  Castle's tax on each unit ([application.md](application.md#bless-castle)); needs gold, a free cell and room under
   the weight limit (`OverWeight`; a potion weighs one per unit). The bought copy is the shop form of the item
   (`ItemRoller.Lower`, see [simulation.md](simulation.md#items)).
 - Worn value: `intact = price * dur / maxDur` (0 counts as 1), `worn = intact + (price - intact) / 4`, where price is
@@ -542,10 +556,12 @@ or the client's view was stale), the covered one going to the moved item's cell 
 (`OverWeight`), and an overweight character cannot open the warehouse (`NpcServiceTransactions.Check`).
 
 Teleport routes (`TeleportRoutes`): route 0 means route 1. Route 1: index 1 field 0 "Mushroom Cave" 100 gold, 2 field 18
-"Beehive Cave" 100, 3 field 7 "Cursed Land" 500, 4 field 12 "Forbidden Land" 1000. The destination field's
-`TravelLevel` applies; arrival is its first start point (or `Center`) placed on the floor. The cave destinations are the
-fields that hold the cave entrances: field 0 (`fore-3`) has the warp gate to `Tcave`, field 18 (`forever-fall-03`) the
-one to `Mcave`.
+"Beehive Cave" 100, 3 field 7 "Cursed Land" 500, 4 field 12 "Forbidden Land" 1000. Route 2 (the castle's teleporter):
+index 1 field 33 "Bless Castle", 500 gold per level of the traveller (`TeleportDestination.PricePerLevel`). Every
+price carries Bless Castle's tax, offered and charged. The
+destination field's `LimitLevel` applies; arrival is its first start point (a random one in a castle,
+`FieldDef.ArrivalFor`; `Center` without one) placed on the floor. The cave destinations are the fields that hold the
+cave entrances: field 0 (`fore-3`) has the warp gate to `Tcave`, field 18 (`forever-fall-03`) the one to `Mcave`.
 
 ## Aging
 
@@ -562,7 +578,8 @@ stats the item tooltip marks (`AgedStats`; bows and javelins also mark mana, as 
   laid out in four rows of three) and at most one aging stone (`BI110` aging stone, `BI111` copper ore, `BI160` elder
   copper ore, `BI161` super aging stone, `BI185` superior copper ore), for `(level + 1) * price / 2` gold. Materials and
   gold are spent whatever the roll gives (`WrongMaterials`, `NotEnoughGold` otherwise). `aging.price_percent`,
-  `aging.failure_percent` and `aging.double_percent` scale the price and the chances (`AgingSettings`).
+  `aging.failure_percent` and `aging.double_percent` scale the price and the chances (`AgingSettings`); Bless Castle's
+  tax is added to the scaled price.
 - The roll (`Roll`, three draws of 0..100: destroy, down, plus): a failure by the level's chance (none to +4, 95% at +18
   and +19; lower with the aging stone, the super stone and the superior ore) falls one or two levels or loses the item
   by the level's split; otherwise below +10 the level may come at once (doubled chance with the aging stone, never with
@@ -591,19 +608,47 @@ stats the item tooltip marks (`AgedStats`; bows and javelins also mark mana, as 
 `Refine` for the `ItemMix` service (value 1 the mixer, 200 the alchemist).
 
 - Mix: an item from the bag that can be worn, never aged nor mixed, not a quest, timed or clan item, with up to twelve
-  sheltoms (Lucidy .. Ordo), for the item's price (`mixing.price_percent`). The sheltoms and the gold are spent whatever
-  the result. The first of the 103 formulas (`MixFormulas.Table`) whose families hold the item's family (axes to
-  javelins, armours and robes, shields, orbs) and whose counts of the nine sheltoms Lucidy .. Celesto are exactly those
-  placed adds its bonuses: elements add their value; other stats add a whole value or a percent of the copy's own value.
-  The copy records its highest sheltom (`MixSheltom`) and the stats the mix raised (`MixStats`); without a formula the
-  mix fails and the item stays as it was. A mixed copy can no longer be aged or mixed.
+  sheltoms (Lucidy .. Ordo), for the item's price (`mixing.price_percent`, then Bless Castle's tax). The sheltoms and
+  the gold are spent whatever the result. The first of the 103 formulas (`MixFormulas.Table`) whose families hold the
+  item's family (axes to javelins, armours and robes, shields, orbs) and whose counts of the nine sheltoms Lucidy ..
+  Celesto are exactly those placed adds its bonuses: elements add their value; other stats add a whole value or a
+  percent of the copy's own value. The copy records its highest sheltom (`MixSheltom`) and the stats the mix raised
+  (`MixStats`); without a formula the mix fails and the item stays as it was. A mixed copy can no longer be aged or
+  mixed.
 - Reconstruction: two seals of one kind and nothing else, for an item whose level requirement is in the seal's band
   (SE101 0..105, SE102 40..79, SE103 0..39, SE104 0..80), rebuilds the item as a newly rolled copy under the same identity.
   With the respec stone (`BI190`) half the rebuilds take the owner's class specialization, the others never take it.
 - Alchemy: each sheltom from Lucidy to the eleventh becomes the force orb of its rank, for 200, 500, 1000, 2000, 4000,
-  5000, 10000, 20000, 30000, 40000 or 50000 gold (`alchemy.price_percent`); the later and the magic sheltoms are refused.
+  5000, 10000, 20000, 30000, 40000 or 50000 gold (`alchemy.price_percent`; Bless Castle's tax on the orbs' price
+  together); the later and the magic sheltoms are refused.
 - Results (`MixResult`): 0 failed, 1 mixed, 2 reconstructed, 3 refined. A mixed copy whose highest sheltom is Devine to
   Mirage glows in the mixing colours (`HeldItemGlow`).
+- Mixture reset (`MixtureReset`, the `MixtureReset` service, action `ResetMix`): a mixed item and the Mixture Reset Stone
+  (`BI189`) remake the item as a newly rolled copy under the same identity, keeping its class specialization (a plain
+  item stays plain, `ItemRollOverrides.Plain`); the stone is spent and the service is free. Result 1 is the reset.
+
+## Smelting and manufacture
+
+`SmeltingWork` (`Items/Smelting/`) and `ManufactureWork` (`Items/Manufacture/`) hold the rules; `NpcServiceTransactions`
+runs `Smelt` for the `Smelting` service and `Manufacture` for the `Manufacture` service. Neither has a price setting.
+
+- Smelting: three ores of one colour (PR101-PR108) and the sheltom the colour asks for (Lucidy + 5 for ore n: OS106 to
+  OS113) make the colour's crystal (PR2nn) for 25,000 gold; three crystals of one colour and their sheltom (OS107 to
+  OS113 for crystals 1-7; OS103, OS104, OS105 for crystals 9-11 and again 12-14) make its A or B rune (PR3nn, PR4nn, even
+  odds) for 50,000. Smelting always succeeds. The green crystal (PR208) is not smelted.
+- Manufacture: a recipe (WR1nn weapons, DR1nn armour, nn 1-11) and the three runes it names, in their slots: recipe 1
+  runes 1, 2, 3; recipe 2 runes 2, 3, 4; recipes 3-6 runes 3, 4, 5; recipe 7 runes 4, 5, 6; recipe 8 runes 5, 6, 7;
+  recipe 9 runes 6, 7, 8; recipe 10 runes 9, 10, 11; recipe 11 runes 12, 13, 14. Each rune is A or B; which are B
+  (first, second, third as bits 4, 2, 1) picks the product. Weapon recipes 1-8 make the axe, talon, hammer, scythe, bow,
+  sword, javelin or staff from WA114, WC114, WH115, WP115, WS116, WS217, WT115, WM115, one number higher per recipe and
+  recipes 7 and 8 one further (WA121, WA122). Armour recipes 1-8 make the armour, robe, shield, orb, gauntlets, armlets or
+  boots from DA116, DA216, DS114, OM115, DG114, OA214, DB114 in the same steps; three B runes pick any of the seven. The
+  tenth armour recipe makes OA136 from A, B, A runes; the eleventh (Memory) makes the class's costume from three A runes:
+  DA1 for armour, DA2 for the robe classes (Magician, Priestess, Shaman), 51 for men, 52 for women. Recipe 9 and the
+  weapon recipes 10 and 11 make nothing and are refused, as is a product the catalog lacks.
+- An attempt spends recipe and runes and a third of the product's price; half the attempts make the product
+  (`ManufactureResult` 1), the others fail (0). A `Refresh` of the service with the recipe as `ItemId` answers a
+  `ShopCatalog` of its products: one offer per product, `Ordinal` the rune combination, `Price` the fee.
 
 ## Wing warp gates
 
@@ -613,25 +658,28 @@ Ruinen Village (6), Navisko (9), Forbidden Land (12), Eura (29), Land of Chaos (
 
 - Stepping on a stone opens the wing warp map. Its destinations, in order: Ricarten, Pillai, Land of Dusk, Bamboo
   Forest, Ruinen Village, Navisko Town, Forbidden Land (level 55), Eura Village (90), Land of Chaos (95); the
-  destination field's `TravelLevel` applies as well.
+  destination field's `LimitLevel` applies as well.
 - Reach: without a wing the first two; with a wing in the pack the best one counts: Metal (`QW101`) 4, Silver 5,
   Gold 6, Dia 7, Chaos 8, Extreme (`QW106`) 9.
 - Fee: Ricarten, Pillai and the field the player stands in are free; elsewhere the wing's fee: 100, 300, 500, 1000,
-  2000, 4000 gold from Metal to Extreme. It counts as teleport spending in the currency report.
+  2000, 4000 gold from Metal to Extreme, plus Bless Castle's tax in force. It counts as teleport spending in the
+  currency report.
 - The server checks that the living player stands within `FieldWarpGate.ServerReach` (`max(Width, 48) + 64`) planar
   units of a stone of its field, the reach, the level and the gold. The candidate pays the fee and is stored at the
   destination, then the commit takes the gold and moves the player (`Arrive`, also within the same field) to the
   destination stone's exit (its first start point when it has no stone).
-- Bless Castle's stone has no map entry: the castle destination belongs to the castle's owner clan, and there is no
-  castle ownership yet.
+- Bless Castle's stone (`WingGates.Castle`, map spot 69, 207, document `B_Castle`) shows only to a member of the
+  clan holding the castle, whatever wing it carries (`WingGates.Offers`); the trip costs the wing's fee as any other.
+  The world knows the owner from `CastleAppService` (`ICastleWorld.SetOwner`,
+  [application.md](application.md#bless-castle)), the client from its `CastleState`.
 
 `CharacterSoundCodes` names every sound family code a rule or sound reads (NPCs, castle objects, and the monsters
 with rules of their own); `CharacterSoundCodes.Resolve(key)` maps the authored sound keyword of a monster or NPC to its
 sound family code. The
 importer stores it; the client audio library and the AI rules key on it. The keywords of monsters newer than the
 original sound table (Greedy, Hestian, the invaders, the lizards, the mine and laboratory monsters, Soldier_D, and the
-ChinaPT client's later monsters Adevayo to Ziddane, whose folders come from that client) have Etervale's own codes from
-0x6000, one per sound folder; Furia, the red gladiator's keyword, names the Fury's sounds. MapleFairy, MapleTree,
+ChinaPT client's later monsters Adevayo to Ziddane, whose folders come from that client, and the Heart of Fire's
+Igniculus to Flame Maiden) have Etervale's own codes from 0x6000, one per sound folder; Furia, the red gladiator's keyword, names the Fury's sounds. MapleFairy, MapleTree,
 Lucifer, KhanDoor, LizardDoor and Sakura have no sound folder in any client and stay silent. Hopy's and DeadZone's
 files name their sounds (HOPT, DeadZone) as the later servers do.
 

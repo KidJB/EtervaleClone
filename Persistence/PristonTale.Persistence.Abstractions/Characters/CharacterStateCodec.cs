@@ -28,7 +28,8 @@ public sealed record SavedItem(
     bool Hidden = false,
     int? QuestBox = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Held = false,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ItemRarity Rarity = ItemRarity.None);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ItemRarity Rarity = ItemRarity.None,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Link = null);
 
 // ActiveSide: the bag page shown (inventory) or the weapon pair held (equipment); Hidden items are on the other side.
 public sealed record SavedItems(int Version, SavedItem[] Items, long Revision = 0, AppliedInventoryOperation[]? Operations = null,
@@ -197,7 +198,7 @@ public static class CharacterStateCodec
     {
         return new SavedItem(item.InstanceId, item.Definition.Code, item.Count, anchor, slot, item.UpgradeLevel,
             item.DurabilityCurrent, item.DurabilityMax, item.JobSpecMask, default, item.Roll,
-            item.Definition.SavedUnique, item.Sealed, item.Maturity, item.MixSheltom, item.MixStats) { Rarity = item.Rarity };
+            item.Definition.SavedUnique, item.Sealed, item.Maturity, item.MixSheltom, item.MixStats, Link: item.Link.Length > 0 ? item.Link : null) { Rarity = item.Rarity };
     }
 
     internal static ItemInstance RestoreItem(SavedItem saved, ItemCatalog catalog, HashSet<Guid> identities)
@@ -219,7 +220,8 @@ public static class CharacterStateCodec
             Maturity = saved.Maturity,
             MixSheltom = Math.Max(0, saved.MixSheltom),
             MixStats = saved.MixStats,
-            Rarity = saved.Rarity is >= ItemRarity.None and <= ItemRarities.Highest ? saved.Rarity : ItemRarity.None
+            Rarity = saved.Rarity is >= ItemRarity.None and <= ItemRarities.Highest ? saved.Rarity : ItemRarity.None,
+            Link = saved.Link ?? ""
         };
 
         // Copies saved before per-copy values existed take the shop form of their item with the saved specialization.

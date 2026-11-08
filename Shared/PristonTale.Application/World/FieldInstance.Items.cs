@@ -66,6 +66,11 @@ public sealed partial class FieldInstance
             return null;
         }
 
+        if (crystal.Kind == CrystalKind.CastleMercenary)
+        {
+            return CallMercenary(owner, definition);
+        }
+
         if (crystal.Kind != CrystalKind.SoulStone)
         {
             return _skills.CallCrystalPet(owner, crystal, definition);
@@ -102,8 +107,7 @@ public sealed partial class FieldInstance
             }
             else if (NowMs >= endMs)
             {
-                monster.ApplyDamage(monster.Life);
-                _combat.BeginCorpse(id);
+                KillOutright(monster);
                 _soulScratch.Add(id);
             }
         }

@@ -30,6 +30,9 @@ internal interface IFieldCombatHost
 
     (float DurationMs, float HitAtMs) PlayerSwingTiming(WorldPlayer player);
 
+    // Whether two players of the field may fight each other (the castle's battle zone).
+    bool MayFight(WorldPlayer attacker, WorldPlayer target);
+
     void EmitCombatEvent(in CombatEventView combatEvent);
 }
 
@@ -71,39 +74,117 @@ internal sealed class FieldCombat
             return;
         }
 
-        if (!_host.TryGetMonster(targetId, out var monster) || !monster.IsAlive || monster.Effects.Has(ControlFlags.Charmed) || monster.IsSummon)
+        if (_host.TryGetPlayer(targetId, out var foe))
+        {
+            StepAttackOnPlayer(player, foe);
+            return;
+        }
+
+        if (!_host.TryGetMonster(targetId, out var monster) || !monster.IsAlive || monster.Effects.Has(ControlFlags.Charmed) || monster.IsSummon
+            || OwnClan(player, monster))
         {
             player.ClearAttackTarget();
             return;
         }
 
-        if (player.IsBusy || player.Character.Effects.Has(ControlFlags.Stun))
+        SwingAt(player, targetId, monster.Position);
+    }
+
+    private void StepAttackOnPlayer(WorldPlayer player, WorldPlayer foe)
+    {
+        if (!_host.MayFight(player, foe))
         {
+            player.ClearAttackTarget();
             return;
         }
 
-        if (!player.InAttackRange(monster.Position))
+        SwingAt(player, foe.EntityId, foe.Position);
+    }
+
+    // When idle and in range, the swing begins. The client walks into range and reports it, as in the original; the lock
+    // waits for that position.
+    private void SwingAt(WorldPlayer player, ulong targetId, Vector3 target)
+    {
+        if (player.IsBusy || player.Character.Effects.Has(ControlFlags.Stun) || !player.InAttackRange(target))
         {
-            // The client walks into range and reports it, as in the original; the lock waits for that position.
             return;
         }
 
         (float durationMs, float hitAtMs) = _host.PlayerSwingTiming(player);
-        player.BeginSwing(targetId, monster.Position, durationMs, hitAtMs);
-        _host.EmitCombatEvent(new CombatEventView(
-            player.EntityId, targetId, CombatEventKind.SwingBegin, durationMs, hitAtMs));
+        player.BeginSwing(targetId, target, durationMs, hitAtMs);
+        _host.EmitCombatEvent(new CombatEventView(player.EntityId, targetId, CombatEventKind.SwingBegin, durationMs, hitAtMs));
     }
+
+    private static AttackProfile NormalAttack(WorldPlayer player) =>
+        SkillFormulas.NormalAttack(player.Character) with { ExtraPercent = player.Character.Effects.Totals.Flat(StatKind.NextHitDamage) };
+
+    // A player's blow on another still in range: the target's evasion, then the attacker's normal attack against the
+    // target's defence, block and flat absorption, scaled by both sides' effects, with the attacker's enchants
+    // (Athanasia's guard takes none of it).
+    private void ResolveSwingOnPlayer(WorldPlayer player, WorldPlayer foe)
+    {
+        if (!_host.MayFight(player, foe) || !player.InAttackRange(foe.Position) || SkillCombat?.Evades(player.EntityId, foe) == true)
+        {
+            return;
+        }
+
+        var defender = CombatProfileFactory.ForPlayerDefender(foe.Character);
+        var result = CombatResolver.Resolve(_rng, NormalAttack(player), defender, CombatProfileFactory.HasShield(foe.Character));
+        if (result.Blocked)
+        {
+            _host.EmitCombatEvent(new CombatEventView(player.EntityId, foe.EntityId, CombatEventKind.Block));
+        }
+
+        if (result.Damage <= 0)
+        {
+            if (!result.Hit && !result.Blocked)
+            {
+                _host.EmitCombatEvent(new CombatEventView(player.EntityId, foe.EntityId, CombatEventKind.Miss));
+            }
+
+            return;
+        }
+
+        SkillCombat?.ConsumeNextHit(player);
+        var damage = ModifierRules.ScaleDamage(result.Damage, player.Character.Effects.Totals, foe.Character.Effects.Totals);
+        HurtPlayer(player, foe, damage + (SkillCombat?.EnchantOnPlayer(player, defender) ?? 0), result.Crit);
+    }
+
+    // A player's blow or skill reaches another player for this damage: the attacker's Might Stone, the target's absorbing
+    // shields, then the life it takes (PlayerHurtPlayer) and the hit's event.
+    public void HurtPlayer(WorldPlayer attacker, WorldPlayer foe, int damage, bool crit)
+    {
+        damage = CastleItems.Strike(attacker.Character.Effects, foe.Character.Class.Class, damage);
+        damage = SkillCombat?.DefendFromPlayer(foe, damage) ?? damage;
+        var lifeBefore = foe.Life;
+        foe.ApplyDamage(damage);
+        if (lifeBefore > foe.Life)
+        {
+            PlayerHurtPlayer?.Invoke(attacker, foe, lifeBefore - foe.Life);
+        }
+
+        _host.EmitCombatEvent(new CombatEventView(attacker.EntityId, foe.EntityId, CombatEventKind.Hit, damage: lifeBefore - foe.Life, crit: crit,
+            killed: foe.IsDead));
+    }
+
+    // A player's blow that took another's life, for the siege's board.
+    public Action<WorldPlayer, WorldPlayer, int>? PlayerHurtPlayer { get; set; }
 
     public KillPayout? ResolvePlayerSwingHit(WorldPlayer player, ulong targetId, long nowMs)
     {
         if (player.IsDead)
             return null;
 
+        if (_host.TryGetPlayer(targetId, out var foe))
+        {
+            ResolveSwingOnPlayer(player, foe);
+            return null;
+        }
+
         if (!_host.TryGetMonster(targetId, out var monster) || !monster.IsAlive)
             return null;
 
-        AttackProfile atk = SkillFormulas.NormalAttack(player.Character);
-        atk = atk with { ExtraPercent = player.Character.Effects.Totals.Flat(StatKind.NextHitDamage) };
+        AttackProfile atk = NormalAttack(player);
         DefenderProfile def = DefenderProfile.FromMonster(monster);
         HitResult result = CombatResolver.Resolve(_rng, atk, def, defenderHasShield: false);
 
@@ -121,6 +202,7 @@ internal sealed class FieldCombat
 
         var damage = ModifierRules.ScaleDamage(result.Damage, player.Character.Effects.Totals, monster.Effects.Totals);
         damage = SkillCombat?.BasicStrike(player, monster, damage) ?? damage;
+        damage = CombatResolver.CutHit(_rng, damage, monster.Def.Combat.MaxLife, monster.Def.Combat.Level, player.Character.Level);
         return ApplyPlayerDamage(player, monster, damage, result.Crit, nowMs);
     }
 
@@ -129,10 +211,17 @@ internal sealed class FieldCombat
     // A player's own hit on a wild monster (not a familiar's or a summon's), for the effects that answer each attack.
     public Action<WorldPlayer, MonsterInstance, int>? PlayerHitLanded { get; set; }
 
+    // Every hit of a player (or of its summon) with the life it took, for the siege's board.
+    public Action<WorldPlayer, MonsterInstance, int>? DamageDealt { get; set; }
+
+    // A monster of the player's clan (a clan pet, the castle's defenders for the owner clan) never hurts the player nor is
+    // hurt by it.
+    public static bool OwnClan(WorldPlayer player, MonsterInstance monster) => monster.ClanId != 0 && player.Clan?.ClanId == monster.ClanId;
+
     public KillPayout? ApplyPlayerDamage(WorldPlayer player, MonsterInstance monster, int damage, bool crit, long nowMs, bool forceFlinch = false,
         ulong sourceEntityId = 0)
     {
-        if (damage <= 0 || !monster.IsAlive || monster.DuelPlayerId != 0 && monster.DuelPlayerId != player.EntityId)
+        if (damage <= 0 || !monster.IsAlive || monster.DuelPlayerId != 0 && monster.DuelPlayerId != player.EntityId || OwnClan(player, monster))
         {
             return null;
         }
@@ -145,7 +234,9 @@ internal sealed class FieldCombat
             FieldInstance.AgingAttack(player, monster, crit, nowMs);
         }
 
+        var lifeBefore = monster.Life;
         monster.ApplyDamage(damage);
+        DamageDealt?.Invoke(player, monster, Math.Min(damage, lifeBefore));
         SkillCombat?.MonsterDamaged(monster);
 
         MonsterAiBrain.ApplyBossRetargetOnHit(monster, sourceEntityId != 0 ? sourceEntityId : player.EntityId);
@@ -203,8 +294,13 @@ internal sealed class FieldCombat
     // A monster's normal blow on a player with percent of its damage roll; splash spreads Babel's blow around the target.
     internal void BlowOnPlayer(MonsterInstance attacker, WorldPlayer target, int percent, bool splash)
     {
+        if (OwnClan(target, attacker))
+        {
+            return;
+        }
+
         SkillCombat?.Reflect(attacker, target);
-        if (!attacker.IsAlive || SkillCombat?.Evades(attacker, target) == true)
+        if (!attacker.IsAlive || SkillCombat?.Evades(attacker.EntityId, target) == true)
         {
             return;
         }

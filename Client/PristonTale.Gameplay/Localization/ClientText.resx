@@ -15,12 +15,90 @@
   <data name="Attribute.Spirit" xml:space="preserve"><value>Spirit</value></data>
   <data name="Attribute.Strength" xml:space="preserve"><value>Strength</value></data>
   <data name="Attribute.Talent" xml:space="preserve"><value>Talent</value></data>
+  <data name="Bellatra.Back" xml:space="preserve"><value>Back</value></data>
+  <data name="Bellatra.Chief" xml:space="preserve"><value>Chief: {0}</value></data>
+  <data name="Bellatra.ChiefOnly" xml:space="preserve"><value>Only the clan's chief redeems its income.</value></data>
+  <data name="Bellatra.ChiefRedeems" xml:space="preserve"><value>As its chief you may redeem it.</value></data>
+  <data name="Bellatra.HowMuch" xml:space="preserve"><value>How much?</value></data>
+  <data name="Bellatra.Income" xml:space="preserve"><value>Your clan's income: {0} gold</value></data>
+  <data name="Bellatra.MyScore" xml:space="preserve"><value>Your score</value></data>
+  <data name="Bellatra.NoOperator" xml:space="preserve"><value>No clan operates Bellatra today.</value></data>
+  <data name="Bellatra.NoRanking" xml:space="preserve"><value>No clan played Bellatra yesterday.</value></data>
+  <data name="Bellatra.Operator" xml:space="preserve"><value>Operating clan: {0}</value></data>
+  <data name="Bellatra.Outcome.Cleared" xml:space="preserve"><value>Congratulations! Bellatra is over.</value></data>
+  <data name="Bellatra.Outcome.GoesOn" xml:space="preserve"><value>Stage complete! Your team goes on.</value></data>
+  <data name="Bellatra.Outcome.Out" xml:space="preserve"><value>Your team is out.</value></data>
+  <data name="Bellatra.Over" xml:space="preserve"><value>The game is over</value></data>
+  <data name="Bellatra.RankLine" xml:space="preserve"><value>{0}. {1} - {2} points</value></data>
+  <data name="Bellatra.Ranking" xml:space="preserve"><value>Ranking</value></data>
+  <data name="Bellatra.Redeem" xml:space="preserve"><value>Redeem</value></data>
+  <data name="Bellatra.Round" xml:space="preserve"><value>Round {0}</value></data>
+  <data name="Bellatra.Secretary" xml:space="preserve"><value>Bellatra's secretary</value></data>
+  <data name="Bellatra.Status.Busy" xml:space="preserve"><value>You are busy with something else.</value></data>
+  <data name="Bellatra.Status.NotChief" xml:space="preserve"><value>Only the clan's chief redeems its income.</value></data>
+  <data name="Bellatra.Status.NotEnoughBalance" xml:space="preserve"><value>Your clan's income is not that much.</value></data>
+  <data name="Bellatra.Status.OutOfReach" xml:space="preserve"><value>You are too far from the secretary.</value></data>
+  <data name="Bellatra.Status.TooMuchGold" xml:space="preserve"><value>You cannot carry that much gold.</value></data>
+  <data name="Bellatra.Status.Unavailable" xml:space="preserve"><value>Bellatra's secretary is not available now.</value></data>
+  <data name="Bellatra.Tax" xml:space="preserve"><value>Tax on prizes: {0}</value></data>
+  <data name="Bellatra.Team" xml:space="preserve"><value>Team {0}</value></data>
+  <data name="Bellatra.Title" xml:space="preserve"><value>Bellatra</value></data>
+  <data name="Bellatra.ToRedeem" xml:space="preserve"><value>Gold to redeem</value></data>
+  <data name="Bellatra.Waiting" xml:space="preserve"><value>Waiting for the round</value></data>
   <data name="Brood.Demon" xml:space="preserve"><value>Demon</value></data>
   <data name="Brood.Mechanic" xml:space="preserve"><value>Mechanic</value></data>
   <data name="Brood.Mutant" xml:space="preserve"><value>Mutant</value></data>
   <data name="Brood.Normal" xml:space="preserve"><value>Normal</value></data>
   <data name="Brood.Undead" xml:space="preserve"><value>Undead</value></data>
   <data name="Brood.User" xml:space="preserve"><value>Player</value></data>
+  <data name="Castle.AbsorbEffect" xml:space="preserve"><value>absorption +{0}</value></data>
+  <data name="Castle.Back" xml:space="preserve"><value>Back</value></data>
+  <data name="Castle.ChiefOnly" xml:space="preserve"><value>Only the clan chief changes the castle.</value></data>
+  <data name="Castle.Cost" xml:space="preserve"><value>Cost: {0} gold</value></data>
+  <data name="Castle.DamageEffect" xml:space="preserve"><value>damage +{0}%</value></data>
+  <data name="Castle.EvasionEffect" xml:space="preserve"><value>evades {0}% of blows</value></data>
+  <data name="Castle.Fire" xml:space="preserve"><value>Fire</value></data>
+  <data name="Castle.HowMuch" xml:space="preserve"><value>How much gold</value></data>
+  <data name="Castle.Ice" xml:space="preserve"><value>Ice</value></data>
+  <data name="Castle.Lightning" xml:space="preserve"><value>Lightning</value></data>
+  <data name="Castle.Mercenaries" xml:space="preserve"><value>Mercenaries</value></data>
+  <data name="Castle.MercenariesLine" xml:space="preserve"><value>Mercenaries: {0} (up to {1} each)</value></data>
+  <data name="Castle.MercenaryA" xml:space="preserve"><value>Ricarten militia</value></data>
+  <data name="Castle.MercenaryB" xml:space="preserve"><value>Ricarten guard</value></data>
+  <data name="Castle.MercenaryC" xml:space="preserve"><value>Bless royal guard</value></data>
+  <data name="Castle.MercenaryLine" xml:space="preserve"><value>{0}: {1}/{2} ({3} each)</value></data>
+  <data name="Castle.NoSkill" xml:space="preserve"><value>none</value></data>
+  <data name="Castle.NoTower" xml:space="preserve"><value>none</value></data>
+  <data name="Castle.Reset" xml:space="preserve"><value>Undo</value></data>
+  <data name="Castle.Save" xml:space="preserve"><value>Save</value></data>
+  <data name="Castle.Skill" xml:space="preserve"><value>Clan skill</value></data>
+  <data name="Castle.SkillLine" xml:space="preserve"><value>{0}: {1}</value></data>
+  <data name="Castle.SkillNow" xml:space="preserve"><value>Clan skill: {0}</value></data>
+  <data name="Castle.SkillTomorrow" xml:space="preserve"><value>Clan skill from tomorrow: {0}</value></data>
+  <data name="Castle.Status.Busy" xml:space="preserve"><value>Finish what you are doing first.</value></data>
+  <data name="Castle.Status.DuringSiege" xml:space="preserve"><value>Not during a siege.</value></data>
+  <data name="Castle.Status.InvalidSetup" xml:space="preserve"><value>This change cannot be made.</value></data>
+  <data name="Castle.Status.NotChief" xml:space="preserve"><value>Only the clan chief can do that.</value></data>
+  <data name="Castle.Status.NotEnoughGold" xml:space="preserve"><value>You do not have enough gold.</value></data>
+  <data name="Castle.Status.NotEnoughTreasury" xml:space="preserve"><value>The treasury does not hold that much.</value></data>
+  <data name="Castle.Status.NotOwner" xml:space="preserve"><value>Your clan does not hold Bless Castle.</value></data>
+  <data name="Castle.Status.OutOfReach" xml:space="preserve"><value>You are too far from the butler.</value></data>
+  <data name="Castle.Status.TooMuchGold" xml:space="preserve"><value>You cannot carry that much gold.</value></data>
+  <data name="Castle.Status.Unavailable" xml:space="preserve"><value>The castle cannot be changed now. Try again.</value></data>
+  <data name="Castle.Tax" xml:space="preserve"><value>Tax</value></data>
+  <data name="Castle.TaxLine" xml:space="preserve"><value>Tax: {0} (tomorrow {1})</value></data>
+  <data name="Castle.ToWithdraw" xml:space="preserve"><value>to take from the treasury?</value></data>
+  <data name="Castle.TowerInnerA" xml:space="preserve"><value>Inner court A</value></data>
+  <data name="Castle.TowerInnerB" xml:space="preserve"><value>Inner court B</value></data>
+  <data name="Castle.TowerInnerC" xml:space="preserve"><value>Inner court C</value></data>
+  <data name="Castle.TowerInnerD" xml:space="preserve"><value>Inner court D</value></data>
+  <data name="Castle.TowerLine" xml:space="preserve"><value>{0}: {1}  {2}</value></data>
+  <data name="Castle.TowerOuterA" xml:space="preserve"><value>Outer gate A</value></data>
+  <data name="Castle.TowerOuterB" xml:space="preserve"><value>Outer gate B</value></data>
+  <data name="Castle.Towers" xml:space="preserve"><value>Crystal towers</value></data>
+  <data name="Castle.TowersLine" xml:space="preserve"><value>Crystal towers: {0} of {1}</value></data>
+  <data name="Castle.Treasury" xml:space="preserve"><value>Treasury: {0} gold</value></data>
+  <data name="Castle.Withdraw" xml:space="preserve"><value>Withdraw</value></data>
   <data name="CharSelect.ChooseClass" xml:space="preserve"><value>Choose a class.</value></data>
   <data name="CharSelect.ChooseTribe" xml:space="preserve"><value>Choose a tribe.</value></data>
   <data name="CharSelect.ClassModelsFailed" xml:space="preserve"><value>Could not load class models.</value></data>
@@ -46,6 +124,46 @@
   <data name="CharSelect.ModelsFailed" xml:space="preserve"><value>Could not load character models.</value></data>
   <data name="CharSelect.Unreachable" xml:space="preserve"><value>Could not reach server.</value></data>
   <data name="Chat.Frozen" xml:space="preserve"><value>{0} : I talk too much, my tongue has got frozen! WOW -_-;</value></data>
+  <data name="Clan.Appoint" xml:space="preserve"><value>Appoint vice</value></data>
+  <data name="Clan.Back" xml:space="preserve"><value>Back</value></data>
+  <data name="Clan.BelowSix" xml:space="preserve"><value>Fewer than 6 members: {0} days and {1} hours left to recruit before the clan is disbanded.</value></data>
+  <data name="Clan.Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Clan.ChooseEntrust" xml:space="preserve"><value>Choose the new clan chief (equal or higher level than yours). It costs 300,000 gold, and you become a member.</value></data>
+  <data name="Clan.ChooseExpel" xml:space="preserve"><value>Choose the member to expel.</value></data>
+  <data name="Clan.ChooseVice" xml:space="preserve"><value>Choose the member to appoint vice chief.</value></data>
+  <data name="Clan.Confirm" xml:space="preserve"><value>Confirm</value></data>
+  <data name="Clan.ConfirmAppoint" xml:space="preserve"><value>Do you wish to appoint {0} vice chief?</value></data>
+  <data name="Clan.ConfirmDisband" xml:space="preserve"><value>If you disband the clan, all of its information and members are lost. Do you wish to continue?</value></data>
+  <data name="Clan.ConfirmDischarge" xml:space="preserve"><value>Do you wish to discharge {0} from vice chief?</value></data>
+  <data name="Clan.ConfirmEntrust" xml:space="preserve"><value>Entrust the clan to {0} for 300,000 gold? You will become a member.</value></data>
+  <data name="Clan.ConfirmExpel" xml:space="preserve"><value>Do you wish to expel {0} from the clan?</value></data>
+  <data name="Clan.ConfirmLeave" xml:space="preserve"><value>Do you wish to leave the clan {0}?</value></data>
+  <data name="Clan.ConfirmMark" xml:space="preserve"><value>Use {0} as the clan's mark? It will look like this:</value></data>
+  <data name="Clan.Cost" xml:space="preserve"><value>Forming a clan costs {0} gold and needs level {1}.</value></data>
+  <data name="Clan.Count" xml:space="preserve"><value>Members: {0} of {1}</value></data>
+  <data name="Clan.Disband" xml:space="preserve"><value>Disband</value></data>
+  <data name="Clan.Discharge" xml:space="preserve"><value>Discharge vice</value></data>
+  <data name="Clan.Entrust" xml:space="preserve"><value>Entrust clan</value></data>
+  <data name="Clan.Expel" xml:space="preserve"><value>Expel</value></data>
+  <data name="Clan.Found" xml:space="preserve"><value>Form a clan</value></data>
+  <data name="Clan.Intro" xml:space="preserve"><value>Many warriors with the same objectives gather and form a group around the world. It is called a clan. Clans guard and protect their own people. In order to form a clan, you must pay a fee to register it officially. Do you wish to form a clan?</value></data>
+  <data name="Clan.InviteLine" xml:space="preserve"><value>invites you to the clan {0}.</value></data>
+  <data name="Clan.Leave" xml:space="preserve"><value>Leave clan</value></data>
+  <data name="Clan.Mark" xml:space="preserve"><value>Clan mark</value></data>
+  <data name="Clan.MarkFolder" xml:space="preserve"><value>Put a picture (PNG, JPG or BMP) in the ClanMarks folder beside the game and pick it below. Its centre becomes the {0}x{0} mark.</value></data>
+  <data name="Clan.MarkLoading" xml:space="preserve"><value>Reading the picture...</value></data>
+  <data name="Clan.MarkLooking" xml:space="preserve"><value>Looking for pictures...</value></data>
+  <data name="Clan.MarkUnreadable" xml:space="preserve"><value>{0} could not be read as a picture.</value></data>
+  <data name="Clan.No" xml:space="preserve"><value>No</value></data>
+  <data name="Clan.NoMarkFiles" xml:space="preserve"><value>There is no picture in the ClanMarks folder.</value></data>
+  <data name="Clan.RankChief" xml:space="preserve"><value>(chief)</value></data>
+  <data name="Clan.RankVice" xml:space="preserve"><value>(vice)</value></data>
+  <data name="Clan.Registered" xml:space="preserve"><value>The clan is officially registered.</value></data>
+  <data name="Clan.Registering" xml:space="preserve"><value>Registering: {0} days and {1} hours left to reach 6 members.</value></data>
+  <data name="Clan.Requirements" xml:space="preserve"><value>To be officially registered, a clan needs {0} members (the chief included) within {1} days, or it is cancelled. A registered clan that falls below {0} members has {1} days to recruit again before it is disbanded.</value></data>
+  <data name="Clan.Title" xml:space="preserve"><value>Clan Master</value></data>
+  <data name="Clan.TypeName" xml:space="preserve"><value>Type your clan name (2 to 16 letters, digits, spaces, '-' or '_') and press Enter.</value></data>
+  <data name="Clan.Yes" xml:space="preserve"><value>Yes</value></data>
   <data name="Combat.Evade" xml:space="preserve"><value>Evade</value></data>
   <data name="Combat.Miss" xml:space="preserve"><value>Miss</value></data>
   <data name="Count.DoYouWant" xml:space="preserve"><value>Do you wanna</value></data>
@@ -77,14 +195,64 @@
   <data name="Game.AgedItemMatured" xml:space="preserve"><value>The aged item has matured</value></data>
   <data name="Game.AlreadyApplied" xml:space="preserve"><value>Already done</value></data>
   <data name="Game.AlreadyTalking" xml:space="preserve"><value>Already talking to this NPC</value></data>
+  <data name="Game.BellatraBossDown" xml:space="preserve"><value>A boss fell ({0} points).</value></data>
+  <data name="Game.BellatraCleared" xml:space="preserve"><value>Congratulations! Bellatra is over. You gained {0} gold.</value></data>
+  <data name="Game.BellatraClosed" xml:space="preserve"><value>You cannot enter Bellatra at this time. Please come back later.</value></data>
+  <data name="Game.BellatraEntered" xml:space="preserve"><value>You are already in this Bellatra game.</value></data>
+  <data name="Game.BellatraLevel" xml:space="preserve"><value>You are not strong enough to enter Bellatra yet (level {0}). Train more and come back.</value></data>
+  <data name="Game.BellatraNoTickets" xml:space="preserve"><value>Bellatra's tickets are sold at dawn (game hours {0} and {1}), before a game. Please come back then.</value></data>
+  <data name="Game.BellatraOut" xml:space="preserve"><value>Your team is out (rank {0}). You gained {1} gold.</value></data>
+  <data name="Game.BellatraTeamFull" xml:space="preserve"><value>All of this team's tickets are sold out.</value></data>
+  <data name="Game.BellatraTicket" xml:space="preserve"><value>Bellatra's tickets are on sale: {0} gold.</value></data>
   <data name="Game.BossTime" xml:space="preserve"><value>Boss Time: XX:{0}</value></data>
   <data name="Game.CannotDrop" xml:space="preserve"><value>This item cannot be dropped</value></data>
   <data name="Game.CannotUseYet" xml:space="preserve"><value>Item cannot be used yet</value></data>
+  <data name="Game.CastleTaken" xml:space="preserve"><value>The clan {0} has taken Bless Castle.</value></data>
   <data name="Game.CharacterBusy" xml:space="preserve"><value>A save or another character operation is pending; try again</value></data>
   <data name="Game.CharacterUnchanged" xml:space="preserve"><value>Storage rejected the operation; character unchanged</value></data>
-  <data name="Game.ClanOnly" xml:space="preserve"><value>Only members of a regular clan can use this item</value></data>
+  <data name="Game.ClanAlreadyInClan" xml:space="preserve"><value>You are already in a clan.</value></data>
+  <data name="Game.ClanBelowSix" xml:space="preserve"><value>The clan has fewer than {1} members. Recruit more within {0} days or it will be disbanded.</value></data>
+  <data name="Game.ClanBusy" xml:space="preserve"><value>Close your trade or your personal shop first.</value></data>
+  <data name="Game.ClanCapacityTooLow" xml:space="preserve"><value>At that level the new chief could not keep all the members.</value></data>
+  <data name="Game.ClanChiefCannotLeave" xml:space="preserve"><value>The clan chief cannot leave: entrust the clan or disband it.</value></data>
+  <data name="Game.ClanChiefChanged" xml:space="preserve"><value>The clan chief has changed from {0} to {1}.</value></data>
+  <data name="Game.ClanChiefOnAccount" xml:space="preserve"><value>You already have a clan chief on this account. There can only be one clan chief per account.</value></data>
+  <data name="Game.ClanDisbanded" xml:space="preserve"><value>The clan {0} has been disbanded.</value></data>
+  <data name="Game.ClanExpelled" xml:space="preserve"><value>{0} has been expelled from the clan.</value></data>
+  <data name="Game.ClanFounded" xml:space="preserve"><value>The clan [{0}] was founded. Recruit {1} members (the chief included) within {2} days to register it.</value></data>
+  <data name="Game.ClanFull" xml:space="preserve"><value>You cannot recruit any more members.</value></data>
+  <data name="Game.ClanInviteRefused" xml:space="preserve"><value>{0} has refused to join the clan.</value></data>
+  <data name="Game.ClanInviteSent" xml:space="preserve"><value>The clan invitation was sent to {0}.</value></data>
+  <data name="Game.ClanJoinCooldown" xml:space="preserve"><value>A character cannot join a clan for {0} days after its clan was disbanded.</value></data>
+  <data name="Game.ClanJoined" xml:space="preserve"><value>{0} has joined the clan.</value></data>
+  <data name="Game.ClanLeft" xml:space="preserve"><value>{0} has left the clan.</value></data>
+  <data name="Game.ClanLevelTooLow" xml:space="preserve"><value>You must be level {0} to found a clan.</value></data>
+  <data name="Game.ClanMarkChanged" xml:space="preserve"><value>The clan [{0}] has a new mark.</value></data>
+  <data name="Game.ClanMarkUnavailable" xml:space="preserve"><value>Clan marks cannot be uploaded yet.</value></data>
+  <data name="Game.ClanNameInvalid" xml:space="preserve"><value>Clan names have {0} to {1} letters, digits, spaces, '-' or '_'.</value></data>
+  <data name="Game.ClanNameTaken" xml:space="preserve"><value>This clan name already exists. Please try something else.</value></data>
+  <data name="Game.ClanNoInvitation" xml:space="preserve"><value>The clan invitation is no longer valid.</value></data>
+  <data name="Game.ClanNotChief" xml:space="preserve"><value>Only the clan chief can do that.</value></data>
+  <data name="Game.ClanNotInClan" xml:space="preserve"><value>You are not in a clan.</value></data>
+  <data name="Game.ClanNotMember" xml:space="preserve"><value>That character is not a member of the clan.</value></data>
+  <data name="Game.ClanNotRecruiter" xml:space="preserve"><value>Only the clan chief or vice chief can recruit.</value></data>
+  <data name="Game.ClanNotRegistered" xml:space="preserve"><value>The clan must be officially registered first.</value></data>
+  <data name="Game.ClanNotVice" xml:space="preserve"><value>That member is not the vice chief.</value></data>
+  <data name="Game.ClanOnly" xml:space="preserve"><value>Only clan members can use this item</value></data>
+  <data name="Game.ClanPetOwned" xml:space="preserve"><value>You can only summon one at a time.</value></data>
+  <data name="Game.ClanPetsNearby" xml:space="preserve"><value>Your clan already has three of them here.</value></data>
+  <data name="Game.ClanRegistered" xml:space="preserve"><value>Congratulations! The clan [{0}] is now officially registered.</value></data>
+  <data name="Game.ClanTargetInClan" xml:space="preserve"><value>That player is already in a clan.</value></data>
+  <data name="Game.ClanTargetLevelTooLow" xml:space="preserve"><value>The new chief must be of your level or higher.</value></data>
+  <data name="Game.ClanTargetNotFound" xml:space="preserve"><value>That player is not available.</value></data>
+  <data name="Game.ClanUnavailable" xml:space="preserve"><value>The clan service is unavailable. Please try again later.</value></data>
+  <data name="Game.ClanViceAppointed" xml:space="preserve"><value>{0} has been appointed vice chief.</value></data>
+  <data name="Game.ClanViceDischarged" xml:space="preserve"><value>{0} has been discharged from vice chief.</value></data>
+  <data name="Game.ClanViceExists" xml:space="preserve"><value>The clan already has a vice chief.</value></data>
+  <data name="Game.ClanYouWereExpelled" xml:space="preserve"><value>You have been expelled from the clan {0}.</value></data>
   <data name="Game.CloseShopFirst" xml:space="preserve"><value>Close your personal shop first</value></data>
   <data name="Game.CloseTradeFirst" xml:space="preserve"><value>Close the trade window first</value></data>
+  <data name="Game.ConfirmAcceptQuest" xml:space="preserve"><value>Accept quest</value></data>
   <data name="Game.ConfirmBattleZone" xml:space="preserve"><value>move to the Battle Zone?</value></data>
   <data name="Game.ConfirmCarryOut" xml:space="preserve"><value>carry out the quest?</value></data>
   <data name="Game.ConfirmDoYouWanna" xml:space="preserve"><value>Do you wanna</value></data>
@@ -98,6 +266,7 @@
   <data name="Game.ConfirmRedistribute" xml:space="preserve"><value>redistribute?</value></data>
   <data name="Game.ConfirmSearchQuest" xml:space="preserve"><value>search for the quest?</value></data>
   <data name="Game.ConfirmTheQuest" xml:space="preserve"><value>the quest?</value></data>
+  <data name="Game.ConfirmWantToAccept" xml:space="preserve"><value>want to accept?</value></data>
   <data name="Game.ConfirmWantToDo" xml:space="preserve"><value>want to do?</value></data>
   <data name="Game.ConnectionError" xml:space="preserve"><value>Connection error. Please try again.</value></data>
   <data name="Game.ContactListFull" xml:space="preserve"><value>The list is full</value></data>
@@ -109,8 +278,13 @@
   <data name="Game.DeadCannotUse" xml:space="preserve"><value>Cannot use items while dead</value></data>
   <data name="Game.DeathPenaltyReduced" xml:space="preserve"><value>Death penalty Exp decreased by 1</value></data>
   <data name="Game.DropOutOfReach" xml:space="preserve"><value>The item is gone or out of reach</value></data>
+  <data name="Game.EliteQuestDone" xml:space="preserve"><value>{0} : done</value></data>
+  <data name="Game.EliteQuestExpired" xml:space="preserve"><value>The time limit of the quest has run out.</value></data>
+  <data name="Game.EliteQuestProgress" xml:space="preserve"><value>{0} : {1}/{2}</value></data>
+  <data name="Game.EliteSkillPointsGained" xml:space="preserve"><value>Elite skill points increased by +{0}.</value></data>
   <data name="Game.EnterWorldFirst" xml:space="preserve"><value>Enter the world first</value></data>
   <data name="Game.FemaleCannotUse" xml:space="preserve"><value>The female character cannot use</value></data>
+  <data name="Game.FountainPotion" xml:space="preserve"><value>&gt; {0} took a Mystic Mana Potion from the Soul Fountain [Left: {1}]</value></data>
   <data name="Game.FuryLost" xml:space="preserve"><value>Lose in the confrontation with Fury.</value></data>
   <data name="Game.FuryTitle" xml:space="preserve"><value>Fury's phantasma</value></data>
   <data name="Game.FuryWon" xml:space="preserve"><value>Win in the confrontation with Fury.</value></data>
@@ -136,6 +310,7 @@
   <data name="Game.LifeFifteen" xml:space="preserve"><value>Increased HP +15</value></data>
   <data name="Game.LuckyBagHeld" xml:space="preserve"><value>The lucky bag held {0}</value></data>
   <data name="Game.MaleCannotUse" xml:space="preserve"><value>The male character cannot use</value></data>
+  <data name="Game.MercenaryLimit" xml:space="preserve"><value>You have exceeded your summon limit</value></data>
   <data name="Game.MissionTimedOut" xml:space="preserve"><value>The mission failed by over time.</value></data>
   <data name="Game.Name" xml:space="preserve"><value>{0}</value></data>
   <data name="Game.NoClassChange" xml:space="preserve"><value>The master has no class change for you now</value></data>
@@ -186,7 +361,9 @@
   <data name="Game.QuestItemSlowed" xml:space="preserve"><value>Decreased ATK speed of quest item</value></data>
   <data name="Game.QuestKillCount" xml:space="preserve"><value>Quest&gt; {0} {1} number of monster needed</value></data>
   <data name="Game.QuestMovedOn" xml:space="preserve"><value>The quest has moved on; talk to the NPC again</value></data>
+  <data name="Game.QuestName" xml:space="preserve"><value>{0}</value></data>
   <data name="Game.QuestTitle" xml:space="preserve"><value> Q U E S T </value></data>
+  <data name="Game.RegisteredClanOnly" xml:space="preserve"><value>Only members of a registered clan can use this item</value></data>
   <data name="Game.RequestRefused" xml:space="preserve"><value>The request was refused</value></data>
   <data name="Game.RewardReceived" xml:space="preserve"><value>Acquierd items in compensation.</value></data>
   <data name="Game.SameAttributeRunning" xml:space="preserve"><value>An item with the same attribute is already in use</value></data>
@@ -204,6 +381,12 @@
   <data name="Game.ShopSold" xml:space="preserve"><value>{0} player has bought {1} number of {2} by {3} Gold</value></data>
   <data name="Game.ShopSoldOut" xml:space="preserve"><value>The item was sold already</value></data>
   <data name="Game.ShopTradePending" xml:space="preserve"><value>A trade is still pending; try again</value></data>
+  <data name="Game.SiegeInAnHour" xml:space="preserve"><value>Bless Castle will be started after 1 hour. Please prepare yourselves.</value></data>
+  <data name="Game.SiegeInHalfAnHour" xml:space="preserve"><value>Bless Castle will be started after 30 mins. Please prepare yourselves.</value></data>
+  <data name="Game.SiegeLeague" xml:space="preserve"><value>The Bless Castle league has begun: sieges follow one another for two hours.</value></data>
+  <data name="Game.SiegeOver" xml:space="preserve"><value>Bless Castle is now over. Thank you for joining Bless Castle.</value></data>
+  <data name="Game.SiegeRestartsSoon" xml:space="preserve"><value>Bless Castle is about to begin. Please be ready to participate.</value></data>
+  <data name="Game.SiegeStarted" xml:space="preserve"><value>Bless Castle is now in progress. We wish all players good luck.</value></data>
   <data name="Game.SkillMasterAway" xml:space="preserve"><value>Approach your town's skill master while alive</value></data>
   <data name="Game.SkillPointName" xml:space="preserve"><value>Skill Point</value></data>
   <data name="Game.SkillPointOne" xml:space="preserve"><value>skill point increased by 1</value></data>
@@ -215,6 +398,7 @@
   <data name="Game.StatFiveSkillOne" xml:space="preserve"><value>stat &amp; skill point increased by 5 and 1</value></data>
   <data name="Game.StatFiveSkillTwo" xml:space="preserve"><value>stat &amp; skill point increased by 5 and 2</value></data>
   <data name="Game.StatPointsFive" xml:space="preserve"><value>stat point increased by 5</value></data>
+  <data name="Game.StatPointsGained" xml:space="preserve"><value>Stat points increased by +{0}.</value></data>
   <data name="Game.StatsReset" xml:space="preserve"><value>Your stat points can be distributed again</value></data>
   <data name="Game.StorageRejected" xml:space="preserve"><value>Storage rejected the operation; nothing changed</value></data>
   <data name="Game.SummonLimit" xml:space="preserve"><value>You can only have {0} crystal summons at a time</value></data>
@@ -237,6 +421,10 @@
   <data name="Game.TradeTooMany" xml:space="preserve"><value>Exceeds maximum number of transaction items</value></data>
   <data name="Game.TrainingReset" xml:space="preserve"><value>Reset your numbers for training.</value></data>
   <data name="Game.TwentyBargons" xml:space="preserve"><value>You have killed 20 Bargons.</value></data>
+  <data name="Game.UnionCoreAway" xml:space="preserve"><value>Cannot use the Union Core: that clan member cannot be reached now.</value></data>
+  <data name="Game.UnionCoreBound" xml:space="preserve"><value>The Union Core is registered to you: a clan member who uses it comes to you.</value></data>
+  <data name="Game.UnionCoreOwn" xml:space="preserve"><value>You cannot use your own Union Core.</value></data>
+  <data name="Game.UnionCoreWrongClan" xml:space="preserve"><value>That Union Core belongs to another clan.</value></data>
   <data name="Game.UseDelay" xml:space="preserve"><value>Wait a moment before using another one</value></data>
   <data name="Game.VitalityForty" xml:space="preserve"><value>Vitality increased by 40</value></data>
   <data name="Game.WarehouseChanged" xml:space="preserve"><value>The warehouse changed elsewhere; open it again</value></data>
@@ -343,6 +531,7 @@
   <data name="ItemKind.Sword" xml:space="preserve"><value>Sword</value></data>
   <data name="ItemKind.ThrowingWeapon" xml:space="preserve"><value>Throwing weapon</value></data>
   <data name="ItemKind.Vambrace" xml:space="preserve"><value>Vambrace</value></data>
+  <data name="ItemUse.BindUnionCore" xml:space="preserve"><value>Register the Union Core to you?</value></data>
   <data name="ItemUse.Confirm" xml:space="preserve"><value>Do you want to</value></data>
   <data name="ItemUse.Confirm2" xml:space="preserve"><value>use this item?</value></data>
   <data name="ItemUse.ConnectionError" xml:space="preserve"><value>Connection error. Check your inventory before retrying.</value></data>
@@ -362,6 +551,11 @@
   <data name="Login.Subtitle" xml:space="preserve"><value>Your adventure begins here</value></data>
   <data name="Login.Unreachable" xml:space="preserve"><value>Could not reach the game server.</value></data>
   <data name="Loot.Gold" xml:space="preserve"><value>{0} Gold</value></data>
+  <data name="Manufacture.Done" xml:space="preserve"><value>The item was manufactured.</value></data>
+  <data name="Manufacture.Failed" xml:space="preserve"><value>Item manufacture has failed.</value></data>
+  <data name="Manufacture.Random" xml:space="preserve"><value>Random</value></data>
+  <data name="Manufacture.RunesPlaced" xml:space="preserve"><value>While runes are placed, the recipe cannot be changed.</value></data>
+  <data name="Manufacture.WrongRune" xml:space="preserve"><value>This is not the right way to manufacture.</value></data>
   <data name="Mix.Bonus.Absorb" xml:space="preserve"><value>Absorption Rating +{0}</value></data>
   <data name="Mix.Bonus.AttackRating" xml:space="preserve"><value>Attack Rating +{0}</value></data>
   <data name="Mix.Bonus.AttackSpeed" xml:space="preserve"><value>Attack Speed +{0}</value></data>
@@ -387,6 +581,9 @@
   <data name="Mix.Reconstructed" xml:space="preserve"><value>The item was re-constructed.</value></data>
   <data name="Mix.Refined" xml:space="preserve"><value>The sheltoms were refined into force orbs.</value></data>
   <data name="Mix.Result" xml:space="preserve"><value>Item Mixture Result: {0}</value></data>
+  <data name="MixReset.CannotReset" xml:space="preserve"><value>Only a mixed item can be reset.</value></data>
+  <data name="MixReset.Done" xml:space="preserve"><value>The mixture of the item was reset.</value></data>
+  <data name="MixReset.ItemFirst" xml:space="preserve"><value>Place the mixed item first.</value></data>
   <data name="Npc.Bought" xml:space="preserve"><value>Bought.</value></data>
   <data name="Npc.Destination" xml:space="preserve"><value>{0}  {1} gold</value></data>
   <data name="Npc.DestinationLevel" xml:space="preserve"><value>{0}  {1} gold  (Lv {2})</value></data>
@@ -517,6 +714,15 @@
   <data name="Shop.Price" xml:space="preserve"><value>Price: {0} gold</value></data>
   <data name="Shop.RepairCost" xml:space="preserve"><value>Repair: {0} gold</value></data>
   <data name="Shop.SellsFor" xml:space="preserve"><value>Sells for {0} gold</value></data>
+  <data name="Siege.Crystals" xml:space="preserve"><value>Crystal towers {0}/{1}</value></data>
+  <data name="Siege.DoorDown" xml:space="preserve"><value>Castle door broken</value></data>
+  <data name="Siege.DoorStands" xml:space="preserve"><value>Castle door standing</value></data>
+  <data name="Siege.Ended" xml:space="preserve"><value>The siege of Bless Castle is over.</value></data>
+  <data name="Siege.HeldBy" xml:space="preserve"><value>Held by {0}</value></data>
+  <data name="Siege.League" xml:space="preserve"><value>BLESS CASTLE LEAGUE</value></data>
+  <data name="Siege.NoOwner" xml:space="preserve"><value>No clan holds the castle</value></data>
+  <data name="Siege.Title" xml:space="preserve"><value>BLESS CASTLE</value></data>
+  <data name="Siege.Won" xml:space="preserve"><value>Your clan holds Bless Castle!</value></data>
   <data name="Skill.AlreadyActive" xml:space="preserve"><value>That effect is still active.</value></data>
   <data name="Skill.CannotUse" xml:space="preserve"><value>The skill cannot be used now.</value></data>
   <data name="Skill.InVillage" xml:space="preserve"><value>Skills cannot be used in town.</value></data>
@@ -591,6 +797,10 @@
   <data name="SkillWindow.TrainTitle" xml:space="preserve"><value>Train Skill/Magic</value></data>
   <data name="SkillWindow.Unavailable" xml:space="preserve"><value>Unavailable in this version</value></data>
   <data name="SkillWindow.Unlearned" xml:space="preserve"><value>Unlearned | Rank 1 preview</value></data>
+  <data name="Smelt.CannotSmelt" xml:space="preserve"><value>Only three ores or crystals of one kind and their sheltom can be smelted.</value></data>
+  <data name="Smelt.Done" xml:space="preserve"><value>The smelting is done.</value></data>
+  <data name="Smelt.Failed" xml:space="preserve"><value>Item smelting has failed.</value></data>
+  <data name="Smelt.NotSame" xml:space="preserve"><value>These are not the same kind of ores or crystals.</value></data>
   <data name="Stat.Absorption" xml:space="preserve"><value>Absorption</value></data>
   <data name="Stat.AbsorptionVsUndead" xml:space="preserve"><value>Absorption vs undead</value></data>
   <data name="Stat.Agility" xml:space="preserve"><value>Agility</value></data>
@@ -714,7 +924,9 @@
   <data name="Usable.SoulStone" xml:space="preserve"><value>Releases a hostile soul for {0} minutes.</value></data>
   <data name="Usable.TeleportCore" xml:space="preserve"><value>Teleports you to a field of your choice.</value></data>
   <data name="Usable.TrainTier" xml:space="preserve"><value>Fully trains the skills of class tier {0}.</value></data>
+  <data name="Usable.UnionCoreName" xml:space="preserve"><value>Name: {0}</value></data>
   <data name="Usable.VirtualLife" xml:space="preserve"><value>Virtual Life Lv {0}</value></data>
   <data name="WingGate.MoveThere" xml:space="preserve"><value>move there?</value></data>
   <data name="WingGate.Title" xml:space="preserve"><value>Warp gate</value></data>
+  <data name="Workbench.TakeBack" xml:space="preserve"><value>Right-click: take back</value></data>
 </root>

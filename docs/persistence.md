@@ -23,6 +23,7 @@ FluentMigrator migrations, the schema, and the SQLite and PostgreSQL providers. 
 | `.../GameLogs/GameLogRecords.cs` | `IGameLogRepository` and the game log records: item transfers, currency sinks, server events |
 | `.../Characters/CharacterRecord.cs` | One `characters` row; positional record, JSON columns as `JsonText` |
 | `.../Characters/CharacterJson.cs` | `JsonText` wrapper, shared JSON options |
+| `.../Characters/GameTextJsonConverter.cs` | Game texts as `{Id, Args}`; plain-text lines of older saves read as none |
 | `.../Characters/CharacterStateCodec.cs` | Owned-state JSON (`SavedItems`, `SavedSkills`): capture, strict restore |
 | `.../Characters/CharacterRecordFactory.cs` | New starter rows; capture a live `PlayerCharacter` into a save snapshot |
 | `.../Warehouses/` | `WarehouseRecord`, `IWarehouseRepository`, `WarehouseStateCodec` |
@@ -30,7 +31,7 @@ FluentMigrator migrations, the schema, and the SQLite and PostgreSQL providers. 
 | `.../Security/PasswordHasher.cs` | PBKDF2-SHA256 hashes: `pbkdf2-sha256$<iterations>$<salt b64>$<key b64>` |
 | `Persistence/PristonTale.Persistence/Repositories/` | `Dapper*Repository` implementations shared by both providers |
 | `Persistence/PristonTale.Persistence/PersistenceServiceCollectionExtensions.cs` | `AddPristonRepositories`: the repositories and the migration runner both providers register, given the provider's migration processor |
-| `Persistence/PristonTale.Persistence/Migrations/` | `M013Baseline`, `M014PortraitData`, `M015NpcServices`, `M016QuestData`, `M019GameMasters`, `M021MonsterSkillData`, `M022MonsterExperience64`, `M023ItemFootprints`, `M024WorldDataFields`, `M026Contacts`, `M027CatalogIdentities`, `M028WorldCatalog`, `M029NpcPlacementFacts`, `M030CharacterSaveSequence`, `M031GameLogs`, `M032StarterGifts`, `M033HelpPet`, `M034StarterOffHand`, `M035FieldOrder`, `M044CatalogPortuguese`, `FluentMigratorDatabaseMigrator` |
+| `Persistence/PristonTale.Persistence/Migrations/` | `M013Baseline`, `M014PortraitData`, `M015NpcServices`, `M016QuestData`, `M019GameMasters`, `M021MonsterSkillData`, `M022MonsterExperience64`, `M023ItemFootprints`, `M024WorldDataFields`, `M026Contacts`, `M027CatalogIdentities`, `M028WorldCatalog`, `M029NpcPlacementFacts`, `M030CharacterSaveSequence`, `M031GameLogs`, `M032StarterGifts`, `M033HelpPet`, `M034StarterOffHand`, `M035FieldOrder`, `M036PetSkins`, `M037PetName`, `M038Coins`, `M039Mounts`, `M040ItemBox`, `M041Stalls`, `M042DailyQuests`, `M043Skins`, `M044CatalogPortuguese`, `M045Clans`, `M046Castle`, `M047CastleTreasury`, `M048Bellatra`, `FluentMigratorDatabaseMigrator` |
 | `Persistence/PristonTale.Persistence.Sqlite/` | `AddPristonSqlite`, connection factory (WAL), Dapper type handlers |
 | `Persistence/PristonTale.Persistence.Postgres/` | `AddPristonPostgres`, `NpgsqlDataSource` factory, `jsonb` handler for `JsonText` |
 | `docker-compose.yml` | Local PostgreSQL 17 for development |
@@ -47,6 +48,9 @@ Consumers: `Server/PristonTale.Server/Hosting/HostingExtensions.cs` (provider se
 | `IAccountRepository` | `DapperAccountRepository` | `FindByUserIdAsync`, `CreateAsync` (INSERT ... RETURNING), `UpdateLastLoginAsync` |
 | `ICharacterRepository` | `DapperCharacterRepository` | List by account (ordered by slot), find by name for account, global `NameExistsAsync`, `UsedSlotsAsync`, create (RETURNING), delete by name, `UpdateAsync`, `SaveAllAsync` (the background saves: every record in one transaction, skipping older captures and missing characters, returns the rows written), `UpdateAllAsync` (several characters in one transaction, all or none: a personal shop sale) |
 | `IContactRepository` | `DapperContactRepository` | `ListAsync` (in the order added), `AddAsync` (false when the name is already on the list), `RemoveAsync` |
+| `IClanRepository` | `DapperClanRepository` | `LoadAsync` (clans, members with their character's name, class, level and account), `FoundAsync` (clan, chief and the paying character's `UpdateSql` in one transaction; 0 when the name is taken or the capture is stale), `AddMemberAsync` / `RemoveMemberAsync` (with the clan's state and deadline), `SetRanksAsync` (optionally with a payment), `SetMarkVersionAsync` (once a new mark is kept), `DisbandAsync` (clan and members go, cooldowns for the members), `CooldownAsync`, `IsMemberAsync`, `ClanNamesAsync` (the clan of each of an account's characters, for the character list) |
+| `IBellatraRepository` | `DapperBellatraRepository` | `LoadStateAsync`/`SaveStateAsync` (the day and its operating clan, one row), `TopAsync` (a day's clans by points), `BalanceAsync` (a clan's income), `RecordAsync` (a prize's points to its clan and its tax to the operating clan's balance with a `castle_treasury` movement, in one transaction), `RedeemAsync` (the balance less the redemption, the chief's character by its `UpdateSql` and the movement, in one transaction; false when the balance is short or the capture stale) |
+| `ICastleRepository` | `DapperCastleRepository` | `LoadAsync` (the castle row, `CastleRecord.Empty` before the first save), `SaveAsync` (upsert of the one row), `SaveWithAsync` (the castle with the character that paid or received gold, its `UpdateSql`, and a `castle_treasury` movement, in one transaction; false when the character's capture is stale) |
 | `IWarehouseRepository` | `DapperWarehouseRepository` | `FindAsync`, `SaveWithCharacterAsync` (character + warehouse in one transaction) |
 | `IWorldDataRepository` | `DapperWorldDataRepository` | Read-only bulk loads: items, monsters, NPCs, field spawns, motion models, motion slots |
 | `IServerSettingsRepository` | `DapperServerSettingsRepository` | `SeedAsync` (insert missing rows, refresh descriptions, `ON CONFLICT` on both providers), `LoadAsync`, `SetAsync` |
@@ -73,7 +77,7 @@ Consumers: `Server/PristonTale.Server/Hosting/HostingExtensions.cs` (provider se
 | Factory method | Contract |
 | --- | --- |
 | `ToItemDefinitions`, `ToQuestVariantDefinitions`, `ToNamedUniqueDefinitions` | The regular, quest and named-unique definitions (`variant`); a code `ItemCodes` cannot parse is skipped. Runtime item code = `ItemCodes.Parse(code)`; `CatalogKey` = `code`; `Name` = the selected-language name, else the code. The shop form takes the low end of every range; a named unique's `UniqueVariant` is its `variant_ordinal` |
-| `ToMonsterDefinitions` | Runtime code = the record's `id`; event forms take the codes after the highest id. `Key` = `key`, `Name` = the selected-language name, else the key. The stored model path keeps its authored extension; the definition uses the `.inx` sibling (also for NPCs). A drop line of items splits its weight among them with integer division; an item the runtime catalog lacks keeps its share as an empty slot. Bonus drops whose item is missing are dropped |
+| `ToMonsterDefinitions` | Runtime code = the record's `id`; event forms take the codes after the highest id. `Key` = `key`, `Name` = the selected-language name, else the key. The stored model path keeps its authored extension; the definition uses the `.inx` sibling (also for NPCs). A drop line of items keeps its whole weight among the items the runtime catalog knows (weight / count each, the remainder to the first ones); a line of none of them weighs nothing and is never rolled. The first three bonus drops whose item the catalog knows roll (`BonusDropLines`); the others are dropped |
 | `ToNpcDefinitions` | Runtime code = the record's `id`; `Name` = `key`, `DisplayName` = the selected-language name (empty without one). Services from `npc_services` ordered by `ordinal`; unknown kinds skipped; `Shop` removed when no stock code maps to a runtime item; `Dialog` = the selected-language `npc_dialog_lines` |
 | `ToFieldSpawnData` | Only stages with a field code. Spawns, bosses, escorts and placements carry the monster and NPC ids, which are the runtime codes; boss hours from `field_boss_hours` |
 | `ToMotionTimings` | Groups `motion_slots` by table in row order, then maps each `motion_models.model_key` to its table |
@@ -123,7 +127,7 @@ and its account warehouse are always written together, so a gold or item move be
 | `skills` | `SavedSkills` v1: points, elite points, `(Code, Rank, Uses)`, progression `Revision` and `Operations` | 128 skills, points >= 0 |
 | `warehouses.items` | `SavedItems` v1 with anchors in the warehouse grid | `WarehouseStorage.MaxItems` |
 | `premium` | `SavedPremium` v1 (`PremiumStateCodec.cs`): premium timers `(Kind, Value, DurationSeconds, ExpiresAtSeconds)` with Unix-second expiry, item-use `Operations`, `GravityScrolls`, head mode (1-2 big head, 3 soccer ball) and expiry, `SavedAtSeconds` (the last tick's clock); `{}` is empty | 17 timers; expired timers and heads are dropped on restore; boosters and skill delay move their expiry by the time since `SavedAtSeconds` |
-| `quests` | `SavedQuests` v1: the running quest (`SavedQuest`), level and beginner logs, finished codes, `FinishedCount`, the redistribution offer, `Revision` and quest `Operations` (see [quests.md](quests.md)); `{}` reads as an idle journal | 32 finished codes, 64 operations, defined quest codes and timer kinds, non-negative counts |
+| `quests` | `SavedQuests` v1: the running quest (`SavedQuest`, with an elite quest's `Flags`), level, beginner and elite (`EliteLog`) logs, finished codes, `FinishedCount`, the redistribution offer, `Revision` and quest `Operations` (see [quests.md](quests.md)); `{}` reads as an idle journal | 32 finished codes, 64 operations, defined quest codes and timer kinds, non-negative counts |
 
 - Restore is strict: unknown JSON members are rejected, constructor parameters without defaults are required, max
   depth 16, at most `CharacterStateCodec.MaxStateLength` (4 MiB) characters, `Version` must be 1, instance ids must be unique and non-empty, the item code must
@@ -135,9 +139,12 @@ and its account warehouse are always written together, so a gold or item move be
   whose requirements are no longer met is restored worn.
 - `[]` (inventory, skills, warehouse) and `{}` (equipment) are the blank values and restore as empty state.
 - An inventory item whose saved anchor no longer fits its footprint moves to the first free cell.
+- `SavedItem.Link` is a bound Union Core's clan member (written only when set).
 - `SavedItem.Unique` is 2 for the quest variant of a code (quest weapons, the rank-up ring, Fury rewards); such an item
   restores as the code's quest variant, or as the regular definition when the catalog has no variant.
 - Enums serialize as strings (`JsonStringEnumConverter`).
+- A game text (a saved operation's answer line) is `{Id, Args}` (`GameTextJsonConverter`); a line saved as plain text
+  before game texts, or an id this version lacks, loads as no line.
 
 ## Migrations
 
@@ -172,9 +179,13 @@ FluentMigrator scans `PristonTale.Persistence` for `[Migration(n)]` classes. Ver
 | 39 | `M039Mounts` | `characters.mounts` (int64, default 0: the account's mounts, a bit per `Mounts` id; every row of the account joined at login) and `mount_chosen` (int16, default 0: the mount the character picked) |
 | 40 | `M040ItemBox` | `item_box` (`id` int64 identity, `account_id` FK, `sender` 64, `item` (a saved bag item, JSON), `created_at`; index on `account_id`): the Item Distributor's waiting items |
 | 41 | `M041Stalls` | `stalls` (`id` int64 identity, `account_id` unique FK, `character_id` FK, `field_id`, `x`, `y`, `z`, `facing`, `look` (`StallLook` JSON), `items` (`StallItem` JSON array: saved item, price, cell), `created_at`): offline stalls, one per account |
-| 43 | `M043Skins` | `account_skins` (`account_id` FK, `item_key`: the skins an account owns); `characters.skins` (text, default empty: `SkinCodec` JSON of the looks shown) |
 | 42 | `M042DailyQuests` | `characters.daily_quests` (text, default empty: `DailyQuestCodec` JSON of the day, the accepted quests with their kills and the claimed ones) |
+| 43 | `M043Skins` | `account_skins` (`account_id` FK, `item_key`: the skins an account owns); `characters.skins` (text, default empty: `SkinCodec` JSON of the looks shown) |
 | 44 | `M044CatalogPortuguese` | Adds `pt-BR` (Portuguese (Brazil)) to `languages` |
+| 45 | `M045Clans` | `clans` (name, unique `name_key`, state, created, deadline, intro, mark version), `clan_members` (one row per character, cascades with the character and the clan), `clan_cooldowns` (when a character of a dissolved clan may join again) |
+| 46 | `M046Castle` | `castle` (one row: owner clan, tax and next tax, tower elements as digits, mercenaries of three kinds, clan skill chosen and in force, fountain potions, treasury) |
+| 47 | `M047CastleTreasury` | `castle_treasury`, the clan money ledger (each movement: clan, kind `TreasuryKind` 0 Bellatra income / 1 castle tax / 2 castle withdrawal / 3 Bellatra redemption, amount, receiving character, time; indexed by clan) |
+| 48 | `M048Bellatra` | `bellatra_state` (one row: the day as yyyymmdd and its operating clan), `bellatra_points` (a day's points per clan, keyed by day and clan), `bellatra_balances` (each clan's Bellatra income) |
 
 Upgrade path: databases from the earlier migration set at version 12 upgrade in place. Databases at
 versions 1-11 make `M013Baseline` throw; bring them to 12 with the previous release or back up and recreate them.
@@ -267,8 +278,8 @@ Rows only ever inserted, by the server's background writers, and deleted by age 
 
 | Table | Columns and constraints |
 | --- | --- |
-| `item_transfers` | `id` int64 identity PK; `occurred_at` UTC; `kind` int16 (`ItemTransferKind`: 0 trade, 1 personal shop, 2 warehouse deposit, 3 warehouse withdrawal, 4 ground throw, 5 ground pickup, 6 game-master gift, 7 taken from the Item Distributor, 8 sent to another account's Item Distributor; a stall sale is a personal shop row from the stall's owner); `transfer_id` (36: the rows of one transfer; a throw and the pickup of what it threw share the ground drop's id); `from_character_id`, `to_character_id` int64 nullable (null: the warehouse, the ground or a game master); `account_id` (the warehouse's account); `field_id`; `item_code` (16, the catalog key; null for gold); `instance_id` (36); `amount` int64 (items, or gold). Indexes on `occurred_at`, `from_character_id`, `to_character_id`, `instance_id` |
-| `currency_sinks` | `id` int64 identity PK; `occurred_at` UTC (end of the period); `sink` int16 (`CurrencySink`); `gold` int64. Index on `occurred_at` |
+| `item_transfers` | `id` int64 identity PK; `occurred_at` UTC; `kind` int16 (`ItemTransferKind`: 0 trade, 1 personal shop, 2 warehouse deposit, 3 warehouse withdrawal, 4 ground throw, 5 ground pickup, 6 game-master gift, 7 taken from the Item Distributor, 8 sent to another account's Item Distributor, 9 Bless Castle's soul fountain; a stall sale is a personal shop row from the stall's owner); `transfer_id` (36: the rows of one transfer; a throw and the pickup of what it threw share the ground drop's id); `from_character_id`, `to_character_id` int64 nullable (null: the warehouse, the ground, a game master or the fountain); `account_id` (the warehouse's account); `field_id`; `item_code` (16, the catalog key; null for gold); `instance_id` (36); `amount` int64 (items, or gold). Indexes on `occurred_at`, `from_character_id`, `to_character_id`, `instance_id` |
+| `currency_sinks` | `id` int64 identity PK; `occurred_at` UTC (end of the period); `sink` int16 (`CurrencySink`: 0 mixing, 1 aging, 2 shop, 3-5 life, mana and stamina potions, 6 force orbs, 7 teleports, 8 skill training, 9 Bellatra tickets); `gold` int64. Index on `occurred_at` |
 | `server_events` | `id` int64 identity PK; `occurred_at` UTC; `kind` int16 (`ServerEventKind`: 0 started, 1 stopped); `server_name` (64); `detail`. Index on `occurred_at` |
 
 ### World source preservation

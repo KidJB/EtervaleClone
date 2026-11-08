@@ -20,6 +20,7 @@ using PristonTale.Simulation.Quests;
 using PristonTale.Simulation.World.Npcs;
 using PristonTale.Contracts.Characters;
 using PristonTale.Gameplay.Localization;
+using PristonTale.Gameplay.UI.Clans;
 
 namespace PristonTale.Gameplay.UI;
 
@@ -60,6 +61,12 @@ public sealed partial class GameplayHud : IDisposable
     private readonly Func<OwnedItemView, Point, HudPlacement> _storedPlacement;
     private readonly HudAgingWindow _aging = new();
     private readonly HudMixWindow _mix = new();
+    private readonly HudSmeltingWindow _smelting = new();
+    private readonly HudManufactureWindow _manufacture = new();
+    private readonly HudMixtureResetWindow _mixtureReset = new();
+
+    // The crafting windows, each open while its NPC service is.
+    private readonly HudWorkbench[] _benches;
     // The service windows in draw order: bodies, then overlays, shop first.
     private readonly IHudServiceWindow[] _serviceWindows;
     private readonly HudQuestController _quests;
@@ -151,6 +158,9 @@ public sealed partial class GameplayHud : IDisposable
         Func<QuestCommand, Task<QuestOutcome>> requestQuest = null)
     {
         _context = context;
+        _clanWindow = new HudClanWindow(context.Log);
+        _castleWindow.AskAmount = AskWithdrawal;
+        _bellatraWindow.AskAmount = AskRedemption;
         _settings = new HudSettingsPanel(context.Presentation);
         _sprites = new HudSprites(context.GraphicsDevice, context.AssetRoot, context.Log);
         _sprites.Request(HudArt.Static);
@@ -164,7 +174,8 @@ public sealed partial class GameplayHud : IDisposable
         _icons = new HudItemIcons(context.GraphicsDevice, context.AssetRoot, context.Log);
         _icons.Request([PetSkins.IconKey]);
         _personalShop = new HudPersonalShopController(context.Log) { Notify = _notice.Show, Command = line => _ = _chat.Send?.Invoke(line, false), AskCount = (first, second, maximum, accepted) => _countBox.Open(first, second, maximum, accepted) };
-        _serviceWindows = [_shop, _warehouse, _aging, _mix, _personalShop.Window, _trade];
+        _benches = [_aging, _mix, _smelting, _manufacture, _mixtureReset];
+        _serviceWindows = [_shop, _warehouse, .. _benches, _personalShop.Window, _trade];
         _sprites.Request(HudPersonalShopArt.All);
         _skills = new HudSkillsPanel(context.Font, _sprites);
         _skillHud = new HudSkillHud(_sprites, context.GraphicsDevice);
@@ -185,6 +196,7 @@ public sealed partial class GameplayHud : IDisposable
         _sprites.Request(HudWingGate.Art);
         _inventory.UseRequested = item => _itemUse.Request(item, _state);
         _quests = new HudQuestController(requestQuest, context.Log);
+        _inventory.QuestItemUse = _quests.UseItem;
         _questDocuments = new HudQuestDocuments(context.AssetRoot, context.Log);
         _inventory.InterceptClick = InterceptInventoryClick;
         _inventory.ExternalDrop = DropFromInventory;
@@ -208,7 +220,7 @@ public sealed partial class GameplayHud : IDisposable
         _storedPlacement = StoredPlacement;
         _inventoryPanel.Note = InventoryNote;
         _inventoryPanel.Hunt = item => item.Code == QuestClasses.QuestWeapon(_class) ? _weaponHunt : "";
-        _inventoryPanel.Withheld = id => _aging.Holds(id) || _mix.Holds(id) || _personalShop.Holds(id) || _trade.Holds(id);
+        _inventoryPanel.Withheld = id => BenchHolds(id) || _personalShop.Holds(id) || _trade.Holds(id);
         _inventory.ShopRequested = OpenOwnShop;
         _sprites.Request(HudChatWindow.Art);
         _sprites.Request(HudChatBubbles.Art);
@@ -219,6 +231,7 @@ public sealed partial class GameplayHud : IDisposable
         SetUpParty();
         SetUpTrade();
         SetUpContacts();
+        SetUpClans();
         SetUpHelp();
     }
 
@@ -495,7 +508,7 @@ public sealed partial class GameplayHud : IDisposable
         }
 
         _npc.Dismiss();
-        var closed = _npcOpen || _settingsOpen || _systemMenu || _skills.TrainingPending
+        var closed = _clanWindow.IsOpen || _castleWindow.IsOpen || _bellatraWindow.IsOpen || _npcOpen || _settingsOpen || _systemMenu || _skills.TrainingPending
             || _inventorySlide.Open || _statusSlide.Open || _skillSlide.Open || ServiceWindowOpen(blockingOnly: false)
             || _questWindow.Open || _partyWindow.Open || _quests.Dialog is not null || _quests.SkillResetBox;
         closed |= _personalShop.Close();
@@ -503,6 +516,9 @@ public sealed partial class GameplayHud : IDisposable
         closed |= _itemUse.Teleport.IsOpen || _itemUse.Confirming || _puzzle.Confirming || _crystalDismiss.Confirming || _wingGate.IsOpen || _wingGate.Confirming
             || _helpWindow.IsOpen;
         _helpWindow.Close();
+        _clanWindow.Close();
+        _castleWindow.Close();
+        _bellatraWindow.Close();
         _itemUse.Close();
         _wingGate.Close();
         _puzzle.Close();
@@ -558,7 +574,9 @@ public sealed partial class GameplayHud : IDisposable
 
         _questWindow.Advance(elapsedSeconds);
         _partyWindow.Advance(elapsedSeconds);
+        _clanWindow.Update();
         _partyRequest.Update(_clock.Elapsed.TotalMilliseconds);
+        _clanRequest.Update(_clock.Elapsed.TotalMilliseconds);
         _tradeRequest.Update(_clock.Elapsed.TotalMilliseconds);
         UpdateContacts(_clock.Elapsed.TotalMilliseconds);
         ForwardMessages();
@@ -610,6 +628,14 @@ public sealed partial class GameplayHud : IDisposable
         if (_quests.Dialog is not null && HudQuestDialog.Box.Contains(pointer))
         {
             _questDialog.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
+        }
+        else if (_clanWindow.Contains(pointer))
+        {
+            _clanWindow.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
+        }
+        else if (_partyWindow.Page == HudPartyPage.Clan && _partyWindow.Contains(layout, pointer))
+        {
+            _partyWindow.Clan.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
         }
         else if (_npcOpen && HudNpcPanel.Box.Contains(pointer))
         {
@@ -674,7 +700,7 @@ public sealed partial class GameplayHud : IDisposable
         var clickTaken = clicked && Captures(layout, pointer, design);
         var typedText = _context.TypedText.Drain();
         // A count box or the shop's sign box takes the keyboard: neither the chat nor a game key sees what is typed there.
-        var boxTyping = _countBox.IsOpen || _personalShop.SignOpen || _petWindow.Naming || _itemBox.Naming || _cabinet.Searching;
+        var boxTyping = _countBox.IsOpen || _personalShop.SignOpen || _petWindow.Naming || _itemBox.Naming || _cabinet.Searching || _clanWindow.Typing;
         if (_countBox.IsOpen)
         {
             _typingKeyboard = keyboard;
@@ -702,6 +728,11 @@ public sealed partial class GameplayHud : IDisposable
             {
                 _ = _chat.Send?.Invoke(command, false);
             }
+        }
+        else if (_clanWindow.Typing)
+        {
+            _typingKeyboard = keyboard;
+            _clanWindow.Type(typedText, _typedKey ??= key => Pressed(_typingKeyboard, key), _canDraw ??= _painter.CanDraw);
         }
         else if (_crystalDismiss.Confirming && !_chat.Window.Focused && Pressed(keyboard, Keys.Enter))
         {
@@ -732,19 +763,24 @@ public sealed partial class GameplayHud : IDisposable
         // A click that sets a warehouse item down in the bag is not also a pick-up there.
         var storedCarried = _warehouse.Dragging != Guid.Empty;
         var warehouseAction = _warehouse.Update(mouse, _previousMouse, pointer, _storedPlacement, workLocked, _inventory.Dragging != Guid.Empty);
-        var agingAction = _aging.Update(mouse, _previousMouse, pointer, state, workLocked);
-        var mixAction = _mix.Update(mouse, _previousMouse, pointer, state, workLocked);
+        HudWorkbench actedBench = null;
+        var benchAction = HudWorkActionKind.None;
+        foreach (var bench in _benches)
+        {
+            var action = bench.Update(mouse, _previousMouse, pointer, state, workLocked);
+            if (actedBench is null && action != HudWorkActionKind.None)
+            {
+                (actedBench, benchAction) = (bench, action);
+            }
+        }
+
         if (warehouseAction.Kind != HudWarehouseActionKind.None)
         {
             ApplyWarehouseAction(state, warehouseAction);
         }
-        else if (agingAction != HudWorkActionKind.None)
+        else if (actedBench is not null)
         {
-            ApplyWorkAction(_aging, state, agingAction);
-        }
-        else if (mixAction != HudWorkActionKind.None)
-        {
-            ApplyWorkAction(_mix, state, mixAction);
+            ApplyWorkAction(actedBench, state, benchAction);
         }
         else if (clicked)
         {
@@ -801,7 +837,7 @@ public sealed partial class GameplayHud : IDisposable
 
     // A dialog, a message box or the warp map: it takes every click, the bag's included.
     private bool ModalOpen =>
-        _countBox.IsOpen || _personalShop.ModalOpen || _npcOpen || _quests.Dialog is not null || _quests.Confirming || _quests.SkillResetBox || _skills.TrainingPending
+        _countBox.IsOpen || _personalShop.ModalOpen || _npcOpen || _clanWindow.IsOpen || _castleWindow.IsOpen || _bellatraWindow.IsOpen || _quests.Dialog is not null || _quests.Confirming || _quests.SkillResetBox || _skills.TrainingPending
         || _wingGate.IsOpen || _wingGate.Confirming || _itemUse.Teleport.IsOpen || _itemUse.Confirming || _puzzle.Confirming
         || _crystalDismiss.Confirming;
 
@@ -863,20 +899,24 @@ public sealed partial class GameplayHud : IDisposable
             ShowsPlayerButtons);
         if (ShowsPlayerButtons)
         {
-            HudPlayerButtons.Draw(_painter, HudCombat.TargetFrame(layout), pointer);
+            HudPlayerButtons.Draw(_painter, HudCombat.TargetFrame(layout), pointer, ClanButton);
         }
         _worldBuffs.Draw(_painter, layout, _clock.Elapsed.TotalMilliseconds, pointer, _premium);
+        _siegeBoard.Draw(_painter, layout, InCastleField, _clock.Elapsed.TotalMilliseconds, Combat.OwnClan);
+        _bellatraBoard.Draw(_painter, layout);
         _personalShop.Draw(_painter);
         _chat.Window.Draw(_painter, layout, SideWindowOpen);
 
         if (_statusSlide.Visible)
         {
+            _status.ClanName = Clan.Name;
             _status.Draw(_painter, PanelOrigin(layout, _statusSlide), _state, pointer, pressed, _statusSlide.FullyOpen);
         }
 
         if (_skillSlide.Visible)
         {
-            _skills.Draw(_painter, PanelOrigin(layout, _skillSlide), pointer, _state, _bindings, _skillMaster, pressed, _skillSlide.FullyOpen);
+            _skills.Draw(_painter, PanelOrigin(layout, _skillSlide), pointer, _state, _bindings, _skillMaster, pressed, _skillSlide.FullyOpen,
+                Cooldowns, SkillClockMs);
         }
 
         if (_inventorySlide.Visible)
@@ -957,6 +997,21 @@ public sealed partial class GameplayHud : IDisposable
                 _painter.Flush();
                 _questDialog.Draw(_painter, _context.Font, _quests, _questDocuments, pointer);
             }
+        }
+        else if (_clanWindow.IsOpen)
+        {
+            _painter.Flush();
+            _clanWindow.Draw(_painter, _context.Font, pointer);
+        }
+        else if (_castleWindow.IsOpen)
+        {
+            _painter.Flush();
+            _castleWindow.Draw(_painter, pointer);
+        }
+        else if (_bellatraWindow.IsOpen)
+        {
+            _painter.Flush();
+            _bellatraWindow.Draw(_painter, pointer);
         }
         else if (_npcOpen)
         {
@@ -1039,6 +1094,7 @@ public sealed partial class GameplayHud : IDisposable
         _premium.DrawHover(_painter, pointer, _clock.Elapsed.TotalMilliseconds);
         _painter.Flush();
         _partyRequest.Draw(_painter, pointer, _clock.Elapsed.TotalMilliseconds);
+        _clanRequest.Draw(_painter, pointer, _clock.Elapsed.TotalMilliseconds);
         _tradeRequest.Draw(_painter, pointer, _clock.Elapsed.TotalMilliseconds);
         _restart.Draw(_painter, layout, pointer, RestartOffer?.FieldOpen == true, InCastleField);
         _painter.Flush();
@@ -1151,6 +1207,7 @@ public sealed partial class GameplayHud : IDisposable
         _portrait.Dispose();
         _skillHud.Dispose();
         _icons.Dispose();
+        _clanWindow.Dispose();
         _painter.Dispose();
         _sprites.Dispose();
     }

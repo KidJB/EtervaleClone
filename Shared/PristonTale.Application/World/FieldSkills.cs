@@ -27,6 +27,9 @@ internal interface IFieldSkillHost
     MonsterAiTuning TuningFor(MonsterDefinition definition);
     bool TryFindMonsterDefinition(string name, [MaybeNullWhen(false)] out MonsterDefinition definition);
     MonsterInstance AddSummon(MonsterDefinition definition, Vector3 position, float facing);
+    bool PlayersFight { get; }
+    bool MayFight(WorldPlayer attacker, WorldPlayer target);
+    void HurtPlayer(WorldPlayer attacker, WorldPlayer target, int damage, bool crit);
     bool MonsterStandsAt(Vector3 point);
 }
 
@@ -449,8 +452,22 @@ internal sealed partial class FieldSkills
                 }
 
                 return SkillCastVerdict.Accepted;
+            case SkillTarget.Enemy when _host.TryGetPlayer(request.TargetId, out var foe):
+                if (!SkillFormulas.ReachesPlayers(rule) || !_host.MayFight(player, foe))
+                {
+                    return SkillCastVerdict.InvalidTarget;
+                }
+
+                if (!InRange(player, foe.Position, SkillFormulas.Range(rule, rank, player.Character)))
+                {
+                    return SkillCastVerdict.OutOfRange;
+                }
+
+                targetId = foe.EntityId;
+                aim = foe.Position;
+                return SkillCastVerdict.Accepted;
             case SkillTarget.Enemy:
-                if (!_host.TryGetMonster(request.TargetId, out var monster) || !Strikeable(monster)
+                if (!_host.TryGetMonster(request.TargetId, out var monster) || !Strikeable(player, monster)
                     || rule.Charm is { } charm && !SkillFormulas.MatchesBrood(charm.Broods, monster.Def))
                 {
                     return SkillCastVerdict.InvalidTarget;

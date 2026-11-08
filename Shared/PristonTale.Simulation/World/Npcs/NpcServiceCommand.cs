@@ -27,7 +27,19 @@ public enum NpcServiceAction : byte
 
     // The mixing NPC: Mix works ItemId with sheltoms (or reconstructs it with seals); Refine turns sheltoms into force orbs.
     Mix = 51,
-    Refine = 52
+    Refine = 52,
+
+    // The smelter: Materials are three ores or crystals and their sheltom.
+    Smelt = 53,
+
+    // The craftsman: ItemId is the recipe, Materials its three runes in slot order.
+    Manufacture = 54,
+
+    // The mixture reset: ItemId is the mixed item, Materials the reset stone.
+    ResetMix = 55,
+
+    // A Bellatra team booth: a ticket into the game for the booth's team.
+    EnterBellatra = 60
 }
 
 public enum NpcServiceStatus : ushort
@@ -46,7 +58,12 @@ public enum NpcServiceStatus : ushort
     NotOpen = 11,
     OverWeight = 12,
     WrongPuzzle = 13,
-    WrongMaterials = 14
+    WrongMaterials = 14,
+    BellatraClosed = 15,
+    BellatraLevel = 16,
+    BellatraNoTickets = 17,
+    BellatraTeamFull = 18,
+    BellatraEntered = 19
 }
 
 // ItemCode names a stock entry to buy; ItemId an owned item. Anchor is a destination cell (-1 = first free) or, for a

@@ -6,9 +6,10 @@ namespace PristonTale.Application.World.ItemUses;
 
 // Monster crystals and soul stones. Billing crystals and soul stones refuse during the three-second delay every crystal
 // use starts; the item's level, towns and the quest arena refuse any crystal, and a pet crystal is refused to a user
-// who keeps ten pets. Clan pets need a regular clan and castle mercenaries the castle-master clan during a siege,
-// neither of which Etervale runs, so both are refused. The monster appears beside its caller, and the effect plays
-// where it stands.
+// who keeps ten pets. Clan pets need a registered clan, one a member, while fewer than three of the clan stand near;
+// castle mercenaries need a member of the clan holding the castle during a siege in the castle field, within the called
+// mercenaries' limits (FieldInstance.MercenaryRoom; a siege that ends before the use's commit takes the crystal). The
+// monster appears beside its caller (a mercenary where it stands), and the effect plays there.
 internal sealed class MonsterCrystalUse : ItemUseAction
 {
     public override ItemUseStatus Check(in ItemUseRequest use)
@@ -37,8 +38,12 @@ internal sealed class MonsterCrystalUse : ItemUseAction
 
         return crystal.Kind switch
         {
-            CrystalKind.ClanPet => ItemUseStatus.ClanOnly,
-            CrystalKind.CastleMercenary => ItemUseStatus.CrystalRefused,
+            CrystalKind.ClanPet when context.Player.Clan is null => ItemUseStatus.ClanOnly,
+            CrystalKind.ClanPet when !context.Player.Clan.Registered => ItemUseStatus.RegisteredClanOnly,
+            CrystalKind.ClanPet when context.Field.ClanPetRoom(context.Player) is var room && room != ItemUseStatus.Used => room,
+            CrystalKind.ClanPet when !context.Field.HasCrystalPetSlot(context.Player) => ItemUseStatus.SummonLimit,
+            CrystalKind.CastleMercenary => context.Field.MercenaryRoom(context.Player,
+                context.Field.TryFindMonsterKey(crystal.Pick(context.Pick, context.CrystalEvent), out var mercenary) ? mercenary : null),
             CrystalKind.SoulStone when MonsterCrystals.SoulStoneBlockedFields.Contains(context.Field.FieldId) => ItemUseStatus.NotHere,
             CrystalKind.Pet when !context.Field.HasCrystalPetSlot(context.Player) => ItemUseStatus.SummonLimit,
             _ => ItemUseStatus.Used

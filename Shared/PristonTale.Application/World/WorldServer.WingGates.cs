@@ -12,7 +12,7 @@ public sealed partial class WorldServer
     {
         return EnqueueAsync<PreparedWingGateOperation?>(session.EntityId, () =>
             TryGetPlaying(session, out var connection) && _fields.TryGetValue(connection.FieldId, out var field)
-                ? WingGateTransactions.Prepare(session, connection.Player, field, _catalog, command)
+                ? WingGateTransactions.Prepare(session, connection.Player, field, _catalog, command, Volatile.Read(ref _castleOwnerClanId))
                 : null);
     }
 
@@ -29,7 +29,7 @@ public sealed partial class WorldServer
             }
 
             operation.Original.TryChangeMoney(-fee);
-            Currency.Record(CurrencySink.Teleports, fee);
+            RecordSpending(CurrencySink.Teleports, fee, Simulation.Social.Castle.CastleRules.TaxIn(fee, operation.Tax));
             Arrive(session, arrival);
             return true;
         }, waitForCapacity: true);

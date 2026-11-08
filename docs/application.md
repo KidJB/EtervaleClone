@@ -30,6 +30,9 @@ into it is described in [server.md](server.md); skill resolution details are in 
 | `Services/TradeAppService.cs`, `World/WorldServer.Trades.cs`, `World/Trades/Trade.cs` | Trades between players: requests, offers, locks and the exchange that holds and stores two characters (below) |
 | `World/WorldServer.Notices.cs`, `World/WorldNotice.cs`, `Services/WorldNoticeRequests.cs` | The lines a party or trade change answers, delivered through the chat (`ChatDirectory.Deliver`) |
 | `Contacts/ContactAppService.cs` | The friends page: each character's friends and ignored players, stored, with the friends' presence (below) |
+| `Clans/ClanAppService.cs`, `Clans/ClanTexts.cs`, `Clans/IClanMarkStore.cs`, `World/WorldServer.Clans.cs`, `World/WorldServer.NpcPayments.cs` | The clans: founding, invitations, ranks, leaving, expelling, entrusting, the chief's mark upload, dissolution and the chat roster (below) |
+| `Clans/IClanDirectory.cs`, `Castle/CastleAppService.cs`, `Castle/CastleWorld.cs` | Bless Castle: the owner clan, the tax, the soul fountain and the siege's schedule and clock (below); the clans it reads through `IClanDirectory`, the world through `ICastleWorld` |
+| `World/WorldServer.Castle.cs`, `World/FieldInstance.Castle.cs`, `World/CastleSiege.cs` | The siege in the castle field: its defenders, the clans' damage board, the tower's fall and the published `CastleSiegeView` |
 | `Chat/`, `GameMasters/` | Chat routing, whispers and notices; game-master commands, levels and audit ([chat-and-gm.md](chat-and-gm.md)) |
 | `World/WorldServer.Chat.cs`, `World/WorldServer.GameMasters.cs` | Players in hearing range; tick-side game-master reads and changes (kill, hide, move, spawn, drop, gifts) |
 | `Shared/PristonTale.Contracts/Sessions/*Outcome.cs`, `CharacterSummary.cs`; `Contracts/World/Restart.cs`, `WingGateTrip.cs` | Result records returned to the edge and read by the client (login, characters, world entry, restart, wing trips); failure enums carry stable codes |
@@ -37,7 +40,8 @@ into it is described in [server.md](server.md); skill resolution details are in 
 | [`World/WorldServer.cs`](../Shared/PristonTale.Application/World/WorldServer.cs) | Command queue, tick, field registry, connections, prepare/commit entry points |
 | `World/WorldServer.Npc.cs` | NPC interaction, NPC service check/prepare/commit, teleport arrival |
 | `World/WorldServer.Quests.cs`, `World/FieldInstance.Quests.cs`, `World/QuestTransactions.cs`, `World/PlayerQuestState.cs` | Quest prepare/commit, upkeep requests, quest travel; kill credit, quest drops, timers and arena duels on the field |
-| `World/WorldServerOptions.cs` | `ExperienceMultiplier`, `ExperienceEventPercent`, `ClockOffsetMinutes`, `CrystalEvent`, `ItemEvents`, `Aging`, `Mixing`, `Weather`, `WeatherCycleMinutes`, `MaxPendingCommandsPerPlayer`, `GiveStarterGifts`, `CheckpointSeconds`; `WorldBusyException` |
+| `World/WorldServerOptions.cs` | `ExperienceMultiplier`, `ExperienceEventPercent`, `ClockOffsetMinutes`, `CrystalEvent`, `ItemEvents`, `Aging`, `Mixing`, `Bellatra` (`BellatraOptions`), `Weather`, `WeatherCycleMinutes`, `MaxPendingCommandsPerPlayer`, `GiveStarterGifts`, `CheckpointSeconds`; `WorldBusyException` |
+| `World/WorldServer.Bellatra.cs`, `World/BellatraGame.cs`, `World/BellatraBooth.cs`, `World/FieldInstance.Bellatra.cs`, `Services/BellatraAppService.cs`, `Bellatra/BellatraClanAppService.cs` | Bellatra's game: the rounds on the tick, the team booths, the arena's monsters and scores, the prizes paid off the tick, the operating clan and its income ([Bellatra](#bellatra)) |
 | `World/WorldServer.StarterGifts.cs`, `Services/StarterGiftAppService.cs` | The starter gifts of new characters: their offers on the tick, prepare and commit, the durable operation and its chat line ([Starter gifts](#starter-gifts)) |
 | `Settings/` | `ServerSettings`, `ServerSettingCatalog` (every row of the settings table), `ServerSettingsAppService` (read, apply, write) |
 | [`World/FieldInstance.cs`](../Shared/PristonTale.Application/World/FieldInstance.cs) | One live field: players, monsters, NPCs, spawner, AI, collision index, step order, views |
@@ -74,7 +78,7 @@ to `PristonTale.Tests`. No sockets, packets, SQL or MonoGame.
 | Service and method | Contract |
 | --- | --- |
 | `AuthAppService.LoginAsync` | Empty input, unknown account, wrong password: `BadCredentials` (-2); blocked: `LoginDenied` (-24). Values are wire codes. Success returns a token. |
-| `CharacterAppService.ListCharactersAsync` | Summaries with armour/weapon/off-hand catalog keys and `InVillage`; throws `InvalidDataException` on corrupt saved equipment |
+| `CharacterAppService.ListCharactersAsync` | Summaries with armour/weapon/off-hand catalog keys, `InVillage` and the clan's name (`IClanRepository.ClanNamesAsync`); throws `InvalidDataException` on corrupt saved equipment |
 | `CharacterAppService.CreateCharacterAsync` | Trimmed name 3-16, defined class, valid face, unique name, `CharacterSlots.Maximum` per account, first free slot, starter record in its class's town (`DeathPenalty.TownField`: Ricarten for the Tempskron classes and the assassin, Pillai for the Morion classes) |
 | `CharacterAppService.DeleteCharacterAsync` | Account-scoped delete by name. |
 | `SessionAppService.EnterWorldAsync` | Load record, validate field and class, claim the character, `CharacterStateCodec.Restore`, clamp resources, resolve spawn, mark ready |
@@ -290,6 +294,27 @@ Player basic attack:
 7. `KillPayout` drops fall around the corpse (`FieldGroundLoot.Place`, see Ground loot); each item copy is made
    there with `ItemRoller.Create` from the field's stream (see [simulation.md](simulation.md#items)).
 
+Player against player: only in the castle field's battle zone (south of `CastleSiegeRules.BattleLineZ`, both players
+in it), between players of different clans (a player without a clan fights anyone), never during the castle league
+(`FieldInstance.PlayersFight`, from `WorldServerOptions.CastleLeague`) nor on a dead or hidden player. The target is
+taken like a monster's (`SetAttackTarget`), the swing waits for range, and when it lands with the target still in
+range the target's evasion rolls first (effects and passives, `IPlayerSkillCombat.Evades`); then the attacker's normal
+attack meets the target's defence, block and flat absorption (`CombatProfileFactory.ForPlayerDefender`,
+`CombatResolver.Resolve`: a player defender absorbs flat, a monster a percent), scaled by both sides' effects, with the
+attacker's enchant elements (`EnchantOnPlayer`) and Might Stone (`CastleItems.Strike`) and the target's absorbing
+shields (`DefendFromPlayer`; guards answer only monsters of their broods), then `WorldPlayer.ApplyDamage` (nothing
+during a revive guard or Athanasia). A hidden game master neither fights nor is fought. Damage skills reach players
+there too (`FieldSkills.Players`): only the skills that can hurt one take a foe as their target
+(`SkillFormulas.ReachesPlayers`: weapon skills, bolts and areas of rolled damage that are not chains, never a charm;
+the client offers the same). A weapon skill rolls the player's evasion, then its accuracy, block, critical and flat
+element add against the player as a normal attack does, with the caster's enchants; a bolt's, an area's, a burst's
+and a clicked player's main hit's power meets the player through `SkillFormulas.PowerAgainstPlayer` (the element step
+with the rule's divisor or none, a bonus against the player brood, flat absorption, the dealt and taken effects).
+Areas and bursts take the foes inside them after the monsters under the same cap, rolling accuracy where the area
+does; the clicked player joins beyond the cap when the rule puts its target in the area. Every such hit goes through
+`FieldCombat.HurtPlayer` (Might Stone, shields, the board). Skill effects, pushes and life-share damage never reach
+players, nor do familiars and summons.
+
 Monster attacks (`ResolveMonsterHit`): basic hits check reach, reflection and evasion hooks, roll with
 `CombatResolver.ResolveMonsterAttack` (the player's block chance; a block emits `Block`), scale by modifiers and undead
 absorption, pass the skill
@@ -380,6 +405,7 @@ A prepared operation with `Snapshot == null` is final (rejection or replay) and 
 | NPC services | `NpcServiceTransactions.Prepare` (`PreparedNpcOperation`) | inventory, gold delta, open warehouse, teleport arrival |
 | Quest requests | `QuestTransactions.Prepare` (`PreparedQuestOperation`); follow-ups must answer a step the NPC still offers | inventory, equipment, quest journal (merging tick kills), tier, stat/skill point and gold deltas, travel, arena duel |
 | Starter gift | `WorldServer.PrepareStarterGiftAsync`, run by the server's `StarterGiftService` ([Starter gifts](#starter-gifts)) | inventory and equipment, the gift count |
+| Bellatra prize | `WorldServer.PrepareBellatraPrizeAsync`, run by the server's `BellatraService` ([Bellatra](#bellatra)) | gold |
 | Quest upkeep | `QuestTransactions.PrepareUpkeep`, run by the server's `QuestUpkeepService` | quest drops into the pack, quest weapon growth and expiry, leftovers removed; a busy save gate defers the work to the field's next check |
 | Item use | `ItemUseTransactions.Prepare` with the item's `ItemUseAction` (`PreparedItemUseOperation`) | inventory, premium state, resets and mastery re-applied with the prepared clock, item effects, hair, arrival |
 | Personal shop purchase | `PersonalShopTransactions.Prepare` (`PreparedShopPurchase`): the buyer's and the seller's candidates, stored together first with `ICharacterRepository.UpdateAllAsync` | both inventories, the price from the buyer to the seller, the seller's listing pruned |
@@ -460,7 +486,7 @@ Flow (`NpcAppService.RequestAsync`):
    and within `NpcInteraction.Reach` (96, planar), NPC offers the service, the action fits the service, the service is
    available (`NpcServiceAvailability`). Warehouse actions other than `Close` need an open warehouse (`NotOpen`).
 4. Non-durable actions (`Open`, `Close`, `Refresh`) return the view: shop catalog (3 tabs) and quotes, warehouse view,
-   or teleport destinations. Durable actions check replay, empty id and revisions, then apply to a candidate.
+   teleport destinations, or a manufacture recipe's products. Durable actions check replay, empty id and revisions, then apply to a candidate.
 5. Persist: character only, or character plus warehouse in one transaction under the expected warehouse revision.
    A warehouse revision mismatch returns `Conflict` and clears the cached warehouse ("open it again").
 6. `CommitNpcServiceAsync` (tick): inventory, `MoneyDelta`, warehouse cache, and for a teleport `Arrive` (move to the
@@ -470,9 +496,13 @@ Flow (`NpcAppService.RequestAsync`):
 | --- | --- | --- |
 | Shop | Open, Refresh, Buy, Sell, Repair, RepairAll, Close | `NpcShopRules`: buy own stock at catalog price in its shop form within the weight limit; sell at a fifth of the copy's worn value (no quest items); repair an eighth of lost value; gold cap `MoneyLimits.CarryLimit` |
 | Warehouse | Open, Refresh, Deposit, Withdraw, Move, DepositGold, WithdrawGold, Close | `WarehouseStorage`: per account, 9x9 grid, 100 items, weight 1000, 100,000,000 gold; quest items and materials stay on the character; no opening or withdrawing over the weight limit |
-| Teleporter | Open, Teleport, Close | `TeleportRoutes`: route 1 only (Mushroom Cave 100, Beehive Cave 100, Cursed Land 500, Forbidden Land 1000 gold); level must reach the destination field's `LimitLevel` |
+| Teleporter | Open, Teleport, Close | `TeleportRoutes`: route 1 (Mushroom Cave 100, Beehive Cave 100, Cursed Land 500, Forbidden Land 1000 gold), route 2 (Bless Castle, 500 gold per level) and route 3 (Milter: Endless Tower 1F, free); level must reach the destination field's `LimitLevel` |
 | Skill master | (dialog only here) | Learning goes through `ProgressionCommand.LearnSkill` with the NPC's entity id; the class change goes through the quests |
 | Quest giver, quest script, wing exchange (warp gate 0 or 1) | (dialog only here) | Answered by `QuestAppService` talks, see [quests.md](quests.md) |
+| Aging, mixing and alchemy | Open, Age / Mix / Refine, Close | `AgingWork`, `MixingWork`, see [world.md](world.md) |
+| Smelting | Open, Smelt, Close | `SmeltingWork`: three ores or crystals of one colour and their sheltom, 25,000 or 50,000 gold |
+| Manufacture | Open, Refresh (the recipe's products), Manufacture, Close | `ManufactureWork`: a recipe and its three runes, half the attempts succeed; the fee is a third of the dearest candidate product's price, and gold, bag room and weight for every candidate are checked before the product is drawn, so no refusal follows a roll |
+| Mixture reset | Open, ResetMix, Close | `MixtureReset`: a mixed item and the reset stone, remade under its identity |
 | Mobile shop | NPC id 0: Open, Refresh, Sell, Repair, RepairAll, Close | `MobileShopTransactions`: only after a used mobile shop item (`PlayerSession.MobileShopOpen`), no stock |
 
 Other `NpcServiceKind` values answer `NotAvailable`. Prices, stock, totals and destinations always come from the
@@ -552,7 +582,7 @@ original's texts (`PartyMessages`, [simulation.md](simulation.md)).
   changed. `WorldServer.Parties` (`PartyRoster`) is the chat's `IPartyRoster`.
 - Shares: a kill's experience is taken at the party's average level and split by size (`FieldCombat.AwardParty`); a
   dead player, alone or in a party, gains no experience (its summons may still kill, and a level gained lying dead
-  would fill its life); gold
+  would fill its life); gold a monster dropped (`FieldGroundLoot.FromMonster`), at any amount, and other gold
   under `PartyRules.SharedGoldBelow` picked up is split with the members in the picker's field and share range
   (`GroundPickupTransactions`; one who cannot carry its part within `MoneyLimits.CarryLimit` is left out). Only the
   picker's part is stored with its pickup: the members' parts are rewards, as experience is, given at the commit to
@@ -670,6 +700,183 @@ refuses answers the lists as they were and "The lists cannot be changed now". A 
 refused ([chat-and-gm.md](chat-and-gm.md)). The recent players are the client's
 ([client.md](client.md)).
 
+## Clans
+
+The clans live on the game server (`ClanAppService`, rules in `ClanRules`, [simulation.md](simulation.md); storage
+`IClanRepository`, [persistence.md](persistence.md)). `ClanService` reads them before the game server opens (a failure
+leaves the service unavailable, refusing every request) and dissolves those past their deadline once a minute (and
+forgets invitations nobody answered). The service keeps them in memory and runs one change at a time under its gate,
+stored before it applies (a refused storage, a database error or a busy world changes nothing and answers "The clan
+service is unavailable"; every `ClanRequest` gets its `ClanResult`). Clans change under a short state lock that is never
+held across a wait: world entry, departure and the Clan Master's view take only that lock, so a slow database never holds
+them. The chat reads `ClanOf` without waiting (clan chat, `IClanRoster`). An online member's level is its character's
+live level (views, the chief's capacity, entrusting).
+
+- A player entering the world attaches a link (`IClanLink`): it gets its clan's view (`ClanState`) and its tag
+  (`WorldPlayer.Clan`: id, name, mark version, part of its looks and of `EntityDescription`, and whether the clan is
+  registered, which clan pets need; every member is retagged when the clan registers), and its clan sees it online. Leaving the world detaches it, drops its invitation, and the clan sees it offline.
+- Founding (`FoundAsync`, at a Clan Master): not in a clan nor in a join cooldown, no other chief on the account, a free
+  valid name; the world checks reach, level 40 and 500,000 gold (`PrepareNpcPaymentAsync`) and the clan row is stored
+  with the paying character (`DurableOperations`). The clan starts registering with a ten-day deadline.
+- Invitations: the chief or vice asks an online player without a clan (room under the chief's capacity, no cooldown);
+  the invitation lasts 30 seconds; a yes joins (checked again, the recruiter still chief or vice), a no tells the
+  recruiter. Six members register the clan.
+- The chief appoints or discharges the one vice chief, expels members (online or not), hands the clan to a member at a
+  Clan Master (registered clans only, a member of at least his level whose capacity holds the clan and whose account
+  leads no other clan, 300,000 gold stored with the character) and disbands it; members leave (the chief cannot). The
+  chief's new mark (`UploadMarkAsync`) goes to the mark store (`IClanMarkStore`) as the clan's next mark version, which
+  is then stored with the clan (`SetMarkVersionAsync`), shown over the members' heads and announced; the server keeps no
+  marks yet (`NoClanMarkStore` refuses every upload: "Clan marks cannot be uploaded yet"). Below six members a registered clan gets ten
+  days; a passed deadline dissolves the clan, and its members cannot join one for four days.
+- Every change sends each online member the clan's view and a line in the chat (joined, left, expelled, registered,
+  below six, chief changed, vice appointed or discharged, disbanded). A character in a clan cannot be deleted.
+
+## Bless Castle
+
+`CastleAppService` keeps the castle (rules in `CastleRules`, [simulation.md](simulation.md); storage
+`ICastleRepository`, [persistence.md](persistence.md)): the owner clan, the tax in force and the next one, the owner's
+setup (tower elements, mercenaries, the clan skill chosen), the clan skill in force, the soul fountain's potions and
+the treasury. `CastleService` loads it at start (a database error leaves it unavailable: game masters are told so)
+and ticks it every second with the settings in force (`castle.mode`, `castle.siege_day`, `castle.siege_hour`,
+[server.md](server.md#server-settings-table)). Changes run one at a time under its gate and are stored before they
+apply; a refused storage changes nothing, is logged once and is tried again on a later minute. It reads the clans
+through `IClanDirectory`; while the clans are not loaded no owner is dropped, and once they are an owner clan that no
+longer exists (a dissolved one) is dropped at load and on the next minute.
+
+- The schedule runs minute by minute in local time; a late tick catches up the minutes it missed (at most 60).
+- Each day at 04:00 the next tax and the clan skill chosen take effect (`/set_castle_tax` does it now).
+- Weekly mode: the siege is announced an hour and half an hour before its day and hour and starts then; it lasts 120
+  minutes, is over for 5 seconds and then closes with a notice. A siege hour that a daylight-saving change skips does
+  not come that week.
+- League mode: the siege starts at the same hour and the league lasts 120 minutes; each siege runs at most to the
+  league's end, and one that ends sooner restarts 3 minutes later (announced) while the league goes on. A game
+  master's `/end_castle` ends the league too, and so does turning the mode away from League.
+- Off: no scheduled siege; a game master may still start one.
+- In peace with an owner, the fountain gains a potion a minute, up to 1440, and gives one a second
+  (`GiveFountainPotionAsync`) to the next member of the owner clan standing at it in the castle field
+  (`CastleRules.AtFountain`: x 37040..37158, z -30286..-30102, bounds excluded; `FountainRecipientAsync`, in turn by
+  entity id): a `PM104` into the bag through the path of every inventory change (`PrepareFountainPotionAsync`, an
+  `item_transfers` row of kind 7), stored with the fountain's count in one write before it reaches the bag
+  (`SaveWithAsync`), with a whisper of the potions left (`GameTextId.FountainPotion`). The world checks the recipient
+  again when it prepares the potion; a player busy with another change, with a full bag, or whose write storage refused
+  waits for its next turn.
+- The siege's clock lives in memory: a restart during a siege ends it, and the owner stays.
+- Every player in the world is told the castle (`Attach`/`Detach`, `ICastleLink`, `CastleBroadcast`): at entry and,
+  from the tick, whenever the owner, the tax in force, the league mode, the siege's state or end, or the world's view
+  of the siege changed (the best clans named, the running siege's seconds left counted then; `CastleState` on the
+  wire). Attaching and announcing share one lock, so that no player keeps an older castle than the last.
+- The owner clan's members see Bless Castle's stone on the wing warp map (the world told the owner, `SetOwner`), and
+  route 2's teleporter takes anyone into the castle for 500 gold per level ([world.md](world.md)).
+- The clients draw the crown over the owner clan's players ([client.md](client.md)).
+- The clan skill in force (`CastleClanSkills`): the world, told the owner and the skill (`SetOwner`), gives every member
+  of the owner clan the skill's status for 10 minutes, renewed every minute on the tick (`WorldServer.RenewClanSkill`);
+  a player outside the owner clan, or holding another skill than the one in force, loses it at the next renewal.
+  Absorb takes 20 off every blow received (flat absorption), Attack adds 15 % to the damage dealt, Evasion evades 20 %
+  of the normal blows; the running-effects bar shows `wa1-1`, `wa1-3` or `wa1-2`.
+- The butler (`NpcServiceKind.BlessCastle`) opens the owner's window for the members of the clan holding the castle
+  (`OwnerViewOf`: the setup chosen for the next day and siege, the tax and clan skill in force, the treasury, whether the
+  viewer is the chief). Only the chief changes it, in peace: `SaveSetupAsync` checks the setup (`CastleOwnerRules`: tax
+  0-10, a defined skill, six tower slots that never go back to empty, mercenaries that only grow up to 20) and its
+  cost (a tower in an empty slot 500,000, another element for a bought one free, mercenaries 50,000, 100,000 and
+  300,000 each), takes it from the chief's gold at the butler (`WorldServer.PrepareNpcPaymentAsync`, the same reach,
+  shop, trade and gold checks the Clan Master's fees use) and stores the castle with the character
+  (`SaveWithAsync`) before the gold leaves. `WithdrawAsync` gives the chief gold from the treasury the same way, with a
+  `castle_treasury` movement. Both refuse during a siege and while a conquest or the spent setup waits to be stored.
+  The castle is kept in memory as soon as it is stored. Every request answers a `CastleOwnerStatus`. The treasury stays
+  with the castle: a clan that takes the castle takes what is left in it.
+- The tax in force (`CastleRules.TaxInForce`: the owner's rate, 0 without an owner; a clan that takes the castle keeps
+  the rate until its own setup takes effect at four) is added to the final price of the fees players pay
+  (`CastleRules.WithTax`, whole gold rounded down): each shop unit (offered and charged, `NpcShopRules.BuyPrice`), an
+  aging, a mix and an alchemy's force orbs together after their price percents (`AgingSettings.Tax`,
+  `MixingSettings.Tax`), teleports, the wing warp gates and skill training. The NPCs offer the price percents without
+  it. The world takes it from `SetOwner` and gives it to every field on the next tick (`FieldInstance.CastleTax`); a
+  prepared operation keeps the tax it was charged with, which the training's commit charges again. Every gold spent
+  is recorded once (`WorldServer.RecordSpending`: the currency report and the tax part, exact by
+  `CastleRules.TaxIn`). Each minute the castle service takes what was gathered (`TakeTaxGold`) into the treasury with
+  a `castle_treasury` tax movement naming the clan holding the castle, kept and tried again while storage refuses or
+  the castle has no owner; on shutdown, after the game server, the last of it is stored (`FlushTaxAsync`), and what
+  storage then refuses is lost.
+
+The siege runs in the castle field (`ICastleWorld`, implemented by `WorldServer`). Opening it gives the world the
+owner and its setup (`CastleSiegeOrder`); the castle field, now or when it opens, removes its wild monsters, holds its
+spawns and places the defenders (`CastleSiegeRules`): the door, the Tower of Valhalla and six crystal towers of the
+chosen elements stand still at their places with their potion count as lives (`MonsterLifeRules`; the crystal towers
+and the tower strike what comes into their reach without turning), and up to twenty mercenaries of each kind wander
+around their posts with all their potions. A castle without an owner gets twenty of each and crystal towers of random
+elements. The owner clan's members call more mercenaries with crystals during the siege (GP114-116: one a character,
+five of a kind, twenty of the clan; `FieldInstance.CallMercenary`, [special-items.md](special-items.md)), each one a
+defender as the others are; a fallen crystal tower or the door calls guards at the posts near it
+([world.md](world.md#loot-and-kill-rewards)). Every defender belongs to the owner clan (`MonsterInstance.ClanId`,
+`CastleRole`): the defenders and its players never hurt each other (`FieldCombat.OwnClan`, also for clan pets: no
+attack target, no blow or area skill, no skill or summon of theirs on them) and the defenders never pick its players;
+clan pet rules (the cheer, the pets nearby) leave the defenders out. Each player hit (summons' too) on a crystal
+tower, or on the tower once no crystal tower stands, adds the life it took to the player's clan on the damage board
+(`CastleDamageBoard`); while a crystal tower stands the tower is made whole every tick. A player's blow on another
+(see Combat resolution) scores a tenth of the life it took, at least 1 (`CastleSiegeRules.PkScore`), while the tower
+stands, unless the target has no clan and neither side is the owner clan. The world publishes `CastleSiegeView` (door,
+crystal towers and mercenaries standing, the ten best clans and the total) at most once a second while it changes.
+When the tower falls, the castle goes to the board's leader (no owner when no clan dealt damage, and any clan may
+win), with a notice naming the clan; a conquest storage refuses is kept and stored on a later minute (a game master's
+`/end_castle` after the fall still gives it). The siege then closes: its defenders leave. At peace, living players in
+the castle field outside the owner clan are sent to a random start point of the castle, and the owner's towers and
+mercenaries are spent (they serve one siege). While a crystal tower stands no blow takes the tower's life
+(`MonsterInstance.MinimumLife`). `/easy_castle` leaves every defender one life, no lives in reserve and no potions;
+the tower keeps that one life while a crystal tower stands.
+
+## Bellatra
+
+Bellatra is a game of four teams in its arena (field 30, `BellatraArena`), played by the game clock (`WorldClock`, a
+game hour lasting 48 s). The world owns the game (`BellatraGame`) and steps it on the tick after the fields
+(`WorldServer.StepBellatra`); the arena field counts its entrants' kills. Entrants and the moves owed to them name
+characters, so a relog keeps a player's place and score.
+
+- Tickets: a team booth (`NpcServiceKind.EventBooth`, value 1 to 4 = team 0 to 3; the Navisko booths) answers on
+  opening why it refuses or the ticket's price (`BellatraBooth`), and sells it (`NpcServiceAction.EnterBellatra`) while
+  Bellatra is open (`bellatra.mode`, `BellatraRules.IsOpen`), between games, at game hours 4 and 5, to a character of
+  level 40 or more not entered yet while the team's entrants' levels do not pass 549 (two tickets prepared together may
+  pass it by one), for 300 gold a level (`CurrencySink.BellatraTickets`); when it would sell, its answer on opening
+  carries the ticket as its one destination (`BellatraBooth.Answer`). The ticket is a durable NPC payment that arrives
+  at the team's room centre; its commit enters the team (`PreparedNpcOperation.BellatraTeam`).
+- Rounds: eight rounds of one of three tables (`BellatraRounds`; each game after the first picks one with the world's
+  seeded draw) start as the game clock reaches hours 6, 8, 10, 12, 15, 18, 21 and 0, the game ending at 3; a clock
+  that jumps (a changed clock offset) starts each hour it passed in turn (`BellatraRules.HourReached`). A day whose
+  tickets nobody bought plays nothing. A round's start kills every round monster still standing (lives in reserve
+  too) and drops the entrants away from the arena (another field, or outside `BellatraArena.InArea`); the game
+  finishes when nobody is left. After the round's delay one monster a pulse (`BellatraRules.PulseMs`) enters each
+  room of the round with no more than the round's cap standing, by cumulative chance among the round's monsters
+  resolved once a round, the room's boss once the room has opened more than the cap less 10
+  (`FieldInstance.SpawnBellatraRound`, `MonsterInstance.BellatraRoom`, `BellatraBoss`; these monsters never leave
+  idle). Rounds 1 to 3 use the four first rooms, 4 to 6 the middle two, 7 and 8 the top room. The final round is
+  skipped when no entrant has 50,000 points.
+- Score: an entrant's kill of a round's monster during a round scores the monster's experience by
+  `bellatra.score_divisor`, a round boss's times twice the round (the killer is whispered it), to the entrant and its
+  team. Monsters a round monster calls are not round monsters.
+- Teams: before round 4 the two best teams with somebody left go on (the best to the fifth room, the second to the
+  sixth), before round 7 the best to the top room, `BellatraRules.BannerMs` after the round's start; the others are
+  paid and go to Navisko's centre as long. A move waits while its player lies dead, and is dropped once the player
+  left the arena.
+- The end: every entrant in the arena is paid its score less `bellatra.tax` percent (`BellatraRules.Prize`), and 30 s
+  later every entrant still there goes to Navisko and the game resets.
+- The operating clan (`BellatraClanAppService`, `IBellatraRepository`), by the server's local day (`BellatraDays`):
+  every paid prize gives its entrant's registered clan the score as the points of the day it was won and the clan
+  operating Bellatra the prize's tax as income (a `castle_treasury` movement of kind `Bellatra`); the paid prizes wait
+  in their own queue (`Records`), so that storage never holds the payments. At a new day the clan with the most
+  points of the day before (one that still exists) operates Bellatra; nobody does after a day without games, nor
+  while the clans are not loaded (the day turns once they are). The secretary (`EventBooth` value 5) shows the
+  operating clan, its chief, the tax, the player's clan's income and yesterday's ten best clans (`BellatraClanState`;
+  the ranking and the balances read are kept in memory); a clan's chief redeems its income there alone (the NPC
+  payment of that service value), the redemption stored with the character and a `BellatraRedemption` movement
+  before the gold reaches it. Storage runs off the tick under one gate; a refused storage loses a prize's points and
+  income (logged).
+- Boards: a player in the arena is sent its board in its snapshot (`WorldSnapshot.Bellatra`, `BellatraView`: the
+  round, its team, its score, the teams' scores and how its last round start or the end went), made again only when
+  the game's revision changed (`BellatraGame.ViewOf`); a player who left the game keeps its last board until it leaves
+  the arena (`BellatraGame.Leaving`). Each round start sets every entrant playing, and those going on to a new room.
+- Prizes are paid off the tick (`WorldServer.BellatraPrizes`, `BellatraAppService`, `BellatraService`) through the
+  path of every character change, a fixed gold amount, tried again a few times while the player is busy with another
+  change; the player is told the prize, the gold limit that refused it or why it failed. A prize still waiting when the
+  server stops, or owed to a player who left, is lost.
+
 ## Published outcomes and events
 
 - Command results return through the `Task` of the call (`MovementVerdict`, `SkillCastOutcome`, `InventoryOutcome`,
@@ -682,7 +889,8 @@ refused ([chat-and-gm.md](chat-and-gm.md)). The recent players are the client's
   (only
   when changed) and its cooldowns (null when unchanged since the last send); each copy also carries the receiver's
   `QuestUpdate` (journal view when its revision moved, quest notices, a dialog the world opened), its `PartyView`, its
-  `TradeView` and its pending `PartyRequest` and `TradeRequest`.
+  `TradeView`, its pending `PartyRequest` and `TradeRequest`, and its Bellatra board in the arena (`BellatraView`); the
+  outbox keeps them all when it joins snapshots or drops a reused frame (`WorldSnapshot.WithEvents`, `WithoutFrame`).
 - `WorldOutbox` is the per-connection `Channel<WorldSnapshot>`: a write never blocks; the reader receives the latest
   entity state plus every event accumulated since its last read (state is coalesced, events are reliable, the newest
   cooldown list wins; quest notices stay in order up to 256 and the newest journal view and dialog win). A reader that

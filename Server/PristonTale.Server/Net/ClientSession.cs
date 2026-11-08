@@ -49,6 +49,9 @@ internal sealed record SessionServices(
     TradeAppService Trades,
     ContactAppService Contacts,
     ChatAppService Chat,
+    Application.Clans.ClanAppService Clans,
+    Application.Castle.CastleAppService Castle,
+    Application.Bellatra.BellatraClanAppService BellatraClans,
     GameServerControl Control,
     CoinShopAppService CoinShop,
     ItemBoxAppService ItemBox,
@@ -329,6 +332,18 @@ internal sealed partial class ClientSession : IMovementVerdictSink
                 case EtervaleOpcodes.TradeLock or EtervaleOpcodes.TradeCancel:
                     await SignalTradeAsync(TradeSignalPacket.Read(memory.Span));
                     break;
+                case EtervaleOpcodes.ClanRequest:
+                    await ClanRequestAsync(ClanRequestPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.ClanMark:
+                    await ClanMarkAsync(ClanMarkPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.CastleOwnerRequest:
+                    await CastleOwnerAsync(CastleOwnerRequestPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.BellatraClanRequest:
+                    await BellatraClanAsync(BellatraClanRequestPacket.Read(memory.Span));
+                    break;
                 case EtervaleOpcodes.ContactChange:
                     await ChangeContactAsync(ContactChangePacket.Read(memory.Span));
                     break;
@@ -539,6 +554,8 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         _pump = PumpAsync(outbox, _encoder);
         JoinChat(session, contacts);
         RefreshContacts();
+        JoinCastle(session);
+        await JoinClansAsync(session);
     }
 
     private async Task PumpAsync(WorldOutbox outbox, PresenceEncoder encoder)
@@ -757,7 +774,8 @@ internal sealed partial class ClientSession : IMovementVerdictSink
             outcome = QuestOutcome.Failed(ex is WorldBusyException ? QuestStatus.Busy : QuestStatus.StorageFailed, Refusal(ex));
         }
 
-        var result = QuestWireMapping.ToResult(request.OperationId, outcome);
+        var items = _services.LocalizedWorldData.Get(_session?.Language ?? CatalogLanguages.English, _services.WorldData.Current).Items;
+        var result = QuestWireMapping.ToResult(request.OperationId, outcome, items);
         SendLarge(result.Write, result.Capacity);
     }
 
@@ -918,6 +936,8 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         _player = null;
         _pump = null;
         LeaveChat(session);
+        LeaveClans(session);
+        _services.Castle.Detach(session.EntityId);
         outbox.Writer.TryComplete();
         var leave = await _services.World.LeaveAsync(session.FieldId, session.EntityId, outbox.Writer);
         _services.Chat.Directory.Deliver(leave.Notices);

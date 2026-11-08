@@ -116,6 +116,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
     private BossSpotView[]? _bossSpots;
     private int _bossSpotsField = -1;
     private PartyRequest? _partyRequest;
+    private BellatraView? _bellatra;
     private TradeView? _trade;
     private TradeRequest? _tradeRequest;
     private PresenceFrame? _heldFrame;
@@ -381,10 +382,34 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         SendBossList(snapshot, connection);
         SendParty(snapshot, connection);
         SendTrade(snapshot, connection);
+        SendBellatra(snapshot, connection);
         if (snapshot.Quest is not null)
         {
             SendQuest(snapshot.Quest, connection);
         }
+    }
+
+    // The receiver's Bellatra board whenever it changes, hidden once it leaves the arena.
+    private void SendBellatra(in WorldSnapshot snapshot, IPacketSink connection)
+    {
+        if (ReferenceEquals(snapshot.Bellatra, _bellatra))
+        {
+            return;
+        }
+
+        _bellatra = snapshot.Bellatra;
+        var packet = BellatraBoardPacket.Hidden;
+        if (_bellatra is { } board)
+        {
+            var teams = new ulong[board.TeamScores.Count];
+            for (var team = 0; team < teams.Length; team++)
+            {
+                teams[team] = (ulong)Math.Max(0, board.TeamScores[team]);
+            }
+
+            packet = new BellatraBoardPacket(true, (byte)board.Round, (byte)board.Team, (byte)board.Outcome, (ulong)Math.Max(0, board.Score), teams);
+        }
+        connection.Send(_scratch.AsSpan(0, packet.Write(_scratch)));
     }
 
     // The party's members whenever they change (none once the receiver leaves it), and each new request to join one.
@@ -471,7 +496,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
 
     // Its own method: a lambda capturing the connection in EncodeLocked would allocate a closure on every encode.
     private void SendQuest(QuestUpdate quest, IPacketSink connection) =>
-        QuestWireMapping.Send(quest, (write, capacity) => SendSized(connection, write, capacity));
+        QuestWireMapping.Send(quest, LocalizedData.Items, (write, capacity) => SendSized(connection, write, capacity));
 
     private void SendEventsOnly(in WorldSnapshot snapshot, IPacketSink connection)
     {
@@ -1217,7 +1242,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         return HashCode.Combine(view.MaxLife, view.Level, view.TemplateId, view.MoveSpeed, view.AttackRate,
             HashCode.Combine(appearance.WeaponKey, appearance.ArmorKey, appearance.OffHandKey, appearance.InVillage, appearance.Tier, appearance.HairIndex,
                 HashCode.Combine(appearance.HelperPet, appearance.Phoenix, appearance.BigHead, appearance.WeaponGlow, appearance.OffHandGlow, appearance.ShopSign,
-                    HashCode.Combine(appearance.PetSkin, appearance.PetName, appearance.Mount))),
+                    appearance.ClanId, HashCode.Combine(appearance.ClanName, appearance.ClanMark, appearance.PetSkin, appearance.PetName, appearance.Mount))),
             view.OwnerId,
             view.ModelScale);
     }

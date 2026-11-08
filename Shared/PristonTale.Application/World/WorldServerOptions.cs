@@ -21,7 +21,7 @@ public sealed record WorldServerOptions
 
     public int ExperienceMultiplier { get; init; } = DefaultExperienceMultiplier;
 
-    public int ExperienceEventPercent { get; init; }
+    public int ExperienceEventPercent { get; init; } = 100;
 
     public AgingSettings Aging { get; init; } = AgingSettings.Default;
 
@@ -33,6 +33,9 @@ public sealed record WorldServerOptions
     // Rain over the fields that take it on the original's schedule (WeatherSchedule), every WeatherCycleMinutes game
     // minutes.
     public bool Weather { get; init; } = true;
+
+    // Bless Castle's league runs: players do not fight each other in the castle field.
+    public bool CastleLeague { get; init; }
 
     public int WeatherCycleMinutes { get; init; } = WeatherSchedule.DefaultCycleMinutes;
 
@@ -48,6 +51,8 @@ public sealed record WorldServerOptions
 
     // Item events that replace drop rolls with event items (rates per 10000); all off by default.
     public ItemEventRates ItemEvents { get; init; } = ItemEventRates.None;
+
+    public BellatraOptions Bellatra { get; init; } = BellatraOptions.Default;
 
     public WorldServerOptions Validated()
     {
@@ -81,8 +86,21 @@ public sealed record WorldServerOptions
             throw new InvalidOperationException("Experience event and aging percentages must not be negative.");
         }
 
+        if (Bellatra is null || !Enum.IsDefined(Bellatra.Mode) || Bellatra.Tax is < 0 or > 100 || Bellatra.ScoreDivisor < 1)
+        {
+            throw new InvalidOperationException("Bellatra's mode must be 0, 1 or 2, its tax 0 to 100 and its score divisor at least 1.");
+        }
+
         return this;
     }
+}
+
+// Bellatra: when it opens, the percent of each prize kept for the operating clan, and the divisor from a monster's
+// experience to its score.
+public sealed record BellatraOptions(Simulation.World.Bellatra.BellatraMode Mode = Simulation.World.Bellatra.BellatraMode.Hours,
+    int Tax = Simulation.World.Bellatra.BellatraRules.DefaultTax, int ScoreDivisor = Simulation.World.Bellatra.BellatraRules.DefaultScoreDivisor)
+{
+    public static readonly BellatraOptions Default = new();
 }
 
 // The authoritative command queue refused a command; the caller drops it like a lost packet.

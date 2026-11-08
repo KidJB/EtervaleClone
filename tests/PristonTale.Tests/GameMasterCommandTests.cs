@@ -23,14 +23,16 @@ internal static class GameMasterCommandTests
     private static readonly (string Text, int Level)[] ExpectedLevels =
     [
         ("/localtime", 1), ("/get_bosstime", 1), ("/get_forceorb", 1), ("/get_primitem", 1), ("/get_currency", 1), ("/init_premiumitem", 4),
-        ("/specific", 1), ("/Performance", 1), ("/@get_perf", 4), ("/@get", 4), ("/@put", 4), ("/@coinshop_reload", 4), ("/@coins", 4), ("/@arena", 4), ("/@worldbuff", 4), ("/AgingSetting", 3), ("/get_potion", 1), ("/>", 2), ("/netlog", 1),
+        ("/specific", 1), ("/Performance", 1), ("/@get_perf", 4), ("/@get", 4), ("/@put_perf", 4), ("/@put", 4), ("/@coinshop_reload", 4), ("/@coins", 4), ("/@arena", 4), ("/@worldbuff", 4), ("/AgingSetting", 3), ("/get_potion", 1), ("/>", 2), ("/netlog", 1),
         ("//netlog", 1), ("/user_limit", 2), ("/kick", 2), ("/kill", 2), ("/open_warehouse", 2), ("/shutdown", 2), ("/weather", 2),
         ("/reload_settings", 4), ("/setting", 4), ("/insert", 2),
         ("/usercode", 1), ("/userid", 1), ("/username", 1), ("/near", 2), ("/call", 2), ("/where", 2), ("/field", 2),
         ("/player_location", 2), ("/expup", 4), ("/GiveMeExp!", 4), ("/GiveMeMoney!", 4),
         ("/user", 1), ("/sockets", 1), ("/talk", 1), ("/set_absorb", 4), ("/area_users", 1), ("/monster", 1), ("/mymonster", 1),
         ("/event_monster", 1), ("/area_monster", 1), ("/show_blackuser", 1), ("/reset_blackuser", 1), ("/free_blackuser", 1), ("/hide", 1),
-        ("/show", 1), ("/get_money", 3), ("/dm_info", 1), ("/get_guid", 1), ("/grant", 1)
+        ("/show", 1), ("/get_money", 3), ("/dm_info", 1), ("/get_guid", 1), ("/grant", 1),
+        ("/start_castle", 1), ("/end_castle", 1), ("/easy_castle", 4), ("/set_castle_time", 1), ("/set_castle_master", 1), ("/get_castle_info", 1),
+        ("/get_fountain_info", 1), ("/reset_fountain_time", 1), ("/set_castle_tax", 1)
     ];
 
     public static IEnumerable<(string, Func<Task>)> Cases()
@@ -128,8 +130,8 @@ internal static class GameMasterCommandTests
         fixture.World.Currency.Record(CurrencySink.Teleports, 100);
         await fixture.SayAsync(gm, "/get_currency");
         var lines = gm.Link.Texts();
-        Assert.True(lines[^2] == ">currency: Mx(0) Ag(0) Sh(2500000) Po(40 0 0) Fo(0) Wp(100) Sk(0 ) Tt(2500140)"
-            && lines[^1] == ">currency[M]: Mx(0) Ag(0) Sh(2) Po(0 0 0) Fo(0) Wp(0) Sk(0 ) Tt(2)", string.Join("|", lines.TakeLast(2)));
+        Assert.True(lines[^2] == ">currency: Mx(0) Ag(0) Sh(2500000) Po(40 0 0) Fo(0) Wp(100) Sk(0 ) Bt(0) Tt(2500140)"
+            && lines[^1] == ">currency[M]: Mx(0) Ag(0) Sh(2) Po(0 0 0) Fo(0) Wp(0) Sk(0 ) Bt(0) Tt(2)", string.Join("|", lines.TakeLast(2)));
         Assert.True(CurrencyLedger.ShopSinkFor("PM102") == CurrencySink.ManaPotions && CurrencyLedger.ShopSinkFor("WA101") == CurrencySink.Shop,
             "shop purchases are not sorted by potion kind");
     }
@@ -280,25 +282,11 @@ internal static class GameMasterCommandTests
         Assert.True(drops.Count(drop => drop.View.CatalogKey == "WA101") == 2 && drops.Single(drop => drop.View.Gold).View.Amount == 5000 && drops.All(drop => drop.Public),
             "the created items and gold were not dropped at the game master");
         await fixture.SayAsync(gm, "/@get_perf WA101 MS");
-        Assert.True(gm.Link.Last == "Perfect WA101 created (Mechanician)", gm.Link.Last);
-        await fixture.SayAsync(gm, "/@get_perf WA101 MS +20");
-        Assert.True(gm.Link.Last == "Perfect +20 WA101 created (Mechanician)", gm.Link.Last);
-        fixture.Tick(1);
-        var ground = FieldOf(fixture).GroundLoot;
-        var lookerCharacter = new CharacterClassRegistry().CreatePlayer(PlayerClass.Fighter, "Looker");
-        var aged = false;
-        foreach (var drop in ground.Snapshot().Where(drop => drop.View.CatalogKey == "WA101"))
-        {
-            var look = Guid.NewGuid();
-            var looker = new WorldPlayer(77, drop.View.Position, lookerCharacter, false, default);
-            if (ground.TryReserve(drop.View.Id, look, looker, out _, out var copy))
-            {
-                aged |= copy?.UpgradeLevel == 20;
-                ground.Resolve(drop.View.Id, look, committed: false);
-            }
-        }
-
-        Assert.True(aged, "the perfect axe was not aged to +20");
+        Assert.True(gm.Link.Last == "Perfect WA101 (Mechanician) created", gm.Link.Last);
+        await fixture.SayAsync(gm, "/@get_perf WA101 MS 18");
+        Assert.True(gm.Link.Last == "Perfect +18 WA101 (Mechanician) created", gm.Link.Last);
+        await fixture.SayAsync(gm, "/@get_perf WA101 none 25");
+        Assert.True(gm.Link.Last == "Perfect +20 WA101 (no spec) created", $"the aging was not capped at +20: {gm.Link.Last}");
         await fixture.SayAsync(gm, "/@get_perf WA101 KS");
         Assert.True(gm.Link.Last == "WA101 cannot take the Knight spec", gm.Link.Last);
         await fixture.SayAsync(gm, "/@get_perf WA101 cooks");
@@ -338,6 +326,15 @@ internal static class GameMasterCommandTests
         Assert.True(carried.Any(item => item.Definition.CatalogKey == "PL101"), "the gift did not reach the player's bag");
         Assert.True(fixture.Log.Rows.Single(row => row.Kind == ItemTransferKind.GameMasterGift) is { ItemCode: "PL101", FromCharacterId: null } gift
             && gift.ToCharacterId == fixture.Characters.Records["Ann"].Id, "the gift was not logged");
+
+        await fixture.SayAsync(gm, "/@put_perf Ann WA101 MS 12");
+        Assert.True(gm.Link.Last == "Perfect +12 WA101 (Mechanician) sent to Ann", gm.Link.Last);
+        var axe = Enumerable.Range(0, ann.Session.Character.Inventory.Capacity).Select(anchor => ann.Session.Character.Inventory[anchor])
+            .SingleOrDefault(item => item?.Definition.CatalogKey == "WA101");
+        Assert.True(axe is { UpgradeLevel: 12, Roll.SpecJob: (uint)JobBitCode.Mechanician, Roll.AttackRating: > 30 } && fixture.Characters.Updates == before + 2,
+            $"the perfect +12 copy was not stored and delivered to the player's bag ({axe?.UpgradeLevel}, {axe?.Roll}, {fixture.Characters.Updates - before})");
+        await fixture.SayAsync(gm, "/@put_perf Nobody WA101");
+        Assert.True(gm.Link.Last == "No player named Nobody is online", gm.Link.Last);
     }
 
     private static async Task CharacterAsync()

@@ -37,6 +37,8 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
     private int _trainingIndex = -1;
     private string _trainingName = "";
     private string _trainingPrice = "";
+
+    public int Tax { get; set; }
     private IReadOnlyList<OwnedSkillView> _displayedSkills;
     private Entry _hovered;
     private bool _hoveredBasic;
@@ -170,7 +172,7 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
 
             _trainingIndex = index;
             _trainingName = DataText.SkillName(entry.Skill);
-            _trainingPrice = ClientText.Format("SkillWindow.TrainPrice", rank + 1, SkillLearning.Price(index, rank).ToString("N0", System.Globalization.CultureInfo.InvariantCulture));
+            _trainingPrice = ClientText.Format("SkillWindow.TrainPrice", rank + 1, SkillLearning.Price(index, rank, Tax).ToString("N0", System.Globalization.CultureInfo.InvariantCulture));
         }
     }
 
@@ -225,21 +227,40 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
 
     private Rectangle Box(Point origin, int index) => ClassRow(origin, index - PageFirst);
 
-    private static int Uses(OwnerState state, uint code)
+    // The training gauge left of a skill: a passive skill's plain frame; for the others the frame and, once learned, the
+    // green fill of its proficiency out of 10,000.
+    private static void DrawTraining(HudPainter painter, Rectangle gauge, Entry entry, OwnerState state)
     {
-        foreach (var skill in state.Skills)
+        var code = entry.Skill.Code;
+        if (entry.Skill.MouseUse == SkillMouseUse.None)
         {
-            if (skill.Code == code)
-            {
-                return skill.Uses;
-            }
+            painter.Sprite(HudArt.SkillGaugePassive, gauge.X, gauge.Y);
+            return;
         }
 
-        return 0;
+        painter.Sprite(HudArt.SkillGaugeBack, gauge.X, gauge.Y);
+        if (entry.Rank > 0 && state is not null)
+        {
+            var proficiency = SkillFormulas.Proficiency(state.Talent, (int)state.MagicMastery, Uses(state, code));
+            Fill(painter, HudArt.SkillTraining, HudArt.SkillTrainingTop, gauge, gauge.Height * proficiency / LearnedSkills.MaxUses);
+        }
     }
 
+    // A gauge filled from the bottom: the sprite's lower part, its rounded top three rows over the fill's edge.
+    private static void Fill(HudPainter painter, string sprite, string top, Rectangle gauge, int filled)
+    {
+        filled = Math.Clamp(filled, 0, gauge.Height);
+        painter.Sprite(sprite, gauge.X, gauge.Bottom - filled, new Rectangle(0, gauge.Height - filled, gauge.Width, filled));
+        if (filled >= 3)
+        {
+            painter.Sprite(top, gauge.X, gauge.Bottom - filled, new Rectangle(0, 0, gauge.Width, 3));
+        }
+    }
+
+    private static int Uses(OwnerState state, uint code) => Owned(state, code) is var at and >= 0 ? state.Skills[at].Uses : 0;
+
     public void Draw(HudPainter painter, Point origin, Point pointer, OwnerState state, HudSkillBindings bindings, ulong skillMaster, bool pressed,
-        bool interactive)
+        bool interactive, Effects.SkillCooldownBook cooldowns = null, double clockMs = 0)
     {
         RefreshRanks(state);
         _hovered = null;
@@ -286,18 +307,13 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
                 // elsewhere the learned skills are in colour.
                 var usable = skillMaster != 0 ? entry.Rank < SkillLearning.MaxRank && (entry.Rank > 0 || CanTrain(index, state)) : entry.Rank > 0;
                 painter.Sprite(usable ? entry.Button : entry.GrayButton, node.X, node.Y);
-                var mastery = HudSkillTreeLayout.MasteryGauge(origin, index - PageFirst);
-                painter.Sprite(entry.Skill.MouseUse == SkillMouseUse.None ? HudArt.SkillGaugePassive : HudArt.SkillGaugeBack, mastery.X, mastery.Y);
-                if (entry.Skill.MouseUse != SkillMouseUse.None && entry.Rank > 0)
+                DrawTraining(painter, HudSkillTreeLayout.MasteryGauge(origin, index - PageFirst), entry, state);
+                if (entry.Rank > 0)
                 {
-                    var trained = SkillFormulas.Proficiency(state.Talent, 0, Uses(state, entry.Skill.Code));
-                    var filled = mastery.Height * trained / LearnedSkills.MaxUses;
-                    painter.ColorBox(new Rectangle(mastery.X + 1, mastery.Bottom - filled, mastery.Width - 2, filled), 70, 210, 90, 230);
+                    var ready = HudSkillTreeLayout.ReadyGauge(origin, index - PageFirst);
+                    var charged = (int)((1f - (cooldowns?.Fraction(entry.Skill.Code, clockMs) ?? 0f)) * ready.Height);
+                    Fill(painter, HudArt.SkillGauge, HudArt.SkillGauge, ready, charged);
                 }
-
-                var rank = HudSkillTreeLayout.RankGauge(origin, index - PageFirst);
-                var length = Math.Clamp(entry.Rank, 0, SkillLearning.MaxRank) * rank.Height / SkillLearning.MaxRank;
-                painter.Sprite(HudArt.SkillGauge, rank.X, rank.Bottom - length, new Rectangle(0, rank.Height - length, rank.Width, length));
                 DrawShortcut(painter, node, entry.Skill.Code, bindings);
             }
 
@@ -430,20 +446,23 @@ public sealed class HudSkillsPanel(SpriteFont font, HudSprites sprites)
 
         var skills = Classes.Get(_class).Skills;
         return SkillLearning.CanTrain(skills, index, code => Rank(state, code), state.Level, state.Tier, state.SkillPoints, state.EliteSkillPoints)
-            && state.Money >= SkillLearning.Price(index, Rank(state, skills[index].Code));
+            && state.Money >= SkillLearning.Price(index, Rank(state, skills[index].Code), Tax);
     }
 
-    private static int Rank(OwnerState state, uint code)
+    private static int Rank(OwnerState state, uint code) => Owned(state, code) is var at and >= 0 ? state.Skills[at].Rank : 0;
+
+    // The owner's entry for the skill (an index loop: the list is read every frame), or -1.
+    private static int Owned(OwnerState state, uint code)
     {
-        foreach (var skill in state.Skills)
+        for (var index = 0; index < state.Skills.Count; index++)
         {
-            if (skill.Code == code)
+            if (state.Skills[index].Code == code)
             {
-                return skill.Rank;
+                return index;
             }
         }
 
-        return 0;
+        return -1;
     }
 
     private static void DrawLines(HudPainter painter, HudLayout layout, Point anchor, string title, string[] lines)

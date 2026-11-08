@@ -411,7 +411,7 @@ public sealed partial class RemoteEntityManager
             if (entity is RemoteModelEntity { Kind: EntityKind.Monster } monster && monster.Actor.IsValid)
             {
                 into.Add(new PristonTale.Gameplay.Effects.MonsterActorView(id, monster.Actor, monster.SoundCode, monster.Level, monster.Scale,
-                    monster.DrawnPosition, monster.RenderFacing, monster.IsDead, monster.MonsterClass == (int)MonsterClass.Hammer));
+                    monster.DrawnPosition, monster.RenderFacing, monster.IsDead, monster.MonsterClass == (int)MonsterClass.Hammer, _summonOwners.ContainsKey(id)));
             }
         }
     }
@@ -752,6 +752,21 @@ public sealed partial class RemoteEntityManager
 
         soundCode = 0;
         position = default;
+        return false;
+    }
+
+    // A living remote player's render position and clan (0 for none).
+    public bool TryGetLivingPlayer(ulong entityId, out XnaVector3 position, out long clanId)
+    {
+        if (_entities.TryGetValue(entityId, out var entity) && !entity.IsDead && _playerAppearances.TryGetValue(entityId, out var player))
+        {
+            position = entity.RenderPosition;
+            clanId = player.ClanId;
+            return true;
+        }
+
+        position = default;
+        clanId = 0;
         return false;
     }
 

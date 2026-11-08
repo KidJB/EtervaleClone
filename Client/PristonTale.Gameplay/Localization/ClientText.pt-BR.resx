@@ -15,12 +15,90 @@
   <data name="Attribute.Spirit" xml:space="preserve"><value>Espírito</value></data>
   <data name="Attribute.Strength" xml:space="preserve"><value>Força</value></data>
   <data name="Attribute.Talent" xml:space="preserve"><value>Talento</value></data>
+  <data name="Bellatra.Back" xml:space="preserve"><value>Voltar</value></data>
+  <data name="Bellatra.Chief" xml:space="preserve"><value>Chefe: {0}</value></data>
+  <data name="Bellatra.ChiefOnly" xml:space="preserve"><value>Só o chefe do clã resgata a renda.</value></data>
+  <data name="Bellatra.ChiefRedeems" xml:space="preserve"><value>Como chefe, você pode resgatá-la.</value></data>
+  <data name="Bellatra.HowMuch" xml:space="preserve"><value>Quanto?</value></data>
+  <data name="Bellatra.Income" xml:space="preserve"><value>Renda do seu clã: {0} de ouro</value></data>
+  <data name="Bellatra.MyScore" xml:space="preserve"><value>Sua pontuação</value></data>
+  <data name="Bellatra.NoOperator" xml:space="preserve"><value>Nenhum clã administra a Bellatra hoje.</value></data>
+  <data name="Bellatra.NoRanking" xml:space="preserve"><value>Nenhum clã jogou a Bellatra ontem.</value></data>
+  <data name="Bellatra.Operator" xml:space="preserve"><value>Clã administrador: {0}</value></data>
+  <data name="Bellatra.Outcome.Cleared" xml:space="preserve"><value>Parabéns! A Bellatra terminou.</value></data>
+  <data name="Bellatra.Outcome.GoesOn" xml:space="preserve"><value>Etapa concluída! Sua equipe segue.</value></data>
+  <data name="Bellatra.Outcome.Out" xml:space="preserve"><value>Sua equipe foi eliminada.</value></data>
+  <data name="Bellatra.Over" xml:space="preserve"><value>A partida terminou</value></data>
+  <data name="Bellatra.RankLine" xml:space="preserve"><value>{0}. {1} - {2} pontos</value></data>
+  <data name="Bellatra.Ranking" xml:space="preserve"><value>Ranking</value></data>
+  <data name="Bellatra.Redeem" xml:space="preserve"><value>Resgatar</value></data>
+  <data name="Bellatra.Round" xml:space="preserve"><value>Rodada {0}</value></data>
+  <data name="Bellatra.Secretary" xml:space="preserve"><value>Secretária da Bellatra</value></data>
+  <data name="Bellatra.Status.Busy" xml:space="preserve"><value>Você está ocupado com outra coisa.</value></data>
+  <data name="Bellatra.Status.NotChief" xml:space="preserve"><value>Só o chefe do clã resgata a renda.</value></data>
+  <data name="Bellatra.Status.NotEnoughBalance" xml:space="preserve"><value>A renda do seu clã não chega a esse valor.</value></data>
+  <data name="Bellatra.Status.OutOfReach" xml:space="preserve"><value>Você está longe demais da secretária.</value></data>
+  <data name="Bellatra.Status.TooMuchGold" xml:space="preserve"><value>Você não pode carregar tanto ouro.</value></data>
+  <data name="Bellatra.Status.Unavailable" xml:space="preserve"><value>A secretária da Bellatra não está disponível agora.</value></data>
+  <data name="Bellatra.Tax" xml:space="preserve"><value>Imposto sobre os prêmios: {0}</value></data>
+  <data name="Bellatra.Team" xml:space="preserve"><value>Equipe {0}</value></data>
+  <data name="Bellatra.Title" xml:space="preserve"><value>Bellatra</value></data>
+  <data name="Bellatra.ToRedeem" xml:space="preserve"><value>Ouro a resgatar</value></data>
+  <data name="Bellatra.Waiting" xml:space="preserve"><value>Aguardando a rodada</value></data>
   <data name="Brood.Demon" xml:space="preserve"><value>Demônio</value></data>
   <data name="Brood.Mechanic" xml:space="preserve"><value>Mecânico</value></data>
   <data name="Brood.Mutant" xml:space="preserve"><value>Mutante</value></data>
   <data name="Brood.Normal" xml:space="preserve"><value>Normal</value></data>
   <data name="Brood.Undead" xml:space="preserve"><value>Morto-vivo</value></data>
   <data name="Brood.User" xml:space="preserve"><value>Jogador</value></data>
+  <data name="Castle.AbsorbEffect" xml:space="preserve"><value>absorção +{0}</value></data>
+  <data name="Castle.Back" xml:space="preserve"><value>Voltar</value></data>
+  <data name="Castle.ChiefOnly" xml:space="preserve"><value>Só o líder do clã altera o castelo.</value></data>
+  <data name="Castle.Cost" xml:space="preserve"><value>Custo: {0} de ouro</value></data>
+  <data name="Castle.DamageEffect" xml:space="preserve"><value>dano +{0}%</value></data>
+  <data name="Castle.EvasionEffect" xml:space="preserve"><value>esquiva de {0}% dos golpes</value></data>
+  <data name="Castle.Fire" xml:space="preserve"><value>Fogo</value></data>
+  <data name="Castle.HowMuch" xml:space="preserve"><value>Quanto ouro</value></data>
+  <data name="Castle.Ice" xml:space="preserve"><value>Gelo</value></data>
+  <data name="Castle.Lightning" xml:space="preserve"><value>Raio</value></data>
+  <data name="Castle.Mercenaries" xml:space="preserve"><value>Mercenários</value></data>
+  <data name="Castle.MercenariesLine" xml:space="preserve"><value>Mercenários: {0} (até {1} de cada)</value></data>
+  <data name="Castle.MercenaryA" xml:space="preserve"><value>Milícia de Ricarten</value></data>
+  <data name="Castle.MercenaryB" xml:space="preserve"><value>Guarda de Ricarten</value></data>
+  <data name="Castle.MercenaryC" xml:space="preserve"><value>Guarda real de Bless</value></data>
+  <data name="Castle.MercenaryLine" xml:space="preserve"><value>{0}: {1}/{2} ({3} cada)</value></data>
+  <data name="Castle.NoSkill" xml:space="preserve"><value>nenhuma</value></data>
+  <data name="Castle.NoTower" xml:space="preserve"><value>nenhuma</value></data>
+  <data name="Castle.Reset" xml:space="preserve"><value>Desfazer</value></data>
+  <data name="Castle.Save" xml:space="preserve"><value>Salvar</value></data>
+  <data name="Castle.Skill" xml:space="preserve"><value>Habilidade</value></data>
+  <data name="Castle.SkillLine" xml:space="preserve"><value>{0}: {1}</value></data>
+  <data name="Castle.SkillNow" xml:space="preserve"><value>Habilidade: {0}</value></data>
+  <data name="Castle.SkillTomorrow" xml:space="preserve"><value>Habilidade a partir de amanhã: {0}</value></data>
+  <data name="Castle.Status.Busy" xml:space="preserve"><value>Termine o que está fazendo primeiro.</value></data>
+  <data name="Castle.Status.DuringSiege" xml:space="preserve"><value>Não durante um cerco.</value></data>
+  <data name="Castle.Status.InvalidSetup" xml:space="preserve"><value>Essa mudança não é possível.</value></data>
+  <data name="Castle.Status.NotChief" xml:space="preserve"><value>Só o líder do clã pode fazer isso.</value></data>
+  <data name="Castle.Status.NotEnoughGold" xml:space="preserve"><value>Você não tem ouro suficiente.</value></data>
+  <data name="Castle.Status.NotEnoughTreasury" xml:space="preserve"><value>O tesouro não tem tudo isso.</value></data>
+  <data name="Castle.Status.NotOwner" xml:space="preserve"><value>Seu clã não domina o Bless Castle.</value></data>
+  <data name="Castle.Status.OutOfReach" xml:space="preserve"><value>Você está longe demais do mordomo.</value></data>
+  <data name="Castle.Status.TooMuchGold" xml:space="preserve"><value>Você não pode carregar tanto ouro.</value></data>
+  <data name="Castle.Status.Unavailable" xml:space="preserve"><value>O castelo não pode ser alterado agora. Tente de novo.</value></data>
+  <data name="Castle.Tax" xml:space="preserve"><value>Imposto</value></data>
+  <data name="Castle.TaxLine" xml:space="preserve"><value>Imposto: {0} (amanhã {1})</value></data>
+  <data name="Castle.ToWithdraw" xml:space="preserve"><value>tirar do tesouro?</value></data>
+  <data name="Castle.TowerInnerA" xml:space="preserve"><value>Pátio interno A</value></data>
+  <data name="Castle.TowerInnerB" xml:space="preserve"><value>Pátio interno B</value></data>
+  <data name="Castle.TowerInnerC" xml:space="preserve"><value>Pátio interno C</value></data>
+  <data name="Castle.TowerInnerD" xml:space="preserve"><value>Pátio interno D</value></data>
+  <data name="Castle.TowerLine" xml:space="preserve"><value>{0}: {1}  {2}</value></data>
+  <data name="Castle.TowerOuterA" xml:space="preserve"><value>Portão externo A</value></data>
+  <data name="Castle.TowerOuterB" xml:space="preserve"><value>Portão externo B</value></data>
+  <data name="Castle.Towers" xml:space="preserve"><value>Torres de cristal</value></data>
+  <data name="Castle.TowersLine" xml:space="preserve"><value>Torres de cristal: {0} de {1}</value></data>
+  <data name="Castle.Treasury" xml:space="preserve"><value>Tesouro: {0} de ouro</value></data>
+  <data name="Castle.Withdraw" xml:space="preserve"><value>Sacar</value></data>
   <data name="CharSelect.ChooseClass" xml:space="preserve"><value>Escolha uma classe.</value></data>
   <data name="CharSelect.ChooseTribe" xml:space="preserve"><value>Escolha uma tribo.</value></data>
   <data name="CharSelect.ClassModelsFailed" xml:space="preserve"><value>Não foi possível carregar os modelos das classes.</value></data>
@@ -46,6 +124,46 @@
   <data name="CharSelect.ModelsFailed" xml:space="preserve"><value>Não foi possível carregar os modelos dos personagens.</value></data>
   <data name="CharSelect.Unreachable" xml:space="preserve"><value>Não foi possível alcançar o servidor.</value></data>
   <data name="Chat.Frozen" xml:space="preserve"><value>{0} : Falei demais, minha língua congelou! WOW -_-;</value></data>
+  <data name="Clan.Appoint" xml:space="preserve"><value>Nomear vice</value></data>
+  <data name="Clan.Back" xml:space="preserve"><value>Voltar</value></data>
+  <data name="Clan.BelowSix" xml:space="preserve"><value>Menos de 6 membros: faltam {0} dias e {1} horas para recrutar antes de o clã ser dissolvido.</value></data>
+  <data name="Clan.Cancel" xml:space="preserve"><value>Cancelar</value></data>
+  <data name="Clan.ChooseEntrust" xml:space="preserve"><value>Escolha o novo líder (nível igual ou maior que o seu). Custa 300.000 de ouro, e você passa a ser membro.</value></data>
+  <data name="Clan.ChooseExpel" xml:space="preserve"><value>Escolha o membro a expulsar.</value></data>
+  <data name="Clan.ChooseVice" xml:space="preserve"><value>Escolha o membro a nomear vice-líder.</value></data>
+  <data name="Clan.Confirm" xml:space="preserve"><value>Confirmar</value></data>
+  <data name="Clan.ConfirmAppoint" xml:space="preserve"><value>Deseja nomear {0} vice-líder?</value></data>
+  <data name="Clan.ConfirmDisband" xml:space="preserve"><value>Se você dissolver o clã, todas as informações e os membros dele se perdem. Deseja continuar?</value></data>
+  <data name="Clan.ConfirmDischarge" xml:space="preserve"><value>Deseja remover {0} do cargo de vice-líder?</value></data>
+  <data name="Clan.ConfirmEntrust" xml:space="preserve"><value>Passar a liderança para {0} por 300.000 de ouro? Você passará a ser membro.</value></data>
+  <data name="Clan.ConfirmExpel" xml:space="preserve"><value>Deseja expulsar {0} do clã?</value></data>
+  <data name="Clan.ConfirmLeave" xml:space="preserve"><value>Deseja sair do clã {0}?</value></data>
+  <data name="Clan.ConfirmMark" xml:space="preserve"><value>Usar {0} como a marca do clã? Ela ficará assim:</value></data>
+  <data name="Clan.Cost" xml:space="preserve"><value>Formar um clã custa {0} de ouro e exige nível {1}.</value></data>
+  <data name="Clan.Count" xml:space="preserve"><value>Membros: {0} de {1}</value></data>
+  <data name="Clan.Disband" xml:space="preserve"><value>Dissolver</value></data>
+  <data name="Clan.Discharge" xml:space="preserve"><value>Remover vice</value></data>
+  <data name="Clan.Entrust" xml:space="preserve"><value>Passar liderança</value></data>
+  <data name="Clan.Expel" xml:space="preserve"><value>Expulsar</value></data>
+  <data name="Clan.Found" xml:space="preserve"><value>Formar um clã</value></data>
+  <data name="Clan.Intro" xml:space="preserve"><value>Muitos guerreiros com os mesmos objetivos se reúnem pelo mundo e formam um grupo, chamado clã. Os clãs guardam e protegem os seus. Para formar um clã é preciso pagar uma taxa para registrá-lo oficialmente. Deseja formar um clã?</value></data>
+  <data name="Clan.InviteLine" xml:space="preserve"><value>convida você para o clã {0}.</value></data>
+  <data name="Clan.Leave" xml:space="preserve"><value>Sair do clã</value></data>
+  <data name="Clan.Mark" xml:space="preserve"><value>Marca do clã</value></data>
+  <data name="Clan.MarkFolder" xml:space="preserve"><value>Coloque uma imagem (PNG, JPG ou BMP) na pasta ClanMarks ao lado do jogo e escolha-a abaixo. O centro dela vira a marca de {0}x{0}.</value></data>
+  <data name="Clan.MarkLoading" xml:space="preserve"><value>Lendo a imagem...</value></data>
+  <data name="Clan.MarkLooking" xml:space="preserve"><value>Procurando imagens...</value></data>
+  <data name="Clan.MarkUnreadable" xml:space="preserve"><value>Não foi possível ler {0} como imagem.</value></data>
+  <data name="Clan.No" xml:space="preserve"><value>Não</value></data>
+  <data name="Clan.NoMarkFiles" xml:space="preserve"><value>Não há nenhuma imagem na pasta ClanMarks.</value></data>
+  <data name="Clan.RankChief" xml:space="preserve"><value>(líder)</value></data>
+  <data name="Clan.RankVice" xml:space="preserve"><value>(vice)</value></data>
+  <data name="Clan.Registered" xml:space="preserve"><value>O clã está oficialmente registrado.</value></data>
+  <data name="Clan.Registering" xml:space="preserve"><value>Em registro: faltam {0} dias e {1} horas para chegar a 6 membros.</value></data>
+  <data name="Clan.Requirements" xml:space="preserve"><value>Para ser registrado oficialmente, o clã precisa de {0} membros (contando o líder) em até {1} dias, senão é cancelado. Um clã registrado que cair abaixo de {0} membros tem {1} dias para recrutar de novo antes de ser dissolvido.</value></data>
+  <data name="Clan.Title" xml:space="preserve"><value>Mestre de Clã</value></data>
+  <data name="Clan.TypeName" xml:space="preserve"><value>Digite o nome do clã (2 a 16 letras, números, espaços, '-' ou '_') e tecle Enter.</value></data>
+  <data name="Clan.Yes" xml:space="preserve"><value>Sim</value></data>
   <data name="Combat.Evade" xml:space="preserve"><value>Esquivou</value></data>
   <data name="Combat.Miss" xml:space="preserve"><value>Errou</value></data>
   <data name="Count.DoYouWant" xml:space="preserve"><value>Você quer</value></data>
@@ -77,14 +195,64 @@
   <data name="Game.AgedItemMatured" xml:space="preserve"><value>O item em aging amadureceu</value></data>
   <data name="Game.AlreadyApplied" xml:space="preserve"><value>Já foi feito</value></data>
   <data name="Game.AlreadyTalking" xml:space="preserve"><value>Já está falando com este NPC</value></data>
+  <data name="Game.BellatraBossDown" xml:space="preserve"><value>Um chefe caiu ({0} pontos).</value></data>
+  <data name="Game.BellatraCleared" xml:space="preserve"><value>Parabéns! A Bellatra terminou. Você ganhou {0} de ouro.</value></data>
+  <data name="Game.BellatraClosed" xml:space="preserve"><value>Você não pode entrar na Bellatra agora. Volte mais tarde.</value></data>
+  <data name="Game.BellatraEntered" xml:space="preserve"><value>Você já está nesta partida da Bellatra.</value></data>
+  <data name="Game.BellatraLevel" xml:space="preserve"><value>Você ainda não é forte o bastante para entrar na Bellatra (nível {0}). Treine mais e volte.</value></data>
+  <data name="Game.BellatraNoTickets" xml:space="preserve"><value>Os ingressos da Bellatra são vendidos ao amanhecer (horas {0} e {1} do jogo), antes de uma partida. Volte nesse horário.</value></data>
+  <data name="Game.BellatraOut" xml:space="preserve"><value>Sua equipe foi eliminada ({0}º lugar). Você ganhou {1} de ouro.</value></data>
+  <data name="Game.BellatraTeamFull" xml:space="preserve"><value>Todos os ingressos desta equipe estão esgotados.</value></data>
+  <data name="Game.BellatraTicket" xml:space="preserve"><value>Os ingressos da Bellatra estão à venda: {0} de ouro.</value></data>
   <data name="Game.BossTime" xml:space="preserve"><value>Hora do chefe: XX:{0}</value></data>
   <data name="Game.CannotDrop" xml:space="preserve"><value>Este item não pode ser jogado fora</value></data>
   <data name="Game.CannotUseYet" xml:space="preserve"><value>O item ainda não pode ser usado</value></data>
+  <data name="Game.CastleTaken" xml:space="preserve"><value>O clã {0} conquistou o Bless Castle.</value></data>
   <data name="Game.CharacterBusy" xml:space="preserve"><value>Um salvamento ou outra operação do personagem está pendente; tente de novo</value></data>
   <data name="Game.CharacterUnchanged" xml:space="preserve"><value>O armazenamento recusou a operação; o personagem não mudou</value></data>
-  <data name="Game.ClanOnly" xml:space="preserve"><value>Só membros de um clã regular podem usar este item</value></data>
+  <data name="Game.ClanAlreadyInClan" xml:space="preserve"><value>Você já está em um clã.</value></data>
+  <data name="Game.ClanBelowSix" xml:space="preserve"><value>O clã tem menos de {1} membros. Recrute mais em até {0} dias ou ele será dissolvido.</value></data>
+  <data name="Game.ClanBusy" xml:space="preserve"><value>Feche a troca ou a sua loja pessoal primeiro.</value></data>
+  <data name="Game.ClanCapacityTooLow" xml:space="preserve"><value>Nesse nível o novo líder não conseguiria manter todos os membros.</value></data>
+  <data name="Game.ClanChiefCannotLeave" xml:space="preserve"><value>O líder não pode sair do clã: passe a liderança ou dissolva o clã.</value></data>
+  <data name="Game.ClanChiefChanged" xml:space="preserve"><value>A liderança do clã passou de {0} para {1}.</value></data>
+  <data name="Game.ClanChiefOnAccount" xml:space="preserve"><value>Você já tem um líder de clã nesta conta. Só pode haver um líder de clã por conta.</value></data>
+  <data name="Game.ClanDisbanded" xml:space="preserve"><value>O clã {0} foi dissolvido.</value></data>
+  <data name="Game.ClanExpelled" xml:space="preserve"><value>{0} foi expulso do clã.</value></data>
+  <data name="Game.ClanFounded" xml:space="preserve"><value>O clã [{0}] foi fundado. Recrute {1} membros (contando o líder) em até {2} dias para registrá-lo.</value></data>
+  <data name="Game.ClanFull" xml:space="preserve"><value>Não é possível recrutar mais membros.</value></data>
+  <data name="Game.ClanInviteRefused" xml:space="preserve"><value>{0} recusou entrar no clã.</value></data>
+  <data name="Game.ClanInviteSent" xml:space="preserve"><value>O convite do clã foi enviado para {0}.</value></data>
+  <data name="Game.ClanJoinCooldown" xml:space="preserve"><value>Um personagem não pode entrar em um clã por {0} dias depois que o clã dele foi dissolvido.</value></data>
+  <data name="Game.ClanJoined" xml:space="preserve"><value>{0} entrou no clã.</value></data>
+  <data name="Game.ClanLeft" xml:space="preserve"><value>{0} saiu do clã.</value></data>
+  <data name="Game.ClanLevelTooLow" xml:space="preserve"><value>É preciso ter nível {0} para fundar um clã.</value></data>
+  <data name="Game.ClanMarkChanged" xml:space="preserve"><value>O clã [{0}] tem uma nova marca.</value></data>
+  <data name="Game.ClanMarkUnavailable" xml:space="preserve"><value>Ainda não é possível enviar marcas de clã.</value></data>
+  <data name="Game.ClanNameInvalid" xml:space="preserve"><value>O nome do clã tem de {0} a {1} letras, números, espaços, '-' ou '_'.</value></data>
+  <data name="Game.ClanNameTaken" xml:space="preserve"><value>Esse nome de clã já existe. Escolha outro.</value></data>
+  <data name="Game.ClanNoInvitation" xml:space="preserve"><value>O convite do clã não é mais válido.</value></data>
+  <data name="Game.ClanNotChief" xml:space="preserve"><value>Só o líder do clã pode fazer isso.</value></data>
+  <data name="Game.ClanNotInClan" xml:space="preserve"><value>Você não está em um clã.</value></data>
+  <data name="Game.ClanNotMember" xml:space="preserve"><value>Esse personagem não é membro do clã.</value></data>
+  <data name="Game.ClanNotRecruiter" xml:space="preserve"><value>Só o líder ou o vice-líder do clã pode recrutar.</value></data>
+  <data name="Game.ClanNotRegistered" xml:space="preserve"><value>O clã precisa estar oficialmente registrado primeiro.</value></data>
+  <data name="Game.ClanNotVice" xml:space="preserve"><value>Esse membro não é o vice-líder.</value></data>
+  <data name="Game.ClanOnly" xml:space="preserve"><value>Só membros de um clã podem usar este item</value></data>
+  <data name="Game.ClanPetOwned" xml:space="preserve"><value>Você só pode invocar um de cada vez.</value></data>
+  <data name="Game.ClanPetsNearby" xml:space="preserve"><value>O seu clã já tem três deles aqui.</value></data>
+  <data name="Game.ClanRegistered" xml:space="preserve"><value>Parabéns! O clã [{0}] agora está oficialmente registrado.</value></data>
+  <data name="Game.ClanTargetInClan" xml:space="preserve"><value>Esse jogador já está em um clã.</value></data>
+  <data name="Game.ClanTargetLevelTooLow" xml:space="preserve"><value>O novo líder precisa ter o seu nível ou mais.</value></data>
+  <data name="Game.ClanTargetNotFound" xml:space="preserve"><value>Esse jogador não está disponível.</value></data>
+  <data name="Game.ClanUnavailable" xml:space="preserve"><value>O serviço de clãs está indisponível. Tente novamente mais tarde.</value></data>
+  <data name="Game.ClanViceAppointed" xml:space="preserve"><value>{0} foi nomeado vice-líder.</value></data>
+  <data name="Game.ClanViceDischarged" xml:space="preserve"><value>{0} deixou de ser vice-líder.</value></data>
+  <data name="Game.ClanViceExists" xml:space="preserve"><value>O clã já tem um vice-líder.</value></data>
+  <data name="Game.ClanYouWereExpelled" xml:space="preserve"><value>Você foi expulso do clã {0}.</value></data>
   <data name="Game.CloseShopFirst" xml:space="preserve"><value>Feche sua loja pessoal primeiro</value></data>
   <data name="Game.CloseTradeFirst" xml:space="preserve"><value>Feche a janela de troca primeiro</value></data>
+  <data name="Game.ConfirmAcceptQuest" xml:space="preserve"><value>Aceitar a quest</value></data>
   <data name="Game.ConfirmBattleZone" xml:space="preserve"><value>ir para a zona de batalha?</value></data>
   <data name="Game.ConfirmCarryOut" xml:space="preserve"><value>cumprir a quest?</value></data>
   <data name="Game.ConfirmDoYouWanna" xml:space="preserve"><value>Você quer</value></data>
@@ -98,6 +266,7 @@
   <data name="Game.ConfirmRedistribute" xml:space="preserve"><value>redistribuir?</value></data>
   <data name="Game.ConfirmSearchQuest" xml:space="preserve"><value>procurar a quest?</value></data>
   <data name="Game.ConfirmTheQuest" xml:space="preserve"><value>a quest?</value></data>
+  <data name="Game.ConfirmWantToAccept" xml:space="preserve"><value>deseja aceitar?</value></data>
   <data name="Game.ConfirmWantToDo" xml:space="preserve"><value>quer fazer?</value></data>
   <data name="Game.ConnectionError" xml:space="preserve"><value>Erro de conexão. Tente de novo.</value></data>
   <data name="Game.ContactListFull" xml:space="preserve"><value>A lista está cheia</value></data>
@@ -109,8 +278,13 @@
   <data name="Game.DeadCannotUse" xml:space="preserve"><value>Não é possível usar itens enquanto está morto</value></data>
   <data name="Game.DeathPenaltyReduced" xml:space="preserve"><value>Penalidade de EXP por morte reduzida em 1</value></data>
   <data name="Game.DropOutOfReach" xml:space="preserve"><value>O item sumiu ou está fora de alcance</value></data>
+  <data name="Game.EliteQuestDone" xml:space="preserve"><value>{0} : concluída</value></data>
+  <data name="Game.EliteQuestExpired" xml:space="preserve"><value>O tempo limite da quest acabou.</value></data>
+  <data name="Game.EliteQuestProgress" xml:space="preserve"><value>{0} : {1}/{2}</value></data>
+  <data name="Game.EliteSkillPointsGained" xml:space="preserve"><value>Pontos de skill de elite aumentaram em +{0}.</value></data>
   <data name="Game.EnterWorldFirst" xml:space="preserve"><value>Entre no mundo primeiro</value></data>
   <data name="Game.FemaleCannotUse" xml:space="preserve"><value>A personagem feminina não pode usar</value></data>
+  <data name="Game.FountainPotion" xml:space="preserve"><value>&gt; {0} recebeu uma Poção de Mana Mística da Fonte das Almas [Restam: {1}]</value></data>
   <data name="Game.FuryLost" xml:space="preserve"><value>Derrota no confronto com Fury.</value></data>
   <data name="Game.FuryTitle" xml:space="preserve"><value>O fantasma de Fury</value></data>
   <data name="Game.FuryWon" xml:space="preserve"><value>Vitória no confronto com Fury.</value></data>
@@ -136,6 +310,7 @@
   <data name="Game.LifeFifteen" xml:space="preserve"><value>HP aumentado em +15</value></data>
   <data name="Game.LuckyBagHeld" xml:space="preserve"><value>A lucky bag continha {0}</value></data>
   <data name="Game.MaleCannotUse" xml:space="preserve"><value>O personagem masculino não pode usar</value></data>
+  <data name="Game.MercenaryLimit" xml:space="preserve"><value>Você excedeu o limite de invocações</value></data>
   <data name="Game.MissionTimedOut" xml:space="preserve"><value>A missão falhou por tempo esgotado.</value></data>
   <data name="Game.Name" xml:space="preserve"><value>{0}</value></data>
   <data name="Game.NoClassChange" xml:space="preserve"><value>O mestre não tem mudança de classe para você agora</value></data>
@@ -186,7 +361,9 @@
   <data name="Game.QuestItemSlowed" xml:space="preserve"><value>A velocidade de ataque do item da quest diminuiu</value></data>
   <data name="Game.QuestKillCount" xml:space="preserve"><value>Quest&gt; {0}: faltam {1} monstros</value></data>
   <data name="Game.QuestMovedOn" xml:space="preserve"><value>A quest avançou; fale com o NPC de novo</value></data>
+  <data name="Game.QuestName" xml:space="preserve"><value>{0}</value></data>
   <data name="Game.QuestTitle" xml:space="preserve"><value> Q U E S T </value></data>
+  <data name="Game.RegisteredClanOnly" xml:space="preserve"><value>Só membros de um clã registrado podem usar este item</value></data>
   <data name="Game.RequestRefused" xml:space="preserve"><value>O pedido foi recusado</value></data>
   <data name="Game.RewardReceived" xml:space="preserve"><value>Itens recebidos como recompensa.</value></data>
   <data name="Game.SameAttributeRunning" xml:space="preserve"><value>Um item com o mesmo atributo já está em uso</value></data>
@@ -204,6 +381,12 @@
   <data name="Game.ShopSold" xml:space="preserve"><value>{0} comprou {1} de {2} por {3} de ouro</value></data>
   <data name="Game.ShopSoldOut" xml:space="preserve"><value>O item já foi vendido</value></data>
   <data name="Game.ShopTradePending" xml:space="preserve"><value>Uma troca ainda está pendente; tente de novo</value></data>
+  <data name="Game.SiegeInAnHour" xml:space="preserve"><value>O cerco ao Bless Castle começa em 1 hora. Preparem-se.</value></data>
+  <data name="Game.SiegeInHalfAnHour" xml:space="preserve"><value>O cerco ao Bless Castle começa em 30 minutos. Preparem-se.</value></data>
+  <data name="Game.SiegeLeague" xml:space="preserve"><value>A liga do Bless Castle começou: os cercos se seguem por duas horas.</value></data>
+  <data name="Game.SiegeOver" xml:space="preserve"><value>O cerco ao Bless Castle terminou. Obrigado por participarem.</value></data>
+  <data name="Game.SiegeRestartsSoon" xml:space="preserve"><value>O cerco ao Bless Castle vai recomeçar. Preparem-se para participar.</value></data>
+  <data name="Game.SiegeStarted" xml:space="preserve"><value>O cerco ao Bless Castle começou. Boa sorte a todos os jogadores.</value></data>
   <data name="Game.SkillMasterAway" xml:space="preserve"><value>Aproxime-se, vivo, do mestre de habilidades da sua cidade</value></data>
   <data name="Game.SkillPointName" xml:space="preserve"><value>Pontos de habilidade</value></data>
   <data name="Game.SkillPointOne" xml:space="preserve"><value>pontos de habilidade aumentados em 1</value></data>
@@ -215,6 +398,7 @@
   <data name="Game.StatFiveSkillOne" xml:space="preserve"><value>pontos de atributo e de habilidade aumentados em 5 e 1</value></data>
   <data name="Game.StatFiveSkillTwo" xml:space="preserve"><value>pontos de atributo e de habilidade aumentados em 5 e 2</value></data>
   <data name="Game.StatPointsFive" xml:space="preserve"><value>pontos de atributo aumentados em 5</value></data>
+  <data name="Game.StatPointsGained" xml:space="preserve"><value>Pontos de status aumentaram em +{0}.</value></data>
   <data name="Game.StatsReset" xml:space="preserve"><value>Seus pontos de atributo podem ser distribuídos de novo</value></data>
   <data name="Game.StorageRejected" xml:space="preserve"><value>O armazenamento recusou a operação; nada mudou</value></data>
   <data name="Game.SummonLimit" xml:space="preserve"><value>Você só pode ter {0} invocações de cristal ao mesmo tempo</value></data>
@@ -237,6 +421,10 @@
   <data name="Game.TradeTooMany" xml:space="preserve"><value>Excede o número máximo de itens da troca</value></data>
   <data name="Game.TrainingReset" xml:space="preserve"><value>Sua contagem de treino foi reiniciada.</value></data>
   <data name="Game.TwentyBargons" xml:space="preserve"><value>Você matou 20 Bargons.</value></data>
+  <data name="Game.UnionCoreAway" xml:space="preserve"><value>Não é possível usar o Union Core: esse membro do clã não pode ser alcançado agora.</value></data>
+  <data name="Game.UnionCoreBound" xml:space="preserve"><value>O Union Core foi registrado em você: o membro do clã que usá-lo virá até você.</value></data>
+  <data name="Game.UnionCoreOwn" xml:space="preserve"><value>Você não pode usar o seu próprio Union Core.</value></data>
+  <data name="Game.UnionCoreWrongClan" xml:space="preserve"><value>Esse Union Core pertence a outro clã.</value></data>
   <data name="Game.UseDelay" xml:space="preserve"><value>Espere um momento antes de usar outro</value></data>
   <data name="Game.VitalityForty" xml:space="preserve"><value>Vitalidade aumentada em 40</value></data>
   <data name="Game.WarehouseChanged" xml:space="preserve"><value>O armazém mudou em outro lugar; abra de novo</value></data>
@@ -343,6 +531,7 @@
   <data name="ItemKind.Sword" xml:space="preserve"><value>Espada</value></data>
   <data name="ItemKind.ThrowingWeapon" xml:space="preserve"><value>Arma de arremesso</value></data>
   <data name="ItemKind.Vambrace" xml:space="preserve"><value>Vambrace</value></data>
+  <data name="ItemUse.BindUnionCore" xml:space="preserve"><value>Registrar o Union Core em você?</value></data>
   <data name="ItemUse.Confirm" xml:space="preserve"><value>Você quer</value></data>
   <data name="ItemUse.Confirm2" xml:space="preserve"><value>usar este item?</value></data>
   <data name="ItemUse.ConnectionError" xml:space="preserve"><value>Erro de conexão. Confira o inventário antes de tentar de novo.</value></data>
@@ -362,6 +551,11 @@
   <data name="Login.Subtitle" xml:space="preserve"><value>Sua aventura começa aqui</value></data>
   <data name="Login.Unreachable" xml:space="preserve"><value>Não foi possível alcançar o servidor do jogo.</value></data>
   <data name="Loot.Gold" xml:space="preserve"><value>{0} de ouro</value></data>
+  <data name="Manufacture.Done" xml:space="preserve"><value>O item foi fabricado.</value></data>
+  <data name="Manufacture.Failed" xml:space="preserve"><value>A fabricação do item falhou.</value></data>
+  <data name="Manufacture.Random" xml:space="preserve"><value>Aleatório</value></data>
+  <data name="Manufacture.RunesPlaced" xml:space="preserve"><value>Com runas colocadas, a receita não pode ser trocada.</value></data>
+  <data name="Manufacture.WrongRune" xml:space="preserve"><value>Esta não é a forma certa de fabricar.</value></data>
   <data name="Mix.Bonus.Absorb" xml:space="preserve"><value>Taxa de absorção +{0}</value></data>
   <data name="Mix.Bonus.AttackRating" xml:space="preserve"><value>Taxa de ataque +{0}</value></data>
   <data name="Mix.Bonus.AttackSpeed" xml:space="preserve"><value>Velocidade de ataque +{0}</value></data>
@@ -387,6 +581,9 @@
   <data name="Mix.Reconstructed" xml:space="preserve"><value>O item foi reconstruído.</value></data>
   <data name="Mix.Refined" xml:space="preserve"><value>Os sheltoms foram refinados em force orbs.</value></data>
   <data name="Mix.Result" xml:space="preserve"><value>Resultado da mistura: {0}</value></data>
+  <data name="MixReset.CannotReset" xml:space="preserve"><value>Só um item misturado pode ter a mistura desfeita.</value></data>
+  <data name="MixReset.Done" xml:space="preserve"><value>A mistura do item foi desfeita.</value></data>
+  <data name="MixReset.ItemFirst" xml:space="preserve"><value>Coloque primeiro o item misturado.</value></data>
   <data name="Npc.Bought" xml:space="preserve"><value>Comprado.</value></data>
   <data name="Npc.Destination" xml:space="preserve"><value>{0}  {1} de ouro</value></data>
   <data name="Npc.DestinationLevel" xml:space="preserve"><value>{0}  {1} de ouro  (Nv {2})</value></data>
@@ -517,6 +714,15 @@
   <data name="Shop.Price" xml:space="preserve"><value>Preço: {0} de ouro</value></data>
   <data name="Shop.RepairCost" xml:space="preserve"><value>Conserto: {0} de ouro</value></data>
   <data name="Shop.SellsFor" xml:space="preserve"><value>Vende por {0} de ouro</value></data>
+  <data name="Siege.Crystals" xml:space="preserve"><value>Torres de cristal {0}/{1}</value></data>
+  <data name="Siege.DoorDown" xml:space="preserve"><value>Portão do castelo derrubado</value></data>
+  <data name="Siege.DoorStands" xml:space="preserve"><value>Portão do castelo de pé</value></data>
+  <data name="Siege.Ended" xml:space="preserve"><value>O cerco ao Bless Castle terminou.</value></data>
+  <data name="Siege.HeldBy" xml:space="preserve"><value>Defendido por {0}</value></data>
+  <data name="Siege.League" xml:space="preserve"><value>LIGA DO BLESS CASTLE</value></data>
+  <data name="Siege.NoOwner" xml:space="preserve"><value>Nenhum clã domina o castelo</value></data>
+  <data name="Siege.Title" xml:space="preserve"><value>BLESS CASTLE</value></data>
+  <data name="Siege.Won" xml:space="preserve"><value>Seu clã domina o Bless Castle!</value></data>
   <data name="Skill.AlreadyActive" xml:space="preserve"><value>Esse efeito ainda está ativo.</value></data>
   <data name="Skill.CannotUse" xml:space="preserve"><value>A habilidade não pode ser usada agora.</value></data>
   <data name="Skill.InVillage" xml:space="preserve"><value>Habilidades não podem ser usadas na cidade.</value></data>
@@ -591,6 +797,10 @@
   <data name="SkillWindow.TrainTitle" xml:space="preserve"><value>Treinar habilidade/magia</value></data>
   <data name="SkillWindow.Unavailable" xml:space="preserve"><value>Indisponível nesta versão</value></data>
   <data name="SkillWindow.Unlearned" xml:space="preserve"><value>Não aprendida | Prévia do rank 1</value></data>
+  <data name="Smelt.CannotSmelt" xml:space="preserve"><value>Só três minérios ou cristais do mesmo tipo e o sheltom deles podem ser fundidos.</value></data>
+  <data name="Smelt.Done" xml:space="preserve"><value>A fundição foi concluída.</value></data>
+  <data name="Smelt.Failed" xml:space="preserve"><value>A fundição do item falhou.</value></data>
+  <data name="Smelt.NotSame" xml:space="preserve"><value>Estes não são minérios ou cristais do mesmo tipo.</value></data>
   <data name="Stat.Absorption" xml:space="preserve"><value>Absorção</value></data>
   <data name="Stat.AbsorptionVsUndead" xml:space="preserve"><value>Absorção contra mortos-vivos</value></data>
   <data name="Stat.Agility" xml:space="preserve"><value>Agilidade</value></data>
@@ -714,7 +924,9 @@
   <data name="Usable.SoulStone" xml:space="preserve"><value>Liberta uma alma hostil por {0} minutos.</value></data>
   <data name="Usable.TeleportCore" xml:space="preserve"><value>Teleporta você para o mapa que escolher.</value></data>
   <data name="Usable.TrainTier" xml:space="preserve"><value>Treina por completo as habilidades do tier {0} da classe.</value></data>
+  <data name="Usable.UnionCoreName" xml:space="preserve"><value>Nome: {0}</value></data>
   <data name="Usable.VirtualLife" xml:space="preserve"><value>Vida virtual nv. {0}</value></data>
   <data name="WingGate.MoveThere" xml:space="preserve"><value>ir para lá?</value></data>
   <data name="WingGate.Title" xml:space="preserve"><value>Portal</value></data>
+  <data name="Workbench.TakeBack" xml:space="preserve"><value>Clique direito: retirar</value></data>
 </root>

@@ -12,12 +12,13 @@ public enum ItemTransferKind : short
     GameMasterGift = 6,
     // An item taken from the account's Item Distributor into the bag, or sent from the bag to another account's.
     ItemBoxTaken = 7,
-    ItemBoxSent = 8
+    ItemBoxSent = 8,
+    CastleFountain = 9
 }
 
 // One item, part of a stack, or an amount of gold (ItemCode null) that moved. A null character is the other end the kind
-// names: the account warehouse (AccountId), the ground (FieldId) or a game master. TransferId groups the rows of one
-// transfer; a throw and the pickup of what it threw share the ground drop's id.
+// names: the account warehouse (AccountId), the ground (FieldId), a game master or Bless Castle's soul fountain.
+// TransferId groups the rows of one transfer; a throw and the pickup of what it threw share the ground drop's id.
 public sealed record ItemTransferRecord(
     DateTime OccurredAt,
     ItemTransferKind Kind,

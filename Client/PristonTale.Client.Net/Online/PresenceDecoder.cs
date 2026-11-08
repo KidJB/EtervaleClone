@@ -143,6 +143,29 @@ internal sealed class PresenceDecoder : IEventHandleReader
             EtervaleOpcodes.CloseRequest => OnCloseRequest(packet),
             EtervaleOpcodes.PartyMembers => OnPartyMembers(PartyMembersPacket.Read(packet)),
             EtervaleOpcodes.PartyRequest => OnPartyRequest(PartyRequestPacket.Read(packet)),
+            EtervaleOpcodes.ClanState => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Clan = Clan(ClanStatePacket.Read(packet)) },
+            EtervaleOpcodes.CastleState => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Castle = Castle(CastleStatePacket.Read(packet)) },
+            EtervaleOpcodes.CastleOwnerState => new PresenceUpdate(_tick, [], [], [], [], FieldId) { CastleOwner = CastleOwner(CastleOwnerStatePacket.Read(packet)) },
+            EtervaleOpcodes.BellatraBoard => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Bellatra = Bellatra(BellatraBoardPacket.Read(packet)) },
+            EtervaleOpcodes.BellatraClanState => new PresenceUpdate(_tick, [], [], [], [], FieldId) { BellatraClan = BellatraClan(BellatraClanStatePacket.Read(packet)) },
+            EtervaleOpcodes.BellatraClanResult => new PresenceUpdate(_tick, [], [], [], [], FieldId)
+            {
+                BellatraClanResult = BellatraClanResultPacket.Read(packet) is var bellatra ? new BellatraClanResultInfo(bellatra.Action, (Contracts.Social.BellatraClanStatus)bellatra.Status) : null
+            },
+            EtervaleOpcodes.CastleOwnerResult => new PresenceUpdate(_tick, [], [], [], [], FieldId)
+            {
+                CastleOwnerResult = CastleOwnerResultPacket.Read(packet) is var result
+                    ? new CastleOwnerResultInfo(result.Action, (Simulation.Social.Castle.CastleOwnerStatus)result.Status)
+                    : null
+            },
+            EtervaleOpcodes.ClanInvite => new PresenceUpdate(_tick, [], [], [], [], FieldId)
+            {
+                ClanInvitation = ClanInvitePacket.Read(packet) is var invite ? new ClanInvitationInfo(invite.RecruiterId, invite.ClanName, invite.ChiefName) : null
+            },
+            EtervaleOpcodes.ClanResult => new PresenceUpdate(_tick, [], [], [], [], FieldId)
+            {
+                ClanResult = ClanResultPacket.Read(packet) is var result ? new ClanResultInfo((byte)result.Action, (Simulation.Social.Clans.ClanStatus)result.Status) : null
+            },
             EtervaleOpcodes.TradeDetails => OnTradeDetails(TradeDetailsPacket.Read(packet)),
             EtervaleOpcodes.TradeState => OnTradeState(TradeStatePacket.Read(packet)),
             EtervaleOpcodes.TradeAsked => OnTradeAsked(TradeAskedPacket.Read(packet)),
@@ -285,6 +308,31 @@ internal sealed class PresenceDecoder : IEventHandleReader
 
         return new PresenceUpdate(_tick, [], [], [], [], FieldId) { Party = new PartyInfo(members) };
     }
+
+    private static ClanInfo Clan(ClanStatePacket packet) => !packet.HasClan ? ClanInfo.None
+        : new ClanInfo((long)packet.ClanId, packet.Name, (Simulation.Social.Clans.ClanState)packet.State, packet.Deadline, (Simulation.Social.Clans.ClanRank)packet.Rank,
+            packet.Capacity, packet.Intro, packet.MarkVersion, packet.Members.Select(static member => new ClanMemberInfo(member.Name, member.Class, member.Level,
+                (Simulation.Social.Clans.ClanRank)member.Rank, member.Online)).ToArray());
+
+    private static CastleInfo Castle(CastleStatePacket packet) =>
+        new((long)packet.OwnerClanId, packet.OwnerName, packet.Tax, (Simulation.Social.Castle.SiegeState)packet.Siege, packet.League, packet.SecondsLeft,
+            packet.DoorDown, packet.Crystals, [.. packet.Top.Select(static clan => new CastleClanInfo((long)clan.ClanId, clan.Name, (long)clan.Damage))],
+            (long)packet.TotalDamage);
+
+    private static BellatraBoardInfo Bellatra(BellatraBoardPacket packet) => !packet.Shown ? BellatraBoardInfo.Hidden
+        : new BellatraBoardInfo(true, packet.Round, packet.Team, (long)Math.Min(packet.Score, long.MaxValue),
+            [.. packet.TeamScores.Select(static score => (long)Math.Min(score, long.MaxValue))], (Contracts.Social.BellatraOutcome)packet.Outcome);
+
+    private static BellatraClanInfo BellatraClan(BellatraClanStatePacket packet) => !packet.HasView ? BellatraClanInfo.None
+        : new BellatraClanInfo(true, (long)Math.Min(packet.OperatingClanId, long.MaxValue), packet.OperatingName, packet.Chief, packet.Tax,
+            (long)Math.Min(packet.Balance, long.MaxValue), packet.CanRedeem,
+            [.. packet.Top.Select(static clan => new BellatraClanRankInfo(clan.Name, (long)Math.Min(clan.Points, long.MaxValue)))]);
+
+    private static CastleOwnerInfo CastleOwner(CastleOwnerStatePacket packet) => !packet.HasView ? CastleOwnerInfo.None
+        : new CastleOwnerInfo(true, (long)Math.Min(packet.Treasury, long.MaxValue), packet.Tax,
+            new Simulation.Social.Castle.CastleSetup(packet.NextTax, (Simulation.Social.Castle.CastleClanSkill)packet.Skill,
+                [.. packet.Towers.Select(static tower => (Simulation.Social.Castle.CastleTower)tower)], [.. packet.Mercenaries.Select(static count => (int)count)]),
+            (Simulation.Social.Castle.CastleClanSkill)packet.SkillInForce, packet.CanEdit);
 
     private PresenceUpdate OnPartyRequest(PartyRequestPacket packet) =>
         new PresenceUpdate(_tick, [], [], [], [], FieldId) { PartyRequest = new PartyRequestInfo(packet.FromId, packet.FromName, packet.Recommended) };
@@ -744,7 +792,7 @@ internal sealed class PresenceDecoder : IEventHandleReader
     }
 
     private static OwnedItemView Item(InventoryItemEntry entry) => new(entry.InstanceId, entry.Code, entry.Name, (ItemKind)entry.Kind, entry.Count,
-        entry.Anchor, entry.Slot, entry.Width, entry.Height, ItemCodes.KeyOf(entry.Code));
+        entry.Anchor, entry.Slot, entry.Width, entry.Height, ItemCodes.KeyOf(entry.Code)) { Link = entry.Link };
 
     private PresenceUpdate Update(IReadOnlyList<EntitySpawnInfo> spawns, IReadOnlyList<EntityStateInfo> states, IReadOnlyList<ulong>? removed = null,
         IReadOnlyList<CombatEventInfo>? events = null) =>
@@ -771,7 +819,10 @@ internal sealed class PresenceDecoder : IEventHandleReader
                 BigHead = looks.BigHead,
                 WeaponGlow = Glow(looks.WeaponGlow),
                 OffHandGlow = Glow(looks.OffHandGlow),
-                ShopSign = looks.ShopSign
+                ShopSign = looks.ShopSign,
+                ClanId = (long)looks.ClanId,
+                ClanName = looks.ClanName,
+                ClanMark = looks.ClanMark
             };
         }
 

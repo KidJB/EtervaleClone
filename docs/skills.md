@@ -43,7 +43,7 @@ Monster skills are a separate system (see [world.md](world.md)); they share only
 | `Client/PristonTale.Gameplay/Effects/SkillState.cs` | `SkillCooldownBook` (local cooldowns), `StatusBook`/`StatusEntry` (statuses of every visible entity) |
 | `Client/PristonTale.Gameplay/Effects/SkillSoundBank.cs` | Skill sounds by asset path, decoded on a worker, created on the game thread |
 | `tools/PristonTale.VfxImport/Authored/Common/`, `Authored/Classes/<Class>/` | Named skill effects, installed into `<assetRoot>/Effect/Vfx` by `ptvfx import`; format in [effects.md](effects.md) |
-| `Client/PristonTale.Gameplay/UI/Widgets/HudSkillsPanel.cs`, `HudSkillTreeLayout.cs` | Skill window (`S`): 16 nodes, rank gauges, short-key marks, training clicks at a skill master |
+| `Client/PristonTale.Gameplay/UI/Widgets/HudSkillsPanel.cs`, `HudSkillTreeLayout.cs` | Skill window (`S`): 16 nodes, training and ready gauges, short-key marks, training clicks at a skill master |
 | `Client/PristonTale.Gameplay/UI/Widgets/HudSkillBindings.cs` | Left/right mouse sockets and the action bar's short keys (`HudActionBarSlots`, saved per character; [client.md](client.md#hud-and-windows)) |
 | `Client/PristonTale.Gameplay/UI/Widgets/HudSkillHud.cs` | Bottom-bar sockets with cooldown sweep; continuous-skill bar (keep icons, duration gauge, summon mode tooltip) |
 | `Client/PristonTale.Gameplay/UI/Widgets/HudSkillDetails.cs` | Tooltip numbers per rank, read from the same `SkillRule` |
@@ -227,7 +227,8 @@ means absent); `SkillRule.At` clamps the rank into the table. Distances are worl
   `attackSpeedSteps[10]` and `motionSpeedSteps` (0..6; each step adds 0.125 to the rate), `motionRatePercent`,
   `motionSpeedPercent` (1..400, default 100).
 - Presentation: `projectile` (hits land after the flight), `projectileArc` (lob height at mid flight), `castEffect`,
-  `impactEffect`, `impactNeedsTarget` (no impact effect on a cast that struck nothing), `projectileEffect`, `buffEffect` (aura while the status runs), `companionEffect` (familiar or counter
+  `impactEffect`, `impactNeedsTarget` (no impact effect when the cast struck no one: Divine Lightning's bolts fall only on
+  the monsters it hit), `projectileEffect`, `buffEffect` (aura while the status runs), `companionEffect` (familiar or counter
   strike), `castSound`, `impactSound`, `companionSound` (game-data paths under `wav/`), `keepIcon` (buff-bar icon).
 - Presentation per hit and on actors (`SkillRulePresentation.cs`, ignored by the server): `impactSounds` with
   `impactSoundOrder` (`Sequence`: impact n of the cast plays entry n, wrapping; `Random`; `Final`: only the cast's last
@@ -354,7 +355,8 @@ Example (real entry, Mechanician window index 1):
   (`Proficiency`; `itemMastery` is the worn magic mastery, truncated); mastery `M = clamp(masteryBase + masteryPerRank x rank - P / 100, 2, 200)`;
   the cooldown lasts `M / 2 x 35 / 60` seconds. Learning a rank halves the uses (`UsesAfterRankUp`), and the skill window's green bar shows P.
 - Proficiency (`UsesAfterCast`): every `CastsPerStep[windowIndex] + (rank - 1) / 3` casts add 100 uses (max 10000).
-  The cast counter (`WorldPlayer.SkillCasts`) is per session; uses persist.
+  The cast counter (`WorldPlayer.SkillCasts`) is per session; uses persist. A changed use count raises the skills
+  revision, so the owner's skill list (`OwnedSkillView.Uses`) carries it to the skill window's training gauge.
 - Mana: `mana[rank]` scaled by `SkillManaCost` percent plus flat, not below 0. Stamina has no modifiers.
 - Timing (`Timing`, `Plan`, `MotionRate`): skill clips play at the fixed frame step / 80, or at the caster's attack
   rate + 0.125 per speed step, times the two percents; frames last 33 ms at rate 1 (`MotionTiming`). Weapon-clip
@@ -423,7 +425,8 @@ Input and cast flow (`GameScene.Skills.cs`, `HudSkillBindings`, `GameplayHud`):
   (`F1`-`F8`, `F10`, `4`-`0`, `-`, `=`), or releasing it over a key of the shown bar, binds that key of the shown page
   to the skill and side (one key per skill on a page); pressing the key elsewhere selects the bound skill. `Ctrl` and
   `Alt` suppress the keys. Sockets fall back to the basic attack (`0x11111111`) when a skill is lost.
-- A click with a skill in the clicked socket picks the entity under the cursor: `Enemy` needs a monster, `Ally` takes a
+- A click with a skill in the clicked socket picks the entity under the cursor: `Enemy` needs a monster (or, except a
+  charm, a player of another clan where both stand in the castle's battle zone), `Ally` takes a
   picked player or none, `Self`/`None` cast at once. Local pre-checks (rank, cooldown) show a notice instead of sending;
   mana and stamina are the server's (`SkillFormulas.ManaCost`/`StaminaCost`, with the cost-reducing effects), refused as
   `NotEnoughMana`/`NotEnoughStamina`. The avatar walks until within `SkillFormulas.Range` of the owner's attack range,
@@ -437,6 +440,11 @@ Input and cast flow (`GameScene.Skills.cs`, `HudSkillBindings`, `GameplayHud`):
 
 Presentation (`SkillPresentation`):
 
+- Continued attack (`GameScene.SkillTrace`): a click with a skill that strikes an enemy, on a monster, keeps attacking it
+  while that mouse button is held, or until it dies or leaves when Shift was down at the click, as the original's
+  continued attack: the skill again whenever it is ready, the weapon's strikes (a sustained attack) while it is not. A
+  cast the server refuses for a passing reason (mana, stamina, cooldown, range) is retried a second later without its
+  notice; any other refusal ends the trace with its notice. Another click ends it.
 - Own events run at once; another entity's events wait its playback delay (`ISkillSceneHost.PlaybackDelayMsOf`, the
   snapshot buffer's adaptive 150 to 600 ms) to match its interpolated motion.
 - A held right button casts the right-mouse skill again as soon as it is ready; auto skill (Shift + right click on a monster, `GameScene.AutoSkill`) does

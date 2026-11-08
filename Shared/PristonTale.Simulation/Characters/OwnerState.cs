@@ -10,6 +10,9 @@ public sealed record OwnedItemView(
     // The copy's values for tooltips and equipment rules; null until the owner receives them.
     public ItemDetailView Details { get; init; }
 
+    // A bound Union Core's clan member (ItemInstance.Link).
+    public string Link { get; init; } = "";
+
     // Where it is: the bag (Anchor), an equipment slot (Slot), a potion belt box (Slot from PotionBelt.FirstOwnerSlot), a
     // special item box (Slot from QuestItemBox.FirstOwnerSlot) or the hand (HeldSlot, PlayerCharacter.Held).
     public const int HeldSlot = QuestItemBox.FirstOwnerSlot + QuestItemBox.Boxes;
@@ -29,7 +32,7 @@ public sealed record OwnedItemView(
             ? new OwnedItemView(item.InstanceId, ItemCodes.Parse(Puzzles.LuckyBagIcon), Puzzles.LuckyBagName, definition.Kind, item.Count, anchor, slot,
                 definition.GridWidth, definition.GridHeight, Puzzles.LuckyBagIcon)
             : new OwnedItemView(item.InstanceId, definition.Code, item.DisplayName, definition.Kind, item.Count, anchor, slot, definition.GridWidth,
-                definition.GridHeight, definition.CatalogKey);
+                definition.GridHeight, definition.CatalogKey) { Link = item.Link };
     }
 
     // Whether a carried potion joins this stack: the same potion. The server joins only compatible stacks
@@ -128,9 +131,8 @@ public sealed record OwnerState(
     // so the capture the server makes every tick allocates nothing for it.
     private OwnerStamp Stamp { get; init; }
 
-    // Apart from Capture: a lambda over the character there would allocate its closure on every call, changed or not.
-    private static IReadOnlyList<OwnedSkillView> ProjectSkills(PlayerCharacter character) =>
-        Array.AsReadOnly(character.Skills.Ranks.Select(pair => new OwnedSkillView(pair.Key, pair.Value, character.Skills.UsesOf(pair.Key))).ToArray());
+    private static IReadOnlyList<OwnedSkillView> SkillViews(PristonTale.Simulation.Skills.LearnedSkills skills) =>
+        Array.AsReadOnly(skills.Ranks.Select(pair => new OwnedSkillView(pair.Key, pair.Value, skills.UsesOf(pair.Key))).ToArray());
 
     // An unchanged owner returns the previous instance (which the encoder skips); otherwise the state is built in full and
     // compared as a record, the lists reused while their revision holds.
@@ -166,8 +168,7 @@ public sealed record OwnerState(
             BagPage = character.BagPage,
             WeaponSet = character.WeaponSet,
             EliteSkillPoints = character.EliteSkillPoints,
-            Skills = previous is not null && previous.SkillsRevision == character.Skills.Revision ? previous.Skills
-                : ProjectSkills(character),
+            Skills = previous is not null && previous.SkillsRevision == character.Skills.Revision ? previous.Skills : SkillViews(character.Skills),
             CarriedWeight = character.Derived.CarriedWeight,
             MaxWeight = character.Derived.MaxWeight,
             CriticalChance = Combat.CombatProfileFactory.CriticalChance(character),

@@ -12,8 +12,8 @@ How the code works is documented in [docs/](docs/README.md).
 ## Requirements
 
 - .NET 10 SDK.
-- [Game data archive](https://drive.google.com/file/d/1oE3oQwQAG8YghbTlqzXhtX23seGhH2pF/view?usp=sharing),
-  **published 2026-11-04 at 15:50 (UTC-03:00)**.
+- [Game data archive](https://drive.google.com/file/d/1b9z7PrSsWzTBY_O-uoIOw4bK-vwKq4p1/view?usp=sharing),
+  **published 2026-11-07 at 02:45 (UTC-03:00)**.
 - For the client: a GPU and driver with Vulkan 1.1 or later. The client uses MonoGame's Native platform on Vulkan
   through the fork in [monogame/](monogame/README.md); shaders compile with DXC on every platform (no Wine).
 - The client's native runtime, built once per machine (see Build): on Windows, Visual Studio 2022 or 2026 with the
@@ -83,11 +83,13 @@ standalone importer build is explicit because its Release output must be availab
 
 ## Screenshots
 
-<img width="1918" height="1012" alt="image" src="https://github.com/user-attachments/assets/2850e4b8-9c72-43b2-9171-6434a6313135" />
+<img width="1920" height="1033" alt="image" src="https://github.com/user-attachments/assets/d5978f70-be44-4e95-92c7-7af454e220f0" />
 --
-<img width="1918" height="1012" alt="image" src="https://github.com/user-attachments/assets/81668a53-e1ed-499d-b5d5-e13488e596dd" />
+<img width="1920" height="1034" alt="image" src="https://github.com/user-attachments/assets/4f1d1923-ed92-4709-aa3a-d2fd44ff6d3c" />
 --
-<img width="1918" height="1012" alt="image" src="https://github.com/user-attachments/assets/ac1b25ce-96f1-489f-9aa4-a2c9f6e70fb1" />
+<img width="1920" height="1034" alt="image" src="https://github.com/user-attachments/assets/5b0d2e28-a940-42ac-bfb2-8c0d67910756" />
+--
+<img width="1920" height="1036" alt="image" src="https://github.com/user-attachments/assets/edc99191-0b33-4653-9553-69b82c8600de" />
 
 ## Run: migrate, import, and connect
 

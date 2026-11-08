@@ -27,6 +27,7 @@ layouts live in [protocol.md](protocol.md).
 | `Hosting/FieldTerrainLoadService.cs` | Hosted service: reads every field's stage `.smd` collision in parallel into `FieldTerrainCatalog`. |
 | `World/WorldTickService.cs` | `BackgroundService` calling `WorldServer.Tick(1/20 s, tick)` on its own thread, on the absolute timeline of `TickSchedule` (owed ticks run back to back, a stall past 5 ticks is skipped); logs tick percentiles, ticks caught up and skipped, the command and field phases, process CPU, allocation rate, collections, heap and working set. |
 | `World/StarterGiftService.cs`, `World/SessionWork.cs` | `BackgroundService` reading `WorldServer.StarterGiftRequests` and running `StarterGiftAppService.GiveAsync`; `SessionWork` is the loop it shares with `QuestUpkeepService` (a few sessions at a time, a failure logged). |
+| `World/BellatraService.cs` | `BackgroundService` reading `WorldServer.BellatraPrizes` and paying each with `BellatraAppService.PayAsync`, one after another, and beside it storing each paid prize's points and income (`BellatraClanAppService.Records`, a refused storage logged) ([application.md](application.md#bellatra)). |
 | `World/QuestUpkeepService.cs` | `BackgroundService` reading `WorldServer.QuestUpkeepRequests` and running `QuestAppService.RunUpkeepAsync`, at most 8 players at a time ([quests.md](quests.md)). |
 | [Net/GameTcpServer.cs](../Server/PristonTale.Server/Net/GameTcpServer.cs) | Listener, connection and handshake caps (in all and per address), TLS handshake, one `ClientSession` per connection, housekeeping (idle/login timeouts, bandwidth log). |
 | `Net/ServerCertificate.cs` | Loads the TLS certificate, or creates and stores a self-signed one. |
@@ -59,9 +60,12 @@ registration order. An exception from any `StartAsync` stops the host before the
 | 5 | `FieldTerrainLoadService` | Loads the collision of all 43 fields of `WorldCatalog.AllFields` (the quest arena included) (`FieldDef.StageSmd`). | No assets directory, or any stage missing or unreadable, unless `Assets:AllowMissingTerrain=true`. |
 | 6 | `WorldTickService` | Starts the 20 Hz tick loop. | Never; a throwing tick is logged and the loop continues. |
 | 7 | `ServerSettingsService` | Adds the missing `server_settings` rows with their defaults, reads the table and applies it on the tick, then reads it again every `server.settings_reload_minutes`. | The table cannot be read at start; later failures keep the settings in force. |
-| 8 | `GameTcpServer` | Loads the TLS certificate, binds `[::]:<Network:Port>` (10009) dual-stack, backlog 512, and accepts. | The port is in use (the host stops). |
-| 9 | `QuestUpkeepService` | Applies the quest work the tick queues (quest drops, quest weapon growth and expiry) and queues the character for storage. | Never; a failed upkeep is logged and retried on the field's next check. |
-| 10 | `StarterGiftService` | Gives the starter gifts the tick finds due ([application.md](application.md#starter-gifts)). | Never; a failed gift is logged and offered again after the interval. |
+| 8 | `ClanService` | Loads the clans before the game server opens, then dissolves the clans past their deadline and forgets unanswered invitations once a minute ([application.md](application.md#clans)). | Never; a failed load leaves the clans unavailable. |
+| 9 | `CastleService` | Loads Bless Castle, then ticks its schedule, siege clock and fountain every second with the settings in force ([application.md](application.md#bless-castle)). | Never; a failed load leaves the castle unavailable. |
+| 10 | `GameTcpServer` | Loads the TLS certificate, binds `[::]:<Network:Port>` (10009) dual-stack, backlog 512, and accepts. | The port is in use (the host stops). |
+| 11 | `QuestUpkeepService` | Applies the quest work the tick queues (quest drops, quest weapon growth and expiry) and queues the character for storage. | Never; a failed upkeep is logged and retried on the field's next check. |
+| 12 | `StarterGiftService` | Gives the starter gifts the tick finds due ([application.md](application.md#starter-gifts)). | Never; a failed gift is logged and offered again after the interval. |
+| 13 | `BellatraService` | Pays the Bellatra prizes the tick owes ([application.md](application.md#bellatra)). | Never; a failed prize is logged and the player told. |
 
 Shutdown runs the services in reverse: the game server closes every connection and awaits their leave saves while the
 tick still runs, and the character store stops last. Once the host is stopping, the first write storage refuses sends
@@ -163,7 +167,7 @@ that limit; negative values stop startup. The game settings live in the database
 | `Logging:LogLevel:Default` | `Information` | host | Standard .NET logging filter. |
 
 Fixed values that are not settings: idle timeout 60 s, housekeeping period 5 s, report period 30 s,
-tick rate 20 Hz, send backlog limit 512 KiB per connection (`FrameConnectionOptions.MaxPendingSendBytes`), presence
+tick rate 20 Hz, send backlog limit 576 KiB per connection (`FrameConnectionOptions.MaxPendingSendBytes`), presence
 backlog 64 KiB (`ClientSession.PresenceBacklogBytes`) and its stall time 30 s. The send limit holds the presence backlog,
 a full outbox's events and a full crowd's entries (`NetworkHardeningTests.SendLimitAsync`).
 
@@ -187,7 +191,7 @@ show or write one row with `/setting name [value]` ([chat-and-gm.md](chat-and-gm
 | `players.starter_gifts` | true | A new character receives its starter gifts ([application.md](application.md#starter-gifts)). |
 | `gm.potion_monitor` | true | Enables `/get_potion`. |
 | `experience.multiplier` | 5 | Times the monsters' experience, 1 to 1000. |
-| `experience.event_percent` | 0 | Experience event: 0 off, else +100% (any value up to 199), +200%, +300% or +400% (400 and above) on each kill. |
+| `experience.event_percent` | 100 | Experience event: the percent of each monster's experience a kill gives (100 = x1, 500 = x5; 0 is x1). |
 | `world.clock_offset_minutes` | 0 | Game minutes added to the game clock (`WorldServer.GameClockMs` = Unix ms + offset x 800), -1440 to 1440. |
 | `world.weather` | true | Rain over the fields that take it on the original's schedule ([world.md](world.md#weather)). |
 | `world.weather_cycle_minutes` | 8192 | Game minutes from one rain to the next, 933 to 1000000. |
@@ -199,6 +203,12 @@ show or write one row with `/setting name [value]` ([chat-and-gm.md](chat-and-gm
 | `aging.double_percent` | 100 | Chance of a level at once below +10, in percent of each level's chance. |
 | `mixing.price_percent` | 100 | Price of a mix or a reconstruction in percent of the item's price; carried to the client in the mixer's offer. |
 | `alchemy.price_percent` | 100 | Price of turning sheltoms into force orbs, in percent of the price per sheltom. |
+| `castle.mode` | 1 | Bless Castle siege: 0 off, 1 weekly, 2 league, during which players never fight each other in the castle ([application.md](application.md#bless-castle)). |
+| `castle.siege_day` | 0 | Day of the scheduled siege, 0 Sunday to 6 Saturday, server local time. |
+| `castle.siege_hour` | 20 | Hour of the scheduled siege, 0 to 23, server local time. |
+| `bellatra.mode` | 1 | Bellatra: 0 closed, 1 open while the server's hour is 0 to 5 or 12 to 17, 2 always open ([application.md](application.md#bellatra)). |
+| `bellatra.tax` | 5 | Percent of each Bellatra prize kept for the operating clan. |
+| `bellatra.score_divisor` | 35 | A Bellatra kill scores the monster's experience divided by this (a boss's times twice the round); the score is the prize in gold. |
 
 Settings apply on the tick (`WorldServer.ApplyOptionsAsync`): every open field and the fields opened later take the
 experience, item event and aging values.
@@ -353,7 +363,7 @@ of the regression suite ([testing.md](testing.md#multiplayer-propagation)):
 | Second login | per connection | `Login` after a successful login gets `LoginResult` 3 (already logged in). |
 | World quota | per player | `WorldServer` refuses more than `MaxPendingCommandsPerPlayer` queued commands with `WorldBusyException`; the shared queue holds 65536. |
 | Presence backlog | per connection | Past 64 KiB unsent the pump waits, and the outbox joins the snapshots meanwhile; still past it after 30 s closes the connection (`send stalled`). |
-| Send backlog | per connection | More than 512 KiB unsent closes the connection (`send backlog exceeded ...`). |
+| Send backlog | per connection | More than 576 KiB unsent closes the connection (`send backlog exceeded ...`). |
 
 `LoginResult` statuses: 1 bad credentials (unknown account, wrong or empty password), 2 account blocked, 3 already
 logged in on this connection, 4 busy (throttled, full or storage failure), 5 outdated client protocol.

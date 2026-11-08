@@ -165,6 +165,11 @@ public sealed partial class GameScene : ISkillSceneHost
         if (!result.Accepted)
         {
             _castLockUntilMs = 0d;
+            if (TraceCastRefused(result))
+            {
+                return;
+            }
+
             SkillNotice?.Invoke(result.Status switch
             {
                 SkillCastVerdict.Cooldown => ClientText.Get("Skill.NotReady"),
@@ -259,14 +264,16 @@ public sealed partial class GameScene : ISkillSceneHost
             case SkillTarget.None:
                 return RequestCast(code, rule, 0, null);
             case SkillTarget.Enemy:
-                if (target == 0 || kind != EntityKind.Monster)
+                if (target == 0 || kind != EntityKind.Monster && !(kind == EntityKind.Player && SkillFormulas.ReachesPlayers(rule) && Fights(target)))
                 {
                     return false;
                 }
 
                 _targetSelection.Trace(target);
                 _lastSkillTarget = target;
-                return RequestCast(code, rule, target, null);
+                RequestCast(code, rule, target, null);
+                StartSkillTrace(code, target, rightButton);
+                return true;
             case SkillTarget.Ally:
                 return RequestCast(code, rule, target != 0 && kind == EntityKind.Player ? target : 0, null);
             default:
@@ -274,7 +281,7 @@ public sealed partial class GameScene : ISkillSceneHost
         }
     }
 
-    private bool RequestCast(uint code, SkillRule rule, ulong target, NumVector3? point)
+    private bool RequestCast(uint code, SkillRule rule, ulong target, NumVector3? point, bool repeat = false)
     {
         var rank = Rank(code);
         var skill = FindSkill(code);
@@ -292,7 +299,7 @@ public sealed partial class GameScene : ISkillSceneHost
 
         _lootInteraction?.Cancel();
         ClearAttackTarget();
-        _pendingCast = new PendingCast(code, rule, rank, target);
+        _pendingCast = new PendingCast(code, rule, rank, target, repeat);
         UpdatePendingCast();
         return true;
     }
@@ -354,6 +361,11 @@ public sealed partial class GameScene : ISkillSceneHost
         ReportMovementNow();
         var planar = _playerBody.PlanarPosition;
         var point = WorldSpace.Mirror(new NumVector3(planar.X, _playerBody.Height, planar.Y));
+        if (pending.Repeat)
+        {
+            _traceCastSequence = _castSequence + 1;
+        }
+
         SendUpstream(_playChannel.SendSkillCastAsync(++_castSequence, pending.Code, target, point, _presenceCts.Token), "skill cast");
     }
 
@@ -556,5 +568,5 @@ public sealed partial class GameScene : ISkillSceneHost
         }
     }
 
-    private readonly record struct PendingCast(uint Code, SkillRule Rule, int Rank, ulong TargetId);
+    private readonly record struct PendingCast(uint Code, SkillRule Rule, int Rank, ulong TargetId, bool Repeat = false);
 }

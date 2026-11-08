@@ -388,7 +388,7 @@ public sealed partial record SkillRule
     public string CastEffect { get; init; } = "";
     public string ImpactEffect { get; init; } = "";
 
-    // The impact effect plays only when the cast struck something.
+    // The impact effect plays only on a cast that struck something (an area around the caster that found no one shows none).
     public bool ImpactNeedsTarget { get; init; }
     public string ProjectileEffect { get; init; } = "";
     public string BuffEffect { get; init; } = "";

@@ -25,6 +25,8 @@ The codecs live in `Shared/PristonTale.Protocol`; the server edge is `Server/Pri
 | `Binary/WireHeader.cs` | `{uint16 Version, uint16 Flags = 0}` body header: `Write(version)`, `Read(name, minimumVersion = 1)` (newer versions append fields). Domain helpers (`NpcWire.Header`, `ItemUseWire.ReadHeader`...) delegate to it. |
 | `Binary/WireList.cs` | `IWireEntry<T>` (static `Size`, `Read`, instance `Write`) and `WireList`: `{int32 Count, entries}` with the entries filling the rest exactly; the cooldown, timer, item effect, shop quote and item detail lists use it (the skill list, the object removals and the aging progress still check their counts themselves). |
 | `Packets/IFramePacket.cs` | `IFramePacket`: a message that writes itself as one frame; every client-to-server message implements it. |
+| `Packets/CastlePackets.cs` | `CastleState` (Bless Castle's owner, league mode and siege board), the owner's window (`CastleOwnerRequest`, `CastleOwnerState`, `CastleOwnerResult`). |
+| `Packets/BellatraPackets.cs` | Bellatra's secretary (`BellatraClanRequest`, `BellatraClanState`, `BellatraClanResult`). |
 | `Packets/AccountPackets.cs` | `ProtocolVersion`, `ServerHello`, `Login`/`LoginResult`, `CharacterList`, `CharacterCommand`/`CharacterResult`, `Heartbeat`. |
 | `Packets/PlayerActionPackets.cs` | `MovementReport`, `AttackRequest` and `FieldWarp`. |
 | `Packets/WingGatePackets.cs` | `WingGateRequest` and `WingGateResult`. |
@@ -74,7 +76,7 @@ search finds; they are not part of the build.
 | Port | TCP 10009; the server's `Network:Port` can change it |
 | Security | TLS 1.2 or 1.3 (`TlsTransport`) around the whole stream; the handshake must finish within `Network:HandshakeTimeoutSeconds` (10) |
 | Frame | `int32 size` (including the header), `uint32 code`, 8 to 8192 bytes, inside the TLS stream; anything else closes the connection |
-| Send backlog | More than 512 KiB pending closes the connection; the server sends a slow reader fewer presence snapshots, and closes one whose backlog stays above 64 KiB for 30 s |
+| Send backlog | More than 576 KiB pending closes the connection (room for a full event outbox and 256 entities described at once above the 64 KiB presence backlog); the server sends a slow reader fewer presence snapshots, and closes one whose backlog stays above 64 KiB for 30 s |
 
 The server presents the certificate in `Network:Certificate:Path` (PKCS#12, default `data/server-certificate.pfx`,
 password `Network:Certificate:Password`). When the file is missing it creates a self-signed ECDSA P-256 certificate for
@@ -93,9 +95,9 @@ Bodies start with `uint16 Version = 1`; text is UTF-8 with a `uint16` byte lengt
 | Step | Packet | Notes |
 | --- | --- | --- |
 | Connect | S→C `ServerHello` (`0x45540F00`) | `{uint16 Version, uint16 0, uint32 Protocol, MinimumProtocol, int32 FullPlayers, text ServerName (32 B)}`: `FullPlayers` = players in the world when the player limit (`server.max_users` or `/user_limit`) is reached, else 0 (then only game masters may log in); `ServerName` is `server.name`. |
-| Log in | C→S `Login` (`0x45540F01`) | `{uint16 Version, uint16 0, uint32 Protocol, text Account (64 B), text Password (128 B), text Language (16 B)}`. `Protocol` is `ProtocolVersion.Current` (11); a change of any message's layout raises it and `ProtocolVersion.Minimum`, so a client built before it is refused instead of misreading the world (a login without the language, from a client before protocol 4, is still read so the server can answer it is outdated). `Language` is the client's language (`en` or `pt-BR`; any other value is English): the server sends names and NPC dialog in it, falling back to English. |
+| Log in | C→S `Login` (`0x45540F01`) | `{uint16 Version, uint16 0, uint32 Protocol, text Account (64 B), text Password (128 B), text Language (16 B)}`. `Protocol` is `ProtocolVersion.Current` (21); a change of any message's layout raises it and `ProtocolVersion.Minimum`, so a client built before it is refused instead of misreading the world (a login without the language, from a client before protocol 4, is still read so the server can answer it is outdated). `Language` is the client's language (`en` or `pt-BR`; any other value is English): the server sends names and NPC dialog in it, falling back to English. |
 | Result | S→C `CharacterList` (`0x45540F03`), then `LoginResult` (`0x45540F02`) | `LoginResult` = `{uint16 Version, uint8 Status, uint8 0}`: 0 ok, 1 bad credentials (also unknown accounts), 2 account blocked, 3 already logged in on this connection, 4 busy (throttled, full or storage failure), 5 client protocol older than the server's minimum. A failed login sends no list. |
-| Character list | S→C `CharacterList` | `{uint16 Version, uint16 0, int32 Count (at most 6)}`, then `{text Name, uint32 Class (PlayerClass), int32 Level, uint8 Tier, Face, Hair, Flags (1 in a village), uint32 WeaponCode, ArmorCode, OffHandCode, uint32 0}`. |
+| Character list | S→C `CharacterList` | `{uint16 Version, uint16 0, int32 Count (at most 6)}`, then `{text Name, uint32 Class (PlayerClass), int32 Level, uint8 Tier, Face, Hair, Flags (1 in a village), uint32 WeaponCode, ArmorCode, OffHandCode, uint32 0, text ClanName (48 B; empty out of a clan)}`. |
 | Create, delete | C→S `CharacterCommand` (`0x45540F04`), S→C `CharacterResult` (`0x45540F05`) | Command `{uint16 Version, uint8 Action (1 create, 2 delete), uint8 0, int32 Class (PlayerClass), FaceIndex, text Name}`; result `{uint16 Version, uint8 Action, uint8 Ok, int32 Failure (CreateCharacterFailure), text Name}`. |
 | Select | C→S `EnterWorld` (`0x45540E00`) | `{uint16 Version = 1, uint16 0, text Name (64 B)}`. |
 | Entry | S→C `WorldEntry` (`0x45540E01`) | `{uint16 Version, uint8 Status (0 entered, else EnterWorldFailure), uint8 0, uint64 EntityId, int32 Field, int32 X, Z (x256)}`. The owner's stats, inventory and skills follow on the presence stream. |
@@ -170,8 +172,8 @@ Every message code has the high word `0x4554` ("ET"); every message keeps the `{
 | Code | Name | Direction | Content |
 | --- | --- | --- | --- |
 | `0x45540100` | `OwnerStatus` | S→C | Level, unsigned 64-bit experience (current, level start, next level), 64-bit money, resources, attributes, combat values and revisions, then the elite skill points and the class tier (0..4), the bag page shown and the weapon pair held (a byte each, 0 A, 1 B). 158 B. |
-| `0x45540101` | `Skills` | S→C | Skill revision and (code, rank) pairs, at most 512. |
-| `0x45540102` | `Inventory` | S→C | Inventory revision split into parts of up to 64 items; the client replaces its inventory when all parts of a revision arrived. |
+| `0x45540101` | `Skills` | S→C | Skill revision and (code, rank, uses) entries, at most 512. |
+| `0x45540102` | `Inventory` | S→C | Inventory revision split into parts of up to 48 items, each `{Guid, uint32 Code, int32 Kind, Count, Anchor, Slot, int16 Width, Height, text Name (64 B), text Link (48 B: a bound Union Core's clan member)}`; the client replaces its inventory when all parts of a revision arrived. |
 | `0x45540110` / `0x45540111` | `InventoryCommand` / `InventoryResult` | C→S / S→C | Transactional inventory operation, correlated by operation id. A ground pickup (`InventoryAction.Pickup`) names the drop in `ItemId`, with `Destination` 0 (received as any item) or `InventoryCommand.PickupToBag` (1: into the bag as a stack of its own, for the client's cursor, or to the hand when the page shown is full; anything else is refused); a throw (`InventoryAction.Drop`) names the bag item or the item in the hand and the amount in `Count`; `Move`, `Merge` and `Swap` naming the item in the hand set it down on the page shown; a gold throw (`InventoryAction.DropGold`) only the amount. |
 | `0x45540120` / `0x45540121` | `ProgressionCommand` / `ProgressionResult` | C→S / S→C | Attribute allocation and skill learning. |
 | `0x45540130` | `NpcResult` | S→C | Completes an NPC click: name, typed services with availability and the line the NPC says. |
@@ -214,21 +216,34 @@ Every message code has the high word `0x4554` ("ET"); every message keeps the `{
 | `0x45540805` .. `0x45540807` | `TradeAsked`, `TradeState`, `TradeDetails` | S→C | A player asks the receiver to trade; the trade window when it changed, after its partner items' values. |
 | `0x45541000` / `0x45541001` | `ContactChange` / `ContactRefresh` | C→S | Put a name on the friends or ignored list or take it off; send the lists again. |
 | `0x45541002` | `ContactList` | S→C | One list (friends, then ignored) answering each change or refresh. |
-| `0x45541100` | `CoinShopOpen` | C→S | `Guid OperationId`: open the coin shop ([coin-shop.md](coin-shop.md)). |
-| `0x45541101` | `CoinShopTab` | S→C | `Guid OperationId, int32 Id, text Name, text Icon, uint16 Count`, articles `{int32 Id, text Name, text Description, text ItemKey, int32 Price, Discount, Bulk, MaxBulk, uint8 Flags (1 spec, 2 quantity)}` (at most 32). |
-| `0x45541102` | `CoinShopCatalog` | S→C | `Guid OperationId, int64 Balance, uint16 TabCount, text Name, text Message`: ends an open, after its tabs. |
-| `0x45541103` | `CoinShopBuy` | C→S | `Guid OperationId, int32 TabId, ItemId, Quantity, SpecClass`. |
-| `0x45541104` | `CoinShopBuyResult` | S→C | `Guid OperationId, uint8 Status (CoinShopStatus), uint8 0, uint16 0, int64 Balance`. |
-| `0x45541105` | `CoinBalance` | C→S | `Guid OperationId`: the account's coins. |
-| `0x45541106` | `CoinBalanceResult` | S→C | `Guid OperationId, int64 Balance`. |
-| `0x45541200` | `ItemBoxOpen` | C→S | `Guid OperationId, uint64 NpcId`: the account's Item Distributor at that NPC. |
-| `0x45541201` | `ItemBoxEntry` | S→C | `Guid OperationId, int64 Id, int64 CreatedAtUnixMs, text Sender, StoreItemEntry Item, ItemDetailEntry Details`: one waiting item of an open. |
-| `0x45541202` | `ItemBoxList` | S→C | `Guid OperationId, uint8 Status (ItemBoxStatus), uint8 0, uint16 0, int32 Count`: ends an open, after its entries. |
-| `0x45541203` | `ItemBoxAction` | C→S | `Guid OperationId, uint64 NpcId, uint8 Action (1 take, 2 discard, 3 send), uint8 0, uint16 0, int64 Id, Guid ItemId, text Recipient`. |
-| `0x45541300` | `DailyQuestState` | S→C | `int32 Day, int32 Count, entries {int32 Id, int32 Kills, uint8 Flags (1 accepted, 2 claimed), uint8 0, uint16 0}`: the owner's daily quests of the day, when it enters and whenever they change. |
-| `0x45541301` | `DailyQuestRequest` | C→S | `Guid OperationId, uint64 NpcId, int32 QuestId, uint8 Action (1 accept, 2 claim), uint8 0, uint16 0`. |
-| `0x45541302` | `DailyQuestResult` | S→C | `Guid OperationId, uint8 Status (DailyQuestStatus), uint8 0, uint16 0`. |
-| `0x45541204` | `ItemBoxResult` | S→C | `Guid OperationId, uint8 Status (ItemBoxStatus: 0 ok, 1 out of reach, 2 not found, 3 no room, 4 no such character, 5 not sendable, 6 busy, 7 storage failed, 8 rejected), uint8 0, uint16 0`. |
+| `0x45541100` | `ClanRequest` | C→S | A clan action (`ClanAction`): open, found, invite, accept, refuse, leave, expel, disband, appoint, discharge, entrust. |
+| `0x45541101` | `ClanState` | S→C | The player's clan with its members, or none; on entering the world, on opening the Clan Master and after every change. |
+| `0x45541102` | `ClanInvite` | S→C | A recruiter's invitation to a clan. |
+| `0x45541103` | `ClanResult` | S→C | How a `ClanRequest` or a `ClanMark` ended (`ClanStatus`); a refusal's line comes in the chat. |
+| `0x45541104` | `ClanMark` | C→S | The chief's new clan mark, fitted by the client. |
+| `0x45541200` | `CastleState` | S→C | Bless Castle: on entering the world and on every change of its owner, tax in force, league mode or siege ([application.md](application.md#bless-castle)); one packet is made per state and shared by every connection; it carries the tax for the prices the client works out. |
+| `0x45541201` | `CastleOwnerRequest` | C→S | The owner's window at the castle's butler: open it, save the setup or withdraw from the treasury. |
+| `0x45541202` | `CastleOwnerState` | S→C | The owner's window, after every request (none when the player's clan does not hold the castle). |
+| `0x45541203` | `CastleOwnerResult` | S→C | How a `CastleOwnerRequest` ended (`CastleOwnerStatus`, 0 done). |
+| `0x45541300` | `BellatraClanRequest` | C→S | Bellatra's secretary: open the window or redeem the clan's income. |
+| `0x45541301` | `BellatraClanState` | S→C | The secretary's window: the operating clan, its chief, the tax, the player's clan's income and yesterday's best clans ([application.md](application.md#bellatra)). |
+| `0x45541302` | `BellatraClanResult` | S→C | How a `BellatraClanRequest` ended (`BellatraClanStatus`, 0 done). |
+| `0x45541303` | `BellatraBoard` | S→C | The player's Bellatra board whenever it changes while the player is in the arena, hidden once it leaves ([application.md](application.md#bellatra)). |
+| `0x45541600` | `CoinShopOpen` | C→S | `Guid OperationId`: open the coin shop ([coin-shop.md](coin-shop.md)). |
+| `0x45541601` | `CoinShopTab` | S→C | `Guid OperationId, int32 Id, text Name, text Icon, uint16 Count`, articles `{int32 Id, text Name, text Description, text ItemKey, int32 Price, Discount, Bulk, MaxBulk, uint8 Flags (1 spec, 2 quantity)}` (at most 32). |
+| `0x45541602` | `CoinShopCatalog` | S→C | `Guid OperationId, int64 Balance, uint16 TabCount, text Name, text Message`: ends an open, after its tabs. |
+| `0x45541603` | `CoinShopBuy` | C→S | `Guid OperationId, int32 TabId, ItemId, Quantity, SpecClass`. |
+| `0x45541604` | `CoinShopBuyResult` | S→C | `Guid OperationId, uint8 Status (CoinShopStatus), uint8 0, uint16 0, int64 Balance`. |
+| `0x45541605` | `CoinBalance` | C→S | `Guid OperationId`: the account's coins. |
+| `0x45541606` | `CoinBalanceResult` | S→C | `Guid OperationId, int64 Balance`. |
+| `0x45541700` | `ItemBoxOpen` | C→S | `Guid OperationId, uint64 NpcId`: the account's Item Distributor at that NPC. |
+| `0x45541701` | `ItemBoxEntry` | S→C | `Guid OperationId, int64 Id, int64 CreatedAtUnixMs, text Sender, StoreItemEntry Item, ItemDetailEntry Details`: one waiting item of an open. |
+| `0x45541702` | `ItemBoxList` | S→C | `Guid OperationId, uint8 Status (ItemBoxStatus), uint8 0, uint16 0, int32 Count`: ends an open, after its entries. |
+| `0x45541703` | `ItemBoxAction` | C→S | `Guid OperationId, uint64 NpcId, uint8 Action (1 take, 2 discard, 3 send), uint8 0, uint16 0, int64 Id, Guid ItemId, text Recipient`. |
+| `0x45541800` | `DailyQuestState` | S→C | `int32 Day, int32 Count, entries {int32 Id, int32 Kills, uint8 Flags (1 accepted, 2 claimed), uint8 0, uint16 0}`: the owner's daily quests of the day, when it enters and whenever they change. |
+| `0x45541801` | `DailyQuestRequest` | C→S | `Guid OperationId, uint64 NpcId, int32 QuestId, uint8 Action (1 accept, 2 claim), uint8 0, uint16 0`. |
+| `0x45541802` | `DailyQuestResult` | S→C | `Guid OperationId, uint8 Status (DailyQuestStatus), uint8 0, uint16 0`. |
+| `0x45541704` | `ItemBoxResult` | S→C | `Guid OperationId, uint8 Status (ItemBoxStatus: 0 ok, 1 out of reach, 2 not found, 3 no room, 4 no such character, 5 not sendable, 6 busy, 7 storage failed, 8 rejected), uint8 0, uint16 0`. |
 | `0x45540A00` / `0x45540A01` | `RestartRequest` / `RestartResult` | C→S / S→C | A dead player's restart (field, town, exit), correlated by operation id; a stored restart also sends a forced `FieldWarp`. |
 | `0x45540A02` | `RestartOffer` | S→C | While the owner is dead, what a restart would cost, whenever it changes. |
 | `0x45540B00` / `0x45540B01` | `GroundItems` / `GroundItemsRemoved` | S→C | Drops entering and leaving the receiver's view: within the ground-item range (squared `0xC8000` units, about 905 units), private drops only to their owner. |
@@ -244,7 +259,7 @@ These bodies have no version header, except the combat event list's (see [Event 
 | `ProgressionCommand` | `Guid OperationId, int64 ExpectedRevision, int32 Action, Attribute, Amount, uint SkillCode, uint64 NpcId` | 56 |
 | `InventoryResult` / `ProgressionResult` | `Guid OperationId, int32 Ok, int64 Revision, game text Message` (none for a plain success) | 40 + texts |
 | `Inventory` | `int64 Revision, int32 Part, Parts, Count`, then items `{Guid, uint Code, int32 Kind, Count, Anchor, Slot, int16 Width, Height, text Name (64 B)}` (at most 64 per part) | 28 + up to 106n |
-| `Skills` | `int64 Revision, int32 Count`, then `{uint Code, int32 Rank}` | 20 + 8n |
+| `Skills` | `int64 Revision, int32 Count`, then `{uint Code, int32 Rank, int32 Uses}` | 20 + 12n |
 | `CombatEvents` | `uint16 Version (1), uint16 Count`, then compact entries (see [Event lists](#event-lists)) | 12 + 4 to 65 per entry |
 | `RemoveObjects` | `int32 Count`, then `uint64 EntityId` | 12 + 8n |
 | `GroundItems` | `uint16 Version (1), uint16 Flags, int32 Count`, then `{Guid Id, uint32 ItemCode, uint8 Flags (1 gold), uint8 Rarity (0 none .. 5 legendary), uint16 0, int32 Amount, X, Y, Z, text Name (64 B)}` (1 to 64) | 16 + up to 106n |
@@ -361,9 +376,9 @@ Rules: [special-items.md](special-items.md).
 
 ### Entity descriptions
 
-Bodies start with `{uint16 Version = 2, uint16 Flags = 0}` (version 2 appended the player's shop sign to
-`EntityDescription`; a reader fills it only from version 2); text is UTF-8 with a `uint16` byte length (name 64 bytes,
-model paths 160).
+Bodies start with `{uint16 Version = 3, uint16 Flags = 0}` (version 2 appended the player's shop sign to
+`EntityDescription`, version 3 then its clan: `varuint ClanId` (0 none), `text ClanName` (48 bytes), `varuint ClanMark`;
+a reader fills each only from its version); text is UTF-8 with a `uint16` byte length (name 64 bytes, model paths 160).
 
 | Message | Layout after the header |
 | --- | --- |
@@ -445,14 +460,17 @@ to 64 bytes, item names 40, messages 128, dialog lines 256), and counts are 32-b
 - `NpcServiceResult`: `{Guid OperationId, uint64 NpcId, uint8 Service, uint8 Action, uint16 Status, int32 Ok, int64
   Revision, int64 StorageRevision, game text Message}`. `Status` is `NpcServiceStatus` (`NotAvailable` for services Etervale
   does not run, `OutOfReach`, `Rejected`, `Stale`, `NotEnoughGold`, `NoSpace`, `GoldLimit`, `Busy`, `StorageFailed`,
-  `Conflict`, `NotOpen`, `OverWeight`, `WrongPuzzle`, `WrongMaterials`). The state messages a request produces
+  `Conflict`, `NotOpen`, `OverWeight`, `WrongPuzzle`, `WrongMaterials`, `BellatraClosed`, `BellatraLevel`,
+  `BellatraNoTickets`, `BellatraTeamFull`, `BellatraEntered`). The state messages a request produces
   (`ShopCatalog`, `ShopQuotes`, `Warehouse`, `TeleportList`, `ItemWork`) carry the same operation id and precede the
   result.
 - `ItemWork`: `{uint16 Version, uint16 0, Guid OperationId, uint64 NpcId, uint8 Service, uint8 Result, uint16 0,
   Guid ItemId, uint32 Code}`. For the aging NPC `Result` is `AgingResult` (0 lost, 1 down one, 2 down two, 3 success,
   4 doubled) and `ItemId` is empty when the item was lost; for the mixing NPC it is `MixResult` (0 failed, 1 mixed,
-  2 reconstructed, 3 refined, `ItemId` empty after refining). `PricePercent` of a dialog service is the server's price
-  setting of the aging, mixing and alchemy services (100 for the others). A teleport also sends a forced `FieldWarp`.
+  2 reconstructed, 3 refined, `ItemId` empty after refining); for the smelter `SmeltResult` (1 smelted), the craftsman
+  `ManufactureResult` (0 failed, `ItemId` empty, 1 made) and the mixture reset 1. `PricePercent` of a dialog service is the server's price
+  setting of the aging, mixing and alchemy services (100 for the others), without Bless Castle's tax, which the client
+  adds to the price it works out (`CastleState`). A teleport also sends a forced `FieldWarp`.
 
 The server checks every request against the NPC in the player's field (alive, within 96 units, offering the service),
 writes durable changes before applying them and records the operation id with the character, so a retried request
@@ -520,6 +538,27 @@ refused change also by a chat line.
 | `ContactChange` | `uint8 List` (`ContactList`: 0 friends, 1 ignored), `uint8 Add` (0 or 1), `text Name` |
 | `ContactRefresh` | nothing |
 | `ContactList` | `uint8 List, uint8 Count` (at most 100), entries `{text Name, uint8 Online}` in the order added (`Online` 0 on the ignored list) |
+
+### Clans
+
+Every body starts with `{uint16 Version = 1, uint16 Flags = 0}`; names are UTF-8 with a `uint16` byte length: a clan's name
+at most 48 bytes (`ClanWire.MaxClanNameBytes`: 16 characters), a character's 64.
+
+| Message | Layout after the header |
+| --- | --- |
+| `ClanRequest` | `uint8 Action` (`ClanAction`: 0 open, 1 found, 2 invite, 3 accept, 4 refuse, 5 leave, 6 expel, 7 disband, 8 appoint, 9 discharge, 10 entrust; 11 mark names a `ClanMark`'s result), `varuint Id` (the Clan Master for found and entrust, the player for invite), `text Name` (the new clan, or the member) |
+| `ClanState` | `uint8 HasClan`; with a clan `varuint ClanId, text Name, uint8 State` (0 registering, 1 registered), `int64 Deadline` (Unix seconds, 0 none), `uint8 Rank` (0 member, 1 vice, 2 chief), `uint8 Capacity, text Intro` (256 bytes), `varuint MarkVersion, uint16 Count` (at most 80), members `{text Name, uint8 Class, varuint Level, uint8 Rank, uint8 Online}` (chief, vice, then by name) |
+| `ClanInvite` | `varuint RecruiterId, text ClanName, text ChiefName` |
+| `ClanResult` | `uint8 Action, uint8 Status` (`ClanStatus`, 0 done) |
+| `ClanMark` | `uint16 Size` (32, `ClanWire.MarkSize`), then Size x Size pixels of `uint8` red, green, blue and alpha (straight), rows from the top: 4,096 bytes, one frame |
+| `CastleState` | `varuint OwnerClanId` (0 none), `text OwnerName` (48 bytes), `uint8 Tax` (in force on fees), `uint8 Siege` (0 peace, 1 running, 3 over), `uint8 Flags` (1 the server runs the league, 2 door down), `varuint SecondsLeft` (a running siege's, when the state was made; 0 otherwise), `uint8 Crystals`, `uint8 Count` (at most 10, `CastleLimits.TopClans`), then per clan `varuint ClanId, text Name, varuint Damage`, then `varuint TotalDamage` |
+| `CastleOwnerRequest` | `uint8 Action` (0 open, 1 save, 2 withdraw), `varuint Npc` (the butler), `uint8 Tax, uint8 Skill`, `uint8 x6 Towers` (0 none, 1 ice, 2 lightning, 3 fire), `uint8 x3 Mercenaries`, `varuint Amount` (a withdrawal's gold) |
+| `CastleOwnerState` | `uint8 HasView`; with one `varuint Treasury, uint8 Tax` (in force), `uint8 NextTax, uint8 Skill` (chosen), `uint8 SkillInForce`, `uint8 x6 Towers, uint8 x3 Mercenaries, uint8 CanEdit` (the chief) |
+| `BellatraClanRequest` | `uint8 Action` (0 open, 1 redeem), `varuint Npc` (the secretary), `varuint Amount` (a redemption's gold) |
+| `BellatraClanState` | `uint8 HasView`; with one `varuint OperatingClanId` (0 none), `text OperatingName` (48 bytes), `text Chief` (64 bytes), `uint8 Tax`, `varuint Balance` (the player's clan's income), `uint8 CanRedeem` (its chief), `uint8 Count` (at most 10, `BellatraLimits.TopClans`), then per clan `text Name, varuint Points` (yesterday's) |
+| `BellatraBoard` | `uint8 Shown`; with it `uint8 Round` (0 between rounds), `uint8 Team` (0 to 3), `uint8 Outcome` (0 playing, 1 the team goes on, 2 out, 3 the game is over), `varuint Score`, `varuint x4 TeamScores` (`BellatraLimits.Teams`) |
+| `BellatraClanResult` | `uint8 Action, uint8 Status` (`BellatraClanStatus`: 0 done, 1 not the chief, 2 not enough income, 3 out of reach, 4 too much gold, 5 busy, 6 unavailable) |
+| `CastleOwnerResult` | `uint8 Action, uint8 Status` (`CastleOwnerStatus`: 0 done, 1 not the owner clan, 2 not the chief, 3 out of reach, 4 busy, 5 not enough gold, 6 invalid setup, 7 during a siege, 8 not enough in the treasury, 9 too much gold, 10 unavailable) |
 
 ### Death and restart
 
@@ -655,12 +694,13 @@ connection every `Server:ReportSeconds` (30 by default).
 
 ## How to add an opcode or packet
 
-1. **Code.** Add a constant to `EtervaleOpcodes` in `Binary/EtervaleOpcodes.cs`, in the range of its area (`0x455401xx`
-   owner state, `0x4554011x` inventory, `0x4554012x` progression, `0x4554013x` NPC, `0x4554014x` combat, `0x4554015x`
-   removals, `0x4554016x` leave, `0x4554017x` clock, `0x455402xx` skills, `0x455403xx` item details, `0x455404xx`
-   usable items, `0x455405xx` quests, `0x455406xx` personal shops, `0x455407xx` parties, `0x455408xx` trades, `0x455409xx` presence, `0x45540Axx` restart,
-   `0x45540Bxx` ground items, `0x45540Cxx` chat, `0x45540Dxx` player actions, `0x45540Exx` world entry, `0x45540Fxx`
-   account, `0x455410xx` contacts).
+1. **Code.** Add a constant to `EtervaleOpcodes` in `Binary/EtervaleOpcodes.cs`, in the range of its area
+   (`0x455401xx` owner state, `0x4554011x` inventory, `0x4554012x` progression, `0x4554013x` NPC, `0x4554014x` combat,
+   `0x4554015x` removals, `0x4554016x` leave, `0x4554017x` clock, `0x455402xx` skills, `0x455403xx` item details,
+   `0x455404xx` usable items, `0x455405xx` quests, `0x455406xx` personal shops, `0x455407xx` parties, `0x455408xx`
+   trades, `0x455409xx` presence, `0x45540Axx` restart, `0x45540Bxx` ground items, `0x45540Cxx` chat, `0x45540Dxx` player
+   actions, `0x45540Exx` world entry, `0x45540Fxx` account, `0x455410xx` contacts, `0x455411xx` clans, `0x455412xx` Bless
+   Castle, `0x455413xx` Bellatra).
 2. **Packet type.** Add a record in `Packets/` with `Size` or `HeaderSize` constants, `int Write(Span<byte>)` built on
    `PacketWriter` (returning `Finish()`), and `static Read(ReadOnlySpan<byte>)` built on `PacketReader(packet,
    minimum)`. Start new bodies with `{uint16 Version, uint16 Flags}`, reject version 0, append fields only at the end,

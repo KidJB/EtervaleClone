@@ -10,6 +10,8 @@ using PristonTale.Simulation.World.Ai;
 using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Spawning;
 
+using PristonTale.Simulation.Social.Castle;
+
 namespace PristonTale.Application.World;
 
 // World state the game-master commands read and change. Every call runs on the command phase; the requester's quota
@@ -54,19 +56,22 @@ public sealed partial class WorldServer
         {
             case Simulation.World.Npcs.NpcServiceAction.Buy:
                 var key = _worldData.Current.Items.TryGet(command.ItemCode, out var definition) ? definition.CatalogKey : "";
-                Currency.Record(CurrencyLedger.ShopSinkFor(key), spent);
+                RecordSpending(CurrencyLedger.ShopSinkFor(key), spent, CastleRules.TaxIn(spent, operation.Tax, command.Count));
                 break;
             case Simulation.World.Npcs.NpcServiceAction.Teleport:
-                Currency.Record(CurrencySink.Teleports, spent);
+                RecordSpending(CurrencySink.Teleports, spent, CastleRules.TaxIn(spent, operation.Tax));
                 break;
             case Simulation.World.Npcs.NpcServiceAction.Age:
-                Currency.Record(CurrencySink.Aging, spent);
+                RecordSpending(CurrencySink.Aging, spent, CastleRules.TaxIn(spent, operation.Tax));
                 break;
             case Simulation.World.Npcs.NpcServiceAction.Mix:
-                Currency.Record(CurrencySink.Mixing, spent);
+                RecordSpending(CurrencySink.Mixing, spent, CastleRules.TaxIn(spent, operation.Tax));
                 break;
             case Simulation.World.Npcs.NpcServiceAction.Refine:
-                Currency.Record(CurrencySink.ForceOrbs, spent);
+                RecordSpending(CurrencySink.ForceOrbs, spent, CastleRules.TaxIn(spent, operation.Tax));
+                break;
+            case Simulation.World.Npcs.NpcServiceAction.EnterBellatra:
+                RecordSpending(CurrencySink.BellatraTickets, spent, 0);
                 break;
         }
     }
@@ -106,10 +111,7 @@ public sealed partial class WorldServer
             return null;
         }
 
-        var points = definition.StartPoints;
-        var point = points.Count == 0 ? definition.Center
-            : definition.State == FieldState.Castle ? points[random.Next(points.Count)]
-            : points[0];
+        var point = definition.ArrivalFor(random);
         return new GmPlacement(fieldCode, new Vector3(point.X, float.NaN, point.Z));
     }
 
@@ -127,13 +129,20 @@ public sealed partial class WorldServer
                 return null;
             }
 
-            var terrain = GetField(destination.FieldId).Terrain;
-            var position = onFloor ? terrain.PlaceOnFloor(requested) : terrain.SettleNear(requested, FieldTerrain.ArrivalTolerance);
-            var inVillage = definition.State == FieldState.Village;
-            Relocate(connection, destination.FieldId, position, inVillage);
-            connection.Player.EnterField(position, inVillage);
-            return new GmPlacement(destination.FieldId, position);
+            return new GmPlacement(destination.FieldId, MoveTo(connection, definition, requested, onFloor));
         });
+    }
+
+    // Moves a player to a position of a field (on the highest floor there, or settled near the height given) and returns
+    // where it stands; the caller sends the forced warp.
+    private Vector3 MoveTo(Connection connection, FieldDef definition, Vector3 requested, bool onFloor)
+    {
+        var terrain = GetField(definition.FieldCode).Terrain;
+        var position = onFloor ? terrain.PlaceOnFloor(requested) : terrain.SettleNear(requested, FieldTerrain.ArrivalTolerance);
+        var inVillage = definition.State == FieldState.Village;
+        Relocate(connection, definition.FieldCode, position, inVillage);
+        connection.Player.EnterField(position, inVillage);
+        return position;
     }
 
     // Players in the world and living wild monsters of every field.
@@ -352,35 +361,11 @@ public sealed partial class WorldServer
 
     // A game master's gift into a player's bag: the copy must fit the bag and the weight limit. Outcome false means it did
     // not fit (nothing is written); null means the player is not playing.
-    public Task<PreparedCharacterOperation<bool>?> PrepareGiftAsync(ulong requesterId, PlayerSession session, Func<ISimRng, ItemInstance> make)
-    {
-        return EnqueueAsync<PreparedCharacterOperation<bool>?>(requesterId, () =>
-        {
-            if (session.Loaded is null || !TryGetPlaying(session, out var connection))
-            {
-                return null;
-            }
+    public Task<PreparedCharacterOperation<bool>?> PrepareGiftAsync(ulong requesterId, PlayerSession session, Func<ISimRng, ItemInstance> make) =>
+        PrepareIntoBagAsync(requesterId, session, connection => make(_fields[connection.FieldId].Rng), waitForCapacity: false);
 
-            var (candidate, snapshot) = Receive(session, connection, make(_fields[connection.FieldId].Rng), null);
-            return new PreparedCharacterOperation<bool>(connection.Player.Character, candidate, snapshot, candidate is not null);
-        });
-    }
-
-    public Task<bool> CommitGiftAsync(PlayerSession session, PreparedCharacterOperation<bool> operation)
-    {
-        return EnqueueAsync(NoOwner, () =>
-        {
-            var candidate = CheckReceived(session, operation, "a game master's gift");
-            if (Transfer(Persistence.Abstractions.GameLogs.ItemTransferKind.GameMasterGift, Guid.NewGuid(), session.FieldId) is { } log)
-            {
-                log.Arrived(operation.Original, candidate, null, CharacterIdOf(session));
-                Log(log);
-            }
-
-            operation.Original.CommitInventoryOperation(candidate);
-            return true;
-        }, waitForCapacity: true);
-    }
+    public Task<bool> CommitGiftAsync(PlayerSession session, PreparedCharacterOperation<bool> operation) =>
+        CommitIntoBagAsync(session, operation, Persistence.Abstractions.GameLogs.ItemTransferKind.GameMasterGift, "a game master's gift");
 
     public Task<GmCharacterReport?> InspectAsync(ulong requesterId, ulong entityId)
     {

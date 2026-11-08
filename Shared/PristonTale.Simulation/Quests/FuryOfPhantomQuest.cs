@@ -5,8 +5,8 @@ using PristonTale.Simulation.World;
 namespace PristonTale.Simulation.Quests;
 
 // Fury of Phantom, from level 100: fifty monsters in the Heart of Perum, a duel with Fury, a hundred monsters in the
-// Galluvia valley and two more duels against stronger forms of Fury; the reward is one of eight weapons. Each won duel
-// sends the player back to Pillai.
+// Galluvia valley and two more duels against stronger forms of Fury; the reward is one of eleven weapons, any class's.
+// Each won duel sends the player back to Pillai.
 public static class FuryOfPhantomQuest
 {
     public const QuestCode Code = QuestCode.FuryOfPhantom;
@@ -19,13 +19,14 @@ public static class FuryOfPhantomQuest
     private static readonly uint[] RewardWeapons =
     [
         ItemCodes.Parse("WA120"), ItemCodes.Parse("WC120"), ItemCodes.Parse("WH121"), ItemCodes.Parse("WP121"),
-        ItemCodes.Parse("WS122"), ItemCodes.Parse("WS223"), ItemCodes.Parse("WT121"), ItemCodes.Parse("WM121")
+        ItemCodes.Parse("WS122"), ItemCodes.Parse("WS223"), ItemCodes.Parse("WT121"), ItemCodes.Parse("WM121"),
+        ItemCodes.Parse("WD121"), ItemCodes.Parse("WN121"), ItemCodes.Parse("WV121")
     ];
 
     private static readonly string[] RewardDocuments =
     [
         "haQuestFuryItem1", "haQuestFuryItem2", "haQuestFuryItem3", "haQuestFuryItem4", "haQuestFuryItem5", "haQuestFuryItem6", "haQuestFuryItem7",
-        "haQuestFuryItem8"
+        "haQuestFuryItem8", "haQuestFuryItem9", "haQuestFuryItem10", "haQuestFuryItem11"
     ];
 
     // The duel of each battle state: the first in state 4, the second in 9 and the third in 11, each against a stronger Fury.
@@ -74,7 +75,7 @@ public static class FuryOfPhantomQuest
             12 => new QuestPrompt(Code, 12, "100LVQuest_7End", QuestFollowup.ChooseFromList)
             {
                 Title = QuestTexts.FuryTitle,
-                Choices = QuestTexts.FuryRewardNames,
+                ChoiceItems = RewardWeapons,
                 ChoiceDocuments = RewardDocuments
             },
             _ => Reward(active.Variant)
@@ -90,7 +91,7 @@ public static class FuryOfPhantomQuest
         Title = QuestTexts.FuryTitle,
         ConfirmLine1 = QuestTexts.ReceiveItem.Item1,
         ConfirmLine2 = QuestTexts.ReceiveItem.Item2,
-        Choices = QuestTexts.FuryRewardNames,
+        ChoiceItems = RewardWeapons,
         ChoiceDocuments = RewardDocuments,
         Choice = Math.Clamp(choice, 1, RewardDocuments.Length)
     };

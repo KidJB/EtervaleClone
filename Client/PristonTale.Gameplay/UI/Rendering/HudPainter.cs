@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using PristonTale.Gameplay.UI.Clans;
 
 namespace PristonTale.Gameplay.UI.Rendering;
 
@@ -24,6 +25,7 @@ public sealed class HudPainter : IDisposable
     private readonly Texture2D _white;
     private readonly Texture2D _nameBox;
     private readonly Texture2D _nameBoxHighlighted;
+    private readonly Texture2D _clanMark;
     private readonly List<TextRun> _text = new(128);
     private readonly float _textShift;
     private readonly float _capCropping;
@@ -40,6 +42,7 @@ public sealed class HudPainter : IDisposable
         _white.SetData([Color.White]);
         _nameBox = NameBoxTexture(batch.GraphicsDevice, new Color(170, 136, 65), new Color(98, 84, 48));
         _nameBoxHighlighted = NameBoxTexture(batch.GraphicsDevice, new Color(236, 200, 110), new Color(150, 120, 60));
+        _clanMark = ClanMarks.Default(batch.GraphicsDevice);
         _capCropping = font.GetGlyphs().TryGetValue('M', out var glyph) ? glyph.Cropping.Y : CapTop / TextScale;
         _textShift = MathF.Round(CapTop - _capCropping * TextScale);
     }
@@ -141,6 +144,23 @@ public sealed class HudPainter : IDisposable
             Stretch(path, destination, null, new Color(amount, amount, amount, 0));
         }
     }
+
+    // A texture of straight-alpha RGBA pixels, rows from the top (a picture the player chose); the caller disposes it.
+    public Texture2D CreateTexture(int width, int height, byte[] rgba)
+    {
+        var pixels = new Color[width * height];
+        for (var index = 0; index < pixels.Length; index++)
+        {
+            var at = index * Protocol.Packets.ClanWire.PixelBytes;
+            pixels[index] = Color.FromNonPremultiplied(rgba[at], rgba[at + 1], rgba[at + 2], rgba[at + 3]);
+        }
+
+        var texture = new Texture2D(_batch.GraphicsDevice, width, height, false, SurfaceFormat.Color);
+        texture.SetData(pixels);
+        return texture;
+    }
+
+    public void ClanMark(int x, int y) => _batch.Draw(_clanMark, new Vector2(x, y), Color.White);
 
     public void Image(Texture2D texture, Rectangle destination, Color? tint = null)
     {
@@ -247,32 +267,7 @@ public sealed class HudPainter : IDisposable
         return ((int)MathF.Ceiling(capitals) + pad * 2, pad);
     }
 
-    public string Fit(string value, int width)
-    {
-        if (Measure(value) <= width)
-        {
-            return value;
-        }
-
-        // The longest prefix that fits with the ellipsis; a prefix's width grows with its length, so bisect it.
-        var fitted = string.Empty;
-        for (int low = 1, high = value.Length - 1; low <= high;)
-        {
-            var length = (low + high) / 2;
-            var candidate = value[..length] + "...";
-            if (Measure(candidate) <= width)
-            {
-                fitted = candidate;
-                low = length + 1;
-            }
-            else
-            {
-                high = length - 1;
-            }
-        }
-
-        return fitted;
-    }
+    public string Fit(string value, int width) => Measure(value) <= width ? value : HudTextLayout.Fit(value, width, candidate => Measure(candidate));
 
     // Item info box: nine 16x16 tiles repeated over a box measured in whole tiles.
     public void InfoBox(Rectangle bounds)
@@ -503,5 +498,6 @@ public sealed class HudPainter : IDisposable
         _white.Dispose();
         _nameBox.Dispose();
         _nameBoxHighlighted.Dispose();
+        _clanMark.Dispose();
     }
 }

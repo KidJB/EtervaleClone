@@ -146,6 +146,26 @@ public static class QuestBook
         return open ? QuestBookStatus.Available : QuestBookStatus.Locked;
     }
 
+    // One entry per elite chain: the client does not receive the elite log, so a chain shows Available from its level on.
+    private static void AddEliteChain(List<QuestBookEntry> entries, int chain, string title, string task, string reward, string giver, string giverNpc)
+    {
+        var codes = new List<QuestCode>();
+        foreach (var quest in EliteQuests.All)
+        {
+            if (quest.Chain == chain)
+            {
+                codes.Add(quest.Code);
+            }
+        }
+
+        entries.Add(new QuestBookEntry(title, EliteQuests.ChainLevels[chain], QuestBookSide.Both, task, [reward])
+        {
+            Codes = codes,
+            Giver = giver,
+            GiverNpcs = [giverNpc]
+        });
+    }
+
     private static QuestBookEntry[] Build()
     {
         var entries = new List<QuestBookEntry>();
@@ -213,13 +233,18 @@ public static class QuestBook
             LevelBit = LevelQuestLog.Level90Bonus
         });
         entries.Add(new QuestBookEntry("Fury of Phantom", FuryOfPhantomQuest.MinimumLevel, QuestBookSide.Both,
-            "Two field hunts and three duels with Fury in the arena.", ["One weapon of your choice: " + string.Join(", ", QuestTexts.FuryRewardNames)])
+            "Two field hunts and three duels with Fury in the arena.", ["One of eleven weapons of your choice, any class's"])
         {
             Codes = [QuestCode.FuryOfPhantom],
             Giver = "Royalmage Ray (Pillai)",
             GiverNpcs = [Ray],
             ElementaryBit = ElementaryQuestLog.FuryOfPhantom
         });
+        AddEliteChain(entries, 0, "Lovers of history", "Six quests for the Force Master and Royalmage Ray.", "+2 elite skill points", "Force Master", "Force Master");
+        AddEliteChain(entries, 1, "War of the Ancient", "Eight quests for Knight Commander Derik, Craftman Salon and Clever Newter.", "+3 elite skill points",
+            "Knight Commander Derik (Ricarten)", Derik);
+        AddEliteChain(entries, 2, "Mission from the ancestor", "Seven quests for the Wandering Soul and Sage Celina.",
+            "+3 elite skill points, +10 stat points and the Dragon Crystal", "Wandering Soul", "Wandering Soul");
         for (var index = 0; index < WingQuest.ExchangeCount; index++)
         {
             var wing = WingGates.Wings[index].Name;

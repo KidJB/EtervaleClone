@@ -32,8 +32,8 @@ public static class ServerSettingCatalog
         Int("experience.multiplier", WorldServerOptions.DefaultExperienceMultiplier, 1, 1000,
             "Times the experience of each monster killed (the monsters' authored experience times this).",
             static (s, v) => World(s, s.World with { ExperienceMultiplier = v })),
-        Int("experience.event_percent", 0, 0, 100_000,
-            "Experience event: 0 off, else extra experience per monster killed, in steps of 100% from 100 up to 400 (a value between steps takes the step below).",
+        Int("experience.event_percent", WorldServerOptions.Default.ExperienceEventPercent, 0, 100_000,
+            "Experience event: the percent of each monster's experience a kill gives (100 = x1, 500 = x5; 0 is x1).",
             static (s, v) => World(s, s.World with { ExperienceEventPercent = v })),
         Int("world.clock_offset_minutes", 0, -1440, 1440, "Game minutes added to the game clock, to start the day at another hour.",
             static (s, v) => World(s, s.World with { ClockOffsetMinutes = v })),
@@ -71,7 +71,26 @@ public static class ServerSettingCatalog
         Int("mixing.price_percent", 100, 0, 10_000, "Price of a mix or a reconstruction in percent of the item's price; 0 makes it free.",
             static (s, v) => World(s, s.World with { Mixing = s.World.Mixing with { PricePercent = v } })),
         Int("alchemy.price_percent", 100, 0, 10_000, "Price of turning sheltoms into force orbs, in percent of the original's price per sheltom.",
-            static (s, v) => World(s, s.World with { Mixing = s.World.Mixing with { AlchemyPricePercent = v } }))
+            static (s, v) => World(s, s.World with { Mixing = s.World.Mixing with { AlchemyPricePercent = v } })),
+        Int("bellatra.mode", (int)BellatraOptions.Default.Mode, 0, 2,
+            "Bellatra: 0 closed, 1 open while the server's hour is 0 to 5 or 12 to 17, 2 always open (a game follows the game clock: tickets at game hours 4 and 5).",
+            static (s, v) => World(s, s.World with { Bellatra = s.World.Bellatra with { Mode = (Simulation.World.Bellatra.BellatraMode)v } })),
+        Int("bellatra.tax", BellatraOptions.Default.Tax, 0, 100, "Bellatra: percent of each player's prize kept for the operating clan.",
+            static (s, v) => World(s, s.World with { Bellatra = s.World.Bellatra with { Tax = v } })),
+        Int("bellatra.score_divisor", BellatraOptions.Default.ScoreDivisor, 1, 1_000_000,
+            "Bellatra: a kill scores the monster's experience divided by this (a boss's times twice the round); the score is the prize in gold.",
+            static (s, v) => World(s, s.World with { Bellatra = s.World.Bellatra with { ScoreDivisor = v } })),
+        Int("castle.mode", (int)Application.Castle.CastleOptions.Default.Mode, 0, 2,
+            "Bless Castle: 0 no sieges, 1 a weekly siege at castle.siege_day and castle.siege_hour, 2 the open league (sieges one after another for two hours from then; players never fight each other in the castle).",
+            static (s, v) => s with
+            {
+                Castle = s.Castle with { Mode = (Simulation.Social.Castle.CastleMode)v },
+                World = s.World with { CastleLeague = v == (int)Simulation.Social.Castle.CastleMode.League }
+            }),
+        Int("castle.siege_day", Application.Castle.CastleOptions.Default.SiegeDay, 0, 6, "Bless Castle: the siege's day of the week, 0 Sunday to 6 Saturday (server time).",
+            static (s, v) => s with { Castle = s.Castle with { SiegeDay = v } }),
+        Int("castle.siege_hour", Application.Castle.CastleOptions.Default.SiegeHour, 0, 23, "Bless Castle: the siege's starting hour, 0 to 23 (server time).",
+            static (s, v) => s with { Castle = s.Castle with { SiegeHour = v } })
     ];
 
     // The definition of a setting by name, in any case; null for none.

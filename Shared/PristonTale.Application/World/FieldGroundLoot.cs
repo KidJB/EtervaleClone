@@ -70,7 +70,10 @@ public sealed class FieldGroundLoot(ItemCatalog catalog, FieldTerrain? terrain =
                 }
             }
 
-            _entries.Add(id, new Entry(view, item, payout.CreditedPlayerId, publicDrop ? nowMs : nowMs + OwnedDropMs, nowMs + LifetimeMs(definition), NoThrower));
+            _entries.Add(id, new Entry(view, item, payout.CreditedPlayerId, publicDrop ? nowMs : nowMs + OwnedDropMs, nowMs + LifetimeMs(definition), NoThrower)
+            {
+                FromMonster = true
+            });
             _dirty = true;
         }
     }
@@ -110,6 +113,9 @@ public sealed class FieldGroundLoot(ItemCatalog catalog, FieldTerrain? terrain =
 
     // The character id that threw a drop; NoThrower for a monster's drop or one that is gone.
     public long ThrownBy(Guid id) => _entries.TryGetValue(id, out var entry) ? entry.ThrownBy : NoThrower;
+
+    // Whether a drop came from a monster's kill (Place); false for a thrown or created one, or one that is gone.
+    public bool FromMonster(Guid id) => _entries.TryGetValue(id, out var entry) && entry.FromMonster;
 
     // Where a drop from the origin (a corpse, the thrower's feet) lies, as the original lays drops: on a ring cell taken in
     // turn with one counter for the whole field, whose floor is within DropTolerance of the origin. The original meant to
@@ -270,6 +276,7 @@ public sealed class FieldGroundLoot(ItemCatalog catalog, FieldTerrain? terrain =
     private sealed class Entry(GroundDropView view, ItemInstance? item, ulong ownerId, long publicAt, long expiresAt, long thrownBy)
     {
         public long ThrownBy { get; } = thrownBy;
+        public bool FromMonster { get; init; }
         public GroundDropView View { get; } = view;
         public ItemInstance? Item { get; } = item;
         public ulong OwnerId { get; } = ownerId;

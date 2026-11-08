@@ -29,6 +29,9 @@ public sealed class GameTcpServer(
     PartyAppService parties,
     TradeAppService trades,
     ContactAppService contacts,
+    Application.Clans.ClanAppService clans,
+    Application.Castle.CastleAppService castle,
+    Application.Bellatra.BellatraClanAppService bellatraClans,
     ChatAppService chat,
     GameServerControl control,
     CoinShopAppService coinShop,
@@ -67,7 +70,7 @@ public sealed class GameTcpServer(
         _loginThrottle = new LoginThrottle(_limits.LoginFailuresPerAccount, _limits.LoginFailuresPerIp, _limits.LoginFailureWindowMs);
         control.Attach(() => _clients.Count, _loginThrottle);
         var services = new SessionServices(auth, characters, sessionsApp, sessions, world, worldData, localizedWorldData, logger, _limits, _loginThrottle, npc, itemUse,
-            restart, wingGates, quests, personalShops, parties, trades, contacts, chat, control, coinShop, itemBox, dailyQuests, skins);
+            restart, wingGates, quests, personalShops, parties, trades, contacts, chat, clans, castle, bellatraClans, control, coinShop, itemBox, dailyQuests, skins);
         using var certificate = ServerCertificate.Load(configuration, logger);
         var certificateContext = SslStreamCertificateContext.Create(certificate, additionalCertificates: null);
         using var listener = new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp) { DualMode = true };

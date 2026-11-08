@@ -73,6 +73,7 @@ public sealed partial class GameScene
         else if (!WorldClicksBlocked && !RightAttackEnabled && mouse.RightButton == ButtonState.Pressed
             && _lastMouseState.RightButton == ButtonState.Released && !SelfCasting)
         {
+            EndSkillTrace();
             TryCastSkillClick(mouse, rightButton: true);
         }
 
@@ -84,6 +85,7 @@ public sealed partial class GameScene
             _leftPressMs = gameTime.TotalGameTime.TotalMilliseconds;
             _followCursor = false;
             _holdCursorMovement = false;
+            EndSkillTrace();
             if (TryPickLoot(mouse))
             {
             }
@@ -115,6 +117,7 @@ public sealed partial class GameScene
 
         UpdateCharge(mouse);
         EndSkillMotion();
+        UpdateSkillTrace(mouse);
         UpdatePendingCast();
         UpdateNpcApproach();
         UpdateReachedPlayer();
@@ -284,8 +287,8 @@ public sealed partial class GameScene
             return false;
         }
         // A seller is approached and its shop opened as an NPC's dialog is; another player is approached for the buttons
-        // under its portrait.
-        if (kind is EntityKind.Npc or EntityKind.Player)
+        // under its portrait, unless the castle's battle zone lets the two fight (the server decides).
+        if (kind is EntityKind.Npc || kind == EntityKind.Player && !Fights(entityId))
         {
             _lootInteraction.Cancel();
             ClearAttackTarget();
@@ -296,7 +299,7 @@ public sealed partial class GameScene
             StopPredictedMovement();
             return true;
         }
-        if (kind != EntityKind.Monster)
+        if (kind is not (EntityKind.Monster or EntityKind.Player))
         {
             return false;
         }
