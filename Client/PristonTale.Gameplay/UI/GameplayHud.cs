@@ -170,6 +170,8 @@ public sealed partial class GameplayHud : IDisposable
         _sprites.Request(HudCraftArt.All);
         _sprites.Request(HudArt.BlockText);
         _sprites.Request(HudQuestArt.All);
+        _sprites.Request(Bellatra.HudBellatraResult.Art);
+        SetUpBellatraShow();
         _painter = new HudPainter(context.SpriteBatch, context.Font, _sprites);
         _icons = new HudItemIcons(context.GraphicsDevice, context.AssetRoot, context.Log);
         _icons.Request([PetSkins.IconKey]);
@@ -508,7 +510,7 @@ public sealed partial class GameplayHud : IDisposable
         }
 
         _npc.Dismiss();
-        var closed = _clanWindow.IsOpen || _castleWindow.IsOpen || _bellatraWindow.IsOpen || _npcOpen || _settingsOpen || _systemMenu || _skills.TrainingPending
+        var closed = _clanWindow.IsOpen || _castleWindow.IsOpen || _siegeResult.IsOpen || _bellatraWindow.IsOpen || _bellatraResult.IsOpen || _npcOpen || _settingsOpen || _systemMenu || _skills.TrainingPending
             || _inventorySlide.Open || _statusSlide.Open || _skillSlide.Open || ServiceWindowOpen(blockingOnly: false)
             || _questWindow.Open || _partyWindow.Open || _quests.Dialog is not null || _quests.SkillResetBox;
         closed |= _personalShop.Close();
@@ -518,7 +520,9 @@ public sealed partial class GameplayHud : IDisposable
         _helpWindow.Close();
         _clanWindow.Close();
         _castleWindow.Close();
+        _siegeResult.Close();
         _bellatraWindow.Close();
+        _bellatraResult.Close();
         _itemUse.Close();
         _wingGate.Close();
         _puzzle.Close();
@@ -579,6 +583,8 @@ public sealed partial class GameplayHud : IDisposable
         _clanRequest.Update(_clock.Elapsed.TotalMilliseconds);
         _tradeRequest.Update(_clock.Elapsed.TotalMilliseconds);
         UpdateContacts(_clock.Elapsed.TotalMilliseconds);
+        _bellatraResult.Update(_clock.Elapsed.TotalMilliseconds, _npcOpen);
+        _bellatraShow?.Update(elapsedSeconds);
         ForwardMessages();
         ApplyQuests();
         _coinShop.OwnClass = _class;
@@ -1019,6 +1025,18 @@ public sealed partial class GameplayHud : IDisposable
             _npc.Draw(_painter, pointer);
         }
 
+        if (_bellatraResult.IsOpen)
+        {
+            _painter.Flush();
+            _bellatraResult.Draw(_painter, pointer);
+        }
+
+        if (SiegeResultShown)
+        {
+            _painter.Flush();
+            _siegeResult.Draw(_painter, pointer);
+        }
+
         if (_itemUse.Teleport.IsOpen || _itemUse.Confirming)
         {
             _painter.Flush();
@@ -1117,6 +1135,7 @@ public sealed partial class GameplayHud : IDisposable
         _painter.Flush();
         _notice.Draw(_painter, layout);
         _painter.End();
+        DrawBellatraShow();
     }
 
     // Each pet's name in the NPCs' name box over it, within the distance speech bubbles show at.

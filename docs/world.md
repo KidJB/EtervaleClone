@@ -39,7 +39,7 @@ How the tick calls these rules belongs to [application.md](application.md).
 | `World/Loot/` | `DropTable`, `DropRoller`, `KillReward` (experience and kill credit), `GroundDropView` |
 | `World/Motion/` | `MotionClip`, `MotionTiming`, `MotionTimingSet`/`MotionTimingCatalog`, player fallbacks |
 | `World/Motion/PlayerEquipmentTiming.cs`, `World/Motion/Data/PlayerEquipmentTiming.json` | Player attack clips by class and weapon key, loaded from the generated embedded JSON (one entry per class and clip with its keys); do not hand-edit |
-| `World/Bellatra/` | Bellatra's rules: the arena and its rooms (`BellatraArena`), the rounds' tables (`BellatraRounds`), the open hours, tickets, score, prize, ranking and hours reached (`BellatraRules`) ([application.md](application.md#bellatra)) |
+| `World/Bellatra/` | Bellatra's rules: the arena and its rooms (`BellatraArena`), the rounds' tables (`BellatraRounds`), the open hours, tickets, score, prize, ranking, hours reached, the surprises and their seals (`BellatraRules`, `BellatraSeal`) ([application.md](application.md#bellatra)) |
 | `World/Npcs/` | `NpcDefinition`, `NpcCatalog`, typed services (`NpcServiceKind`), service commands and replies, shop and warehouse rules, teleport routes, sound code map |
 | `Physics/EntityCollision.cs` | Circle-vs-circle blocking between bodies (players, monsters, NPCs) along a swept segment |
 | `Physics/EntityCollisionRadii.cs`, `EntityNeighbour.cs` | Body radii (by `EntityKind`) and neighbour records |
@@ -88,7 +88,8 @@ Weapons (110) and its four gates to the Land of Nurwn (132); Lost Island to the 
 Stemple (116); Kelvezu's Lair to the Heart of Fire (125, three exits); the Ice Mine to the Crystal Nest (130). The Crystal
 Nest and the Land of Nurwn have no way out. No monsters are authored for Stemple, the Heart of Fire, the Crystal Nest or
 the Land of Nurwn. The action fields are reached by no gate; a kill in `fall_game` drops its event item GF102 at 150 in
-10000 (`ItemEventDrops`), with no event running.
+10000 (`ItemEventDrops`), with no event running. Space there with nothing ahead swings at nothing
+(`FieldInstance.SwingAtNothing`: a player who may swing and holds no attack).
 
 | Member | Use |
 |---|---|

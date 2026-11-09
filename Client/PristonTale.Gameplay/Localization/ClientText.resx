@@ -15,6 +15,10 @@
   <data name="Attribute.Spirit" xml:space="preserve"><value>Spirit</value></data>
   <data name="Attribute.Strength" xml:space="preserve"><value>Strength</value></data>
   <data name="Attribute.Talent" xml:space="preserve"><value>Talent</value></data>
+  <data name="Bellatra.AdvanceOne" xml:space="preserve"><value>{0}
+goes on to the high tower.</value></data>
+  <data name="Bellatra.AdvanceTwo" xml:space="preserve"><value>{0} and {1}
+go on to the high tower.</value></data>
   <data name="Bellatra.Back" xml:space="preserve"><value>Back</value></data>
   <data name="Bellatra.Chief" xml:space="preserve"><value>Chief: {0}</value></data>
   <data name="Bellatra.ChiefOnly" xml:space="preserve"><value>Only the clan's chief redeems its income.</value></data>
@@ -33,6 +37,13 @@
   <data name="Bellatra.Ranking" xml:space="preserve"><value>Ranking</value></data>
   <data name="Bellatra.Redeem" xml:space="preserve"><value>Redeem</value></data>
   <data name="Bellatra.Round" xml:space="preserve"><value>Round {0}</value></data>
+  <data name="Bellatra.Seal.Freeze" xml:space="preserve"><value>Freeze Seal</value></data>
+  <data name="Bellatra.Seal.Guardian" xml:space="preserve"><value>Guardian Seal</value></data>
+  <data name="Bellatra.Seal.Points" xml:space="preserve"><value>{0} Points Up</value></data>
+  <data name="Bellatra.Seal.Quake" xml:space="preserve"><value>Quake Seal</value></data>
+  <data name="Bellatra.Seal.Rabbit" xml:space="preserve"><value>Rabbit Seal</value></data>
+  <data name="Bellatra.Seal.Stun" xml:space="preserve"><value>Stun Seal</value></data>
+  <data name="Bellatra.Seal.Stygian" xml:space="preserve"><value>Stygian Seal</value></data>
   <data name="Bellatra.Secretary" xml:space="preserve"><value>Bellatra's secretary</value></data>
   <data name="Bellatra.Status.Busy" xml:space="preserve"><value>You are busy with something else.</value></data>
   <data name="Bellatra.Status.NotChief" xml:space="preserve"><value>Only the clan's chief redeems its income.</value></data>
@@ -199,9 +210,17 @@
   <data name="Game.BellatraCleared" xml:space="preserve"><value>Congratulations! Bellatra is over. You gained {0} gold.</value></data>
   <data name="Game.BellatraClosed" xml:space="preserve"><value>You cannot enter Bellatra at this time. Please come back later.</value></data>
   <data name="Game.BellatraEntered" xml:space="preserve"><value>You are already in this Bellatra game.</value></data>
+  <data name="Game.BellatraFreeze" xml:space="preserve"><value>{0} broke the Freeze Seal: the room's monsters are frozen.</value></data>
+  <data name="Game.BellatraGuardian" xml:space="preserve"><value>{0} broke the Guardian Seal: a Guardian Saint fights for them.</value></data>
   <data name="Game.BellatraLevel" xml:space="preserve"><value>You are not strong enough to enter Bellatra yet (level {0}). Train more and come back.</value></data>
   <data name="Game.BellatraNoTickets" xml:space="preserve"><value>Bellatra's tickets are sold at dawn (game hours {0} and {1}), before a game. Please come back then.</value></data>
   <data name="Game.BellatraOut" xml:space="preserve"><value>Your team is out (rank {0}). You gained {1} gold.</value></data>
+  <data name="Game.BellatraPoints" xml:space="preserve"><value>{0} broke the Point Seal: {1} more points.</value></data>
+  <data name="Game.BellatraQuake" xml:space="preserve"><value>{0} broke the Quake Seal: the room's monsters shake.</value></data>
+  <data name="Game.BellatraRabbit" xml:space="preserve"><value>{0} broke the Rabbit Seal: monsters turn into Rabies.</value></data>
+  <data name="Game.BellatraSealIdle" xml:space="preserve"><value>A seal breaks only in one of the arena's rooms while a round is played.</value></data>
+  <data name="Game.BellatraStun" xml:space="preserve"><value>{0} broke the Stun Seal: the room's monsters are stunned.</value></data>
+  <data name="Game.BellatraStygian" xml:space="preserve"><value>{0} broke the Stygian Seal: a Stygian Lord fights for them.</value></data>
   <data name="Game.BellatraTeamFull" xml:space="preserve"><value>All of this team's tickets are sold out.</value></data>
   <data name="Game.BellatraTicket" xml:space="preserve"><value>Bellatra's tickets are on sale: {0} gold.</value></data>
   <data name="Game.BossTime" xml:space="preserve"><value>Boss Time: XX:{0}</value></data>
@@ -718,11 +737,13 @@
   <data name="Siege.DoorDown" xml:space="preserve"><value>Castle door broken</value></data>
   <data name="Siege.DoorStands" xml:space="preserve"><value>Castle door standing</value></data>
   <data name="Siege.Ended" xml:space="preserve"><value>The siege of Bless Castle is over.</value></data>
+  <data name="Siege.EndedText" xml:space="preserve"><value>In a moment, everyone whose clan does not hold Bless Castle goes back to the start of the castle's field.</value></data>
   <data name="Siege.HeldBy" xml:space="preserve"><value>Held by {0}</value></data>
   <data name="Siege.League" xml:space="preserve"><value>BLESS CASTLE LEAGUE</value></data>
   <data name="Siege.NoOwner" xml:space="preserve"><value>No clan holds the castle</value></data>
   <data name="Siege.Title" xml:space="preserve"><value>BLESS CASTLE</value></data>
   <data name="Siege.Won" xml:space="preserve"><value>Your clan holds Bless Castle!</value></data>
+  <data name="Siege.WonText" xml:space="preserve"><value>Congratulations on your victory! The castle is your clan's until the next siege. The clan's chief sets the tax and the clan skill with the castle's butler.</value></data>
   <data name="Skill.AlreadyActive" xml:space="preserve"><value>That effect is still active.</value></data>
   <data name="Skill.CannotUse" xml:space="preserve"><value>The skill cannot be used now.</value></data>
   <data name="Skill.InVillage" xml:space="preserve"><value>Skills cannot be used in town.</value></data>
@@ -821,8 +842,11 @@
   <data name="Stat.DamageVsUndead" xml:space="preserve"><value>Damage vs undead</value></data>
   <data name="Stat.Defence" xml:space="preserve"><value>Defence</value></data>
   <data name="Stat.Evasion" xml:space="preserve"><value>Evasion</value></data>
+  <data name="Stat.ForceOrbDamage" xml:space="preserve"><value>Force Orb power</value></data>
   <data name="Stat.HealingTaken" xml:space="preserve"><value>Healing taken</value></data>
   <data name="Stat.HitDamage" xml:space="preserve"><value>Hit damage</value></data>
+  <data name="Stat.HitDamageMax" xml:space="preserve"><value>Maximum hit damage</value></data>
+  <data name="Stat.HitDamageMin" xml:space="preserve"><value>Minimum hit damage</value></data>
   <data name="Stat.LifeCostPerAttack" xml:space="preserve"><value>Life cost per attack</value></data>
   <data name="Stat.LifeLeech" xml:space="preserve"><value>Life leech</value></data>
   <data name="Stat.LifeRegen" xml:space="preserve"><value>Life regeneration (tenths/s)</value></data>

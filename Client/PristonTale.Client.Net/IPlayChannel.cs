@@ -90,6 +90,9 @@ public interface IPlayChannel : IAsyncDisposable
     // Space inside the minute a yahoo word opened; the cheer arrives on the presence timeline.
     Task SendYahooKeyAsync(CancellationToken ct = default);
 
+    // Space with nothing ahead in an action field: the server swings at nothing; the swing arrives on the presence timeline.
+    Task SendSwingAsync(CancellationToken ct = default);
+
     // The owner confirmed dismissing the pet of one status (the code its icon shows); the icon goes with the status's
     // removal.
     Task SendDismissCrystalPetsAsync(uint statusCode, CancellationToken ct = default);
@@ -116,6 +119,10 @@ public interface IPlayChannel : IAsyncDisposable
 
     // A request of Bellatra's secretary (a redemption's gold), answered by a BellatraClanResult and the window's state.
     Task SendBellatraClanAsync(Protocol.Packets.BellatraClanAction action, ulong npcId, long amount, CancellationToken ct = default);
+
+    // Asks a Bellatra result (BellatraResultRequestPacket.OwnGame the player's game, 1 to 4 a team booth's live one),
+    // answered by a BellatraResult.
+    Task SendBellatraResultAsync(int team, CancellationToken ct = default);
 
     // Trade requests: ask a player to trade, answer a request (PresenceUpdate.TradeRequest), the side's whole offer, lock it,
     // cancel. None is answered: the window (PresenceUpdate.Trade) and chat lines show what changed.

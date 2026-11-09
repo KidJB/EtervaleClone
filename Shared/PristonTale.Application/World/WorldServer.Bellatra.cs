@@ -44,7 +44,7 @@ public sealed partial class WorldServer
             return;
         }
 
-        _bellatra.Entrants[character.Name] = new BellatraGame.Entrant(team);
+        _bellatra.Entrants[character.Name] = new BellatraGame.Entrant(team, character.Class.Class);
         _bellatra.TeamLevels[team] += character.Level;
     }
 
@@ -52,7 +52,7 @@ public sealed partial class WorldServer
     {
         var game = _bellatra;
         StepBellatraMoves(nowMs);
-        DeliverBellatraBossKills();
+        DeliverBellatraNotices();
         var hour = GameHour;
         // A jump of the clock reaches several hours at once; each reached starts its round in turn.
         var started = 0;
@@ -90,8 +90,8 @@ public sealed partial class WorldServer
 
     // Every round's monster still standing falls and entrants away from the arena lose their place; the round after
     // starts, skipping the final when no player reached its need, or the game finishes after the last or with nobody
-    // left. Before rounds 4 and 7 the best teams with somebody left go on to their rooms, the others are paid and leave.
-    // False when the day's game has no entrant to start with.
+    // left. Before rounds 4 and 7 the best teams with somebody left cheer and go on to their rooms, the others are paid
+    // and leave. False when the day's game has no entrant to start with.
     private bool StartBellatraRound(long nowMs)
     {
         var game = _bellatra;
@@ -101,7 +101,6 @@ public sealed partial class WorldServer
         }
 
         var arena = GetField(BellatraArena.Field);
-        arena.KillBellatraMonsters();
         Span<bool> present = stackalloc bool[BellatraArena.Teams];
         foreach (var (name, entrant) in game.Entrants.ToList())
         {
@@ -122,6 +121,7 @@ public sealed partial class WorldServer
             game.Next++;
         }
 
+        arena.KillBellatraMonsters(potions: game.Next >= BellatraRounds.Count);
         if (game.Next >= BellatraRounds.Count || game.Entrants.Count == 0)
         {
             FinishBellatra(nowMs);
@@ -138,6 +138,17 @@ public sealed partial class WorldServer
         if (BellatraArena.GoOn(round) < BellatraArena.Teams)
         {
             var ranks = BellatraRules.Rank(game.TeamScores, present);
+            (game.StageTeams, game.GoingOn) = (0, 0);
+            for (var rank = 0; rank < ranks.Length; rank++)
+            {
+                if (present[ranks[rank]])
+                {
+                    game.StageTeams |= 1 << ranks[rank];
+                    game.GoingOn |= rank < BellatraArena.GoOn(round) ? 1 << ranks[rank] : 0;
+                }
+            }
+
+            game.Revision++;
             foreach (var (name, entrant) in game.Entrants.ToList())
             {
                 var rank = Array.IndexOf(ranks, entrant.Team);
@@ -145,6 +156,7 @@ public sealed partial class WorldServer
                 if (rank < BellatraArena.GoOn(round))
                 {
                     entrant.Outcome = BellatraOutcome.GoesOn;
+                    connection.Player.QueueYahoo(heals: false);
                     game.Moves.Add(new BellatraGame.Move(name, BellatraArena.Field, BellatraArena.Rooms[BellatraArena.AdvanceRoom(rank, round)].Centre,
                         nowMs + BellatraRules.BannerMs));
                 }
@@ -165,15 +177,17 @@ public sealed partial class WorldServer
         return true;
     }
 
-    // Every entrant still in the arena is paid its score less the tax; all go to the village OutSeconds later.
+    // Every entrant still in the arena is paid its score less the tax and cheers; all go to the village OutSeconds later.
     private void FinishBellatra(long nowMs)
     {
         var game = _bellatra;
+        game.Final = new BellatraResult(true, BellatraResultLines(-1));
         foreach (var (name, entrant) in game.Entrants)
         {
             if (InBellatra(name, out var connection))
             {
                 PayBellatra(connection, entrant, GameText.Of(GameTextId.BellatraCleared, BellatraRules.Prize(entrant.Score, _options.Bellatra.Tax)));
+                connection.Player.QueueYahoo(heals: false);
             }
 
             entrant.Outcome = BellatraOutcome.Cleared;
@@ -231,7 +245,7 @@ public sealed partial class WorldServer
         }
     }
 
-    private void DeliverBellatraBossKills()
+    private void DeliverBellatraNotices()
     {
         if (!_fields.TryGetValue(BellatraArena.Field, out var arena))
         {
@@ -244,6 +258,21 @@ public sealed partial class WorldServer
         }
 
         arena.BellatraBossKills.Clear();
+        foreach (var (picker, team, seal) in arena.BellatraSeals)
+        {
+            foreach (var (name, entrant) in _bellatra.Entrants)
+            {
+                if (entrant.Team == team && InBellatra(name, out var member))
+                {
+                    var notice = seal == BellatraSeal.Points
+                        ? GameText.Of(GameTextId.BellatraPoints, picker, BellatraRules.PointsBonus.ToString(CultureInfo.InvariantCulture))
+                        : GameText.Of(BellatraRules.NoticeOf(seal), picker);
+                    Notify(member.Player.EntityId, ChatKind.System, notice);
+                }
+            }
+        }
+
+        arena.BellatraSeals.Clear();
     }
 
     // The board of a player in the arena: its own while it plays, its last one after it left the game until it leaves the
@@ -257,6 +286,29 @@ public sealed partial class WorldServer
 
         var name = connection.Player.Character.Name;
         return _bellatra.Entrants.TryGetValue(name, out var entrant) ? _bellatra.ViewOf(entrant) : _bellatra.Leaving.GetValueOrDefault(name);
+    }
+
+    // The result window of a player asking for its own game (team 0): the game's final result while its entrant waits
+    // after the end, otherwise every team's live result; a team booth's (team 1 to 4) is that team's live result.
+    public Task<BellatraResult> BellatraResultAsync(ulong entityId, int team) =>
+        EnqueueAsync(entityId, () => team == 0 && _bellatra.Final is { } final && _connections.TryGetValue(entityId, out var connection)
+            && _bellatra.Entrants.ContainsKey(connection.Player.Character.Name)
+            ? final
+            : new BellatraResult(false, BellatraResultLines(BellatraRules.TeamOfBooth(team))));
+
+    // The entrants in the arena of a team (-1 every team), best score first.
+    private BellatraResultLine[] BellatraResultLines(int team)
+    {
+        var lines = new List<BellatraResultLine>();
+        foreach (var (name, entrant) in _bellatra.Entrants)
+        {
+            if ((team < 0 || entrant.Team == team) && InBellatra(name, out var connection))
+            {
+                lines.Add(new BellatraResultLine(connection.Player.Character.Name, entrant.Class, entrant.Score, entrant.Kills));
+            }
+        }
+
+        return [.. lines.OrderByDescending(static line => line.Score).Take(BellatraLimits.ResultLines)];
     }
 
     // Whether the entrant plays in the arena now.

@@ -82,6 +82,8 @@ public static class EtervaleOpcodes
     public const uint BellatraClanState = 0x45541301;
     public const uint BellatraClanResult = 0x45541302;
     public const uint BellatraBoard = 0x45541303;
+    public const uint BellatraResultRequest = 0x45541304;
+    public const uint BellatraResult = 0x45541305;
 
     public const uint CoinShopOpen = 0x45541600;
     public const uint CoinShopTab = 0x45541601;
@@ -126,6 +128,7 @@ public static class EtervaleOpcodes
     public const uint WingGateRequest = 0x45540D04;
     public const uint WingGateResult = 0x45540D05;
     public const uint YahooKey = 0x45540D06;
+    public const uint SwingRequest = 0x45540D07;
 
     public const uint EnterWorld = 0x45540E00;
     public const uint WorldEntry = 0x45540E01;

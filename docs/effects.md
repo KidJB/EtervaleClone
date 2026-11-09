@@ -476,6 +476,16 @@ sounds: Chain Lance in order, Shadow Master, Lightning and Storm Javelin, Divine
 Chain Lightning, Watornado, Flame Wave and Dancing Sword at random, Vengeance in order, Divine Piercing on its final hit,
 Grand Cross with a swing on the first hit. Effect sounds take `variants` at random (Fire Bolt, Fire Ball, X-Rage).
 
+### Standing up and the grace
+
+A player standing up stands in a pillar of light (`vfx.player.restart`: `GameStart1.smd` at 35 frames a second, a
+grey light, `SkillPresentation.RestartEffect`) at every `Revive` event (restarts, revive skills, Restoration), the
+priestess's rise added when another player revived it, and the local player once on entering the world with the
+restart's sound (`GameScene.ArriveInWorld`). A remote player standing from death plays the Restart clip, which the
+renderer ends in Stand, as the local player does (`RemoteEntityBase.ApplySampleState`). While a player's grace runs
+(the `PlayerGrace.StatusCode` status the server publishes for `WorldPlayer.Guard`) its body blinks for every viewer: 80
+more red and blue light for 16 ticks of every 32 left (`ActorLookBook`).
+
 ### Costume wings
 
 The premium costume armours and robes show a wing at the wearer's back (`CostumeWings`, `Effect/Vfx/Costumes`):
@@ -493,7 +503,20 @@ target they fly 7 frames more and end, as they do after 120 frames. Magicians an
 (`vfx.monster.imp.attack.hit`) with a staff; other classes strike with it. A glowing bow or javelin sheds about 3.5
 sparks a frame along its flight (`Effect/ImageData/Particle/cc.tga`, additive, half its glow colour plus 128, fading to
 half that colour and out over 0.7 s). The flying weapons and sparks go through `VfxRenderer.AddModel` and
-`AddBillboard`; `VfxContent.LoadModel` reads a model no effect definition names.
+`AddBillboard`; `VfxContent.LoadModel` reads a model no effect definition names. A status naming a `shotEffect`
+(Frost Javelin) throws that effect from the weapon to the target instead of the javelin, which stays in the hand, and
+the shot ends in the effect's own hit.
+
+### Hit bursts and blood
+
+`HitEffects` (`GameScene.Hits.cs`) watches the hits of each update. A player's basic hit (a hit event without the skill
+flag: not a skill's, not a pet's) bursts at the struck target: `vfx.hit.critical` (the critical flash and a strong red
+light) on a critical, `vfx.common.normalhit` (the weapon spark and a faint red light) otherwise, and `vfx.hit.bare`
+(the spark, unlit) for a player without a weapon. A holder of a status naming a `hitEffect` (Enchant Weapon) shows that
+effect in its element instead (`vfx.magician.enchant.hit.<element>`, with its light and one of two sounds), and a
+thrower of a `shotEffect` none. A player losing life to any hit bleeds (`vfx.hit.blood`, 16 above its feet, with a
+red light). A buff that defends its holder plays its `defenseEffect` on the holder at each `Defended` impact the server
+reports (Energy Shield, Holy Reflection, Divine Inhalation, Physical Absorption, Holy Body against the undead).
 
 ### Held item glow
 
