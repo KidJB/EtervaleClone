@@ -93,6 +93,11 @@ renderer through `PresentationSettings.ApplyRendering` and apply at once.
 | `exposureCompensation` | float stops, `0` | finite, -3 to 3 | | Added to the automatic or fixed exposure. |
 | `tonemapper` | `PbrNeutral` (default), `AgX`, `Aces` | defined enum | | Display transform of the final pass. |
 | `bloom` | `High` (default), `Low`, `Off` | defined enum | | Bloom pyramid mixed at 5 % (High) or 3 % (Low). |
+| `renderScale` | float, `1` | 0.5 to 1 | | The 3D scene's size relative to the window; below 1 it is upscaled with FSR 1.0 and the HUD stays at full size. |
+| `dynamicResolutionFps` | int, `0` | 0 to 360 | | Lowers and raises the scene's size in 5 % steps to hold this frame rate, never above `renderScale`; 0 is off. |
+| `depthOfField` | bool, `false` | | | Blurs the distance behind the camera's focus; needs the depth pre-pass, so it does nothing with MSAA. |
+| `depthOfFieldStart`, `depthOfFieldEnd` | float, `700`, `4200` | 0 to 3000, 500 to 9000 | | Units behind the focus where the blur begins and is full. |
+| `depthOfFieldRadius` | float, `7` | 1 to 16 | | The largest blur radius in pixels at 1080p; scales with the image. |
 | `colorGrading` | bool, `true` | | | Applies the 3D LUT grade after the display transform. |
 | `colorGradingLut` | string, `""` | `null` becomes `""` | | Path of a `.cube` file (any size, display-referred sRGB input) replacing the built-in grade. Relative paths resolve against the process working directory; an unreadable or malformed file logs a warning and keeps the built-in grade. |
 | `sharpening` | float, `0.6` | finite, 0-1 | | Contrast-adaptive sharpening in the final pass: 0 turns it off; above 0 the peak weight runs from -1/8 to -1/5 (FidelityFX CAS's range). With `Taa`, 0.4 is added (capped at 1) to restore the detail the temporal average softens. |

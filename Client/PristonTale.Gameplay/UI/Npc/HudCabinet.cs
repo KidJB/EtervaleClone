@@ -27,20 +27,18 @@ public sealed class HudCabinet
     private const string NothingText = "No skins fit your gear here. Equip an item to see its skins.";
     private static readonly string[] FilterNames = ["All", "Weapon", "Armor", "Off", "Hair"];
     private static readonly string[] SlotNames = ["Weapon", "Armor", "Off-hand", "Hair"];
-    private static readonly Color FrameColor = new(22, 15, 11, 245);
-    private static readonly Color PageColor = new(32, 22, 16, 255);
-    private static readonly Color BorderColor = new(150, 120, 70);
-    private static readonly Color TextColor = new(235, 225, 205);
-    private static readonly Color NameColor = new(240, 170, 90);
+    private const int PlateWidth = 220;
+    private static readonly Color BorderColor = HudPteuWindow.BorderColor;
+    private static readonly Color TextColor = HudPteuWindow.TextColor;
+    private static readonly Color NameColor = HudPteuWindow.SectionColor;
     private static readonly Color CoinColor = new(255, 214, 90);
     private static readonly Color ChosenColor = new(70, 210, 140);
     private static readonly Color BadColor = new(240, 110, 90);
-    private static readonly Color HeaderColor = new(58, 38, 22, 255);
-    private static readonly Color HeaderEdgeColor = new(214, 176, 104);
-    private static readonly Color CardColor = new(44, 30, 21, 255);
-    private static readonly Color CardLitColor = new(64, 44, 29, 255);
-    private static readonly Color PriceBandColor = new(16, 11, 8, 255);
-    private static readonly Color TabColor = new(52, 35, 23, 255);
+    private static readonly Color ThumbColor = new(150, 130, 100);
+    private static readonly Color CardColor = new(30, 26, 23, 255);
+    private static readonly Color CardLitColor = new(50, 42, 32, 255);
+    private static readonly Color PriceBandColor = new(12, 10, 9, 255);
+    private static readonly Color TabColor = new(36, 31, 27, 255);
     private static readonly Color TabLitColor = new(26, 92, 62, 255);
     private static readonly Color DimColor = new(160, 150, 135);
     private static readonly Color BarBackColor = new(14, 10, 7, 255);
@@ -83,7 +81,8 @@ public sealed class HudCabinet
 
     public static Rectangle Window(HudLayout layout) => new((layout.Width - Width) / 2, Math.Max(0, (layout.Height - Height) / 2 - 40), Width, Height);
 
-    private static Rectangle Close(Rectangle window) => new(window.Right - 24, window.Y + 8, 16, 16);
+    // The CLOSE button under the cards, centred on the right page.
+    private static Rectangle Close(Rectangle window) => HudPteuWindow.CloseButton((window.X + 274 + window.Right - 12) / 2, window.Bottom - 34);
     private static Rectangle Left(Rectangle window) => new(window.X + 12, window.Y + 40, PageWidth, Height - 52);
     private static Rectangle SlotBox(Rectangle window, int slot) => new(window.X + 12 + PageWidth - 52, window.Y + 52 + slot * 58, 46, 50);
     private static Rectangle Apply(Rectangle window) => new(window.X + 42, window.Bottom - 46, 190, 24);
@@ -349,23 +348,15 @@ public sealed class HudCabinet
         }
 
         var window = Window(layout);
-        painter.Fill(window, FrameColor);
-        Border(painter, window, BorderColor);
-        Border(painter, new Rectangle(window.X + 2, window.Y + 2, window.Width - 4, window.Height - 4), HeaderColor);
-        var header = new Rectangle(window.X + 3, window.Y + 3, window.Width - 6, 30);
-        painter.Fill(header, HeaderColor);
-        painter.Fill(new Rectangle(header.X, header.Bottom, header.Width, 1), HeaderEdgeColor);
-        painter.TextCentered("The Cabinet", window.X, window.Right, window.Y + 11, HeaderEdgeColor);
+        HudPteuWindow.Frame(painter, window);
+        HudPteuWindow.DrawPlate(painter, HudPteuWindow.Plate(window, PlateWidth), "The Cabinet");
         var balanceWidth = painter.Measure(_balanceText);
-        painter.Text(_balanceText, window.Right - 36 - balanceWidth, window.Y + 11, CoinColor);
-        painter.Sprite(CoinArt, window.Right - 62 - balanceWidth, window.Y + 12);
-        var close = Close(window);
-        painter.ColorBox(close, 120, 30, 24, close.Contains(pointer) ? 255 : 200);
-        painter.TextCentered("X", close.X, close.Right, close.Y + 1, TextColor);
+        painter.Text(_balanceText, window.Right - 16 - balanceWidth, window.Y + 14, CoinColor);
+        painter.Sprite(CoinArt, window.Right - 42 - balanceWidth, window.Y + 15);
+        HudPteuWindow.DrawClose(painter, Close(window), pointer);
 
         var left = Left(window);
-        painter.Fill(left, PageColor);
-        Border(painter, left, BorderColor);
+        HudPteuWindow.Panel(painter, left);
         if (Picture is { } texture)
         {
             painter.Image(texture, new Rectangle(left.X + 6, left.Y + 26, 188, 270));
@@ -375,7 +366,7 @@ public sealed class HudCabinet
         {
             var box = SlotBox(window, slot);
             painter.Fill(box, box.Contains(pointer) ? CardLitColor : CardColor);
-            Border(painter, box, _chosen[slot].Length > 0 ? ChosenColor : BorderColor);
+            HudPteuWindow.Border(painter, box, _chosen[slot].Length > 0 ? ChosenColor : BorderColor);
             if (_chosen[slot].Length == 0)
             {
                 painter.TextCentered(SlotNames[slot], box.X, box.Right, box.Y + 18, DimColor);
@@ -388,27 +379,26 @@ public sealed class HudCabinet
 
         var apply = Apply(window);
         painter.ColorBox(apply, 30, 110, 70, apply.Contains(pointer) ? 255 : 210);
-        Border(painter, apply, ChosenColor);
+        HudPteuWindow.Border(painter, apply, ChosenColor);
         painter.TextCentered(_applyText, apply.X, apply.Right, apply.Y + 5, TextColor);
         painter.TextCentered(_status, left.X, left.Right, apply.Y - 18, TextColor);
         painter.TextCentered(_countText, left.X, left.Right, window.Bottom - 20, TextColor);
 
         var search = Search(window);
-        painter.ColorBox(search, 12, 9, 7, 255);
-        Border(painter, search, BorderColor);
+        painter.InputBox(search);
         var empty = _search.Text.Length == 0 && !_search.Focused;
         painter.Text(empty ? "Search" : _search.CaretVisible ? _search.Text + "_" : _search.Text, search.X + 4, search.Y + 2, empty ? DimColor : TextColor);
         for (var index = 0; index < FilterNames.Length; index++)
         {
             var filter = Filter(window, index);
             painter.Fill(filter, index == _filter ? TabLitColor : TabColor);
-            Border(painter, filter, index == _filter ? ChosenColor : BorderColor);
+            HudPteuWindow.Border(painter, filter, index == _filter ? ChosenColor : BorderColor);
             painter.TextCentered(FilterNames[index], filter.X, filter.Right, filter.Y + 2, TextColor);
         }
 
         var owned = Owned(window);
         painter.Fill(owned, _ownedOnly ? TabLitColor : TabColor);
-        Border(painter, owned, _ownedOnly ? ChosenColor : BorderColor);
+        HudPteuWindow.Border(painter, owned, _ownedOnly ? ChosenColor : BorderColor);
         painter.TextCentered("Owned", owned.X, owned.Right, owned.Y + 2, TextColor);
 
         for (var card = 0; card < Columns * Rows; card++)
@@ -436,7 +426,7 @@ public sealed class HudCabinet
         if (rows > Rows)
         {
             var thumb = Math.Max(16, bar.Height * Rows / rows);
-            painter.Fill(new Rectangle(bar.X, bar.Y + (bar.Height - thumb) * _scroll / (rows - Rows), bar.Width, thumb), HeaderEdgeColor);
+            painter.Fill(new Rectangle(bar.X, bar.Y + (bar.Height - thumb) * _scroll / (rows - Rows), bar.Width, thumb), ThumbColor);
         }
     }
 
@@ -444,7 +434,7 @@ public sealed class HudCabinet
     {
         painter.Fill(card, card.Contains(pointer) ? CardLitColor : CardColor);
         var chosen = string.Equals(_chosen[article.Slot], article.Key, StringComparison.OrdinalIgnoreCase);
-        Border(painter, card, chosen ? ChosenColor : card.Contains(pointer) ? CoinColor : BorderColor);
+        HudPteuWindow.Border(painter, card, chosen ? ChosenColor : card.Contains(pointer) ? CoinColor : BorderColor);
         painter.Text(painter.Fit(article.Name, card.Width - 8), card.X + 4, card.Y + 6, NameColor);
         icons.Draw(painter, article.Key, new Rectangle(card.X + 15, card.Y + 34, 52, 68));
         painter.Fill(new Rectangle(card.X + 1, card.Bottom - 25, card.Width - 2, 24), PriceBandColor);
@@ -454,13 +444,5 @@ public sealed class HudCabinet
         {
             painter.Sprite(CoinArt, card.X + 8, card.Bottom - 19);
         }
-    }
-
-    private static void Border(HudPainter painter, Rectangle bounds, Color color)
-    {
-        painter.Fill(new Rectangle(bounds.X, bounds.Y, bounds.Width, 1), color);
-        painter.Fill(new Rectangle(bounds.X, bounds.Bottom - 1, bounds.Width, 1), color);
-        painter.Fill(new Rectangle(bounds.X, bounds.Y, 1, bounds.Height), color);
-        painter.Fill(new Rectangle(bounds.Right - 1, bounds.Y, 1, bounds.Height), color);
     }
 }

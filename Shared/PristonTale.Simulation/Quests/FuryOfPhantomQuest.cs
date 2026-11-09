@@ -201,16 +201,21 @@ public static class FuryOfPhantomQuest
     }
 
     // The hunts count every monster killed in their field.
-    public static void OnKill(QuestContext context)
+    public static QuestHunt Hunt(ActiveQuest active)
     {
-        var active = context.Journal.Active;
         var field = active.State switch
         {
             2 => HeartOfPerumField,
             7 => GalluviaValleyField,
             _ => 0
         };
-        if (active.Code != Code || field == 0 || context.FieldCode != field || active.KillsNeeded == 0)
+        return active.Code != Code || field == 0 || active.KillsNeeded == 0 ? QuestHunt.None : new QuestHunt([], field, AnyMonster: true);
+    }
+
+    public static void OnKill(QuestContext context)
+    {
+        var active = context.Journal.Active;
+        if (!Hunt(active).Includes(0, context.FieldCode))
         {
             return;
         }

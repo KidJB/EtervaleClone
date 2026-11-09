@@ -275,6 +275,29 @@ public sealed class ChatAppService
             return InviteToPartyAsync(member, text, party);
         }
 
+        if (Math.Max(ChatCommandText.Match("//raid", text), ChatCommandText.Match("//RAID", text)) is var raid and > 0)
+        {
+            return InviteToPartyAsync(member, text, raid, toRaid: true);
+        }
+
+        if (Math.Max(ChatCommandText.Match("/raid", text), ChatCommandText.Match("/RAID", text)) is var raidLine and > 0)
+        {
+            var message = ChatCommandText.Rest(text, raidLine);
+            if (message.Length > 0 && !Floods(member, message, channel: true))
+            {
+                var line = new ChatLine(ChatKind.Party, 0, ChatRules.ClipToCapacity("[Raid] " + member.Name + "> " + message));
+                foreach (var id in _parties.RaidMembersOf(member.EntityId))
+                {
+                    if (Directory.TryGet(id, out var hearer))
+                    {
+                        hearer.Link.Deliver(line);
+                    }
+                }
+            }
+
+            return Task.FromResult(true);
+        }
+
         var clan = _clans.ClanOf(member.EntityId);
         if (clan != 0 && ChatCommandText.Match("/CLAN>", text) is var clanLength and > 0)
         {
@@ -300,7 +323,7 @@ public sealed class ChatAppService
     private static int PartyRequestLength(string text) => Math.Max(ChatCommandText.Match("//party", text), ChatCommandText.Match("//PARTY", text));
 
     // "//party name": the original's party request, also what the button under a player's portrait sends.
-    private async Task<bool> InviteToPartyAsync(ChatMember member, string text, int length)
+    private async Task<bool> InviteToPartyAsync(ChatMember member, string text, int length, bool toRaid = false)
     {
         var name = ChatCommandText.ReadWord(text, ref length);
         if (name.Length == 0)
@@ -310,7 +333,7 @@ public sealed class ChatAppService
 
         try
         {
-            Directory.Deliver(await World.InviteToPartyByNameAsync(member.Session, name));
+            Directory.Deliver(await (toRaid ? World.InviteToRaidByNameAsync(member.Session, name) : World.InviteToPartyByNameAsync(member.Session, name)));
         }
         catch (WorldBusyException)
         {

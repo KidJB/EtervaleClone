@@ -18,9 +18,25 @@ internal static class EventItemTests
         yield return ("gift boxes need room and weight, draw their prize table and land the prize in the inventory", GiftBoxAsync);
         yield return ("chocolates grant Virtual Life at their level to the gender they are meant for, never in town or twice", ChocolateAsync);
         yield return ("the soccer-ball potion changes the head for three hours, refuses over the big head and ends with a burst", SoccerHeadAsync);
+        yield return ("personal timers stand still in Ricarten and Pillai and run on everywhere else", TownHoldAsync);
         yield return ("boosters raise the maximum by 15%, stack by kind, show in the effects bar and pause while offline", BoostersAsync);
         yield return ("the skill-delay item recharges every skill in half a second", SkillDelayAsync);
         yield return ("item events replace drop rolls with their items in order and seal puzzle pieces; the action field gives its own", EventDropsAsync);
+    }
+
+    private static Task TownHoldAsync()
+    {
+        var premium = new PremiumTimers();
+        premium.Start(PremiumEffectKind.ExperienceUp, 30, 3600, 1000);
+        premium.Expire(1000);
+        premium.Hold(1600);
+        premium.Expire(1600);
+        Assert.True(premium.Find(PremiumEffectKind.ExperienceUp)?.RemainingSeconds(1600) == 3600, "the timer ran on while held in town");
+        premium.Expire(2200);
+        Assert.True(premium.Find(PremiumEffectKind.ExperienceUp)?.RemainingSeconds(2200) == 3000, "the timer did not run on out of town");
+        Assert.True(PremiumTimers.PausesInField(PristonTale.Simulation.World.FieldCodes.Ricarten) && PremiumTimers.PausesInField(PristonTale.Simulation.World.FieldCodes.Pillai)
+            && !PremiumTimers.PausesInField(PristonTale.Simulation.World.FieldCodes.Navisko) && !PremiumTimers.PausesInField(PristonTale.Simulation.World.FieldCodes.Forest3), "the pausing towns differ");
+        return Task.CompletedTask;
     }
 
     private static async Task FoodAsync()

@@ -226,7 +226,7 @@ public static class LevelBonusQuests
     public static void OnKill(QuestContext context, int monsterCode)
     {
         var active = context.Journal.Active;
-        if (active is not { Code: QuestCode.Level90Bonus, State: 2 } || active.Target == 0 || monsterCode != active.Target)
+        if (active is not { Code: QuestCode.Level90Bonus, State: 2 } || !QuestTargets.IsPrey(active, monsterCode))
         {
             return;
         }

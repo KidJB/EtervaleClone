@@ -12,6 +12,7 @@ namespace PristonTale.Gameplay.UI;
 public sealed partial class GameplayHud
 {
     private readonly HudPartyWindow _partyWindow = new();
+    private readonly HudPartyFrames _partyFrames = new();
     private readonly HudRequestBox _partyRequest = new(HudPartyArt.Request, Simulation.Parties.PartyRules.InviteMs);
 
     // Sends the party requests; set by the screen.
@@ -30,24 +31,13 @@ public sealed partial class GameplayHud
     {
         if (update.Party is { } party)
         {
-            var formed = Party.Members.Count == 0 && party.Members.Count > 0;
-            var released = Party.Members.Count > 0 && party.Members.Count == 0;
             Party = party;
             _partyWindow.Refresh(party);
-            if (formed)
-            {
-                _questWindow.Close();
-                _partyWindow.Show();
-            }
-            else if (released && _partyWindow.Page == HudPartyPage.Party)
-            {
-                _partyWindow.Close();
-            }
         }
 
         if (update.PartyRequest is { } request && !_warehouse.IsOpen)
         {
-            var line = request.Recommended.Length > 0
+            var line = request.Raid ? ClientText.Get("Party.RaidRequest") : request.Recommended.Length > 0
                 ? ClientText.Format(Simulation.Parties.PartyMessages.Recommends(request.Recommended))
                 : ClientText.Format(Simulation.Parties.PartyMessages.Request);
             _partyRequest.Show(request.FromId, request.FromName, line, _clock.Elapsed.TotalMilliseconds);
@@ -62,15 +52,17 @@ public sealed partial class GameplayHud
         _questWindow.Toggle();
     }
 
-    private void TogglePartyWindow()
+    private void ToggleSocial()
     {
         _questWindow.Close();
-        _partyWindow.Toggle();
+        _social.Toggle();
     }
 
     private void SetUpParty()
     {
         _sprites.Request(HudPartyArt.All);
+        _sprites.Request(HudPartyFrames.Art);
+        _partyFrames.Commanded = (command, member) => Parties?.CommandPartyAsync(command, member);
         _partyWindow.Commanded = (command, member) => Parties?.CommandPartyAsync(command, member);
         _partyWindow.Whispered = _chat.Window.WhisperTo;
         _chat.InParty = InParty;
@@ -82,6 +74,11 @@ public sealed partial class GameplayHud
 
     private bool ClickParty(HudLayout layout, Point pointer)
     {
+        if (_partyFrames.Click(layout, Party, pointer) || _social.Click(layout, pointer, _clock.Elapsed.TotalSeconds) || _tuning.Contains(layout, pointer))
+        {
+            return true;
+        }
+
         var from = _partyRequest.FromId;
         if (_partyRequest.Click(pointer) is { } answer)
         {
@@ -89,7 +86,7 @@ public sealed partial class GameplayHud
             return true;
         }
 
-        if (ShowsPlayerButtons && HudPlayerButtons.At(HudCombat.TargetFrame(layout), pointer, ClanButton) is { } button)
+        if (ShowsPlayerButtons && HudPlayerButtons.At(HudCombat.TargetFrame(layout, _context.Presentation.Requested.ClassicTargetFrame), pointer, ClanButton) is { } button)
         {
             if (button == HudPlayerButton.Clan)
             {
@@ -116,8 +113,8 @@ public sealed partial class GameplayHud
     }
 
     private bool CapturesParty(HudLayout layout, Point pointer) =>
-        _partyRequest.Captures(pointer) || _partyWindow.Contains(layout, pointer)
-        || ShowsPlayerButtons && HudPlayerButtons.At(HudCombat.TargetFrame(layout), pointer, ClanButton) is not null;
+        _partyRequest.Captures(pointer) || _partyWindow.Contains(layout, pointer) || _partyFrames.Contains(layout, Party, pointer) || _social.Contains(layout, pointer) || _tuning.Contains(layout, pointer)
+        || ShowsPlayerButtons && HudPlayerButtons.At(HudCombat.TargetFrame(layout, _context.Presentation.Requested.ClassicTargetFrame), pointer, ClanButton) is not null;
 
     // The other members' last known places, for the minimap.
     // The NPCs and players in view and the other party members, who are marked as members rather than as players; a
@@ -125,6 +122,12 @@ public sealed partial class GameplayHud
     private void CollectMinimapMarkers()
     {
         Combat.CollectMapMarkers(_minimapMarkers);
+        // Spawn points first, so every other marker draws over them; like the bosses they come in wire (x, z).
+        for (var index = 0; index < SpawnSpots.Count; index++)
+        {
+            _minimapMarkers.Insert(index, new HudMapMarker((ulong)index, new Vector3(SpawnSpots[index].X, 0f, -SpawnSpots[index].Z), HudMapMarkerKind.Spawn));
+        }
+
         // A boss marker's id is its index in BossSpots; its spot comes in wire (x, z), the render plane's (x, -z).
         for (var index = 0; index < BossSpots.Count; index++)
         {

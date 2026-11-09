@@ -117,6 +117,18 @@ local player) when within 768 units of the camera; a player's line also enters t
 12 lines, use the classic chat-box frame with a tail, and colour the speaker's name by kind (players, party and owned
 summons, monsters, NPCs); the hovered or selected speaker draws brighter.
 
+## Raids
+
+`//raid name` asks another party's leader to link the two parties (leaders only, two parties at most; `WorldServer.InviteRaid`), and `/raid text`
+speaks to both parties. The leader's own party frame has Leave Raid.
+
+## Reward lines on the Notice page
+
+The notice button shows the `ChatKind.Assist` page. The server adds each player's rewards there through `WorldServer.Notices`:
+- experience from a kill, with the share and size of the party when it was shared (`FieldCombat.ExperienceGains`, taken with the tick's notices);
+- gold picked up, or how many party members split it and each part, to everyone paid;
+- an item picked up, or `<name> gained <item>` to the whole party.
+
 ## Game masters
 
 The account's `gm_level` (0 Player, 1 Guide, 2 Moderator, 3 Operator, 4 Administrator) is loaded at login into the

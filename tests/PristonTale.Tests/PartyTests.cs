@@ -5,6 +5,7 @@ using PristonTale.Application.Services;
 using PristonTale.Application.World;
 using PristonTale.Contracts.Characters;
 using PristonTale.Contracts.Social;
+using PristonTale.Contracts.Texts;
 using PristonTale.Protocol.Packets;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Combat;
@@ -34,6 +35,7 @@ internal static class PartyTests
         yield return ("a player leaving the world leaves its party: its leader hands over, a party of two is released", LeaveWorldAsync);
         yield return ("a kill's experience is taken at the party's average level and shared by size with the living members in range", ExperienceAsync);
         yield return ("a monster's gold at any amount and other gold under 10000 picked up is split with the members in range, the picker's part stored; a member who cannot carry its part or whose save gate is held is left out", GoldAsync);
+        yield return ("party modes change the shares and drops; two leaders link their parties in a raid, its lines reach both, and it ends cleanly", RaidAndModesAsync);
         yield return ("party rules: shares by size, the average level, the level gap, the share range and the gold split", RulesAsync);
         yield return ("party messages round-trip on the wire and refuse unknown commands and answers", WireAsync);
     }
@@ -281,7 +283,60 @@ internal static class PartyTests
         Assert.True(!monster.IsAlive && killer.Character.Experience > 0 && near.Character.Experience == killer.Character.Experience
             && far.Character.Experience == 0 && elsewhere.Character.Experience == 0 && fallen.IsDead && fallen.Character.Experience == 0,
             $"shares {killer.Character.Experience}/{near.Character.Experience}/{far.Character.Experience}/{elsewhere.Character.Experience}/{fallen.Character.Experience}");
+        var gains = field.Combat.ExperienceGains;
+        Assert.True(gains.Count == 2 && gains.All(gain => gain.PartySize > 0 && gain.PartyPercent > 0) && gains.Any(gain => gain.PlayerId == near.EntityId && gain.Amount == near.Character.Experience),
+            "the party's experience Notice gains differ");
         return Task.CompletedTask;
+    }
+
+    private static async Task RaidAndModesAsync()
+    {
+        Assert.True(PartyRules.ExpShare(2, PartyMode.Normal) == PartyRules.ExpShare(2) && PartyRules.ExpShare(2, PartyMode.Exp) == (90, 90)
+            && PartyRules.ExpShare(4, PartyMode.Hunt) == (30, 30), "the mode shares differ");
+        Assert.True(PartyRules.DropChange(PartyMode.Normal, 3, 0) == 0 && PartyRules.DropChange(PartyMode.Hunt, 1, 0) == 0
+            && PartyRules.DropChange(PartyMode.Hunt, 3, 19) == 2 && PartyRules.DropChange(PartyMode.Hunt, 3, 20) == 1 && PartyRules.DropChange(PartyMode.Exp, 6, 90) == -1,
+            "the mode drops differ");
+
+        var (fixture, parties) = Fixture();
+        var ann = await fixture.JoinAsync("Ann", 0, 0);
+        var bob = await fixture.JoinAsync("Bob", 100, 0);
+        var cid = await fixture.JoinAsync("Cid", 200, 0);
+        var dan = await fixture.JoinAsync("Dan", 300, 0);
+        await Group(fixture, parties, ann, bob);
+        await Group(fixture, parties, cid, dan);
+
+        async Task Do(Func<Task<WorldNotice[]>> action)
+        {
+            var task = action();
+            fixture.Tick(1);
+            fixture.Directory.Deliver(await task);
+        }
+
+        await Do(() => fixture.World.InviteToRaidByNameAsync(bob.Session, "Cid"));
+        await Do(() => fixture.World.AnswerPartyAsync(cid.Session, bob.Id, true));
+        fixture.Tick(1);
+        Assert.True(ChatFixture.Latest(ann)?.Party?.Raid.Count == 0, "a member formed a raid");
+
+        await Do(() => fixture.World.InviteToRaidByNameAsync(ann.Session, "Cid"));
+        await Do(() => fixture.World.AnswerPartyAsync(cid.Session, ann.Id, true));
+        fixture.Tick(1);
+        var view = ChatFixture.Latest(ann)?.Party;
+        var danView = ChatFixture.Latest(dan)?.Party;
+        Assert.True(view is { LeadsRaid: true } && view.Raid.Select(member => member.EntityId).SequenceEqual([cid.Id, dan.Id])
+            && danView is { LeadsRaid: false, Raid.Count: 2 }, "the raid did not form");
+        Assert.True(fixture.World.Parties.RaidMembersOf(bob.Id).Count == 4 && fixture.World.Parties.MembersOf(bob.Id).Count == 2, "the raid's roster differs");
+
+        await Do(() => fixture.World.CommandPartyAsync(bob.Session, PartyCommand.ChangeMode, 0));
+        fixture.Tick(1);
+        Assert.True(ChatFixture.Latest(ann)?.Party?.Mode == PartyMode.Normal, "a member changed the mode");
+        await Do(() => fixture.World.CommandPartyAsync(ann.Session, PartyCommand.ChangeMode, 0));
+        fixture.Tick(1);
+        Assert.True(ChatFixture.Latest(bob)?.Party?.Mode == PartyMode.Exp, "the mode did not change");
+
+        await Do(() => fixture.World.CommandPartyAsync(cid.Session, PartyCommand.Disband, 0));
+        fixture.Tick(1);
+        Assert.True(ChatFixture.Latest(ann)?.Party is { LeadsRaid: false, Raid.Count: 0 } && fixture.World.Parties.RaidMembersOf(ann.Id).Count == 2,
+            "a released party left the raid behind");
     }
 
     private static async Task GoldAsync()
@@ -332,6 +387,10 @@ internal static class PartyTests
         Assert.True(ann.Session.Character!.Money == 501 && bob.Session.Character!.Money == 500 && cid.Session.Character!.Money == 0,
             $"split {ann.Session.Character.Money}/{bob.Session.Character!.Money}/{cid.Session.Character!.Money}");
         Assert.True(fixture.Characters.Records["Ann"].Money == 501, "the picker's part was not stored");
+        var goldLine = GameText.Of(GameTextId.PartyGoldGained, "2", "500");
+        var goldNotices = fixture.World.TakeTickNotices();
+        Assert.True(goldNotices.Count(notice => notice.Kind == ChatKind.Assist && notice.Text == goldLine && (notice.To == ann.Id || notice.To == bob.Id)) == 2
+            && goldNotices.All(notice => notice.To != cid.Id), "the split gold's Notice lines differ");
 
         await PickUp(10_000);
         Assert.True(ann.Session.Character!.Money == 10_501 && bob.Session.Character!.Money == 500, "gold of 10000 was split");
@@ -391,7 +450,7 @@ internal static class PartyTests
         Assert.True(invite.TargetId == 42 && answer is { FromId: 7, Accept: true } && command is { Command: PartyCommand.Kick, MemberId: 9 }
             && request is { FromId: 5, FromName: "Ann", Recommended: "Cid" }, "party requests did not round-trip");
 
-        var members = new PartyMembersPacket([new PartyMemberWire(1, "Ann", 40, 120, 300, 10.5f, -3f), new PartyMemberWire(2, "Bob", 38, 0, 250, 0f, 0f)]);
+        var members = new PartyMembersPacket([new PartyMemberWire(1, "Ann", 40, 120, 300, 10.5f, -3f, 80, 150, 6), new PartyMemberWire(2, "Bob", 38, 0, 250, 0f, 0f)]);
         var read = PartyMembersPacket.Read(buffer.AsSpan(0, members.Write(buffer)));
         Assert.True(read.Members.SequenceEqual(members.Members), "party members did not round-trip");
         Assert.True(PartyMembersPacket.Read(buffer.AsSpan(0, new PartyMembersPacket([]).Write(buffer))).Members.Count == 0, "no party did not round-trip");

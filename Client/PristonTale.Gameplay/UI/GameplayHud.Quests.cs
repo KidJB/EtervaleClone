@@ -62,6 +62,7 @@ public sealed partial class GameplayHud
         if (!ReferenceEquals(_quests.View, _questView))
         {
             _questView = _quests.View;
+            Combat.SetQuestTargets(_questView);
             _questViewMs = _clock.Elapsed.TotalMilliseconds;
             _weaponHunt = _questView is { Code: RankUpByQuestWeapon.Code }
                 ? RankUpByQuestWeapon.HuntLine(QuestClasses.WeaponHunt(_class), _questView.WeaponStage, _questView.WeaponKillsLeft)

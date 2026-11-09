@@ -311,5 +311,21 @@ public enum GameTextId : ushort
     BellatraStygian = 794,
     BellatraGuardian = 795,
     BellatraPoints = 796,
-    BellatraSealIdle = 797
+    BellatraSealIdle = 797,
+
+    // The Notice tab's reward lines; numbered apart so that new phrases of the upstream game do not take them.
+    ExperienceGained = 2000,
+    PartyExperienceGained = 2001,
+    GoldGained = 2002,
+    PartyGoldGained = 2003,
+    ItemGained = 2004,
+    MemberItemGained = 2005,
+    RaidRequested = 2006,
+    RaidNotLeaders = 2007,
+    RaidFull = 2008,
+    RaidFormed = 2009,
+    RaidEnded = 2010,
+    PartyModeNormal = 2011,
+    PartyModeExp = 2012,
+    PartyModeHunt = 2013
 }

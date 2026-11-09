@@ -19,9 +19,9 @@ public sealed class HudCountBox
     private string _text = "0";
 
     public static Rectangle Bounds => HudMessageBox.Bounds;
-    public static Rectangle Field => new(Bounds.X + 34, Bounds.Y + 62, 109, 25);
-    public static Rectangle Up => new(Bounds.X + 124, Bounds.Y + 62, 19, 13);
-    public static Rectangle Down => new(Bounds.X + 124, Bounds.Y + 75, 19, 13);
+    public static Rectangle Field => new(Bounds.X + 34, Bounds.Y + 82, 138, 22);
+    public static Rectangle Up => new(Bounds.X + 176, Bounds.Y + 82, 20, 11);
+    public static Rectangle Down => new(Bounds.X + 176, Bounds.Y + 93, 20, 11);
     public static Rectangle Ok => HudMessageBox.Accept;
     public static Rectangle Cancel => HudMessageBox.Reject;
 
@@ -86,22 +86,22 @@ public sealed class HudCountBox
     public void Draw(HudPainter painter, Point pointer)
     {
         var bounds = Bounds;
-        painter.Sprite(HudArt.MessageBox, bounds.X, bounds.Y);
-        painter.TextCentered(painter.Fit(_first, HudMessageBox.VisibleWidth - 16), bounds.Left, bounds.Right, bounds.Y + 20, HudTextColors.BoxTitle);
-        painter.TextCentered(painter.Fit(_second, HudMessageBox.VisibleWidth - 16), bounds.Left, bounds.Right, bounds.Y + 40);
-        painter.Sprite(HudArt.CountField, Field.X, Field.Y);
-        painter.Text(_text, Field.X + 8, Field.Y + 6);
-        if (Up.Contains(pointer))
-        {
-            painter.Sprite(HudArt.CountUp, Up.X, Up.Y);
-        }
-        else if (Down.Contains(pointer))
-        {
-            painter.Sprite(HudArt.CountDown, Down.X, Down.Y);
-        }
+        HudMessageBox.DrawFrame(painter);
+        painter.TextCentered(painter.Fit(_first, HudMessageBox.VisibleWidth - 24), bounds.Left, bounds.Right, bounds.Y + HudMessageBox.TitleY, HudTextColors.BoxTitle);
+        painter.TextCentered(painter.Fit(_second, HudMessageBox.VisibleWidth - 24), bounds.Left, bounds.Right, bounds.Y + 48);
+        painter.InputBox(Field);
+        painter.TextCentered(_text, Field.X, Field.Right, Field.Y + 1);
+        Step(painter, Up, "+", pointer);
+        Step(painter, Down, "-", pointer);
+        painter.Sprite(Ok.Contains(pointer) ? HudMessageBox.OkLit : HudMessageBox.OkArt, Ok.X, Ok.Y);
+        painter.Sprite(Cancel.Contains(pointer) ? HudMessageBox.CancelLit : HudMessageBox.CancelArt, Cancel.X, Cancel.Y);
+    }
 
-        painter.Sprite(Ok.Contains(pointer) ? HudArt.OkYellow : HudArt.OkGray, Ok.X, Ok.Y);
-        painter.Sprite(Cancel.Contains(pointer) ? HudArt.CancelYellow : HudArt.CancelGray, Cancel.X, Cancel.Y);
+    private static void Step(HudPainter painter, Rectangle button, string label, Point pointer)
+    {
+        painter.Fill(button, button.Contains(pointer) ? HudPteuWindow.SelectedColor : HudPteuWindow.PanelColor);
+        HudPteuWindow.Border(painter, button, HudPteuWindow.BorderColor);
+        painter.TextCentered(label, button.X, button.Right, button.Y - 4);
     }
 
     private void Show(long count)

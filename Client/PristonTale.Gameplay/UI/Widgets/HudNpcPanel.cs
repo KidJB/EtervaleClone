@@ -202,7 +202,7 @@ public sealed class HudNpcPanel(
 
         painter.HelpBox(BoxX, BoxY, SizeW, SizeH);
         var title = Title;
-        painter.Sprite(HudArt.HelpTitle, title.X, title.Y);
+        painter.TitlePlate(title);
         painter.TextCentered(painter.Fit(Current.Name, title.Width - 20), title.Left, title.Right, title.Y + 7, HudTextColors.BoxTitle);
         var capacity = LineCapacity;
         string[] lines = Destinations.Count > 0 ? [ClientText.Get("Npc.WhereTo")] : _dialog;
@@ -220,8 +220,7 @@ public sealed class HudNpcPanel(
 
         DrawButtons(painter, pointer);
         var ok = OkButton;
-        painter.Sprite(HudArt.HelpButton, ok.X - 9, ok.Y - 4);
-        painter.Sprite(ok.Contains(pointer) ? HudArt.OkYellow : HudArt.OkGray, ok.X, ok.Y);
+        painter.OkButton(ok, ok.Contains(pointer));
     }
 
     private void DrawButtons(HudPainter painter, Point pointer)

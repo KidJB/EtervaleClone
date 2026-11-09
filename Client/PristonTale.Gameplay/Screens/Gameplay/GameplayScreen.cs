@@ -163,10 +163,13 @@ public sealed class GameplayScreen : GameScreen
         _hud.World = new HudWorldView(field?.Id, field?.Underground == true, _scene.ActiveMapRectangle, _scene.PlayerPosition,
             _scene.PlayerForward, _scene.TimeOfDay, _scene.RunFlag, mapHidden, neighbour, neighbourMap);
         _hud.PremiumTimers = _scene.PremiumTimers;
+        _hud.Combat.FieldCode = field?.FieldCode ?? HudCombat.NoField;
+        _hud.PremiumPaused = field is not null && PristonTale.Simulation.Items.Usable.PremiumTimers.PausesInField(field.FieldCode);
         _hud.NextBoss = _scene.NextBoss;
         _hud.WorldBuffs = _scene.WorldBuffs;
         _hud.AutoSkill = _scene.AutoSkill;
         _hud.BossSpots = _scene.BossSpots;
+        _hud.SpawnSpots = _scene.SpawnSpots;
         _hud.BossList = _scene.BossList;
         _hud.PetCollection = _scene.PetCollection;
         _hud.DailyQuests = _scene.DailyQuests;

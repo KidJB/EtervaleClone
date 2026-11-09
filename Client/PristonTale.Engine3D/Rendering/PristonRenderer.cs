@@ -214,6 +214,8 @@ public sealed partial class PristonRenderer : IDisposable
         _contactShadows = settings.ContactShadows;
         _imageBasedLighting = settings.ImageBasedLighting;
         _screenReflections = settings.ScreenSpaceReflections;
+        _renderScale = settings.RenderScale;
+        _dynamicResolutionFps = settings.DynamicResolutionFps;
         _calibrationSpheres = settings.CalibrationSpheres;
         _volumetricLight = settings.VolumetricLight;
         RealisticSky = settings.RealisticSky;
@@ -516,6 +518,8 @@ public sealed partial class PristonRenderer : IDisposable
     {
         _lodFrustum.Matrix = camera.View * camera.Projection;
         _lodFocus = camera.Target;
+        _focusDistance = Vector3.Distance(camera.Position, camera.Target);
+        _sceneTargets.RenderScale = _dynamicResolution.Update(_lastDeltaSeconds, _renderScale, _dynamicResolutionFps);
         _lodCameraKnown = true;
         var staticBatches = 0;
         var dynamicBatches = 0;
@@ -847,7 +851,8 @@ public sealed partial class PristonRenderer : IDisposable
             Vector4.Zero,
             default,
             _lastDeltaSeconds,
-            DebugView == PristonDebugView.ExposureFalseColour);
+            DebugView == PristonDebugView.ExposureFalseColour,
+            FocusDistance: _focusDistance);
         _sceneTargets.Compose(postFrame, _temporalFrame, Profiler);
         _stateCache.InvalidateDeviceState();
         _motionFrame++;
@@ -885,6 +890,10 @@ public sealed partial class PristonRenderer : IDisposable
     // The camera of the last frame drawn, for the crowd level of detail of the next animation update.
     private readonly BoundingFrustum _lodFrustum = new(Matrix.Identity);
     private Vector3 _lodFocus;
+    private float _focusDistance;
+    private readonly Post.PristonDynamicResolution _dynamicResolution = new();
+    private float _renderScale = 1f;
+    private int _dynamicResolutionFps;
     private bool _lodCameraKnown;
     private uint _animationFrame;
     private Func<Vector3, float, bool> _lampHasCasters;

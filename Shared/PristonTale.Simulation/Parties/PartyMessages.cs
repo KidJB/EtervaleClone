@@ -1,3 +1,4 @@
+using PristonTale.Contracts.Social;
 using PristonTale.Contracts.Texts;
 
 namespace PristonTale.Simulation.Parties;
@@ -13,6 +14,20 @@ public static class PartyMessages
 
     // The request box's second line, under the name of who asks; a member's recommendation names the player instead.
     public static readonly GameText Request = GameText.Of(GameTextId.PartyRequest);
+
+    public static readonly GameText RaidNotLeaders = GameText.Of(GameTextId.RaidNotLeaders);
+    public static readonly GameText RaidFull = GameText.Of(GameTextId.RaidFull);
+    public static readonly GameText RaidFormed = GameText.Of(GameTextId.RaidFormed);
+    public static readonly GameText RaidEnded = GameText.Of(GameTextId.RaidEnded);
+
+    public static GameText RaidRequested(string player) => GameText.Of(GameTextId.RaidRequested, player);
+
+    public static GameText ModeChanged(PartyMode mode) => GameText.Of(mode switch
+    {
+        PartyMode.Exp => GameTextId.PartyModeExp,
+        PartyMode.Hunt => GameTextId.PartyModeHunt,
+        _ => GameTextId.PartyModeNormal
+    });
 
     public static GameText Recommends(string player) => GameText.Of(GameTextId.PartyRecommends, player);
 

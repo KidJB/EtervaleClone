@@ -62,7 +62,7 @@ internal static class GroundPickupTransactions
             candidate.RecordInventoryOperation(command);
             var snapshot = CharacterRecordFactory.Capture(session.Loaded!, candidate, field.FieldId, player.Position);
             var result = new PreparedPickupOperation(original, candidate, snapshot,
-                new(true, candidate.InventoryRevision, GameText.None), field.GroundLoot, drop.Id, command.OperationId, gold, shares);
+                new(true, candidate.InventoryRevision, GameText.None), field.GroundLoot, drop.Id, command.OperationId, gold, shares, item?.DisplayName ?? "");
             prepared = true;
             return result;
         }

@@ -42,6 +42,7 @@ public sealed partial class GameplayHud
         if (update.Clan is { } clan)
         {
             _clanWindow.Observe(clan);
+            _social.Observe(clan);
             _partyWindow.ObserveClan(clan);
             Combat.OwnClan = clan.ClanId;
             _wingGate.CastleOwner = HoldsCastle;

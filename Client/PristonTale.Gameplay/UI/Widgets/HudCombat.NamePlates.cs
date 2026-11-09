@@ -44,6 +44,7 @@ public sealed partial class HudCombat
 
     public void DrawNamePlates(HudPainter painter, HudLayout layout, Func<ulong, HudOverheadPoint?> project, ulong hovered, ulong traced, bool classic)
     {
+        DrawQuestTargets(painter, layout, project);
         _plates.Clear();
         foreach (var (id, entity) in _entities)
         {

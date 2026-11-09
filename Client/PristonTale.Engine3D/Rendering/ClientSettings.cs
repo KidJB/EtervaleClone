@@ -73,6 +73,8 @@ public sealed record ClientSettings
     public bool ShadowsEnabled { get; init; } = true;
     // Classic: the target HP bar appears only after you attack a monster at full HP, without numbers.
     public bool ClassicTargetHealthBar { get; init; }
+    // Classic: the target frame is the original's portrait box at the top right; otherwise the bar at the top centre.
+    public bool ClassicTargetFrame { get; init; }
     // Classic: the name boxes over monsters and NPCs use the speech bubble frame and the HUD text size, and a monster's
     // life bar shows while the cursor is on it; otherwise a compact box, the bar once the monster was clicked or attacked.
     public bool ClassicNamePlates { get; init; }
@@ -99,6 +101,16 @@ public sealed record ClientSettings
     public float ExposureCompensation { get; init; }
     public TonemapperMode Tonemapper { get; init; } = TonemapperMode.PbrNeutral;
     public BloomQuality Bloom { get; init; } = BloomQuality.High;
+    // Blurs the distance behind the camera's focus (needs the depth pre-pass, so not with MSAA).
+    public bool DepthOfField { get; init; }
+    // Distance behind the focus where the blur begins and is full, and its largest radius in pixels at 1080p.
+    public float DepthOfFieldStart { get; init; } = Post.PristonDepthOfField.DefaultStart;
+    public float DepthOfFieldEnd { get; init; } = Post.PristonDepthOfField.DefaultEnd;
+    public float DepthOfFieldRadius { get; init; } = Post.PristonDepthOfField.DefaultRadius;
+    // The 3D scene's size relative to the window, 0.5 to 1; below 1 it is upscaled with FSR (the HUD stays at full size).
+    public float RenderScale { get; init; } = 1f;
+    // Lowers and raises the scene's size to hold this frame rate, up to RenderScale; 0 is off.
+    public int DynamicResolutionFps { get; init; }
     // The built-in colour grade (a 3D LUT after the display transform), or the .cube file ColorGradingLut names.
     public bool ColorGrading { get; init; } = true;
     public string ColorGradingLut { get; init; } = string.Empty;
@@ -142,6 +154,11 @@ public sealed record ClientSettings
                 : defaults.ExposureCompensation,
             Tonemapper = Enum.IsDefined(Tonemapper) ? Tonemapper : defaults.Tonemapper,
             Bloom = Enum.IsDefined(Bloom) ? Bloom : defaults.Bloom,
+            RenderScale = float.IsFinite(RenderScale) ? Math.Clamp(RenderScale, Post.PristonDynamicResolution.MinimumScale, 1f) : 1f,
+            DynamicResolutionFps = Math.Clamp(DynamicResolutionFps, 0, 360),
+            DepthOfFieldStart = float.IsFinite(DepthOfFieldStart) ? Math.Clamp(DepthOfFieldStart, 0f, 3000f) : defaults.DepthOfFieldStart,
+            DepthOfFieldEnd = float.IsFinite(DepthOfFieldEnd) ? Math.Clamp(DepthOfFieldEnd, 500f, 9000f) : defaults.DepthOfFieldEnd,
+            DepthOfFieldRadius = float.IsFinite(DepthOfFieldRadius) ? Math.Clamp(DepthOfFieldRadius, 1f, 16f) : defaults.DepthOfFieldRadius,
             ColorGradingLut = ColorGradingLut ?? defaults.ColorGradingLut,
             Sharpening = float.IsFinite(Sharpening) && Sharpening is >= 0f and <= 1f ? Sharpening : defaults.Sharpening,
             LocalLightLimit = LocalLightLimit is 8 or 16 or PristonShaderLibrary.MaxLocalLightCount ? LocalLightLimit : defaults.LocalLightLimit,
@@ -268,6 +285,12 @@ public sealed record ClientSettings
             && ExposureCompensation == other.ExposureCompensation
             && Tonemapper == other.Tonemapper
             && Bloom == other.Bloom
+            && DepthOfField == other.DepthOfField
+            && DepthOfFieldStart == other.DepthOfFieldStart
+            && DepthOfFieldEnd == other.DepthOfFieldEnd
+            && DepthOfFieldRadius == other.DepthOfFieldRadius
+            && RenderScale == other.RenderScale
+            && DynamicResolutionFps == other.DynamicResolutionFps
             && ColorGrading == other.ColorGrading
             && ColorGradingLut == other.ColorGradingLut
             && Sharpening == other.Sharpening

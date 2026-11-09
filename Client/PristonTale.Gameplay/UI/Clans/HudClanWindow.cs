@@ -271,8 +271,7 @@ public sealed class HudClanWindow
         }
 
         var ok = HudNpcPanel.OkButton;
-        painter.Sprite(HudArt.HelpButton, ok.X - 9, ok.Y - 4);
-        painter.Sprite(ok.Contains(pointer) ? HudArt.OkYellow : HudArt.OkGray, ok.X, ok.Y);
+        painter.OkButton(ok, ok.Contains(pointer));
     }
 
     private void Go(Page page)

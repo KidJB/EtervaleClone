@@ -26,8 +26,9 @@ public sealed partial class HudQuestBook
     public const string RepeatableMark = MarksFolder + "notify_repeatable_quest.png";
     public const string TakenMark = MarksFolder + "Progress_Quest.png";
     public const string ReadyMark = MarksFolder + "Complete_Quest.png";
+    public const string TargetMark = MarksFolder + "quest_target.png";
     public static readonly string[] Art =
-        [Background, CloseArt, CloseHoverArt, ScrollArt, ScrollerArt, .. StatusArt, AvailableMark, RepeatableMark, TakenMark, ReadyMark];
+        [Background, CloseArt, CloseHoverArt, ScrollArt, ScrollerArt, .. StatusArt, AvailableMark, RepeatableMark, TakenMark, ReadyMark, TargetMark];
 
     // The book's art is 620x460; every place below is in its pixels.
     private const int Width = 620;

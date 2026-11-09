@@ -21,6 +21,7 @@ internal static class SpawnScheduleTests
         yield return ("bosses require configured hours and active anchors", AnchorsAsync);
         yield return ("the world boss list holds every field's bosses soonest first, rebuilds when a pass comes, travels and opens beside the map", BossListAsync);
         yield return ("a boss always spawns at its field's first active spawn point, is remembered as its master, and its spots travel", BossSpotAsync);
+        yield return ("a field's active spawn points travel to the minimap, and the large map spans more ground at a larger scale", SpawnSpotsAsync);
         yield return ("the next boss pass is the first boss hour after now at the day's minute, travels and counts down", NextBossAsync);
         yield return ("world host shares boss passes across fields and does not replay them on entry", HostAsync);
     }
@@ -135,6 +136,22 @@ internal static class SpawnScheduleTests
         Assert.True(read.Spots.SequenceEqual(spots), "the boss spots did not survive the wire");
         var empty = PristonTale.Protocol.Packets.BossSpotsPacket.Read(buffer.AsSpan(0, new PristonTale.Protocol.Packets.BossSpotsPacket([]).Write(buffer)));
         Assert.True(empty.Spots.Count == 0, "an empty boss list did not read back empty");
+        return Task.CompletedTask;
+    }
+
+    private static Task SpawnSpotsAsync()
+    {
+        var buffer = new byte[16 * 1024];
+        var spots = new[] { new PristonTale.Protocol.Packets.SpawnSpotEntry(300 * 256, -400 * 256), new PristonTale.Protocol.Packets.SpawnSpotEntry(-5, 7) };
+        var read = PristonTale.Protocol.Packets.SpawnSpotsPacket.Read(buffer.AsSpan(0, new PristonTale.Protocol.Packets.SpawnSpotsPacket(spots).Write(buffer)));
+        Assert.True(read.Spots.SequenceEqual(spots), "the spawn spots did not survive the wire");
+        var most = new PristonTale.Protocol.Packets.SpawnSpotEntry[PristonTale.Protocol.Packets.SpawnSpotsPacket.MaxSpots];
+        Assert.True(new PristonTale.Protocol.Packets.SpawnSpotsPacket(most).Write(buffer) <= 8192, "the largest spawn list does not fit a frame");
+
+        var small = PristonTale.Gameplay.UI.Widgets.HudMinimap.MarkerOffset(Vector3.Zero, new Vector3(100f, 0f, 50f), 400f);
+        var large = PristonTale.Gameplay.UI.Widgets.HudMinimap.MarkerOffset(Vector3.Zero, new Vector3(100f, 0f, 50f), 600f,
+            PristonTale.Gameplay.UI.Widgets.HudMinimap.LargeSize);
+        Assert.True(small == new Vector2(16f, 8f) && large == new Vector2(32f, 16f), $"minimap offsets differ: {small} {large}");
         return Task.CompletedTask;
     }
 

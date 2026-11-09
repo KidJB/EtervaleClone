@@ -19,6 +19,9 @@ public sealed class HudChat
     public HudChatWindow Window { get; } = new();
     public HudChatBubbles Bubbles { get; } = new();
 
+    private double _updatedMs;
+    private HudChatTab _updatedTab;
+
     // Sends a typed line (party: the party channel); set by the screen.
     public Func<string, bool, Task> Send { get; set; }
 
@@ -96,6 +99,9 @@ public sealed class HudChat
     // commands. Typed characters (backspace included) arrive from the window's text input.
     public void Update(KeyboardState keyboard, KeyboardState previous, IEnumerable<char> typed, double nowMs, HudChatTab tab)
     {
+        _updatedMs = nowMs;
+        _updatedTab = tab;
+        Window.SendClicked ??= SendTyped;
         bool Pressed(Keys key) => keyboard.IsKeyDown(key) && !previous.IsKeyDown(key);
         var control = keyboard.IsKeyDown(Keys.LeftControl) || keyboard.IsKeyDown(Keys.RightControl);
         if (!Window.Focused)
@@ -143,6 +149,15 @@ public sealed class HudChat
         if (Pressed(Keys.Enter) && !control)
         {
             Submit(nowMs, tab);
+        }
+    }
+
+    // The send button beside the input line does what Enter does.
+    private void SendTyped()
+    {
+        if (Window.Focused)
+        {
+            Submit(_updatedMs, _updatedTab);
         }
     }
 

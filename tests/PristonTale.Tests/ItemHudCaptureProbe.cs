@@ -273,13 +273,16 @@ internal sealed class ItemHudCaptureProbe : Game
                     _hud.ItemUse.Request(_owner.Items[2], _owner);
                     if (scenario.Scene == Scene.TeleportPage3)
                     {
-                        Click(layout, HudTeleportCore.NextPage.Center);
-                        Click(layout, HudTeleportCore.NextPage.Center);
+                        for (var step = 0; step < 6; step++)
+                        {
+                            _hud.ItemUse.Teleport.Scroll(-120, HudTeleportCore.Row(0).Center, 0);
+                        }
                     }
 
                     if (scenario.Scene == Scene.TeleportConfirm)
                     {
                         Click(layout, HudTeleportCore.Row(3).Center);
+                        Click(layout, HudTeleportCore.TeleportButton.Center);
                     }
 
                     break;

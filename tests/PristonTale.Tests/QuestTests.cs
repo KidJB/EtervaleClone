@@ -31,6 +31,7 @@ internal static class QuestTests
         yield return ("the wing exchange takes the held wing, crystals and gold for the next wing", WingAsync);
         yield return ("quest drops come only from allowed sources and while a running quest wants them", DropsAsync);
         yield return ("class tier changes only through rank-up quests and masters of a lower group stop at the first", TierAuthorityAsync);
+        yield return ("the markers name exactly the monsters and fields whose kills count for each kind of quest", QuestTargetsAsync);
         yield return ("the quest book lists every quest once per side and marks it from level, tier and logs", QuestBookAsync);
     }
 
@@ -635,6 +636,29 @@ internal static class QuestTests
         public int NextExclusive(int minInclusive, int maxExclusive) => Math.Clamp(value, minInclusive, maxExclusive - 1);
 
         public float NextUnit() => 0f;
+    }
+
+    private static Task QuestTargetsAsync()
+    {
+        var hunting = new ActiveQuest { Code = QuestCode.Level30, State = 1 }.Hunting(QuestMonsters.Bargon, 2);
+        Assert.True(QuestTargets.Prey(hunting).Includes(QuestMonsters.Bargon, 3) && !QuestTargets.Prey(hunting).Includes(QuestMonsters.Titan, 3), "the prey differs");
+        Assert.True(QuestTargets.Prey(hunting with { Kills = 2 }) == QuestHunt.None, "a finished hunt still marks its prey");
+
+        var crystals = EliteQuests.All.First(quest => quest.Objective == EliteObjective.Crystals);
+        var running = new ActiveQuest { Code = crystals.Code, State = EliteQuests.Running, Flags = 1 };
+        var left = EliteQuests.Hunt(running);
+        Assert.True(!left.Includes(crystals.Monsters[0], 0) && left.Includes(crystals.Monsters[1], 0), "a found crystal's monster stayed marked");
+        Assert.True(EliteQuests.Hunt(running with { State = EliteQuests.Met }) == QuestHunt.None, "a met elite objective stayed marked");
+
+        var fury = FuryOfPhantomQuest.Hunt(new ActiveQuest { Code = FuryOfPhantomQuest.Code, State = 2 }.Hunting(QuestMonsters.Bargon, 50));
+        Assert.True(fury.AnyMonster && fury.Includes(0, fury.Field) && !fury.Includes(0, fury.Field + 1), "the field hunt differs");
+
+        var combat = new PristonTale.Gameplay.UI.Widgets.HudCombat();
+        combat.SetQuestTargets(new QuestView(1, QuestCode.Level30, 1, "", 0, 2, QuestTimerKind.None, 0, [], []) { TargetTemplates = [7u] });
+        Assert.True(combat.IsQuestTarget(7, 3) && !combat.IsQuestTarget(8, 3), "the client marked the wrong template");
+        combat.SetQuestTargets(null);
+        Assert.True(!combat.IsQuestTarget(7, 3), "no quest still marks monsters");
+        return Task.CompletedTask;
     }
 
     private static Task QuestBookAsync()

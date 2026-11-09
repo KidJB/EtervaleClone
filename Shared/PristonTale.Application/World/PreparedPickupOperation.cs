@@ -14,7 +14,8 @@ public sealed record PreparedPickupOperation(
     Guid DropId,
     Guid OperationId,
     long Gold,
-    IReadOnlyList<GoldShare> Shares)
+    IReadOnlyList<GoldShare> Shares,
+    string ItemName = "")
     : PreparedCharacterOperation<InventoryOutcome>(Original, Candidate, Snapshot, Outcome);
 
 // A party member's part of picked-up gold. It is a reward, as a kill's experience is: given once the picker's pickup is

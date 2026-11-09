@@ -310,6 +310,12 @@ seguem para a torre alta.</value></data>
   <data name="Game.GateNotAtStone" xml:space="preserve"><value>Fique sobre o portal primeiro</value></data>
   <data name="Game.GateNotReached" xml:space="preserve"><value>Sua asa não alcança este portal</value></data>
   <data name="Game.GateRefused" xml:space="preserve"><value>O portal recusou</value></data>
+  <data name="Game.ExperienceGained" xml:space="preserve"><value>&gt; Ganhou {0} de experiência!</value></data>
+  <data name="Game.GoldGained" xml:space="preserve"><value>&gt; Ganhou {0} de ouro!</value></data>
+  <data name="Game.ItemGained" xml:space="preserve"><value>&gt; Ganhou {0}!</value></data>
+  <data name="Game.MemberItemGained" xml:space="preserve"><value>&gt; {0} ganhou {1}!</value></data>
+  <data name="Game.PartyExperienceGained" xml:space="preserve"><value>&gt; Ganhou {0} de experiência [{1}% / {2}] no grupo!</value></data>
+  <data name="Game.PartyGoldGained" xml:space="preserve"><value>&gt; {0} membros do grupo ganharam {1} de ouro!</value></data>
   <data name="Game.GoldLimit" xml:space="preserve"><value>Excede a quantidade máxima de ouro que você pode carregar</value></data>
   <data name="Game.GravityStoneUsed" xml:space="preserve"><value>Você usou uma Gravity Stone</value></data>
   <data name="Game.HestianLost" xml:space="preserve"><value>Você perdeu para Hestian.</value></data>
@@ -687,7 +693,6 @@ seguem para a torre alta.</value></data>
   <data name="Settings.Clouds.Off" xml:space="preserve"><value>desligadas</value></data>
   <data name="Settings.Frequency" xml:space="preserve"><value>Frequência: {0} Hz (0 = automática)</value></data>
   <data name="Settings.FrequencyDesktop" xml:space="preserve"><value>Frequência: área de trabalho</value></data>
-  <data name="Settings.Hint" xml:space="preserve"><value>Clique: próximo   Shift+clique: anterior</value></data>
   <data name="Settings.Language" xml:space="preserve"><value>Idioma: {0}</value></data>
   <data name="Settings.MaxFps" xml:space="preserve"><value>FPS máximo: {0}</value></data>
   <data name="Settings.MaxFpsUnlimited" xml:space="preserve"><value>FPS máximo: ilimitado</value></data>
@@ -710,14 +715,20 @@ seguem para a torre alta.</value></data>
   <data name="Settings.ShadowAnimationEveryFrame" xml:space="preserve"><value>Animação das sombras: todo quadro</value></data>
   <data name="Settings.ShadowsOff" xml:space="preserve"><value>Sombras: desligadas</value></data>
   <data name="Settings.ShadowsOn" xml:space="preserve"><value>Sombras: ligadas</value></data>
+  <data name="Settings.DepthOfFieldOff" xml:space="preserve"><value>Profundidade de campo: desligada</value></data>
+  <data name="Settings.DepthOfFieldOn" xml:space="preserve"><value>Profundidade de campo: ligada</value></data>
+  <data name="Settings.RenderScale" xml:space="preserve"><value>Escala de render FSR: {0}%</value></data>
+  <data name="Settings.DynamicResolutionOff" xml:space="preserve"><value>Resolução dinâmica: desligada</value></data>
+  <data name="Settings.DynamicResolution" xml:space="preserve"><value>Resolução dinâmica: manter {0} FPS</value></data>
   <data name="Settings.SkyClassic" xml:space="preserve"><value>Céu: clássico</value></data>
   <data name="Settings.SkyRealistic" xml:space="preserve"><value>Céu: realista</value></data>
   <data name="Settings.SoundOff" xml:space="preserve"><value>Áudio: desligado</value></data>
   <data name="Settings.SoundOn" xml:space="preserve"><value>Áudio: ligado</value></data>
   <data name="Settings.SunShadow" xml:space="preserve"><value>Sombra do sol: {0}</value></data>
+  <data name="Settings.TargetFrameNew" xml:space="preserve"><value>Quadro do alvo: novo (no topo)</value></data>
+  <data name="Settings.TargetFrameClassic" xml:space="preserve"><value>Quadro do alvo: clássico</value></data>
   <data name="Settings.TargetHealthAlways" xml:space="preserve"><value>HP do alvo: sempre, com porcentagem</value></data>
   <data name="Settings.TargetHealthClassic" xml:space="preserve"><value>HP do alvo: clássico (após o primeiro golpe)</value></data>
-  <data name="Settings.Title" xml:space="preserve"><value>Configurações</value></data>
   <data name="Settings.VSyncOff" xml:space="preserve"><value>VSync: desligado</value></data>
   <data name="Settings.VSyncOn" xml:space="preserve"><value>VSync: ligado</value></data>
   <data name="Settings.WeatherOff" xml:space="preserve"><value>Clima: desligado</value></data>
@@ -887,15 +898,49 @@ seguem para a torre alta.</value></data>
   <data name="Status.SavingAndDisconnecting" xml:space="preserve"><value>Salvando e desconectando…</value></data>
   <data name="Status.SkillDelay" xml:space="preserve"><value>As habilidades recarregam em meio segundo</value></data>
   <data name="Status.StaminaBooster" xml:space="preserve"><value>Aumenta a stamina em {0}%</value></data>
-  <data name="TeleportCore.Page" xml:space="preserve"><value>[Teleport Core - Página {0}]</value></data>
-  <data name="TeleportCore.Row" xml:space="preserve"><value>{0}. {1} (Nv {2})</value></data>
-  <data name="TeleportCore.Title" xml:space="preserve"><value>TELEPORTE</value></data>
   <data name="Time.Days" xml:space="preserve"><value>{0} dias</value></data>
   <data name="Time.Hours" xml:space="preserve"><value>{0} horas</value></data>
   <data name="Time.OneDay" xml:space="preserve"><value>1 dia</value></data>
   <data name="Time.OneHour" xml:space="preserve"><value>1 hora</value></data>
   <data name="Time.Seconds" xml:space="preserve"><value>{0}s</value></data>
   <data name="Trade.Gold" xml:space="preserve"><value>você quer trocar?</value></data>
+  <data name="Party.Confirm.Delegate" xml:space="preserve"><value>Tornar este jogador o líder do grupo?</value></data>
+  <data name="Party.Confirm.Disband" xml:space="preserve"><value>Desfazer o grupo?</value></data>
+  <data name="Party.Confirm.Kick" xml:space="preserve"><value>Expulsar este jogador do grupo?</value></data>
+  <data name="Party.Confirm.Leave" xml:space="preserve"><value>Sair do grupo?</value></data>
+  <data name="Party.Menu.Delegate" xml:space="preserve"><value>Delegar</value></data>
+  <data name="Party.Menu.Disband" xml:space="preserve"><value>Desfazer</value></data>
+  <data name="Party.Menu.Kick" xml:space="preserve"><value>Expulsar</value></data>
+  <data name="Party.Menu.Leave" xml:space="preserve"><value>Sair</value></data>
+  <data name="Party.Fold" xml:space="preserve"><value>Ocultar/Mostrar grupo</value></data>
+  <data name="Social.Add" xml:space="preserve"><value>Adicionar amigo</value></data>
+  <data name="Social.Blocked" xml:space="preserve"><value>Lista de bloqueados</value></data>
+  <data name="Social.Friends" xml:space="preserve"><value>Lista de amigos</value></data>
+  <data name="Social.Recent" xml:space="preserve"><value>Lista de recentes</value></data>
+  <data name="Game.RaidRequested" xml:space="preserve"><value>Pedido de raid enviado a {0}</value></data>
+  <data name="Game.RaidNotLeaders" xml:space="preserve"><value>A raid é formada entre líderes de grupo</value></data>
+  <data name="Game.RaidFull" xml:space="preserve"><value>Um grupo já está em uma raid</value></data>
+  <data name="Game.RaidFormed" xml:space="preserve"><value>A raid foi formada</value></data>
+  <data name="Game.RaidEnded" xml:space="preserve"><value>A raid terminou</value></data>
+  <data name="Game.PartyModeNormal" xml:space="preserve"><value>O grupo mudou para o modo Normal</value></data>
+  <data name="Game.PartyModeExp" xml:space="preserve"><value>O grupo mudou para o modo EXP</value></data>
+  <data name="Game.PartyModeHunt" xml:space="preserve"><value>O grupo mudou para o modo Caça</value></data>
+  <data name="Party.RaidRequest" xml:space="preserve"><value>pede ao seu grupo para formar uma raid</value></data>
+  <data name="Party.Mode.Normal" xml:space="preserve"><value>Modo Normal</value></data>
+  <data name="Party.Mode.Exp" xml:space="preserve"><value>Modo EXP: mais experiência, menos drops</value></data>
+  <data name="Party.Mode.Hunt" xml:space="preserve"><value>Modo Caça: mais drops, menos experiência</value></data>
+  <data name="Party.Menu.Mode" xml:space="preserve"><value>Mudar modo</value></data>
+  <data name="Party.Menu.LeaveRaid" xml:space="preserve"><value>Sair da raid</value></data>
+  <data name="Party.Confirm.Mode" xml:space="preserve"><value>Mudar o modo do grupo?</value></data>
+  <data name="Party.Confirm.LeaveRaid" xml:space="preserve"><value>Sair da raid?</value></data>
+  <data name="TeleportCore.Bosses" xml:space="preserve"><value>CHEFES</value></data>
+  <data name="TeleportCore.MapLevel" xml:space="preserve"><value>Nível do mapa: {0}</value></data>
+  <data name="TeleportCore.MapType" xml:space="preserve"><value>Tipo de mapa:</value></data>
+  <data name="TeleportCore.NoBosses" xml:space="preserve"><value>Nenhum chefe agendado.</value></data>
+  <data name="TeleportCore.Tag.Exp" xml:space="preserve"><value>EXP</value></data>
+  <data name="TeleportCore.Tag.Pvp" xml:space="preserve"><value>PVP</value></data>
+  <data name="TeleportCore.Tag.Town" xml:space="preserve"><value>CIDADE</value></data>
+  <data name="TeleportCore.Teleport" xml:space="preserve"><value>TELEPORTAR</value></data>
   <data name="Usable.AgingArmlet" xml:space="preserve"><value>o bracelete</value></data>
   <data name="Usable.AgingArmor" xml:space="preserve"><value>a armadura ou manto</value></data>
   <data name="Usable.AgingBoots" xml:space="preserve"><value>as botas</value></data>

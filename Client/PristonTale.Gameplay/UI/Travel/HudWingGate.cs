@@ -211,7 +211,7 @@ public sealed class HudWingGate(IClientLog log)
     {
         painter.HelpBox(HudNpcPanel.BoxX, HudNpcPanel.BoxY, HudNpcPanel.SizeW, HudNpcPanel.SizeH);
         var title = HudNpcPanel.Title;
-        painter.Sprite(HudArt.HelpTitle, title.X, title.Y);
+        painter.TitlePlate(title);
         painter.TextCentered(hovered?.Name ?? ClientText.Get("WingGate.Title"), title.Left, title.Right, title.Y + 7, TitleColor);
         var lines = HelpLines(font, documents, hovered);
         var capacity = (HudNpcPanel.OkButton.Y - 8 - TextY) / HudPainter.LineHeight;

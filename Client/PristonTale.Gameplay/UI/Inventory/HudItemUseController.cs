@@ -11,7 +11,7 @@ namespace PristonTale.Gameplay.UI.Inventory;
 
 // Right-click use of a carried item: most items are sent at once; the Teleport Core first opens its field list, and the
 // mobile shop and an unbound Union Core (bound to its user) ask for confirmation. One use is in flight at a time and carries the inventory revision it was built on.
-public sealed class HudItemUseController(Func<ItemUseCommand, Task<ItemUseOutcome>> use, IClientLog log)
+public sealed class HudItemUseController(Func<ItemUseCommand, Task<ItemUseOutcome>> use, IClientLog log, HudSprites sprites)
 {
     private readonly HudRequest<ItemUseOutcome> _request = new(log, "Item use failed");
     private OwnedItemView _confirmItem;
@@ -21,7 +21,7 @@ public sealed class HudItemUseController(Func<ItemUseCommand, Task<ItemUseOutcom
     private double _deadSinceMs = -1d;
     private bool _restoreSent;
 
-    public HudTeleportCore Teleport { get; } = new();
+    public HudTeleportCore Teleport { get; } = new(sprites);
     public bool Pending => _request.Pending;
     public bool Confirming => _confirmItem is not null || _confirmDestination is not null;
     public string Message { get; private set; } = "";
@@ -151,9 +151,9 @@ public sealed class HudItemUseController(Func<ItemUseCommand, Task<ItemUseOutcom
         }
     }
 
-    public void Draw(HudPainter painter, Point pointer)
+    public void Draw(HudPainter painter, Point pointer, HudBossList bosses, double nowMs)
     {
-        Teleport.Draw(painter, pointer);
+        Teleport.Draw(painter, pointer, bosses, nowMs);
         if (_confirmItem is not null)
         {
             painter.Flush();

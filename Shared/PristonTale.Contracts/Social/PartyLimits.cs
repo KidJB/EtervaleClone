@@ -16,5 +16,15 @@ public enum PartyCommand : byte
     Delegate = 0,
     Disband = 1,
     Kick = 2,
-    Leave = 3
+    Leave = 3,
+    ChangeMode = 4,
+    LeaveRaid = 5
+}
+
+// How a party shares: Normal as the original, Exp a larger experience share for fewer drops, Hunt a smaller share for more.
+public enum PartyMode : byte
+{
+    Normal = 0,
+    Exp = 1,
+    Hunt = 2
 }

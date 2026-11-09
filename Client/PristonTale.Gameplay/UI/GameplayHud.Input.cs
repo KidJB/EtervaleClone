@@ -82,16 +82,26 @@ public sealed partial class GameplayHud
             HelpPetKey("System");
         }
 
+        if (Pressed(keyboard, Keys.F12))
+        {
+            _tuning.Toggle();
+        }
+
+        if (Pressed(keyboard, Keys.O))
+        {
+            ToggleSocial();
+            HelpPetKey("Party");
+        }
+
+        if (Pressed(keyboard, Keys.N))
+        {
+            _minimap.Large = !_minimap.Large;
+        }
+
         if (Pressed(keyboard, Keys.Q))
         {
             ToggleQuestWindow();
             HelpPetKey("Quest");
-        }
-
-        if (Pressed(keyboard, Keys.D))
-        {
-            TogglePartyWindow();
-            HelpPetKey("Party");
         }
 
         if (Pressed(keyboard, Keys.R))
@@ -204,7 +214,7 @@ public sealed partial class GameplayHud
 
         if (_settingsOpen && HudSettingsPanel.Box.Contains(pointer))
         {
-            if (HudSettingsPanel.OkButton.Contains(pointer))
+            if (HudSettingsPanel.Closes(pointer))
             {
                 _settingsOpen = false;
             }
@@ -301,6 +311,7 @@ public sealed partial class GameplayHud
             if (entry == HudSystemEntry.Settings)
             {
                 _settingsOpen = true;
+                _settings.Opened();
                 _systemMenu = false;
                 return;
             }
@@ -410,7 +421,7 @@ public sealed partial class GameplayHud
                 ToggleQuestWindow();
                 break;
             case HudMenuButton.Party:
-                TogglePartyWindow();
+                ToggleSocial();
                 break;
         }
     }

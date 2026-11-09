@@ -14,6 +14,8 @@ public sealed record HudActionBarDocument(int Version, bool Open, bool Locked, b
     public int TrackerY { get; init; }
     public bool TrackerCollapsed { get; init; }
     public int BuffsX { get; init; }
+    public int PartyX { get; init; }
+    public int PartyY { get; init; }
     public int BuffsY { get; init; }
     public bool BuffsCollapsed { get; init; }
 }

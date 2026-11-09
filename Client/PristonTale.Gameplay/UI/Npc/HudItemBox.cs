@@ -338,7 +338,7 @@ public sealed class HudItemBox
 
         var box = NameBox(window);
         painter.Text("To:", window.X + 70, box.Y + 1, TextColor);
-        painter.ColorBox(box, 0, 0, 0, 230);
+        painter.InputBox(box);
         painter.Text(_recipient.CaretVisible ? _recipient.Text + "_" : _recipient.Text, box.X + 4, box.Y + 1, TextColor);
         var button = SendButton(window);
         painter.Sprite(button.Contains(pointer) ? SendLitArt : SendArt, button.X, button.Y);

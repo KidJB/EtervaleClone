@@ -2,6 +2,7 @@ using PristonTale.Client.Net.Presence;
 using PristonTale.Contracts.Social;
 using PristonTale.Gameplay.UI.Contacts;
 using PristonTale.Gameplay.UI.Parties;
+using PristonTale.Gameplay.UI.Widgets;
 
 namespace PristonTale.Gameplay.UI;
 
@@ -11,6 +12,8 @@ public sealed partial class GameplayHud
 {
     private const double ContactRefreshMs = 10_000;
     private double _contactsAskedMs = double.MinValue;
+    private HudSocialWindow _social;
+    private HudTuningPanel _tuning;
 
     // Sends the contact list requests; set by the screen.
     public IContactClient Contacts { get; set; }
@@ -30,11 +33,14 @@ public sealed partial class GameplayHud
         friends.Changed = (list, add, name) => Contacts?.ChangeContactAsync(list, add, name);
         friends.Whispered = _chat.Window.WhisperTo;
         _chat.WhisperPartner = friends.Met;
+        _social = new HudSocialWindow(friends) { Whispered = _chat.Window.WhisperTo };
+        _tuning = new HudTuningPanel(_context.Presentation);
+        _sprites.Request(HudSocialWindow.Art);
     }
 
     private void UpdateContacts(double nowMs)
     {
-        if (_partyWindow.Visible && _partyWindow.Page == HudPartyPage.Friends && nowMs - _contactsAskedMs >= ContactRefreshMs)
+        if ((_partyWindow.Visible && _partyWindow.Page == HudPartyPage.Friends || _social.Open) && nowMs - _contactsAskedMs >= ContactRefreshMs)
         {
             _contactsAskedMs = nowMs;
             Contacts?.RefreshContactsAsync();
@@ -53,6 +59,6 @@ public sealed partial class GameplayHud
         _partyWindow.Friends.Met(name);
         _questWindow.Close();
         _contactsAskedMs = double.MinValue;
-        _partyWindow.ShowFriends(HudFriendsView.Friends);
+        _social.ShowFriends();
     }
 }

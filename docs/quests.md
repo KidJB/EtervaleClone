@@ -288,6 +288,13 @@ price) before the commit. The owner's state travels as `DailyQuestState` (protoc
 (`HudQuestBook.Daily`) lists the dailies of the player's level, and Messenger Ian's "Daily quests" button opens it with
 Accept and Claim.
 
+## Markers over quest monsters
+
+`QuestTargets` (Simulation) answers which kills count for the running quest as a `QuestHunt`: quest monster codes or every monster,
+and the field they count in. The kill credit of each quest family reads it, so a marker and a credited kill cannot disagree. `QuestView.Hunt`
+travels in `QuestJournal` as monster template ids (`QuestWireMapping`), and `HudCombat.DrawQuestTargets` draws a bobbing purple orb (`Hud/QuestMarks/quest_target.png`) over
+each matching monster in view that is not a summon. A quest item drop held by a monster (no kill count) has no marker.
+
 ## World buffs
 
 `WorldBuffs` (Simulation) and `WorldServer.WorldBuffs`: ten buffs sold in the coin shop as items `WB101`-`WB110` (`data/coinshop.json`).
@@ -295,6 +302,8 @@ with 24-hour versions `WB201`-`WB210`. Using one adds its time to every player's
 later login has the time left and items stack. The ends are kept in `data/worldbuffs.json`, read at start. `PremiumTimers.WorldBuffMask` carries
 them to the premium rules and `PremiumEffects`; the HUD shows them with `HudWorldBuffs`. `/@worldbuff [seconds] [kind]` starts them
 for a game master, 0 seconds ends them.
+
+World buffs never pause, in town or offline; the Active Buffs panel's hover box marks their time left "(DOES NOT PAUSE)".
 
 ## Boss arena
 

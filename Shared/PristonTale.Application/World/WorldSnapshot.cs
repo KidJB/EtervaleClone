@@ -264,6 +264,9 @@ public readonly struct WorldSnapshot
     // The field's bosses at their spot (FieldInstance.BossSpots); the encoder sends the list when the array changes.
     public BossSpotView[] BossSpots { get; init; } = [];
 
+    // The field's active spawn points (FieldInstance.SpawnSpots); the encoder sends them when the field changes.
+    public SpawnSpotView[] SpawnSpots { get; init; } = [];
+
     // Every boss of the world (WorldServer, shared by all receivers) and the local time it is measured against; the
     // encoder sends the list when it is a new one.
     public BossList BossList { get; init; } = BossList.Empty;

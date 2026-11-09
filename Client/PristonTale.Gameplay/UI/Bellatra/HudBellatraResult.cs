@@ -174,8 +174,7 @@ public sealed class HudBellatraResult
         }
 
         var ok = Ok;
-        painter.Sprite(HudArt.HelpButton, ok.X - 9, ok.Y - 4);
-        painter.Sprite(ok.Contains(pointer) ? HudArt.OkYellow : HudArt.OkGray, ok.X, ok.Y);
+        painter.OkButton(ok, ok.Contains(pointer));
     }
 
     private void Request(Wait wait, int team, double nowMs)

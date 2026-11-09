@@ -136,7 +136,8 @@ One element of a converted effect group with its own clock, loops and keyed even
 `loop` (0 = until stopped), `delay`, `endTime` (quads: seconds per loop; particles: lifetime range), `color` (0..255),
 `sizeMin`/`sizeMax`, `blend`, `beamFrom`/`beamTo`, particle `spawn` (Point/Box/Sphere/Doughnut) with
 `spawnMin`/`spawnMax`, `count`, `rate`, `velocityMin`/`velocityMax`, `outward`, `beams`, and `events`
-`[t, kind Color|Size, ramp, value]`. A set event replaces the value; a ramp event is a target that the event before
+`[t, kind Color|Size, ramp, value]`. A component on the `Point` anchor moves whenever the effect is moved (a followed child
+ carries it along). A set event replaces the value; a ramp event is a target that the event before
 it moves towards, and the last step keeps going after the last ramp. Every loop restarts the events at 0 without
 resetting values. Particle pools hold at most 100 live particles.
 

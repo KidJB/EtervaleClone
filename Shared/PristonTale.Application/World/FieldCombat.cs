@@ -49,6 +49,9 @@ internal sealed class FieldCombat
     private readonly Dictionary<ulong, float> _corpseMsLeft = new();
     private readonly Dictionary<ulong, ulong> _expByPlayer = new();
 
+    // The experience awarded since the world last took them for the players' Notice lines.
+    internal List<ExperienceGain> ExperienceGains { get; } = [];
+
     private readonly List<ulong> _expiredScratch = new();
 
     public FieldCombat(IFieldCombatHost host, CombatRng rng, int experienceMultiplier = 1)
@@ -400,10 +403,46 @@ internal sealed class FieldCombat
         IReadOnlyList<RolledDrop> drops = monster.DropsDisabled ? [] : FinishDrops(monster,
             DropRoller.Roll(_rng, monster.Def.Drops, eventItem, monster.Def.EventItem, dropBonus, events));
 
+        if (!monster.DropsDisabled && credited != 0 && _host.TryGetPlayer(credited, out var partyKiller) && partyKiller.Party is { Mode: not Contracts.Social.PartyMode.Normal } modeParty)
+        {
+            drops = ApplyPartyMode(monster, partyKiller, modeParty, drops);
+        }
+
         _damageLogs.Remove(monster.EntityId);
         _corpseMsLeft[monster.EntityId] = CorpseDespawnMs;
 
         return new KillPayout(monster.EntityId, credited, exp, drops);
+    }
+
+    // Hunt mode rolls more of the monster's drops; Exp mode takes the last ones away.
+    private List<RolledDrop> ApplyPartyMode(MonsterInstance monster, WorldPlayer killer, Party party, IReadOnlyList<RolledDrop> rolled)
+    {
+        var nearby = 0;
+        foreach (var id in party.Members)
+        {
+            if (_host.TryGetPlayer(id, out var member) && PartyRules.InShareRange(killer.Position, member.Position))
+            {
+                nearby++;
+            }
+        }
+
+        var drops = new List<RolledDrop>(rolled);
+        var change = PartyRules.DropChange(party.Mode, nearby, _rng.NextExclusive(0, 100));
+        for (var extra = 0; extra < change; extra++)
+        {
+            var more = FinishDrops(monster, DropRoller.Roll(_rng, monster.Def.Drops));
+            if (more.Count > 0)
+            {
+                drops.Add(more[0]);
+            }
+        }
+
+        if (change < 0)
+        {
+            drops.RemoveRange(Math.Max(0, drops.Count + change), Math.Min(drops.Count, -change));
+        }
+
+        return drops;
     }
 
     // The kill's experience at the party's average level, shared by its size (PartyRules); members in other fields share
@@ -412,17 +451,17 @@ internal sealed class FieldCombat
     {
         var exp = KillReward.ExpForKill(monster.Def.ExpReward, monster.Def.Combat.Level, party.AverageLevel, ExperienceMultiplier,
             ExperienceEventPercent);
-        var (killerShare, otherShare) = PartyRules.ExpShare(party.Count);
+        var (killerShare, otherShare) = PartyRules.ExpShare(party.Count, party.Mode);
         ulong killerAward = 0;
         foreach (var id in party.Members)
         {
             if (id == killer.EntityId)
             {
-                killerAward = Award(killer, PartyRules.Share(exp, killerShare));
+                killerAward = Award(killer, PartyRules.Share(exp, killerShare), killerShare, party.Count);
             }
             else if (_host.TryGetPlayer(id, out var member) && PartyRules.InShareRange(killer.Position, member.Position))
             {
-                Award(member, PartyRules.Share(exp, otherShare));
+                Award(member, PartyRules.Share(exp, otherShare), otherShare, party.Count);
             }
         }
 
@@ -431,7 +470,7 @@ internal sealed class FieldCombat
 
     // Each player's premium boosts its own part. A dead player gains nothing: its summons may still kill, and a level gained
     // lying dead would fill its life.
-    private ulong Award(WorldPlayer player, ulong experience)
+    private ulong Award(WorldPlayer player, ulong experience, int partyPercent = 0, int partySize = 0)
     {
         var exp = player.IsDead ? 0 : PremiumRules.BoostExperience(experience, player.Character.Premium);
         if (exp == 0)
@@ -442,6 +481,7 @@ internal sealed class FieldCombat
         _expByPlayer.TryGetValue(player.EntityId, out var total);
         _expByPlayer[player.EntityId] = exp > ulong.MaxValue - total ? ulong.MaxValue : total + exp;
         player.Character.AwardExperience(exp);
+        ExperienceGains.Add(new ExperienceGain(player.EntityId, exp, partyPercent, partySize));
         return exp;
     }
 

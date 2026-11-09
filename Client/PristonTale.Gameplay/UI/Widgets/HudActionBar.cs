@@ -28,12 +28,24 @@ public enum HudActionBarButton
 // acts as its key. It lies horizontal or, turned, vertical, and keeps its distance from the bottom edge.
 public sealed class HudActionBar
 {
-    public const int Slot = HudSkillHud.SkillIcon + 2;
+    public const int Slot = 41;
     public const int Step = Slot + 1;
-    public const int Padding = 4;
-    public const int Header = 14;
-    public const int Button = 11;
-    public const int ButtonStep = Button + 1;
+    private const int PaddingX = 6;
+    private const int PaddingY = 8;
+    private const int LongSide = 424;
+    private const int ShortSide = 96;
+    // In the upright bar the slots start under the buttons.
+    private const int UprightSlotsY = 38;
+    private const int IconInset = 4;
+    private const string Folder = "Hud/ActionBar/";
+    private const string BackgroundWide = Folder + "background_horizontal.png";
+    private const string BackgroundTall = Folder + "background_vertical.png";
+    private const string SlotArt = Folder + "slot.png";
+    private const string SlotLit = Folder + "slot_.png";
+    private static readonly string[] ButtonNames = ["", "tab1", "tab2", "tab3", "btnlock", "btnswap", "btnclose"];
+    private static readonly string[] ButtonArt = ButtonNames.Select(static name => $"{Folder}{name}.png").ToArray();
+    private static readonly string[] ButtonArtLit = ButtonNames.Select(static name => $"{Folder}{name}_.png").ToArray();
+    public static readonly string[] Art = [BackgroundWide, BackgroundTall, SlotArt, SlotLit, .. ButtonArt.Skip(1), .. ButtonArtLit.Skip(1)];
     private const int ItemCell = 22;
     private const int MaxCount = 999;
     // Until moved, the bar sits centred with its bottom this far above the screen's bottom, over the bottom bar.
@@ -41,7 +53,6 @@ public sealed class HudActionBar
     private static readonly Color Frame = new(150, 128, 88);
     private static readonly Color Lit = new(255, 220, 140);
     private static readonly string[] Counts = Enumerable.Range(0, MaxCount + 1).Select(count => count.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
-    private static readonly string[] ButtonLabels = ["", "1", "2", "3", "L", "T", "x"];
 
     private readonly HudSkillBindings _bindings;
     private Point _anchor = new(-1, -1);
@@ -78,9 +89,7 @@ public sealed class HudActionBar
         _anchor = anchor;
     }
 
-    public Point Size => Vertical
-        ? new Point(Padding * 2 + HudActionBarSlots.Rows * Step - 1, Header + Padding * 2 + HudActionBarSlots.Columns * Step - 1)
-        : new Point(Padding * 2 + HudActionBarSlots.Columns * Step - 1, Header + Padding * 2 + HudActionBarSlots.Rows * Step - 1);
+    public Point Size => Vertical ? new Point(ShortSide, LongSide) : new Point(LongSide, ShortSide);
 
     public Rectangle Bounds(HudLayout layout)
     {
@@ -96,11 +105,20 @@ public sealed class HudActionBar
         var column = index % HudActionBarSlots.Columns;
         var row = index / HudActionBarSlots.Columns;
         var (across, down) = Vertical ? (row, column) : (column, row);
-        return new Rectangle(bar.X + Padding + across * Step, bar.Y + Header + Padding + down * Step, Slot, Slot);
+        return new Rectangle(bar.X + PaddingX + across * Step, bar.Y + (Vertical ? UprightSlotsY + PaddingX : PaddingY) + down * Step, Slot, Slot);
     }
 
-    public static Rectangle ButtonBounds(Rectangle bar, HudActionBarButton button) =>
-        new(bar.X + 1 + ((int)button - 1) * ButtonStep, bar.Y + 1, Button, Button);
+    public Rectangle ButtonBounds(Rectangle bar, HudActionBarButton button)
+    {
+        var (x, y, width, height) = button switch
+        {
+            HudActionBarButton.Lock => Vertical ? (53, 4, 12, 15) : (387, 10, 12, 15),
+            HudActionBarButton.Turn => Vertical ? (72, 25, 12, 15) : (406, 31, 12, 15),
+            HudActionBarButton.Close => Vertical ? (70, 5, 14, 14) : (404, 11, 14, 14),
+            _ => Vertical ? (PaddingX, 4 + 14 * ((int)button - 1), 34, 12) : (384, 50 + 14 * ((int)button - 1), 34, 12)
+        };
+        return new Rectangle(bar.X + x, bar.Y + y, width, height);
+    }
 
     public int SlotAt(HudLayout layout, Point pointer)
     {
@@ -231,7 +249,7 @@ public sealed class HudActionBar
                     _liftedFrom = index;
                 }
             }
-            else if (index < 0 && Bounds(layout).Contains(pointer) && pointer.Y < Bounds(layout).Y + Header && !Locked)
+            else if (index < 0 && Bounds(layout).Contains(pointer) && !Locked)
             {
                 var bar = Bounds(layout);
                 _grab = new Point(pointer.X - bar.X, pointer.Y - bar.Y);
@@ -283,9 +301,7 @@ public sealed class HudActionBar
         }
 
         var bar = Bounds(layout);
-        painter.ColorBox(bar, 12, 10, 8, 170);
-        Outline(painter, bar, Frame);
-        var hovered = bar.Contains(pointer) || _moving;
+        painter.Sprite(Vertical ? BackgroundTall : BackgroundWide, bar.X, bar.Y);
         var hoveredButton = ButtonAt(layout, pointer);
         for (var button = HudActionBarButton.Page1; button <= HudActionBarButton.Close; button++)
         {
@@ -297,24 +313,16 @@ public sealed class HudActionBar
                 HudActionBarButton.Close => false,
                 _ => Slots.Page == (int)button - 1
             };
-            if (!hovered && !on)
-            {
-                continue;
-            }
-
-            painter.ColorBox(bounds, on ? 120 : 40, on ? 96 : 34, on ? 48 : 26, 220);
-            Outline(painter, bounds, button == hoveredButton ? Lit : Frame);
-            painter.TextCentered(ButtonLabels[(int)button], bounds.X, bounds.Right, bounds.Y - 3, Color.White);
+            painter.Sprite(on || button == hoveredButton ? ButtonArtLit[(int)button] : ButtonArt[(int)button], bounds.X, bounds.Y);
         }
 
         for (var index = 0; index < HudActionBarSlots.SlotCount; index++)
         {
             var bounds = SlotBounds(bar, index);
-            painter.ColorBox(bounds, 0, 0, 0, 150);
-            Outline(painter, bounds, bounds.Contains(pointer) ? Lit : Frame);
-            var inner = new Rectangle(bounds.X + 1, bounds.Y + 1, bounds.Width - 2, bounds.Height - 2);
+            painter.Sprite(bounds.Contains(pointer) ? SlotLit : SlotArt, bounds.X, bounds.Y);
+            var inner = new Rectangle(bounds.X + IconInset, bounds.Y + IconInset, bounds.Width - IconInset * 2, bounds.Height - IconInset * 2);
             DrawShortcut(painter, inner, Slots[index], state, icons, cooldowns, nowMs, skillHud);
-            painter.Text(HudActionBarSlots.Labels[index], bounds.X + 2, bounds.Y - 2, Color.White);
+            painter.Text(HudActionBarSlots.Labels[index], bounds.X + 4, bounds.Y + 1, Color.White);
         }
     }
 

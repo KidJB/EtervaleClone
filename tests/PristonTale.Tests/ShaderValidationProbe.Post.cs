@@ -21,6 +21,8 @@ internal sealed partial class ShaderValidationProbe
         VerifyMotion(skinned: true);
         VerifyAutoExposure();
         VerifyBloom();
+        VerifyDepthOfField();
+        VerifyFsr();
         foreach (var mode in Enum.GetValues<TonemapperMode>())
         {
             VerifyDisplayTransform(mode);
@@ -117,6 +119,83 @@ internal sealed partial class ShaderValidationProbe
     }
 
     // The pyramid is a convex combination of blurs: a flat image stays flat at every level.
+    // A bright stripe beside a dark field: near the focus the edge stays hard, far behind it the blur crosses the edge.
+    private void VerifyDepthOfField()
+    {
+        Assert.True(PristonDepthOfField.Radius(300f, 300f, 1080) == 0f && PristonDepthOfField.Radius(5000f, 300f, 1080) == 7f
+            && PristonDepthOfField.Radius(5000f, 300f, 2160) == 14f, "the blur radius differs");
+        const int size = 512;
+        using var scene = new RenderTarget2D(GraphicsDevice, size, size, false, SurfaceFormat.HalfVector4, DepthFormat.None);
+        using var depth = new Texture2D(GraphicsDevice, size, size, false, SurfaceFormat.Single);
+        var colours = new HalfVector4[size * size];
+        for (var index = 0; index < colours.Length; index++)
+        {
+            colours[index] = new HalfVector4(index % size < size / 2 ? new Vector4(1f, 1f, 1f, 1f) : new Vector4(0f, 0f, 0f, 1f));
+        }
+
+        scene.SetData(colours);
+        using var triangle = new PristonFullscreenTriangle(GraphicsDevice);
+        using var effect = Content.Load<Effect>(PristonDepthOfField.Asset).Clone();
+        using var blur = new PristonDepthOfField(GraphicsDevice, triangle, effect);
+        float EdgeValue(float depthValue)
+        {
+            var depths = new float[size * size];
+            Array.Fill(depths, depthValue);
+            depth.SetData(depths);
+            var result = blur.Run(scene, depth, 300f);
+            GraphicsDevice.SetRenderTarget(null);
+            var pixels = new HalfVector4[size * size];
+            ((RenderTarget2D)result).GetData(pixels);
+            return pixels[size / 2 * size + size / 2 + 1].ToVector4().X;
+        }
+
+        Assert.True(EdgeValue(300f) < 0.01f, "depth of field blurred the focus");
+        Assert.True(EdgeValue(9000f) > 0.05f, "depth of field did not blur the distance");
+    }
+
+    // A flat image stays flat and the flat sides of a hard edge keep their colours when doubled; the resolution controller steps both ways.
+    private void VerifyFsr()
+    {
+        var dynamic = new PristonDynamicResolution();
+        Assert.True(dynamic.Update(0.1, 0.8f, 0) == 0.8f, "dynamic resolution off did not keep the player's scale");
+        var scale = dynamic.Update(2d, 0.8f, 60);
+        Assert.True(MathF.Abs(scale - 0.75f) < 0.001f, $"slow frames did not lower the scale: {scale}");
+        for (var frame = 0; frame < 200; frame++)
+        {
+            scale = dynamic.Update(0.008d, 0.8f, 60);
+        }
+
+        Assert.True(MathF.Abs(scale - 0.8f) < 0.001f, $"fast frames did not restore the player's scale: {scale}");
+
+        const int size = 32;
+        using var source = new Texture2D(GraphicsDevice, size, size, false, SurfaceFormat.Color);
+        using var output = new RenderTarget2D(GraphicsDevice, size * 2, size * 2, false, SurfaceFormat.Color, DepthFormat.None);
+        using var triangle = new PristonFullscreenTriangle(GraphicsDevice);
+        using var effect = Content.Load<Effect>(PristonFsr.Asset).Clone();
+        using var fsr = new PristonFsr(GraphicsDevice, triangle, effect);
+        Color[] Upscaled(Func<int, Color> pixel)
+        {
+            var pixels = new Color[size * size];
+            for (var index = 0; index < pixels.Length; index++)
+            {
+                pixels[index] = pixel(index % size);
+            }
+
+            source.SetData(pixels);
+            fsr.Apply(source, output.Width, output.Height, 0.5f, () => GraphicsDevice.SetRenderTarget(output));
+            GraphicsDevice.SetRenderTarget(null);
+            var result = new Color[output.Width * output.Height];
+            output.GetData(result);
+            return result;
+        }
+
+        Assert.True(Upscaled(_ => new Color(120, 80, 40)).All(pixel => Math.Abs(pixel.R - 120) <= 1 && Math.Abs(pixel.G - 80) <= 1 && Math.Abs(pixel.B - 40) <= 1),
+            "FSR changed a flat image");
+        var edge = Upscaled(x => x < size / 2 ? new Color(200, 200, 200) : new Color(40, 40, 40));
+        var row = size * output.Width;
+        Assert.True(edge[row + 4].R >= 195 && edge[row + output.Width - 4].R <= 45, $"FSR moved the flat sides of an edge: {edge[row + 4].R} {edge[row + output.Width - 4].R}");
+    }
+
     private void VerifyBloom()
     {
         using var scene = new RenderTarget2D(GraphicsDevice, 128, 128, false, SurfaceFormat.HalfVector4, DepthFormat.None);

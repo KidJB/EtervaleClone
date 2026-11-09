@@ -323,20 +323,48 @@ public static class EliteQuests
         return true;
     }
 
+    // The kills that still count for the running elite quest: a crystal already found no longer asks for its monster.
+    public static QuestHunt Hunt(ActiveQuest active)
+    {
+        if (Find(active.Code) is not { } quest || active.State != Running)
+        {
+            return QuestHunt.None;
+        }
+
+        var field = quest.Field >= 0 ? quest.Field : QuestHunt.AnyField;
+        switch (quest.Objective)
+        {
+            case EliteObjective.Kill:
+            case EliteObjective.Drop:
+                return new QuestHunt(quest.Monsters, field);
+            case EliteObjective.UseAndKill:
+                return (active.Flags & Killed) != 0 ? QuestHunt.None : new QuestHunt(quest.Monsters, field);
+            case EliteObjective.Crystals:
+                var left = new List<int>(quest.Monsters.Length);
+                for (var index = 0; index < quest.Monsters.Length; index++)
+                {
+                    if ((active.Flags & (1 << index)) == 0)
+                    {
+                        left.Add(quest.Monsters[index]);
+                    }
+                }
+
+                return new QuestHunt(left, field);
+            default:
+                return QuestHunt.None;
+        }
+    }
+
     // Runs on the world tick for the credited player. Returns true when the kill earned an item the upkeep hands out.
     public static bool OnKill(QuestContext context, int monsterCode)
     {
         var active = context.Journal.Active;
-        if (Find(active.Code) is not { } quest || active.State != Running || quest.Field >= 0 && quest.Field != context.FieldCode)
+        if (Find(active.Code) is not { } quest || !Hunt(active).Includes(monsterCode, context.FieldCode))
         {
             return false;
         }
 
         var index = Array.IndexOf(quest.Monsters, monsterCode);
-        if (index < 0)
-        {
-            return false;
-        }
 
         switch (quest.Objective)
         {
@@ -352,7 +380,7 @@ public static class EliteQuests
                 active = active with { Kills = active.Kills + 1 };
                 break;
             case EliteObjective.Crystals:
-                if ((active.Flags & (1 << index)) != 0 || context.Rng.NextExclusive(0, 1000) >= DropPerMille)
+                if (context.Rng.NextExclusive(0, 1000) >= DropPerMille)
                 {
                     return false;
                 }
@@ -360,11 +388,6 @@ public static class EliteQuests
                 active = active with { Flags = active.Flags | 1 << index | 1 << (CrystalOwedShift + index) };
                 break;
             case EliteObjective.UseAndKill:
-                if ((active.Flags & Killed) != 0)
-                {
-                    return false;
-                }
-
                 active = active with { Flags = active.Flags | Killed };
                 break;
             default:

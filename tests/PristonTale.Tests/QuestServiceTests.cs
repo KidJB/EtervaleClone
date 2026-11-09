@@ -123,11 +123,12 @@ internal static class QuestServiceTests
             && readResult.Notices.SequenceEqual(notices) && Same(readResult.Prompt!, prompt), "the quest result differs");
 
         var journal = new QuestJournalPacket(9, 0x10, (byte)QuestTimerKind.Expiring, true, 3, "Avelisk-L", 12, 50, 4_000_000, 0, 0, 0x81, 0x40,
-            [new QuestBoardLine("Job Quest 3th[1]", "Quest4\\ChangeJob4_1.msg")], [new QuestBoardLine("For her(completed)", "LevelQuest\\Quest30a.Msg")]);
+            [new QuestBoardLine("Job Quest 3th[1]", "Quest4\\ChangeJob4_1.msg")], [new QuestBoardLine("For her(completed)", "LevelQuest\\Quest30a.Msg")], 28, true, [7u, 9u]);
         length = journal.Write(buffer);
         var readJournal = QuestJournalPacket.Read(buffer.AsSpan(0, length));
         Assert.True(length <= journal.Capacity && readJournal.TargetName == "Avelisk-L" && readJournal.TimerMs == 4_000_000 && readJournal.SkillResetOffered
             && readJournal.LevelLog == 0x81 && readJournal.ElementaryLog == 0x40
+            && readJournal.TargetField == 28 && readJournal.AnyTarget && readJournal.TargetTemplates!.SequenceEqual([7u, 9u])
             && readJournal.Progress.SequenceEqual(journal.Progress) && readJournal.Finished.SequenceEqual(journal.Finished), "the quest journal differs");
 
         var world = new QuestNoticesPacket(notices, prompt with { Choices = [], ChoiceDocuments = [] });

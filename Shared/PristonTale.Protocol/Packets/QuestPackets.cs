@@ -227,18 +227,22 @@ public sealed record QuestResultPacket(Guid OperationId, byte Status, bool Ok, b
 
 // S->C whenever the journal changes: {header, int64 Revision, uint16 Code, uint8 Timer, uint8 SkillResetOffered,
 // int32 State, text TargetName, int32 Kills, KillsNeeded, int64 TimerMs, int32 WeaponStage, WeaponKillsLeft, uint32 LevelLog, ElementaryLog,
-// int32 ProgressCount, lines, int32 FinishedCount, lines}; a line is {text Title, text Description}.
+// int32 ProgressCount, lines, int32 FinishedCount, lines, int32 TargetField (-1 anywhere), uint8 AnyTarget, int32 TargetCount,
+// uint32 monster template ids}; a line is {text Title, text Description}. The targets are the monsters whose kills count now.
 public sealed record QuestJournalPacket(long Revision, ushort Code, byte Timer, bool SkillResetOffered, int State, string TargetName, int Kills,
     int KillsNeeded, long TimerMs, int WeaponStage, int WeaponKillsLeft, uint LevelLog, uint ElementaryLog, IReadOnlyList<QuestBoardLine> Progress,
-    IReadOnlyList<QuestBoardLine> Finished)
+    IReadOnlyList<QuestBoardLine> Finished, int TargetField = -1, bool AnyTarget = false, IReadOnlyList<uint>? TargetTemplates = null)
 {
-    private const int MinimumSize = 8 + 4 + 8 + 4 + 4 + 2 + 4 + 4 + 8 + 4 + 4 + 4 + 4 + 4 + 4;
+    public const int MaxTargetTemplates = 64;
+    private const int MinimumSize = 8 + 4 + 8 + 4 + 4 + 2 + 4 + 4 + 8 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 1 + 4;
+
+    private IReadOnlyList<uint> Targets => TargetTemplates ?? [];
 
     public int Capacity
     {
         get
         {
-            var size = MinimumSize + NpcWire.TextSize(TargetName, QuestWire.MaxTextBytes);
+            var size = MinimumSize + NpcWire.TextSize(TargetName, QuestWire.MaxTextBytes) + Targets.Count * 4;
             foreach (var line in Progress.Concat(Finished))
             {
                 size += NpcWire.TextSize(line.Title, QuestWire.MaxTextBytes) + NpcWire.TextSize(line.Description, QuestWire.MaxTextBytes);
@@ -250,7 +254,7 @@ public sealed record QuestJournalPacket(long Revision, ushort Code, byte Timer, 
 
     public int Write(Span<byte> destination)
     {
-        if (Progress.Count > QuestWire.MaxProgress || Finished.Count > QuestWire.MaxFinished)
+        if (Progress.Count > QuestWire.MaxProgress || Finished.Count > QuestWire.MaxFinished || Targets.Count > MaxTargetTemplates)
         {
             throw new ArgumentOutOfRangeException(nameof(destination), "Too many quest window lines.");
         }
@@ -272,6 +276,14 @@ public sealed record QuestJournalPacket(long Revision, ushort Code, byte Timer, 
         writer.UInt32(ElementaryLog);
         WriteLines(ref writer, Progress);
         WriteLines(ref writer, Finished);
+        writer.Int32(TargetField);
+        writer.Byte(AnyTarget ? (byte)1 : (byte)0);
+        writer.Int32(Targets.Count);
+        foreach (var template in Targets)
+        {
+            writer.UInt32(template);
+        }
+
         return writer.Finish();
     }
 
@@ -322,7 +334,22 @@ public sealed record QuestJournalPacket(long Revision, ushort Code, byte Timer, 
         var elementaryLog = reader.UInt32();
         var progress = ReadLines(ref reader, QuestWire.MaxProgress);
         var finished = ReadLines(ref reader, QuestWire.MaxFinished);
-        return new QuestJournalPacket(revision, code, timer, reset, state, target, kills, needed, timerMs, stage, left, levelLog, elementaryLog, progress, finished);
+        var targetField = reader.Int32();
+        var anyTarget = reader.Byte() != 0;
+        var targetCount = reader.Int32();
+        if (targetCount < 0 || targetCount > MaxTargetTemplates)
+        {
+            throw new InvalidDataException("Quest journal has an invalid target count.");
+        }
+
+        var targets = new uint[targetCount];
+        for (var index = 0; index < targetCount; index++)
+        {
+            targets[index] = reader.UInt32();
+        }
+
+        return new QuestJournalPacket(revision, code, timer, reset, state, target, kills, needed, timerMs, stage, left, levelLog, elementaryLog, progress, finished,
+            targetField, anyTarget, targets);
     }
 }
 

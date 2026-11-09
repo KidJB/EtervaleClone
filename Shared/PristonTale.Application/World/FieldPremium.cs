@@ -65,7 +65,8 @@ internal sealed class FieldPremium
         _attacks.Remove(entityId);
     }
 
-    public void Step(Dictionary<ulong, WorldPlayer>.ValueCollection players)
+    // held: the field is a town where personal timers stand still (PremiumTimers.PausesInField).
+    public void Step(Dictionary<ulong, WorldPlayer>.ValueCollection players, bool held)
     {
         if (NowSeconds > 0)
         {
@@ -73,6 +74,11 @@ internal sealed class FieldPremium
             {
                 var premium = player.Character.Premium;
                 var head = premium.BigHeadMode;
+                if (held)
+                {
+                    premium.Hold(NowSeconds);
+                }
+
                 premium.Expire(NowSeconds);
                 if (head == PremiumTimers.SoccerHeadMode && premium.BigHeadMode == 0)
                 {

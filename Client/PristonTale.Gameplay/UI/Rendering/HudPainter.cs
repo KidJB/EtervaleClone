@@ -272,20 +272,21 @@ public sealed class HudPainter : IDisposable
 
     public string Fit(string value, int width) => Measure(value) <= width ? value : HudTextLayout.Fit(value, width, candidate => Measure(candidate));
 
-    // Item info box: nine 16x16 tiles repeated over a box measured in whole tiles.
+    // The tooltip box of every item, skill and status tip: a translucent black fill inside 2-pixel rounded edges.
     public void InfoBox(Rectangle bounds)
     {
-        var columns = Math.Max(2, (bounds.Width + 15) / 16);
-        var rows = Math.Max(2, (bounds.Height + 15) / 16);
-        for (var column = 0; column < columns; column++)
-        {
-            for (var row = 0; row < rows; row++)
-            {
-                var horizontal = column == 0 ? 0 : column == columns - 1 ? 2 : 1;
-                var vertical = row == 0 ? 0 : row == rows - 1 ? 2 : 1;
-                Sprite(HudArt.InfoBox[vertical * 3 + horizontal], bounds.X + column * 16, bounds.Y + row * 16);
-            }
-        }
+        const int edge = 2;
+        var (x, y, right, bottom) = (bounds.X, bounds.Y, bounds.Right - edge, bounds.Bottom - edge);
+        var (across, down) = (bounds.Width - edge * 2, bounds.Height - edge * 2);
+        Sprite(HudArt.TooltipTopLeft, x, y);
+        Sprite(HudArt.TooltipTopRight, right, y);
+        Sprite(HudArt.TooltipBottomLeft, x, bottom);
+        Sprite(HudArt.TooltipBottomRight, right, bottom);
+        Stretch(HudArt.TooltipEdge, new Rectangle(x + edge, y, across, edge));
+        Stretch(HudArt.TooltipEdge, new Rectangle(x + edge, bottom, across, edge));
+        Stretch(HudArt.TooltipSide, new Rectangle(x, y + edge, edge, down));
+        Stretch(HudArt.TooltipSide, new Rectangle(right, y + edge, edge, down));
+        ColorBox(new Rectangle(x + edge, y + edge, across, down), 0, 0, 0, 204);
     }
 
     public static Rectangle InfoBoxBounds(int x, int y, int width, int height) =>
@@ -294,48 +295,59 @@ public sealed class HudPainter : IDisposable
     // Help box: 64-pixel corners/sides, 32-pixel repeated edges and centre, Box_Line separator.
     public void HelpBox(int x, int y, int sizeW, int sizeH, bool separator = true)
     {
-        sizeW = Math.Max(2, sizeW);
-        sizeH = Math.Max(2, sizeH);
-        for (var j = 0; j < sizeW - 2; j++)
-        {
-            for (var k = 0; k < sizeH - 2; k++)
-            {
-                Sprite(HudArt.HelpCenter, x + 64 + 32 * j, y + 32 + 32 * k);
-            }
-        }
-
-        var right = x + (sizeW - 1) * 32 + 32;
-        var bottom = y + (sizeH - 1) * 32;
-        Sprite(HudArt.HelpTopLeft, x, y);
-        Sprite(HudArt.HelpTopRight, right, y);
-        Sprite(HudArt.HelpBottomLeft, x, bottom);
-        Sprite(HudArt.HelpBottomRight, right, bottom);
-        for (var j = 1; j < sizeW - 1; j++)
-        {
-            Sprite(HudArt.HelpTop, x + j * 32 + 32, y);
-            Sprite(HudArt.HelpBottom, x + j * 32 + 32, bottom);
-        }
-
-        for (var k = 1; k < sizeH - 1; k++)
-        {
-            Sprite(HudArt.HelpLeft, x, y + k * 32);
-            Sprite(HudArt.HelpRight, right, y + k * 32);
-        }
-
-        if (separator)
-        {
-            Stretch(HudArt.HelpLine, new Rectangle(x + 8, y + 48, sizeW * 32 + 50, 10));
-        }
+        var box = HelpBoxBounds(x, y, sizeW, sizeH);
+        // The art's frame lies inside its drop shadow; the shadow spills past the box.
+        Slice(HudArt.WindowFrame, new Rectangle(box.X - 24, box.Y - 34, box.Width + 49, box.Height + 58), WindowArtWidth, WindowArtHeight, WindowCornerX, WindowCornerTop, WindowCornerBottom);
     }
+
+    private const int WindowArtWidth = 652;
+    private const int WindowArtHeight = 547;
+    private const int WindowCornerX = 70;
+    private const int WindowCornerTop = 60;
+    private const int WindowCornerBottom = 70;
+
+    // A picture in nine parts: its corners at their size, its edges and centre stretched over the rest.
+    private void Slice(string art, Rectangle to, int width, int height, int cornerX, int top, int bottom)
+    {
+        var (middleW, middleH) = (width - cornerX * 2, height - top - bottom);
+        var (toW, toH) = (Math.Max(0, to.Width - cornerX * 2), Math.Max(0, to.Height - top - bottom));
+        var (x1, x2, y1, y2) = (to.X + cornerX, to.Right - cornerX, to.Y + top, to.Bottom - bottom);
+        Stretch(art, new Rectangle(to.X, to.Y, cornerX, top), new Rectangle(0, 0, cornerX, top));
+        Stretch(art, new Rectangle(x1, to.Y, toW, top), new Rectangle(cornerX, 0, middleW, top));
+        Stretch(art, new Rectangle(x2, to.Y, cornerX, top), new Rectangle(width - cornerX, 0, cornerX, top));
+        Stretch(art, new Rectangle(to.X, y1, cornerX, toH), new Rectangle(0, top, cornerX, middleH));
+        Stretch(art, new Rectangle(x1, y1, toW, toH), new Rectangle(cornerX, top, middleW, middleH));
+        Stretch(art, new Rectangle(x2, y1, cornerX, toH), new Rectangle(width - cornerX, top, cornerX, middleH));
+        Stretch(art, new Rectangle(to.X, y2, cornerX, bottom), new Rectangle(0, height - bottom, cornerX, bottom));
+        Stretch(art, new Rectangle(x1, y2, toW, bottom), new Rectangle(cornerX, height - bottom, middleW, bottom));
+        Stretch(art, new Rectangle(x2, y2, cornerX, bottom), new Rectangle(width - cornerX, height - bottom, cornerX, bottom));
+    }
+
+    // A text field: the art's two ends at their width, its middle stretched between them.
+    public void InputBox(Rectangle bounds)
+    {
+        const int leftWidth = 12;
+        const int rightWidth = 11;
+        Stretch(HudArt.InputLeft, new Rectangle(bounds.X, bounds.Y, leftWidth, bounds.Height));
+        Stretch(HudArt.InputCenter, new Rectangle(bounds.X + leftWidth, bounds.Y, bounds.Width - leftWidth - rightWidth, bounds.Height));
+        Stretch(HudArt.InputRight, new Rectangle(bounds.Right - rightWidth, bounds.Y, rightWidth, bounds.Height));
+    }
+
+    // A window's OK button.
+    public void OkButton(Rectangle bounds, bool lit) => Sprite(lit ? HudArt.WindowOkLit : HudArt.WindowOk, bounds.X, bounds.Y);
+
+    // A window's title plate over the title's place.
+    public void TitlePlate(Rectangle title) =>
+        HudPteuWindow.DrawPlate(this, new Rectangle(title.X - 16, title.Center.Y - HudPteuWindow.PlateHeight / 2, title.Width + 32, HudPteuWindow.PlateHeight));
 
     // The help boxes' scroll bar: an 8-pixel bar of the given length and its knob, which travels the length less
     // ScrollKnobSlack as position goes from 0 to range.
-    public const int ScrollKnobSlack = 20;
+    public const int ScrollKnobSlack = 11;
 
     public void ScrollBar(int x, int y, int length, int position, int range)
     {
-        Stretch(HudArt.ScrollBar, new Rectangle(x, y, 8, length));
-        Sprite(HudArt.ScrollButton, x - 4, y + (length - ScrollKnobSlack) * position / Math.Max(1, range));
+        Stretch(HudArt.ScrollBar, new Rectangle(x + 1, y, 6, length));
+        Sprite(HudArt.ScrollButton, x, y + (length - ScrollKnobSlack) * position / Math.Max(1, range));
     }
 
     // The position a click at pointerY on a scroll bar from y of the given length asks for.
@@ -405,7 +417,7 @@ public sealed class HudPainter : IDisposable
     // A help box's title plate, centred at its top, and its OK button, centred at its bottom.
     public static Rectangle HelpBoxTitle(int x, int y, int sizeW) => new(x + (sizeW * 32 + 64) / 2 - 76, y + 14, 152, 28);
 
-    public static Rectangle HelpBoxOk(int x, int y, int sizeW, int sizeH) => new(x + (sizeW * 32 + 64) / 2 - 24 + 9, y + sizeH * 32 - 2 + 4, 32, 16);
+    public static Rectangle HelpBoxOk(int x, int y, int sizeW, int sizeH) => new(x + (sizeW * 32 + 64) / 2 - 46, y + sizeH * 32 - 2, 93, 23);
 
     // The box behind a name over the scene (monsters, NPCs, drops): the speech bubble's dark fill and gold rim with
     // rounded corners. Nine slices of a 20-pixel texture: fixed corners, stretched edges and centre.

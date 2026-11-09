@@ -29,15 +29,36 @@ internal static class QuestWireMapping
     public static QuestNoticeEntry[] ToNotices(IReadOnlyList<QuestNotice> notices) =>
         notices.Take(QuestWire.MaxNotices).Select(static notice => new QuestNoticeEntry((byte)notice.Kind, notice.Text)).ToArray();
 
-    public static QuestJournalPacket ToJournal(QuestView view) =>
+    // The monster templates whose quest code the hunt names, for the markers over them.
+    private static uint[] TargetTemplates(QuestHunt hunt, Simulation.World.Monsters.MonsterCatalog monsters)
+    {
+        if (hunt.Monsters.Count == 0)
+        {
+            return [];
+        }
+
+        var templates = new List<uint>();
+        foreach (var monster in monsters.All)
+        {
+            if (monster.QuestCode != 0 && hunt.Includes(monster.QuestCode, hunt.Field) && templates.Count < QuestJournalPacket.MaxTargetTemplates)
+            {
+                templates.Add((uint)monster.Code);
+            }
+        }
+
+        return templates.ToArray();
+    }
+
+    public static QuestJournalPacket ToJournal(QuestView view, Simulation.World.Monsters.MonsterCatalog monsters) =>
         new(view.Revision, (ushort)view.Code, (byte)view.Timer, view.SkillResetOffered, view.State, view.TargetName, view.Kills, view.KillsNeeded,
-            view.TimerMs, view.WeaponStage, view.WeaponKillsLeft, (uint)view.LevelLog, (uint)view.ElementaryLog, Lines(view.Progress, QuestWire.MaxProgress), Lines(view.Finished, QuestWire.MaxFinished));
+            view.TimerMs, view.WeaponStage, view.WeaponKillsLeft, (uint)view.LevelLog, (uint)view.ElementaryLog, Lines(view.Progress, QuestWire.MaxProgress), Lines(view.Finished, QuestWire.MaxFinished),
+            view.Hunt.Field, view.Hunt.AnyMonster, TargetTemplates(view.Hunt, monsters));
 
     private static QuestBoardLine[] Lines(IReadOnlyList<QuestBoardEntry> entries, int max) =>
         entries.Take(max).Select(static entry => new QuestBoardLine(entry.Title, entry.Description)).ToArray();
 
     // Sends a snapshot's quest update: the journal first, then the notices and any dialog the world opened.
-    public static void Send(QuestUpdate? update, ItemCatalog items, Action<Func<Span<byte>, int>, int> send)
+    public static void Send(QuestUpdate? update, ItemCatalog items, Simulation.World.Monsters.MonsterCatalog monsters, Action<Func<Span<byte>, int>, int> send)
     {
         if (update is null || update.IsEmpty)
         {
@@ -46,7 +67,7 @@ internal static class QuestWireMapping
 
         if (update.View is { } view)
         {
-            var journal = ToJournal(view);
+            var journal = ToJournal(view, monsters);
             send(journal.Write, journal.Capacity);
         }
 

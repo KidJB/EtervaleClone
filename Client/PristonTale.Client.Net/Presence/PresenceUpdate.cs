@@ -43,6 +43,9 @@ public sealed record PresenceUpdate(
     // The bosses of the local player's field at their spot, when it entered a field or a boss came alive or went.
     public IReadOnlyList<BossSpotInfo>? BossSpots { get; init; }
 
+    // The field's active monster spawn points (wire x, z), sent on entering a field.
+    public IReadOnlyList<SpawnSpotInfo>? SpawnSpots { get; init; }
+
     // Every scheduled boss of the world, soonest first, when the player entered the world or a pass in it came.
     public IReadOnlyList<BossListInfo>? BossList { get; init; }
 
@@ -136,6 +139,8 @@ public sealed record PetCollectionInfo(ulong Skins, int Out)
 
 public readonly record struct BossSpotInfo(string BossName, float X, float Z, bool Alive);
 
+public readonly record struct SpawnSpotInfo(float X, float Z);
+
 // A boss of the world, the field it spawns in, and the seconds to its next pass when the list arrived (Exact false: a
 // pass on a later day, of which only the hour is known).
 public readonly record struct BossListInfo(string BossName, string FieldName, int SecondsLeft, bool Exact);
@@ -143,6 +148,10 @@ public readonly record struct BossListInfo(string BossName, string FieldName, in
 public sealed record PartyInfo(IReadOnlyList<PartyMemberInfo> Members)
 {
     public static readonly PartyInfo None = new([]);
+
+    public Contracts.Social.PartyMode Mode { get; init; }
+    public bool LeadsRaid { get; init; }
+    public IReadOnlyList<PartyMemberInfo> Raid { get; init; } = [];
 
     public bool Leads(ulong entityId) => Members.Count > 0 && Members[0].EntityId == entityId;
 
@@ -160,10 +169,11 @@ public sealed record PartyInfo(IReadOnlyList<PartyMemberInfo> Members)
     }
 }
 
-public sealed record PartyMemberInfo(ulong EntityId, string Name, int Level, int Life, int MaxLife, System.Numerics.Vector2 Position);
+public sealed record PartyMemberInfo(ulong EntityId, string Name, int Level, int Life, int MaxLife, System.Numerics.Vector2 Position,
+    int Mana = 0, int MaxMana = 0, Contracts.Characters.PlayerClass Class = 0);
 
 // Recommended: the player a member asks its leader to take (empty for a request to join).
-public sealed record PartyRequestInfo(ulong FromId, string FromName, string Recommended = "");
+public sealed record PartyRequestInfo(ulong FromId, string FromName, string Recommended = "", bool Raid = false);
 
 // One chat line: Kind is the server's colour and tab code, SpeakerId the entity that said it (0 for server lines).
 // Direct lines (the plain chat message) go to the log as they are; the others show over a speaker the client sees.

@@ -114,6 +114,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
 
     // The boss spot list last sent and the field it was for.
     private BossSpotView[]? _bossSpots;
+    private SpawnSpotView[]? _spawnSpots;
     private int _bossSpotsField = -1;
     private PartyRequest? _partyRequest;
     private BellatraView? _bellatra;
@@ -379,6 +380,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         SendWeather(snapshot.Weather, connection);
         SendBossTime(snapshot, connection);
         SendBossSpots(snapshot, connection);
+        SendSpawnSpots(snapshot, connection);
         SendBossList(snapshot, connection);
         SendParty(snapshot, connection);
         SendTrade(snapshot, connection);
@@ -413,6 +415,18 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         connection.Send(_scratch.AsSpan(0, packet.Write(_scratch)));
     }
 
+    private static PartyMemberWire[] PartyWireOf(IReadOnlyList<PartyMemberView> members)
+    {
+        var wire = new PartyMemberWire[members.Count];
+        for (var index = 0; index < wire.Length; index++)
+        {
+            var member = members[index];
+            wire[index] = new PartyMemberWire(member.EntityId, member.Name, member.Level, member.Life, member.MaxLife, member.X, member.Z, member.Mana, member.MaxMana, member.Class);
+        }
+
+        return wire;
+    }
+
     // The party's members whenever they change (none once the receiver leaves it), and each new request to join one.
     private void SendParty(in WorldSnapshot snapshot, IPacketSink connection)
     {
@@ -420,20 +434,14 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         {
             _party = snapshot.Party;
             var members = _party?.Members ?? [];
-            var wire = new PartyMemberWire[members.Count];
-            for (var index = 0; index < wire.Length; index++)
-            {
-                var member = members[index];
-                wire[index] = new PartyMemberWire(member.EntityId, member.Name, member.Level, member.Life, member.MaxLife, member.X, member.Z);
-            }
-
-            connection.Send(_scratch.AsSpan(0, new PartyMembersPacket(wire).Write(_scratch)));
+            var packet = new PartyMembersPacket(PartyWireOf(members), _party?.Mode ?? Contracts.Social.PartyMode.Normal, _party?.LeadsRaid == true, PartyWireOf(_party?.Raid ?? []));
+            connection.Send(_scratch.AsSpan(0, packet.Write(_scratch)));
         }
 
         if (snapshot.PartyRequest is { } request && !ReferenceEquals(request, _partyRequest))
         {
             _partyRequest = request;
-            connection.Send(_scratch.AsSpan(0, new PartyRequestPacket(request.FromId, request.FromName, request.Recommendation ? request.JoinerName : "").Write(_scratch)));
+            connection.Send(_scratch.AsSpan(0, new PartyRequestPacket(request.FromId, request.FromName, request.Recommendation ? request.JoinerName : "", request.Raid).Write(_scratch)));
         }
     }
 
@@ -497,7 +505,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
 
     // Its own method: a lambda capturing the connection in EncodeLocked would allocate a closure on every encode.
     private void SendQuest(QuestUpdate quest, IPacketSink connection) =>
-        QuestWireMapping.Send(quest, LocalizedData.Items, (write, capacity) => SendSized(connection, write, capacity));
+        QuestWireMapping.Send(quest, LocalizedData.Items, LocalizedData.Monsters, (write, capacity) => SendSized(connection, write, capacity));
 
     private void SendEventsOnly(in WorldSnapshot snapshot, IPacketSink connection)
     {
@@ -513,6 +521,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         SendWeather(snapshot.Weather, connection);
         SendBossTime(snapshot, connection);
         SendBossSpots(snapshot, connection);
+        SendSpawnSpots(snapshot, connection);
         SendBossList(snapshot, connection);
     }
 
@@ -607,6 +616,26 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         }
 
         connection.Send(_scratch.AsSpan(0, new BossSpotsPacket(entries).Write(_scratch)));
+    }
+
+    // A field's spawn points never change: the list goes again only for another field's array.
+    private void SendSpawnSpots(in WorldSnapshot snapshot, IPacketSink connection)
+    {
+        if (ReferenceEquals(snapshot.SpawnSpots, _spawnSpots))
+        {
+            return;
+        }
+
+        _spawnSpots = snapshot.SpawnSpots;
+        var count = Math.Min(snapshot.SpawnSpots.Length, SpawnSpotsPacket.MaxSpots);
+        var entries = new SpawnSpotEntry[count];
+        for (var index = 0; index < count; index++)
+        {
+            var spot = snapshot.SpawnSpots[index];
+            entries[index] = new SpawnSpotEntry(GameUnits.ToFixed(spot.X), GameUnits.ToFixed(spot.Z));
+        }
+
+        connection.Send(_scratch.AsSpan(0, new SpawnSpotsPacket(entries).Write(_scratch)));
     }
 
     // Once per pass: the client counts down by itself, so a pass is sent again only when it changes (or the field does).

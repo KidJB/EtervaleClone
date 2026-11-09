@@ -126,7 +126,7 @@ internal sealed class HudCaptureProbe : Game
     };
 
     private sealed record Scenario(string Name, int Width, int Height, Keys Panel = Keys.None, Hover Hover = Hover.None, int HealthPercent = 100,
-        PlayerClass Class = PlayerClass.Mechanician, bool Npc = false, bool Settings = false, bool SystemMenu = false, bool Learned = false,
+        PlayerClass Class = PlayerClass.Mechanician, bool Npc = false, bool Settings = false, bool SettingsDropdown = false, bool SystemMenu = false, bool Learned = false,
         bool Training = false, bool LowHealth = false, float Hour = 13, bool ClassicTarget = false, ulong Target = 2, ulong NpcId = SkillMasterNpc,
         int ServiceButton = -1, bool SellMode = false, int ServiceCount = 2, int RightSelect = -1, bool Buffs = false, bool Block = false,
         ProbeQuest Quest = ProbeQuest.None, bool Dead = false, bool FieldOpen = true, ProbeCarry Carry = ProbeCarry.None,
@@ -245,6 +245,7 @@ internal sealed class HudCaptureProbe : Game
         new("system-menu-800", 800, 600, SystemMenu: true),
         new("settings-800", 800, 600, Hover: Hover.SettingsRow, Settings: true),
         new("settings-1600x1200-scale2", 1600, 1200, Settings: true),
+        new("settings-dropdown-800", 800, 600, Settings: true, SettingsDropdown: true),
         new("quest-dialog-800", 800, 600, Hover: Hover.QuestOk, Npc: true, Quest: ProbeQuest.Dialog),
         new("quest-confirm-800", 800, 600, Npc: true, Quest: ProbeQuest.Confirm),
         new("quest-reward-list-800", 800, 600, Npc: true, Quest: ProbeQuest.RewardList),
@@ -435,6 +436,10 @@ internal sealed class HudCaptureProbe : Game
             if (scenario.Settings)
             {
                 Click(state, layout, layout.Bottom(HudSystemMenu.Entry(HudSystemEntry.Settings)).Center);
+                if (scenario.SettingsDropdown)
+                {
+                    Click(state, layout, HudSettingsPanel.Row(9).Center);
+                }
             }
 
             if (scenario.Clan)

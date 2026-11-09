@@ -183,22 +183,26 @@ public static class RankUpByQuestWeapon
         return true;
     }
 
+    // What grows the weapon at its stage: every monster of the stage's field, or the stage's prey.
+    public static QuestHunt Hunt(ActiveQuest active, QuestWeaponHunt hunt)
+    {
+        if (active.Code != Code || active.State != Growing || active.WeaponStage is < 1 or >= FinalStage || active.WeaponKillsLeft <= 0)
+        {
+            return QuestHunt.None;
+        }
+
+        return hunt == QuestWeaponHunt.Field
+            ? new QuestHunt([], StageField(hunt, active.WeaponStage), AnyMonster: true)
+            : new QuestHunt([StagePrey(hunt, active.WeaponStage)]);
+    }
+
     // Kill credit while the quest weapon is wielded; returns true when the stage's kills are done and the weapon should grow.
     public static bool OnKill(QuestContext context, int monsterCode)
     {
         var active = context.Journal.Active;
         var character = context.Character;
-        if (active.Code != Code || active.State != Growing || active.WeaponStage is < 1 or >= FinalStage || active.WeaponKillsLeft <= 0
-            || character.GetEquipped(EquipmentSlot.Weapon)?.InstanceId != active.WeaponId)
-        {
-            return false;
-        }
-
-        var hunt = QuestClasses.WeaponHunt(QuestClasses.ClassOf(character));
-        var counts = hunt == QuestWeaponHunt.Field
-            ? context.FieldCode == StageField(hunt, active.WeaponStage)
-            : monsterCode == StagePrey(hunt, active.WeaponStage);
-        if (!counts)
+        if (character.GetEquipped(EquipmentSlot.Weapon)?.InstanceId != active.WeaponId
+            || !Hunt(active, QuestClasses.WeaponHunt(QuestClasses.ClassOf(character))).Includes(monsterCode, context.FieldCode))
         {
             return false;
         }

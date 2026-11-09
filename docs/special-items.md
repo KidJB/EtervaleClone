@@ -92,7 +92,9 @@ and draws the result.
 
 ## Items and effects
 
-Durations run on the real clock (Unix seconds) and keep running while the character is offline. A new timer of a
+Durations run on the real clock (Unix seconds) and keep running while the character is offline. They stand still while
+the character is in Ricarten or Pillai (`PremiumTimers.PausesInField`): the field's tick moves every expiry on with the
+clock (`PremiumTimers.Hold`), and the HUD holds its countdown the same way (`HudPremiumTimers.Hold`). A new timer of a
 running kind is refused, so timers never stack.
 
 | Items | Effect |
@@ -118,6 +120,13 @@ running kind is refused, so timers never stack.
 | Big-head potion BI109 | Big head for 600 s |
 | Firecracker BI123 | Four rockets half a second apart; the roll picks each burst's shape; the player cheers (Yahoo) after the motion in progress |
 | Mobile shop BI142 | A shop that buys and repairs until closed (NPC id 0) |
+
+The Teleport Core window (`HudTeleportCore`, drawn in the shared style of `HudPteuWindow` with the art in `assets/Hud/Teleport/`):
+- the left panel lists the destinations, scrolled by the wheel, with a TOWN, PVP or EXP tag (`HudTeleportCore.TagOf`: a
+  village, Bless Castle, any other field) and the entry level;
+- beside it, the chosen field shows its map (the HD render when there is one), its name, level and tag, and the TELEPORT button
+  asks for confirmation;
+- the right panel shows the world's boss timers (`HudBossList`), and CLOSE shuts the window.
 
 Aging and mixing materials (BI110, 111, 160, 161, 185, 189, 190) and the passive resurrection scroll are not used
 from the inventory. Items without a rule keep the generic tooltip.

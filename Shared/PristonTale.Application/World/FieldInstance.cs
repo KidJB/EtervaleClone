@@ -52,8 +52,26 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
 
     private BossSpotView[] _bossSpots = [];
 
+    // The field's active spawn points; they never change, so the encoder sends them once per field.
+    public SpawnSpotView[] SpawnSpots { get; private set; } = [];
+
     // The field's bosses at their spot, rebuilt only when a master comes alive or goes (the encoder sends the list when
     // the array changes); empty for a field without bosses or a boss spot.
+    private static SpawnSpotView[] ActiveSpawnSpots(IReadOnlyList<SpawnPoint> points)
+    {
+        var spots = new List<SpawnSpotView>(points.Count);
+        foreach (var point in points)
+        {
+            if (point.Active)
+            {
+                var world = FieldSpawner.PointToWorld(point);
+                spots.Add(new SpawnSpotView(world.X, world.Z));
+            }
+        }
+
+        return spots.ToArray();
+    }
+
     public BossSpotView[] BossSpots()
     {
         var bosses = _spawner.Bosses;
@@ -119,6 +137,7 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
         _occupancy = new MonsterOccupancy(_neighbourScratch);
         _spawner = new FieldSpawner(spawnData, catalog, rng);
         _spawnPoints = spawnData.SpawnPoints;
+        SpawnSpots = ActiveSpawnSpots(spawnData.SpawnPoints);
         _brain = new MonsterAiBrain(rng);
         _combat = new FieldCombat(this, rng, experienceMultiplier) { ActionField = fieldId == FieldCodes.FallGame };
         _skills = new FieldSkills(this, rng);
@@ -352,7 +371,7 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
             PlaceLoot(reward, nowMs);
         }
 
-        Premium.Step(_players.Values);
+        Premium.Step(_players.Values, Simulation.Items.Usable.PremiumTimers.PausesInField(FieldId));
 
         _combat.TickCorpses(dtMs);
         StepAging(dtMs, nowMs);

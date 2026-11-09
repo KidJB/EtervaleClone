@@ -236,10 +236,10 @@ internal static class ChatClientTests
             && chat.Window.Click(layout, HudChatWindow.NoticeButton(layout).Center, side: false) && chat.Window.NoticeMode == 0, "the notice button cycles three pages");
         Assert.True(!chat.Window.Click(layout, HudChatWindow.TabButton(layout, 1).Center, side: true), "the small window has no tabs");
         Assert.True(chat.Window.Click(layout, HudChatWindow.Toggle(layout, false).Center, side: false) && !chat.Window.Open, "the toggle closes the window");
-        Assert.True(HudChatWindow.Box(layout, false) == new Microsoft.Xna.Framework.Rectangle(0, 408, 305, 192)
+        Assert.True(HudChatWindow.Box(layout, false) == new Microsoft.Xna.Framework.Rectangle(0, 381, 295, 218)
             && HudChatWindow.Box(layout, true) == new Microsoft.Xna.Framework.Rectangle(0, 294, 300, 116), "the chat window moved");
         var tall = Gameplay.UI.HudLayout.Create(800, 700);
-        Assert.True(HudChatWindow.TabButton(tall, 0).Y == 563 + 100, "the chat window must follow the bottom edge");
+        Assert.True(HudChatWindow.TabButton(tall, 0).Y == 558 + 100, "the chat window must follow the bottom edge");
         return Task.CompletedTask;
     }
 }

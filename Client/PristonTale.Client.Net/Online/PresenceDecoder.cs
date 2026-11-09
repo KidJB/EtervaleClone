@@ -175,6 +175,7 @@ internal sealed class PresenceDecoder : IEventHandleReader
             EtervaleOpcodes.BossTime => OnBossTime(BossTimePacket.Read(packet)),
             EtervaleOpcodes.WorldBuffState => Update([], []) with { WorldBuffs = WorldBuffPacket.Read(packet).Buffs },
             EtervaleOpcodes.BossSpots => OnBossSpots(BossSpotsPacket.Read(packet)),
+            EtervaleOpcodes.SpawnSpots => OnSpawnSpots(SpawnSpotsPacket.Read(packet)),
             EtervaleOpcodes.BossList => OnBossList(BossListPacket.Read(packet)),
             EtervaleOpcodes.PetCollection => OnPetCollection(PetCollectionPacket.Read(packet)),
             EtervaleOpcodes.DailyQuestState => OnDailyQuests(DailyQuestStatePacket.Read(packet)),
@@ -200,6 +201,17 @@ internal sealed class PresenceDecoder : IEventHandleReader
         }
 
         return Update([], []) with { BossList = bosses };
+    }
+
+    public PresenceUpdate OnSpawnSpots(SpawnSpotsPacket packet)
+    {
+        var spots = new SpawnSpotInfo[packet.Spots.Count];
+        for (var index = 0; index < spots.Length; index++)
+        {
+            spots[index] = new SpawnSpotInfo(GameUnits.FromFixed(packet.Spots[index].X), GameUnits.FromFixed(packet.Spots[index].Z));
+        }
+
+        return Update([], []) with { SpawnSpots = spots };
     }
 
     public PresenceUpdate OnBossSpots(BossSpotsPacket packet)
@@ -298,16 +310,25 @@ internal sealed class PresenceDecoder : IEventHandleReader
     private PresenceUpdate OnTradeAsked(TradeAskedPacket packet) =>
         new PresenceUpdate(_tick, [], [], [], [], FieldId) { TradeRequest = new TradeRequestInfo(packet.FromId, packet.FromName) };
 
-    private PresenceUpdate OnPartyMembers(PartyMembersPacket packet)
+    private static PartyMemberInfo[] PartyInfoOf(IReadOnlyList<PartyMemberWire> wire)
     {
-        var members = new PartyMemberInfo[packet.Members.Count];
+        var members = new PartyMemberInfo[wire.Count];
         for (var index = 0; index < members.Length; index++)
         {
-            var member = packet.Members[index];
-            members[index] = new PartyMemberInfo(member.EntityId, member.Name, member.Level, member.Life, member.MaxLife, new Vector2(member.X, member.Z));
+            var member = wire[index];
+            members[index] = new PartyMemberInfo(member.EntityId, member.Name, member.Level, member.Life, member.MaxLife, new Vector2(member.X, member.Z),
+                member.Mana, member.MaxMana, (Contracts.Characters.PlayerClass)member.Class);
         }
 
-        return new PresenceUpdate(_tick, [], [], [], [], FieldId) { Party = new PartyInfo(members) };
+        return members;
+    }
+
+    private PresenceUpdate OnPartyMembers(PartyMembersPacket packet)
+    {
+        return new PresenceUpdate(_tick, [], [], [], [], FieldId)
+        {
+            Party = new PartyInfo(PartyInfoOf(packet.Members)) { Mode = packet.Mode, LeadsRaid = packet.LeadsRaid, Raid = PartyInfoOf(packet.Raid ?? []) }
+        };
     }
 
     private static ClanInfo Clan(ClanStatePacket packet) => !packet.HasClan ? ClanInfo.None
@@ -341,7 +362,7 @@ internal sealed class PresenceDecoder : IEventHandleReader
             (Simulation.Social.Castle.CastleClanSkill)packet.SkillInForce, packet.CanEdit);
 
     private PresenceUpdate OnPartyRequest(PartyRequestPacket packet) =>
-        new PresenceUpdate(_tick, [], [], [], [], FieldId) { PartyRequest = new PartyRequestInfo(packet.FromId, packet.FromName, packet.Recommended) };
+        new PresenceUpdate(_tick, [], [], [], [], FieldId) { PartyRequest = new PartyRequestInfo(packet.FromId, packet.FromName, packet.Recommended, packet.Raid) };
 
     private PresenceUpdate OnChat(ChatLinePacket packet) =>
         new PresenceUpdate(_tick, [], [], [], [], FieldId) { Chat = [new ChatLineInfo(packet.Kind, packet.Speaker, packet.Text, packet.Line)] };

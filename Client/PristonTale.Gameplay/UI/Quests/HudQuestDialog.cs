@@ -117,8 +117,7 @@ public sealed class HudQuestDialog
         }
 
         var ok = OkButton;
-        painter.Sprite(HudArt.HelpButton, ok.X - 9, ok.Y - 4);
-        painter.Sprite(ok.Contains(pointer) && !quests.Confirming ? HudArt.OkYellow : HudArt.OkGray, ok.X, ok.Y);
+        painter.OkButton(ok, ok.Contains(pointer) && !quests.Confirming);
     }
 
     // The yes/no box after a dialog: the detail (a job, an item, a destination) in yellow over the two question lines.
@@ -142,7 +141,7 @@ public sealed class HudQuestDialog
         HudMessageBox.Draw(painter, "", "", pointer);
         var bounds = HudMessageBox.Bounds;
         var width = bounds.Width - 16;
-        var y = bounds.Y + 14;
+        var y = bounds.Y + HudMessageBox.TitleY;
         if (!string.IsNullOrEmpty(detail))
         {
             painter.TextCentered(painter.Fit(detail, width), bounds.Left, bounds.Right, y, TitleColor);

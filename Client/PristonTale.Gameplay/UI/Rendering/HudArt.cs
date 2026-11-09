@@ -95,6 +95,17 @@ public static class HudArt
     public const string StatusArrow = Sin + "Status/ChangeArrow.bmp";
     public const string StatusArrowDown = Sin + "Status/SelectArrow.bmp";
 
+    // The tooltip frame: 2-pixel corners and edges around a translucent black fill.
+    public const string TooltipTopLeft = "Hud/Tooltip/topleft.png";
+    public const string TooltipTopRight = "Hud/Tooltip/topright.png";
+    public const string TooltipBottomLeft = "Hud/Tooltip/bottomleft.png";
+    public const string TooltipBottomRight = "Hud/Tooltip/bottomright.png";
+    public const string TooltipSide = "Hud/Tooltip/left.png";
+    public const string TooltipEdge = "Hud/Tooltip/top.png";
+    public const string MenuTop = "Hud/Menu/topleft.png";
+    public const string MenuMiddle = "Hud/Menu/middle.png";
+    public const string MenuBottom = "Hud/Menu/bottom.png";
+
     public static readonly string[] InfoBox =
     [
         Sin + "Items/ItemInfoBox/BoxTopLeft.tga", Sin + "Items/ItemInfoBox/BoxTopCenter.tga", Sin + "Items/ItemInfoBox/BoxTopRight.tga",
@@ -112,10 +123,15 @@ public static class HudArt
     public const string HelpBottom = Sin + "help/box8.tga";
     public const string HelpBottomRight = Sin + "help/box9.tga";
     public const string HelpLine = Sin + "help/Box_Line.tga";
-    public const string HelpTitle = Sin + "help/box-test-title.bmp";
-    public const string HelpButton = Sin + "help/box-test-title2.bmp";
-    public const string ScrollBar = Sin + "help/scl_bar.tga";
-    public const string ScrollButton = Sin + "help/scl_icon.tga";
+    public const string HelpTitle = "Hud/Window/option.png";
+    public const string ScrollBar = "Hud/Window/scrollbar.png";
+    public const string ScrollButton = "Hud/Window/scrollknob.png";
+    public const string WindowFrame = "Hud/Window/window.png";
+    public const string WindowOk = "Hud/Window/btnok.png";
+    public const string WindowOkLit = "Hud/Window/btnok_.png";
+    public const string InputLeft = "Hud/Window/input_left.png";
+    public const string InputCenter = "Hud/Window/input_center.png";
+    public const string InputRight = "Hud/Window/input_right.png";
     // The guide box (HudPainter.GuideBox): corners, edges and fill, left to right and top to bottom.
     public static readonly string[] GuideBox = Enumerable.Range(1, 9).Select(index => $"{Sin}Help/GH-Box0{index}.tga").ToArray();
 
@@ -123,8 +139,6 @@ public static class HudArt
     public const string NoticeLeft = Sin + "MessageBox/CutBox/BoxLeft.tga";
     public const string NoticeCenter = Sin + "MessageBox/CutBox/BoxCenter.tga";
     public const string NoticeRight = Sin + "MessageBox/CutBox/BoxRight.tga";
-    public const string OkGray = Sin + "MessageBox/Button_Ok_Glay.bmp";
-    public const string OkYellow = Sin + "MessageBox/Button_Ok_Yellow.bmp";
     public const string YesGray = Sin + "MessageBox/Button_Yes_Glay.bmp";
     public const string YesYellow = Sin + "MessageBox/Button_Yes_Yellow.bmp";
     public const string NoGray = Sin + "MessageBox/Button_No_Glay.bmp";
@@ -158,9 +172,10 @@ public static class HudArt
         QuestBoxButton, QuestBoxButtonOpen, QuestBoxTile, QuestBoxHint, QuestBoxCloseHint, QuestBoxGlow,
         Status, StatusPoint, StatusArrow, StatusArrowDown,
         .. InfoBox,
+        TooltipTopLeft, TooltipTopRight, TooltipBottomLeft, TooltipBottomRight, TooltipSide, TooltipEdge, MenuTop, MenuMiddle, MenuBottom, WindowFrame, WindowOk, WindowOkLit, InputLeft, InputCenter, InputRight,
         HelpTopLeft, HelpTop, HelpTopRight, HelpLeft, HelpCenter, HelpRight, HelpBottomLeft, HelpBottom, HelpBottomRight, HelpLine,
-        HelpTitle, HelpButton, ScrollBar, ScrollButton, .. GuideBox,
-        MessageBox, NoticeLeft, NoticeCenter, NoticeRight, OkGray, OkYellow, YesGray, YesYellow, NoGray, NoYellow,
+        HelpTitle, ScrollBar, ScrollButton, .. GuideBox,
+        MessageBox, NoticeLeft, NoticeCenter, NoticeRight, YesGray, YesYellow, NoGray, NoYellow,
         CancelGray, CancelYellow, CountField, CountUp, CountDown,
         MapBox, MapArrow, MapNpc, TargetBox, EnergyBack, EnergyFill,
         BroodNormal, BroodMutant, BroodUndead, BroodDemon, BroodMechanic
@@ -190,6 +205,9 @@ public static class HudArt
 
     // Field art: field\map\<name>.tga and field\title\<name>t.tga.
     public static string FieldMap(string fieldId) => $"Field/map/{fieldId}.tga";
+
+    // A higher-resolution map of the same area as FieldMap, when one was made for the field.
+    public static string FieldMapHd(string fieldId) => $"Field/mapHD/{fieldId}.png";
     public static string FieldTitle(string fieldId) => $"Field/title/{fieldId}t.tga";
 
     private static string[] Names(string a, string b, string c, string d, string e, string f, string suffix) =>

@@ -36,6 +36,8 @@ public sealed class HudFriendsPage
 
     public HudFriendsView View { get; private set; } = HudFriendsView.Friends;
     public IReadOnlyList<string> Recent => _recent;
+    public IReadOnlyList<(string Name, bool Online)> FriendList => _friends;
+    public IReadOnlyList<(string Name, bool Online)> IgnoredList => _ignored;
 
     // A name to put on a list or take off it, and a name to whisper to, for the HUD to send.
     public Action<ContactList, bool, string> Changed { get; set; }
@@ -63,6 +65,8 @@ public sealed class HudFriendsPage
             _recent.RemoveAt(_recent.Count - 1);
         }
     }
+
+    public void Forget(string name) => _recent.Remove(name);
 
     public void Apply(ContactListInfo info)
     {

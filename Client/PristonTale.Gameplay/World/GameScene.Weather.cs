@@ -32,6 +32,9 @@ public sealed partial class GameScene
     // The bosses of the player's field at their spot, as the server last sent them.
     public IReadOnlyList<BossSpotInfo> BossSpots { get; private set; } = [];
 
+    // The active monster spawn points of the player's field, as the server last sent them.
+    public IReadOnlyList<SpawnSpotInfo> SpawnSpots { get; private set; } = [];
+
     // Every scheduled boss of the world, as the server last sent the list.
     public IReadOnlyList<BossListInfo> BossList { get; private set; } = [];
 
@@ -52,6 +55,11 @@ public sealed partial class GameScene
         if (update.BossSpots is { } spots)
         {
             BossSpots = spots;
+        }
+
+        if (update.SpawnSpots is { } spawns)
+        {
+            SpawnSpots = spawns;
         }
 
         if (update.BossList is { } list)

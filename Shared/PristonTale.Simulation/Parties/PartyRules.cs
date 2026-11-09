@@ -22,6 +22,36 @@ public static class PartyRules
 
     public static (int Killer, int Other) ExpShare(int members) => ExpShares[Math.Clamp(members, 1, PartyLimits.MaxMembers) - 1];
 
+    // In Exp and Hunt mode the party's total share grows with its size and each member takes an equal part of it.
+    public static (int Killer, int Other) ExpShare(int members, PartyMode mode)
+    {
+        if (mode == PartyMode.Normal || members < 2)
+        {
+            return ExpShare(members);
+        }
+
+        var extra = members - 2;
+        var each = (mode == PartyMode.Exp ? 180 + 80 * extra : 80 + 20 * extra) / members;
+        return (each, each);
+    }
+
+    private static readonly int[] ExpModeExtraChance = [10, 20, 40, 60, 80];
+    private static readonly int[] HuntModeExtraChance = [10, 20, 30, 40, 50];
+
+    // Drops a kill gains (Hunt) or loses (Exp) with nearby members around the killer: one, or two when roll (0-99) falls
+    // under the chance for that many members.
+    public static int DropChange(PartyMode mode, int nearby, int roll)
+    {
+        if (mode == PartyMode.Normal || nearby < 2)
+        {
+            return 0;
+        }
+
+        var chances = mode == PartyMode.Exp ? ExpModeExtraChance : HuntModeExtraChance;
+        var amount = roll < chances[Math.Min(nearby, PartyLimits.MaxMembers) - 2] ? 2 : 1;
+        return mode == PartyMode.Exp ? -amount : amount;
+    }
+
     public static ulong Share(ulong experience, int percent) => (ulong)((UInt128)experience * (uint)percent / 100);
 
     // Integer average, as the original keeps it.

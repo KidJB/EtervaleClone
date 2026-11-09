@@ -22,6 +22,10 @@ public sealed record QuestView(
     public LevelQuestLog LevelLog { get; init; }
     public ElementaryQuestLog ElementaryLog { get; init; }
 
+    // The kills that count now (QuestTargets). On the client Monsters is empty: TargetTemplates names the monsters.
+    public QuestHunt Hunt { get; init; } = QuestHunt.None;
+    public IReadOnlyList<uint> TargetTemplates { get; init; } = [];
+
     public static QuestView Capture(PlayerCharacter character)
     {
         var journal = character.Quests;
@@ -33,7 +37,8 @@ public sealed record QuestView(
             WeaponStage = active.WeaponStage,
             WeaponKillsLeft = active.WeaponKillsLeft,
             LevelLog = journal.LevelLog,
-            ElementaryLog = journal.ElementaryLog
+            ElementaryLog = journal.ElementaryLog,
+            Hunt = QuestTargets.Of(character)
         };
     }
 }

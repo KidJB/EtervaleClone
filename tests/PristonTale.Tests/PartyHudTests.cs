@@ -14,6 +14,7 @@ internal static class PartyHudTests
 {
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
+        yield return ("party frames fold, offer only what the player may do and ask first; the social window lists, removes and whispers", FramesAndSocialAsync);
         yield return ("the party page lists members with levels in tens, gives the leader its buttons, picks a member and whispers on a double click", WindowAsync);
         yield return ("the party request box answers once from its buttons and closes itself after twenty seconds, the trade's after ten", RequestAsync);
         yield return ("the trade, party and friend buttons sit under the portrait from 36 px left of its centre", PlayerButtonsAsync);
@@ -24,6 +25,43 @@ internal static class PartyHudTests
         new PartyMemberInfo(1, "Ann", 45, 100, 200, System.Numerics.Vector2.Zero),
         new PartyMemberInfo(2, "Bob", 9, 50, 50, System.Numerics.Vector2.Zero)
     ]);
+
+    private static Task FramesAndSocialAsync()
+    {
+        var layout = HudLayout.Create(800, 600);
+        var commands = new List<(PartyCommand Command, ulong Member)>();
+        var frames = new HudPartyFrames { Commanded = (command, member) => commands.Add((command, member)) };
+        var row = HudPartyFrames.Row(layout, 1).Center;
+        Assert.True(HudPartyFrames.Fill(50, 200, 120) == 30 && HudPartyFrames.Fill(5, 0, 120) == 0, "the bar fill differs");
+        Assert.True(frames.RightClick(layout, Party, 2, row), "a right click on a frame did not open its menu");
+        Assert.True(frames.Contains(layout, Party, row), "the frame did not take the pointer");
+        Assert.True(frames.RightClick(layout, Party, 1, row), "the leader's menu did not open");
+        var kick = new Point(HudPartyFrames.Row(layout, 1).Right + 12, HudPartyFrames.Row(layout, 1).Y + 6 + 30);
+        // The menu's second row (Kick) lies one 24-pixel row under its first.
+        Assert.True(frames.Click(layout, Party, kick) && frames.Confirming && commands.Count == 0, "the choice did not ask first");
+        Assert.True(frames.Click(layout, Party, HudMessageBox.Accept.Center) && commands.SequenceEqual([(PartyCommand.Kick, 2UL)]), "the kick was not sent");
+
+        var down = new Microsoft.Xna.Framework.Input.MouseState(0, 0, 0, Microsoft.Xna.Framework.Input.ButtonState.Pressed, 0, 0, 0, 0);
+        var dragged = new HudPartyFrames();
+        dragged.Drag(layout, Party, HudPartyFrames.Row(layout, 0).Center, down, default, true);
+        dragged.Drag(layout, Party, HudPartyFrames.Row(layout, 0).Center + new Point(40, 20), down, down, true);
+        dragged.Drag(layout, Party, HudPartyFrames.Row(layout, 0).Center + new Point(40, 20), default, down, true);
+        Assert.True(dragged.Offset == new Point(40, 20) && dragged.Revision == 1, "the party frames did not move");
+
+        var changes = new List<(ContactList List, bool Add, string Name)>();
+        var friends = new PristonTale.Gameplay.UI.Contacts.HudFriendsPage { Changed = (list, add, name) => changes.Add((list, add, name)) };
+        friends.Met("Zed");
+        var whispers = new List<string>();
+        var social = new PristonTale.Gameplay.UI.Contacts.HudSocialWindow(friends) { Whispered = whispers.Add };
+        social.Toggle();
+        var origin = PristonTale.Gameplay.UI.Contacts.HudSocialWindow.Origin(layout);
+        var name = PristonTale.Gameplay.UI.Contacts.HudSocialWindow.Row(origin, 0).Location + new Point(30, 5);
+        Assert.True(social.Click(layout, name, 10) && social.Picked == "Zed" && whispers.Count == 0, "a click did not pick the name");
+        Assert.True(social.Click(layout, name, 10.1) && whispers.SequenceEqual(["Zed"]), "a double click did not whisper");
+        Assert.True(social.Click(layout, PristonTale.Gameplay.UI.Contacts.HudSocialWindow.BottomButton(origin, 0).Center, 20)
+            && changes.SequenceEqual([(ContactList.Friends, true, "Zed")]) && friends.Recent.Count == 0, "add friend did not move the picked name");
+        return Task.CompletedTask;
+    }
 
     private static Task WindowAsync()
     {

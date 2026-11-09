@@ -15,6 +15,7 @@ public sealed partial class WorldServer
     private const uint PartyRefreshTicks = 10;
     private readonly HashSet<Party> _parties = new();
     private readonly PartyMemberView[] _partyScratch = new PartyMemberView[PartyLimits.MaxMembers];
+    private readonly PartyMemberView[] _raidScratch = new PartyMemberView[PartyLimits.MaxMembers];
 
     // Who hears a party line.
     public PartyRoster Parties { get; } = new();
@@ -35,6 +36,20 @@ public sealed partial class WorldServer
             if (PlayerNamed(name) is { } target)
             {
                 Invite(player, target);
+            }
+            else
+            {
+                Reply(player, PartyMessages.NotFound(name));
+            }
+        }));
+
+    // "//raid name": a party's leader asks another party's leader to link their parties.
+    public Task<WorldNotice[]> InviteToRaidByNameAsync(PlayerSession session, string name) =>
+        EnqueueAsync(session.EntityId, () => PartyAction(session, player =>
+        {
+            if (PlayerNamed(name) is { } target)
+            {
+                InviteRaid(player, target);
             }
             else
             {
@@ -100,6 +115,67 @@ public sealed partial class WorldServer
         Reply(inviter, inviter.SharesPartyWith(target) ? PartyMessages.AlreadyMember(name) : PartyMessages.InOtherParty(name));
     }
 
+    private void InviteRaid(WorldPlayer inviter, WorldPlayer target)
+    {
+        if (!MayRaid(inviter, target, out var refusal))
+        {
+            Reply(inviter, refusal);
+            return;
+        }
+
+        Reply(inviter, PartyMessages.RaidRequested(target.Character.Name));
+        target.PartyRequest = new PartyRequest(inviter.EntityId, inviter.Character.Name, inviter.EntityId, "", UnixNowMs + PartyRules.InviteMs) { Raid = true };
+    }
+
+    private static bool MayRaid(WorldPlayer one, WorldPlayer other, out GameText refusal)
+    {
+        refusal = PartyMessages.RaidNotLeaders;
+        if (one.Party is not { } first || other.Party is not { } second || ReferenceEquals(first, second)
+            || first.LeaderId != one.EntityId || second.LeaderId != other.EntityId)
+        {
+            return false;
+        }
+
+        refusal = PartyMessages.RaidFull;
+        return first.Raid is null && second.Raid is null;
+    }
+
+    private void FormRaid(WorldPlayer inviter, WorldPlayer answering)
+    {
+        if (!MayRaid(inviter, answering, out var refusal))
+        {
+            Reply(answering, refusal);
+            return;
+        }
+
+        var leading = inviter.Party!;
+        var joining = answering.Party!;
+        leading.Raid = joining;
+        leading.LeadsRaid = true;
+        joining.Raid = leading;
+        PartyChanged(leading);
+        PartyChanged(joining);
+        Tell(leading, PartyMessages.RaidFormed);
+        Tell(joining, PartyMessages.RaidFormed);
+    }
+
+    private void EndRaid(Party party)
+    {
+        if (party.Raid is not { } other)
+        {
+            return;
+        }
+
+        party.Raid = null;
+        party.LeadsRaid = false;
+        other.Raid = null;
+        other.LeadsRaid = false;
+        PartyChanged(party);
+        PartyChanged(other);
+        Tell(party, PartyMessages.RaidEnded);
+        Tell(other, PartyMessages.RaidEnded);
+    }
+
     // A leader who accepts a member's recommendation asks the recommended player in the party's name.
     private void Answer(WorldPlayer player, ulong fromId, bool accept)
     {
@@ -111,6 +187,16 @@ public sealed partial class WorldServer
         player.PartyRequest = null;
         if (!accept || request.ExpiresMs < UnixNowMs)
         {
+            return;
+        }
+
+        if (request.Raid)
+        {
+            if (_connections.TryGetValue(request.FromId, out var raider))
+            {
+                FormRaid(raider.Player, player);
+            }
+
             return;
         }
 
@@ -212,6 +298,14 @@ public sealed partial class WorldServer
                 }
 
                 break;
+            case PartyCommand.ChangeMode when leads:
+                party.Mode = (PartyMode)(((int)party.Mode + 1) % (Enum.GetValues<PartyMode>().Length));
+                PartyChanged(party);
+                Tell(party, PartyMessages.ModeChanged(party.Mode));
+                break;
+            case PartyCommand.LeaveRaid when leads:
+                EndRaid(party);
+                break;
             case PartyCommand.Leave:
                 LeaveParty(player);
                 Reply(player, PartyMessages.YouLeft);
@@ -261,6 +355,7 @@ public sealed partial class WorldServer
 
     private void Release(Party party)
     {
+        EndRaid(party);
         Tell(party, PartyMessages.Released);
         foreach (var id in party.Members)
         {
@@ -279,6 +374,11 @@ public sealed partial class WorldServer
     {
         Parties.Set(party);
         RefreshParty(party);
+        if (party.Raid is { } other)
+        {
+            Parties.Set(other);
+            RefreshParty(other);
+        }
     }
 
     private void Tell(Party party, GameText text)
@@ -303,6 +403,9 @@ public sealed partial class WorldServer
         }
     }
 
+    private static PartyMemberView MemberView(ulong id, WorldPlayer player) => new(id, player.Character.Name, player.Level, player.Life, player.MaxLife,
+        player.Position.X, player.Position.Z, player.Character.Mana, player.Character.MaxMana, (byte)player.Character.Definition.Class);
+
     private void RefreshParty(Party party)
     {
         Span<int> levels = stackalloc int[PartyLimits.MaxMembers];
@@ -315,15 +418,24 @@ public sealed partial class WorldServer
             }
 
             var player = connection.Player;
-            _partyScratch[count] = new PartyMemberView(id, player.Character.Name, player.Level, player.Life, player.MaxLife, player.Position.X,
-                player.Position.Z);
+            _partyScratch[count] = MemberView(id, player);
             levels[count++] = player.Level;
         }
 
         party.AverageLevel = PartyRules.AverageLevel(levels[..count]);
-        if (party.View is null || !party.View.SameAs(_partyScratch.AsSpan(0, count)))
+        var raidCount = 0;
+        foreach (var id in party.Raid is { } raid ? raid.Members : [])
         {
-            party.View = new PartyView(_partyScratch.AsSpan(0, count).ToArray());
+            if (_connections.TryGetValue(id, out var connection))
+            {
+                _raidScratch[raidCount++] = MemberView(id, connection.Player);
+            }
+        }
+
+        var raided = _raidScratch.AsSpan(0, raidCount);
+        if (party.View is null || !party.View.SameAs(_partyScratch.AsSpan(0, count), party.Mode, party.LeadsRaid, raided))
+        {
+            party.View = new PartyView(_partyScratch.AsSpan(0, count).ToArray(), party.Mode, party.LeadsRaid, raided.ToArray());
         }
     }
 }
@@ -332,17 +444,26 @@ public sealed partial class WorldServer
 public sealed class PartyRoster : IPartyRoster
 {
     private readonly ConcurrentDictionary<ulong, ulong[]> _members = new();
+    private readonly ConcurrentDictionary<ulong, ulong[]> _raid = new();
+
+    public IReadOnlyCollection<ulong> RaidMembersOf(ulong entityId) => _raid.TryGetValue(entityId, out var members) ? members : [];
 
     public IReadOnlyCollection<ulong> MembersOf(ulong entityId) => _members.TryGetValue(entityId, out var members) ? members : [];
 
     internal void Set(Party party)
     {
         var members = party.Members.ToArray();
+        ulong[] raid = party.Raid is { } other ? [.. members, .. other.Members] : members;
         foreach (var id in members)
         {
             _members[id] = members;
+            _raid[id] = raid;
         }
     }
 
-    internal void Remove(ulong entityId) => _members.TryRemove(entityId, out _);
+    internal void Remove(ulong entityId)
+    {
+        _members.TryRemove(entityId, out _);
+        _raid.TryRemove(entityId, out _);
+    }
 }

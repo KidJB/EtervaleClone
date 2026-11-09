@@ -357,7 +357,7 @@ public static class ElementaryQuests
     public static void OnKill(QuestContext context, int monsterCode)
     {
         var active = context.Journal.Active;
-        if (!QuestCodes.IsElementary(active.Code) || active.State != 2 || active.Target == 0 || active.Target != monsterCode || active.KillsNeeded == 0)
+        if (!QuestCodes.IsElementary(active.Code) || active.State != 2 || !QuestTargets.IsPrey(active, monsterCode))
         {
             return;
         }

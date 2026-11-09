@@ -96,9 +96,9 @@ public sealed record PartyCommandPacket(PartyCommand Command, ulong MemberId) : 
 
 // S->C: a player asks the receiver to group (the receiver's answer echoes FromId); a member asking its leader names the
 // player it recommends. {header, uint64 FromId, text FromName, text Recommended (empty for a request to join)}.
-public sealed record PartyRequestPacket(ulong FromId, string FromName, string Recommended) : IFramePacket
+public sealed record PartyRequestPacket(ulong FromId, string FromName, string Recommended, bool Raid = false) : IFramePacket
 {
-    private const int MinimumSize = 8 + WireHeader.Size + 8 + 2 + 2;
+    private const int MinimumSize = 8 + WireHeader.Size + 8 + 2 + 2 + 1;
     public const int MaxSize = MinimumSize + 2 * AccountWire.MaxNameBytes;
 
     public int Write(Span<byte> destination)
@@ -108,6 +108,7 @@ public sealed record PartyRequestPacket(ulong FromId, string FromName, string Re
         writer.UInt64(FromId);
         Utf8Text.Write(ref writer, FromName, AccountWire.MaxNameBytes);
         Utf8Text.Write(ref writer, Recommended, AccountWire.MaxNameBytes);
+        writer.Byte(Raid ? (byte)1 : (byte)0);
         return writer.Finish();
     }
 
@@ -115,24 +116,25 @@ public sealed record PartyRequestPacket(ulong FromId, string FromName, string Re
     {
         var reader = new PacketReader(packet, MinimumSize);
         PartyWire.ReadHeader(ref reader);
-        return new PartyRequestPacket(reader.UInt64(), PartyWire.Name(ref reader), PartyWire.Name(ref reader));
+        return new PartyRequestPacket(reader.UInt64(), PartyWire.Name(ref reader), PartyWire.Name(ref reader), reader.Byte() != 0);
     }
 }
 
-// A party member: {uint64 EntityId, text Name, int32 Level, int32 Life, int32 MaxLife, float X, float Z} (its planar place in the
-// world, which every field shares).
-public readonly record struct PartyMemberWire(ulong EntityId, string Name, int Level, int Life, int MaxLife, float X, float Z);
+// A party member: {uint64 EntityId, text Name, int32 Level, int32 Life, int32 MaxLife, float X, float Z, int32 Mana, int32 MaxMana,
+// uint8 Class} (its planar place in the world, which every field shares).
+public readonly record struct PartyMemberWire(ulong EntityId, string Name, int Level, int Life, int MaxLife, float X, float Z, int Mana = 0, int MaxMana = 0, byte Class = 0);
 
 // S->C: the receiver's party, the leader first; no member when it has none. {header, uint8 Count, members}.
-public sealed record PartyMembersPacket(IReadOnlyList<PartyMemberWire> Members) : IFramePacket
+public sealed record PartyMembersPacket(IReadOnlyList<PartyMemberWire> Members, PartyMode Mode = PartyMode.Normal, bool LeadsRaid = false,
+    IReadOnlyList<PartyMemberWire>? Raid = null) : IFramePacket
 {
-    private const int MinimumSize = 8 + WireHeader.Size + 1;
-    private const int MaxMemberSize = 8 + 2 + AccountWire.MaxNameBytes + 4 * 3 + 4 * 2;
-    public const int MaxSize = MinimumSize + PartyLimits.MaxMembers * MaxMemberSize;
+    private const int MinimumSize = 8 + WireHeader.Size + 1 + 3;
+    private const int MaxMemberSize = 8 + 2 + AccountWire.MaxNameBytes + 4 * 3 + 4 * 2 + 4 * 2 + 1;
+    public const int MaxSize = MinimumSize + 2 * PartyLimits.MaxMembers * MaxMemberSize;
 
     public int Write(Span<byte> destination)
     {
-        if (Members.Count > PartyLimits.MaxMembers)
+        if (Members.Count > PartyLimits.MaxMembers || (Raid?.Count ?? 0) > PartyLimits.MaxMembers)
         {
             throw new ArgumentOutOfRangeException(nameof(destination), "Too many party members.");
         }
@@ -140,7 +142,17 @@ public sealed record PartyMembersPacket(IReadOnlyList<PartyMemberWire> Members) 
         var writer = new PacketWriter(destination, EtervaleOpcodes.PartyMembers);
         PartyWire.Header(ref writer);
         writer.Byte((byte)Members.Count);
-        foreach (var member in Members)
+        WriteMembers(ref writer, Members);
+        writer.Byte((byte)Mode);
+        writer.Byte(LeadsRaid ? (byte)1 : (byte)0);
+        writer.Byte((byte)(Raid?.Count ?? 0));
+        WriteMembers(ref writer, Raid ?? []);
+        return writer.Finish();
+    }
+
+    private static void WriteMembers(ref PacketWriter writer, IReadOnlyList<PartyMemberWire> members)
+    {
+        foreach (var member in members)
         {
             writer.UInt64(member.EntityId);
             Utf8Text.Write(ref writer, member.Name, AccountWire.MaxNameBytes);
@@ -149,9 +161,22 @@ public sealed record PartyMembersPacket(IReadOnlyList<PartyMemberWire> Members) 
             writer.Int32(member.MaxLife);
             writer.Single(member.X);
             writer.Single(member.Z);
+            writer.Int32(member.Mana);
+            writer.Int32(member.MaxMana);
+            writer.Byte(member.Class);
+        }
+    }
+
+    private static PartyMemberWire[] ReadMembers(ref PacketReader reader, int count)
+    {
+        var members = new PartyMemberWire[count];
+        for (var index = 0; index < count; index++)
+        {
+            members[index] = new PartyMemberWire(reader.UInt64(), PartyWire.Name(ref reader), reader.Int32(), reader.Int32(), reader.Int32(),
+                reader.Single(), reader.Single(), reader.Int32(), reader.Int32(), reader.Byte());
         }
 
-        return writer.Finish();
+        return members;
     }
 
     public static PartyMembersPacket Read(ReadOnlySpan<byte> packet)
@@ -164,18 +189,21 @@ public sealed record PartyMembersPacket(IReadOnlyList<PartyMemberWire> Members) 
             throw new InvalidDataException("Party members has an invalid count.");
         }
 
-        var members = new PartyMemberWire[count];
-        for (var index = 0; index < count; index++)
+        var members = ReadMembers(ref reader, count);
+        var mode = (PartyMode)reader.Byte();
+        var leadsRaid = reader.Byte() != 0;
+        int raidCount = reader.Byte();
+        if (!Enum.IsDefined(mode) || raidCount > PartyLimits.MaxMembers)
         {
-            members[index] = new PartyMemberWire(reader.UInt64(), PartyWire.Name(ref reader), reader.Int32(), reader.Int32(), reader.Int32(),
-                reader.Single(), reader.Single());
+            throw new InvalidDataException("Party members has an invalid mode or raid.");
         }
 
+        var raid = ReadMembers(ref reader, raidCount);
         if (reader.Remaining != 0)
         {
             throw new InvalidDataException("Party members has trailing bytes.");
         }
 
-        return new PartyMembersPacket(members);
+        return new PartyMembersPacket(members, mode, leadsRaid, raid);
     }
 }

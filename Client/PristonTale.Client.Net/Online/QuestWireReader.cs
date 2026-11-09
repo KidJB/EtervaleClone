@@ -41,7 +41,9 @@ internal static class QuestWireReader
             WeaponStage = packet.WeaponStage,
             WeaponKillsLeft = packet.WeaponKillsLeft,
             LevelLog = (LevelQuestLog)packet.LevelLog,
-            ElementaryLog = (ElementaryQuestLog)packet.ElementaryLog
+            ElementaryLog = (ElementaryQuestLog)packet.ElementaryLog,
+            Hunt = new QuestHunt([], packet.TargetField, packet.AnyTarget),
+            TargetTemplates = packet.TargetTemplates ?? []
         };
 
     private static QuestBoardEntry[] Entries(IReadOnlyList<QuestBoardLine> lines) =>

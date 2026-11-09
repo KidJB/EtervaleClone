@@ -53,7 +53,7 @@ public static class QuestSteps
     public static void CreditHunt(QuestContext context, int monsterCode)
     {
         var active = context.Journal.Active;
-        if (active.Target == 0 || monsterCode != active.Target || active.KillsNeeded == 0 || active.HuntComplete)
+        if (!QuestTargets.IsPrey(active, monsterCode))
         {
             return;
         }

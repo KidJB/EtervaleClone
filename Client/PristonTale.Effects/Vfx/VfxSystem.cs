@@ -205,6 +205,7 @@ public sealed class VfxInstance
     private bool _cut;
     private bool _emissionEnded;
     private bool _travelling;
+    private Vector3 _componentsPoint;
     private Vector3 _travelFrom;
     private Vector3 _travelTo;
     private float _travelSeconds;
@@ -438,11 +439,14 @@ public sealed class VfxInstance
             any |= TrailStates[index].Update(this, dt, emitting, anchors);
         }
 
+        // Components on the spawn point go where the effect is moved (a child carried along with its parent's caster).
+        var pointMoved = Spawn.Point != _componentsPoint;
+        _componentsPoint = Spawn.Point;
         for (var index = 0; index < ComponentStates.Length; index++)
         {
             var state = ComponentStates[index];
             var source = state.Component.Source;
-            if (source.Follow || !state.Anchored)
+            if (source.Follow || !state.Anchored || pointMoved && source.Anchor == VfxAnchor.Point)
             {
                 state.Anchor = AnchorPosition(source.Anchor, source.Bone, Vector3.Zero, anchors);
                 state.Anchored = true;

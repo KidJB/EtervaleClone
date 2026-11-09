@@ -29,18 +29,48 @@ public enum HudMapMarkerKind : byte
     Party,
     // A boss's spot: grey while the boss waits for its pass, red while it is alive.
     BossWaiting,
-    BossAlive
+    BossAlive,
+    // A monster spawn point of the field (its id is its index in the spawn list); it has no name.
+    Spawn
 }
 
-// An entity marked on the minimap; its name is looked up only when the pointer is over it.
-public readonly record struct HudMapMarker(ulong Id, Vector3 Position, HudMapMarkerKind Kind);
+// An entity marked on the minimap; its name is looked up only when the pointer is over it. Icon: the art drawn in place of
+// the kind's own mark (an NPC's service or quest icon, a clan mate's), or null.
+public readonly record struct HudMapMarker(ulong Id, Vector3 Position, HudMapMarkerKind Kind, string Icon = null);
 
 // Original field minimap: 128x128 box at (656,426), right and bottom anchored, black 50% backdrop, the
 // field\map\<id>.tga region around the player (the neighbouring field's map first), NPC dots, the heading arrow,
 // MapBox.tga and the field title. North is up; the map does not rotate. The player can drag it elsewhere (Offset), and
-// the NPC, player or party marker under the pointer shows its name.
+// the NPC, player or party marker under the pointer shows its name. N switches to the large map: a 384-pixel box over the
+// same corner that shows half again as far, in border_large.png.
 public sealed class HudMinimap
 {
+    public const int SmallSize = 128;
+    public const int LargeSize = 384;
+    private const float LargeViewScale = 1.5f;
+    private const string LargeBorder = Folder + "border_large.png";
+    private const string Folder = "Hud/Minimap/";
+    public const string SpawnIcon = Folder + "spawn.png";
+    public const string PlayerIcon = Folder + "player.png";
+    public const string FriendlyIcon = Folder + "friendly.png";
+    public const string NpcIcon = Folder + "npc.png";
+    public const string WarpIcon = Folder + "Warp.png";
+    public const string WarehouseIcon = Folder + "Warehouse.png";
+    public const string CraftIcon = Folder + "Aging-Mixing.png";
+    public const string SkillMasterIcon = Folder + "Skill-Master.png";
+    public const string SupplyIcon = Folder + "Supply.png";
+    public const string SmithIcon = Folder + "Anvil.png";
+    public const string MagicIcon = Folder + "Magicsmith.png";
+    public const string QuestStartIcon = Folder + "Quest-Start.png";
+    public const string QuestRepeatableIcon = Folder + "Quest-Start-Repeatable.png";
+    public const string QuestProgressIcon = Folder + "Quest-Progress.png";
+    public const string QuestFinishIcon = Folder + "Quest-Finish.png";
+    public static readonly string[] Art =
+    [
+        BossAliveIcon, BossWaitingIcon, LargeBorder, SpawnIcon, PlayerIcon, FriendlyIcon, NpcIcon, WarpIcon, WarehouseIcon, CraftIcon, SkillMasterIcon,
+        SupplyIcon, SmithIcon, MagicIcon, QuestStartIcon, QuestRepeatableIcon, QuestProgressIcon, QuestFinishIcon
+    ];
+
     // The view radius starts at 8 cells and eases toward the field's size by 8 units per 70 Hz frame.
     private const float InitialViewSize = 8 * 64f;
     private const float ZoomSpeed = 8f * GameUnits.TicksPerSecond;
@@ -53,6 +83,9 @@ public sealed class HudMinimap
     private string _fieldMap;
     private string _fieldTitle;
     private string _neighbourMap;
+    // A sharper map of the same area (HudArt.FieldMapHd), drawn instead when the file exists.
+    private string _fieldMapHd;
+    private string _neighbourMapHd;
     private float _viewSize = InitialViewSize;
     private const int TitleHeight = 16;
     // A press on the map moves it once the pointer has gone this far, so a click stays a click.
@@ -71,9 +104,35 @@ public sealed class HudMinimap
     private Point _pressedOffset;
     private bool _pressed;
     private bool _dragging;
+    // A press on the title strip moves the box; a press on the map pans it.
+    private bool _panning;
+    private Vector2 _pan;
+    private Vector2 _pressedPan;
+    // How far a pan may take the view from the player, in world units.
+    private const float MaxPan = 16000f;
 
     // Where the original places the box; Bounds is where it lies after the player moved it.
-    public static Rectangle Box(HudLayout layout) => layout.BottomRight(new Rectangle(656, 426, 128, 128));
+    public static Rectangle Box(HudLayout layout) => layout.BottomRight(new Rectangle(656, 426, SmallSize, SmallSize));
+
+    // The large map grows up and left from the small box's bottom right corner. Switching size recentres the view.
+    public bool Large
+    {
+        get => _large;
+        set
+        {
+            _large = value;
+            _pan = Vector2.Zero;
+        }
+    }
+
+    private bool _large;
+
+    // The world offset of the view's centre from the player (x east, y the engine's z), set by dragging the map.
+    public Vector2 Pan => _pan;
+
+    private int Size => Large ? LargeSize : SmallSize;
+
+    private float ViewRadius => Large ? _viewSize * LargeViewScale : _viewSize;
 
     // How far the player moved the map from its original place (logical pixels); Revision counts moves, for saving.
     public Point Offset
@@ -89,9 +148,10 @@ public sealed class HudMinimap
     public Rectangle Bounds(HudLayout layout)
     {
         var box = Box(layout);
-        var x = Math.Clamp(box.X + _offset.X, 0, Math.Max(0, layout.Width - box.Width));
-        var y = Math.Clamp(box.Y + _offset.Y, TitleHeight, Math.Max(TitleHeight, layout.Height - box.Height));
-        return new Rectangle(x, y, box.Width, box.Height);
+        var grow = Size - SmallSize;
+        var x = Math.Clamp(box.X - grow + _offset.X, 0, Math.Max(0, layout.Width - Size));
+        var y = Math.Clamp(box.Y - grow + _offset.Y, TitleHeight, Math.Max(TitleHeight, layout.Height - Size));
+        return new Rectangle(x, y, Size, Size);
     }
 
     // The box and its title strip, which both take the pointer.
@@ -101,12 +161,13 @@ public sealed class HudMinimap
         return new Rectangle(box.X, box.Y - TitleHeight, box.Width, box.Height + TitleHeight);
     }
 
-    // A left press on the map and a move past DragThreshold carries it with the pointer until the button is released.
+    // A left press and a move past DragThreshold: on the title strip it carries the box with the pointer, on the map it
+    // pans the view the other way, as if the map were dragged under the pointer. A press outside the box recentres it.
     public void Drag(HudLayout layout, Point pointer, MouseState mouse, MouseState previous, bool allowed)
     {
         if (mouse.LeftButton == ButtonState.Released)
         {
-            if (_dragging)
+            if (_dragging && !_panning)
             {
                 Revision++;
             }
@@ -118,9 +179,17 @@ public sealed class HudMinimap
 
         if (previous.LeftButton == ButtonState.Released)
         {
-            _pressed = allowed && Area(layout).Contains(pointer);
+            var area = Area(layout);
+            _pressed = allowed && area.Contains(pointer);
+            _panning = Bounds(layout).Contains(pointer);
             _pressedAt = pointer;
             _pressedOffset = _offset;
+            _pressedPan = _pan;
+            if (!area.Contains(pointer))
+            {
+                _pan = Vector2.Zero;
+            }
+
             return;
         }
 
@@ -131,12 +200,18 @@ public sealed class HudMinimap
 
         var moved = new Point(pointer.X - _pressedAt.X, pointer.Y - _pressedAt.Y);
         _dragging |= Math.Abs(moved.X) > DragThreshold || Math.Abs(moved.Y) > DragThreshold;
-        if (_dragging)
+        if (_dragging && _panning)
+        {
+            var unitsPerPixel = ViewRadius / (Size / 2);
+            _pan = Vector2.Clamp(_pressedPan - new Vector2(moved.X, moved.Y) * unitsPerPixel, new Vector2(-MaxPan), new Vector2(MaxPan));
+        }
+        else if (_dragging)
         {
             _offset = new Point(_pressedOffset.X + moved.X, _pressedOffset.Y + moved.Y);
             var box = Box(layout);
             var placed = Bounds(layout);
-            _offset = new Point(placed.X - box.X, placed.Y - box.Y);
+            var grow = Size - SmallSize;
+            _offset = new Point(placed.X + grow - box.X, placed.Y + grow - box.Y);
         }
     }
 
@@ -158,7 +233,11 @@ public sealed class HudMinimap
     public static bool MapRegion(PristonIntRectangle rectangle, Vector3 position, bool underground, out Vector4 source, out Vector4 destination) =>
         MapRegion(rectangle, position, ViewSize(underground), out source, out destination);
 
-    public static bool MapRegion(PristonIntRectangle rectangle, Vector3 position, float size, out Vector4 source, out Vector4 destination)
+    public static bool MapRegion(PristonIntRectangle rectangle, Vector3 position, float size, out Vector4 source, out Vector4 destination) =>
+        MapRegion(rectangle, position, size, SmallSize, out source, out destination);
+
+    // boxSize: the box in pixels (the interior is 2 pixels narrower and its half spans the view radius).
+    public static bool MapRegion(PristonIntRectangle rectangle, Vector3 position, float size, int boxSize, out Vector4 source, out Vector4 destination)
     {
         source = default;
         destination = default;
@@ -181,13 +260,14 @@ public sealed class HudMinimap
             return false;
         }
 
+        float half = boxSize / 2;
         float dx = 0;
         float dy = 0;
-        float dw = 126;
-        float dh = 126;
+        float dw = boxSize - 2;
+        float dh = boxSize - 2;
         if (fx < 0)
         {
-            var clip = -fx * (64 / fpx);
+            var clip = -fx * (half / fpx);
             dx += clip;
             dw -= clip;
             fx = 0;
@@ -195,13 +275,13 @@ public sealed class HudMinimap
 
         if (fw > 1)
         {
-            dw -= (fw - 1) * (64 / fpx);
+            dw -= (fw - 1) * (half / fpx);
             fw = 1;
         }
 
         if (fy < 0)
         {
-            var clip = -fy * (64 / fpy);
+            var clip = -fy * (half / fpy);
             dy += clip;
             dh -= clip;
             fy = 0;
@@ -209,7 +289,7 @@ public sealed class HudMinimap
 
         if (fh > 1)
         {
-            dh -= (fh - 1) * (64 / fpy);
+            dh -= (fh - 1) * (half / fpy);
             fh = 1;
         }
 
@@ -223,8 +303,10 @@ public sealed class HudMinimap
         forward.X == 0 && forward.Z == 0 ? MathF.PI : WorldSpace.TransportFacing(forward) + MathF.PI;
 
     // A world offset from the player to the box centre: x east, y south (engine z), 64 pixels per view radius.
-    public static Vector2 MarkerOffset(Vector3 player, Vector3 marker, float size) =>
-        new((marker.X - player.X) * 64 / size, (marker.Z - player.Z) * 64 / size);
+    public static Vector2 MarkerOffset(Vector3 player, Vector3 marker, float size) => MarkerOffset(player, marker, size, SmallSize);
+
+    public static Vector2 MarkerOffset(Vector3 player, Vector3 marker, float size, int boxSize) =>
+        new((marker.X - player.X) * (boxSize / 2) / size, (marker.Z - player.Z) * (boxSize / 2) / size);
 
     public static float EaseViewSize(float current, float target, double elapsedSeconds)
     {
@@ -241,17 +323,26 @@ public sealed class HudMinimap
             var fieldMap = world.FieldId is null ? null : HudArt.FieldMap(world.FieldId);
             var fieldTitle = world.FieldId is null ? null : HudArt.FieldTitle(world.FieldId);
             var neighbourMap = neighbour is null ? null : HudArt.FieldMap(neighbour);
+            var fieldMapHd = world.FieldId is null ? null : HudArt.FieldMapHd(world.FieldId);
+            var neighbourMapHd = neighbour is null ? null : HudArt.FieldMapHd(neighbour);
             ReleaseUnless(sprites, _fieldMap, fieldMap, neighbourMap);
             ReleaseUnless(sprites, _fieldTitle, fieldTitle, null);
             ReleaseUnless(sprites, _neighbourMap, fieldMap, neighbourMap);
+            ReleaseUnless(sprites, _fieldMapHd, fieldMapHd, neighbourMapHd);
+            ReleaseUnless(sprites, _neighbourMapHd, fieldMapHd, neighbourMapHd);
             _field = world.FieldId;
             _neighbour = neighbour;
             _fieldMap = fieldMap;
             _fieldTitle = fieldTitle;
             _neighbourMap = neighbourMap;
+            _fieldMapHd = fieldMapHd;
+            _neighbourMapHd = neighbourMapHd;
+            _pan = Vector2.Zero;
             Request(sprites, _fieldMap);
             Request(sprites, _fieldTitle);
             Request(sprites, _neighbourMap);
+            Request(sprites, _fieldMapHd);
+            Request(sprites, _neighbourMapHd);
         }
 
         _viewSize = EaseViewSize(_viewSize, ViewSize(world.Underground), elapsedSeconds);
@@ -275,18 +366,21 @@ public sealed class HudMinimap
             return -1;
         }
 
-        var center = new Vector2(box.X + 64, box.Y + 64);
+        var center = new Vector2(box.X + Size / 2, box.Y + Size / 2);
+        var radius = ViewRadius;
+        var view = ViewCenter(world.PlayerPosition);
         var found = -1;
         var best = float.MaxValue;
         for (var index = 0; index < markers.Count; index++)
         {
             var marker = markers[index].Position;
-            if (MathF.Abs(marker.X - world.PlayerPosition.X) >= _viewSize || MathF.Abs(marker.Z - world.PlayerPosition.Z) >= _viewSize)
+            if (markers[index].Kind == HudMapMarkerKind.Spawn
+                || MathF.Abs(marker.X - view.X) >= radius || MathF.Abs(marker.Z - view.Z) >= radius)
             {
                 continue;
             }
 
-            var offset = MarkerOffset(world.PlayerPosition, marker, _viewSize);
+            var offset = MarkerOffset(view, marker, radius, Size);
             var distance = Vector2.DistanceSquared(center + offset, new Vector2(pointer.X, pointer.Y));
             if (distance <= MarkerReach * MarkerReach && distance < best)
             {
@@ -320,33 +414,44 @@ public sealed class HudMinimap
     public void Draw(HudPainter painter, HudLayout layout, HudWorldView world, IReadOnlyList<HudMapMarker> markers, bool hovered)
     {
         var box = Bounds(layout);
+        var view = ViewCenter(world.PlayerPosition);
         painter.ColorBox(box, 0, 0, 0, 128);
         if (_neighbour is not null)
         {
-            DrawMap(painter, box, _neighbourMap, world.NeighbourMapRectangle, world.PlayerPosition);
+            DrawMap(painter, box, _neighbourMapHd, _neighbourMap, world.NeighbourMapRectangle, view);
         }
 
         if (_field is not null)
         {
-            DrawMap(painter, box, _fieldMap, world.MapRectangle, world.PlayerPosition);
+            DrawMap(painter, box, _fieldMapHd, _fieldMap, world.MapRectangle, view);
         }
 
-        var center = new Vector2(box.X + 64, box.Y + 64);
+        var center = new Vector2(box.X + Size / 2, box.Y + Size / 2);
+        var radius = ViewRadius;
         for (var index = 0; index < markers.Count; index++)
         {
             var marker = markers[index];
-            var dx = marker.Position.X - world.PlayerPosition.X;
-            var dz = marker.Position.Z - world.PlayerPosition.Z;
-            if (MathF.Abs(dx) >= _viewSize || MathF.Abs(dz) >= _viewSize)
+            if (MathF.Abs(marker.Position.X - view.X) >= radius || MathF.Abs(marker.Position.Z - view.Z) >= radius)
             {
                 continue;
             }
 
-            var offset = MarkerOffset(world.PlayerPosition, marker.Position, _viewSize);
+            var dx = marker.Position.X - world.PlayerPosition.X;
+            var dz = marker.Position.Z - world.PlayerPosition.Z;
+            var offset = MarkerOffset(view, marker.Position, radius, Size);
             var x = (int)(center.X + offset.X);
             var y = (int)(center.Y + offset.Y);
+            if (marker.Icon is { } art && painter.Texture(art) is { } texture)
+            {
+                painter.Sprite(art, x - texture.Width / 2, y - texture.Height / 2);
+                continue;
+            }
+
             switch (marker.Kind)
             {
+                case HudMapMarkerKind.Spawn:
+                    painter.Sprite(SpawnIcon, x - 2, y - 2);
+                    break;
                 case HudMapMarkerKind.Npc:
                     painter.Sprite(HudArt.MapNpc, x - 3, y - 3);
                     break;
@@ -365,16 +470,28 @@ public sealed class HudMinimap
             }
         }
 
-        painter.Rotated(HudArt.MapArrow, center, ArrowRotation(world.PlayerForward));
-        painter.Sprite(HudArt.MapBox, box.X, box.Y);
-        if (hovered)
+        // The player's arrow stays where the player is on the panned map, and only while that is inside the box.
+        var arrow = center + MarkerOffset(view, world.PlayerPosition, radius, Size);
+        if (MathF.Abs(arrow.X - center.X) < Size / 2 && MathF.Abs(arrow.Y - center.Y) < Size / 2)
         {
-            painter.Highlight(HudArt.MapBox, box, HoverHighlight);
+            painter.Rotated(HudArt.MapArrow, arrow, ArrowRotation(world.PlayerForward));
+        }
+        if (Large)
+        {
+            painter.Sprite(LargeBorder, box.X - 9, box.Y - 24);
+        }
+        else
+        {
+            painter.Sprite(HudArt.MapBox, box.X, box.Y);
+            if (hovered)
+            {
+                painter.Highlight(HudArt.MapBox, box, HoverHighlight);
+            }
         }
 
         if (_field is not null)
         {
-            var title = new Rectangle(box.X, box.Y - 16, 128, 16);
+            var title = new Rectangle(box.X, box.Y - 16, SmallSize, 16);
             painter.Stretch(_fieldTitle, title);
             if (hovered)
             {
@@ -383,10 +500,17 @@ public sealed class HudMinimap
         }
     }
 
-    private void DrawMap(HudPainter painter, Rectangle box, string path, PristonIntRectangle rectangle, Vector3 player)
+    private Vector3 ViewCenter(Vector3 player) => new(player.X + _pan.X, player.Y, player.Z + _pan.Y);
+
+    private void DrawMap(HudPainter painter, Rectangle box, string hdPath, string path, PristonIntRectangle rectangle, Vector3 player)
     {
+        if (hdPath is not null && painter.Texture(hdPath) is not null)
+        {
+            path = hdPath;
+        }
+
         var map = painter.Texture(path);
-        if (map is null || !MapRegion(rectangle, player, _viewSize, out var source, out var destination))
+        if (map is null || !MapRegion(rectangle, player, ViewRadius, Size, out var source, out var destination))
         {
             return;
         }

@@ -235,7 +235,7 @@ public static class LevelQuests
         var active = context.Journal.Active;
         var spec = Find(active.Code);
         var huntingState = active.Code == QuestCode.Level85 ? 2 : 1;
-        if (spec is null || active.State != huntingState || monsterCode != spec.Prey || active.KillsNeeded == 0)
+        if (spec is null || active.State != huntingState || !QuestTargets.IsPrey(active, monsterCode))
         {
             return;
         }

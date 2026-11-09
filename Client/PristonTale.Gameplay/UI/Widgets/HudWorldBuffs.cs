@@ -145,7 +145,7 @@ public sealed class HudWorldBuffs
                 }
                 else
                 {
-                    _rows[index] = _rows[index] with { Time = string.Create(CultureInfo.InvariantCulture, $"{left / 3600:D2}:{left / 60 % 60:D2}:{left % 60:D2}") };
+                    _rows[index] = _rows[index] with { Time = string.Create(CultureInfo.InvariantCulture, $"{left / 3600:D2}:{left / 60 % 60:D2}:{left % 60:D2} (DOES NOT PAUSE)") };
                 }
             }
         }

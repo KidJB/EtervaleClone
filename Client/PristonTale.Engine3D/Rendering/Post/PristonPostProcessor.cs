@@ -30,6 +30,8 @@ internal sealed class PristonPostProcessor : IDisposable
     private readonly EffectParameter _debugParams;
     private readonly EffectParameter _mesopicParams;
     private readonly PristonBloom _bloom;
+    private readonly PristonDepthOfField _depthOfField;
+    private readonly PristonFsr _fsr;
     private readonly PristonSmaa _smaa;
     private RenderTarget2D _ldrTarget;
     private Texture2D _lutTexture;
@@ -57,6 +59,8 @@ internal sealed class PristonPostProcessor : IDisposable
         _debugParams = _final.Parameters["DebugParams"];
         _mesopicParams = _final.Parameters["MesopicParams"];
         _bloom = new PristonBloom(device, triangle, PristonShaderLibrary.LoadRequired(content, PristonBloom.Asset, log));
+        _depthOfField = new PristonDepthOfField(device, triangle, PristonShaderLibrary.LoadRequired(content, PristonDepthOfField.Asset, log));
+        _fsr = new PristonFsr(device, triangle, PristonShaderLibrary.LoadRequired(content, PristonFsr.Asset, log));
         _smaa = new PristonSmaa(device, triangle, PristonShaderLibrary.LoadRequired(content, PristonSmaa.Asset, log));
         Exposure = new PristonAutoExposure(device, PristonShaderLibrary.LoadRequired(content, PristonAutoExposure.Asset, log));
     }
@@ -85,7 +89,13 @@ internal sealed class PristonPostProcessor : IDisposable
         Profiler?.End(RenderSection.Exposure);
 
         var bloomStrength = BloomStrength(settings.Bloom);
+        // Depth of field needs the pre-pass depth; it is timed with the bloom section.
         Profiler?.Begin(RenderSection.Bloom);
+        if (settings.DepthOfField && frame.Depth is not null)
+        {
+            scene = _depthOfField.Run(scene, frame.Depth, frame.FocusDistance, settings.DepthOfFieldStart, settings.DepthOfFieldEnd, settings.DepthOfFieldRadius);
+        }
+
         if (bloomStrength > 0f)
         {
             _bloom.Run(scene);
@@ -93,10 +103,16 @@ internal sealed class PristonPostProcessor : IDisposable
 
         Profiler?.End(RenderSection.Bloom);
 
-        var filter = settings.AntiAliasing is AntiAliasingMode.Fxaa or AntiAliasingMode.Smaa;
+        // A scaled scene goes through the upscaler instead of FXAA or SMAA, which take the image at the display's size.
+        var filter = !frame.Upscale && settings.AntiAliasing is (AntiAliasingMode.Fxaa or AntiAliasingMode.Smaa);
         Profiler?.Begin(RenderSection.DisplayTransform);
         var viewport = frame.Viewport;
-        if (filter)
+        if (frame.Upscale)
+        {
+            EnsureLdr(scene.Width, scene.Height);
+            _device.SetRenderTarget(_ldrTarget);
+        }
+        else if (filter)
         {
             EnsureLdr(viewport.Width, viewport.Height);
             _device.SetRenderTarget(_ldrTarget);
@@ -112,13 +128,21 @@ internal sealed class PristonPostProcessor : IDisposable
         _lut.SetValue(_lutTexture);
         _exposureState.SetValue(Exposure.State);
         _sourceRect.SetValue(frame.SourceRect);
-        _screenParams.SetValue(new Vector4(scene.Width, scene.Height, _frame++ % 64, settings.EffectiveSharpening));
+        _screenParams.SetValue(new Vector4(scene.Width, scene.Height, _frame++ % 64, frame.Upscale ? 0f : settings.EffectiveSharpening));
         _toneParams.SetValue(new Vector4((float)settings.Tonemapper, settings.ColorGrading ? 1f : 0f, bloomStrength, fixedMultiplier));
         _debugParams.SetValue(new Vector4(frame.DebugExposure ? 1f : 0f, 1f / frame.Exposure.PreExposure, 0f, 0f));
         _mesopicParams.SetValue(new Vector4(frame.Exposure.NightHue == Vector3.Zero ? Vector3.One : frame.Exposure.NightHue, 0f));
         _final.CurrentTechnique = _tonemap;
         _triangle.Draw(_final);
         Profiler?.End(RenderSection.DisplayTransform);
+
+        if (frame.Upscale)
+        {
+            Profiler?.Begin(RenderSection.PostAntiAliasing);
+            _fsr.Apply(_ldrTarget, viewport.Width, viewport.Height, MathHelper.Clamp(settings.EffectiveSharpening, 0f, 1f), bindOutput);
+            Profiler?.End(RenderSection.PostAntiAliasing);
+            return;
+        }
 
         if (!filter)
         {
@@ -214,6 +238,8 @@ internal sealed class PristonPostProcessor : IDisposable
     public void Dispose()
     {
         _bloom.Dispose();
+        _depthOfField.Dispose();
+        _fsr.Dispose();
         _smaa.Dispose();
         Exposure.Dispose();
         _ldrTarget?.Dispose();
@@ -230,7 +256,11 @@ internal sealed record PristonPostSettings(
     bool ColorGrading,
     string ColorGradingLut,
     float Sharpening,
-    bool AutoExposure)
+    bool AutoExposure,
+    bool DepthOfField = false,
+    float DepthOfFieldStart = PristonDepthOfField.DefaultStart,
+    float DepthOfFieldEnd = PristonDepthOfField.DefaultEnd,
+    float DepthOfFieldRadius = PristonDepthOfField.DefaultRadius)
 {
     public static PristonPostSettings From(ClientSettings settings) => new(
         settings.AntiAliasing,
@@ -239,7 +269,11 @@ internal sealed record PristonPostSettings(
         settings.ColorGrading,
         settings.ColorGradingLut,
         settings.Sharpening,
-        settings.AutoExposure);
+        settings.AutoExposure,
+        settings.DepthOfField,
+        settings.DepthOfFieldStart,
+        settings.DepthOfFieldEnd,
+        settings.DepthOfFieldRadius);
 
     public float EffectiveSharpening => AntiAliasing == AntiAliasingMode.Taa
         ? MathF.Min(1f, Sharpening + PristonTemporalAntiAliasing.CompensatingSharpening)
@@ -254,4 +288,7 @@ internal readonly record struct PristonPostFrame(
     Vector4 SourceRect,
     Viewport Viewport,
     float DeltaSeconds,
-    bool DebugExposure);
+    bool DebugExposure,
+    Texture2D Depth = null,
+    float FocusDistance = 0f,
+    bool Upscale = false);

@@ -35,7 +35,6 @@ public sealed class HudHelpWindow(HudTextFiles texts, Action<string> requestArt)
     private static readonly Color TitleColor = HudTextColors.HelpText;
     private static readonly Color Highlight = HudTextColors.Marked;
     // The footer: OK in its plate, and on the guide pages the list link, the notice label and the On/Off switch.
-    private static readonly Point OkPlateAt = new(392, 361);
     public static readonly Rectangle OkButton = HudPainter.HelpBoxOk(BoxX, BoxY, SizeW, SizeH);
     private static readonly Rectangle ListLink = new(234, 359, 85, 32);
     private static readonly Point ListLabelAt = new(255, 359);
@@ -204,10 +203,9 @@ public sealed class HudHelpWindow(HudTextFiles texts, Action<string> requestArt)
         painter.Sprite(HudHelpArt.HelpLabel, HelpIconAt.X + 30, HelpIconAt.Y);
         painter.Sprite(!help || GuideLink.Contains(pointer) ? HudHelpArt.GuideIcon : HudHelpArt.GuideIconGrey, GuideIconAt.X, GuideIconAt.Y);
         painter.Sprite(HudHelpArt.GuideLabel, GuideIconAt.X + 35, GuideIconAt.Y);
-        painter.Sprite(HudArt.HelpTitle, Title.X, Title.Y);
+        painter.TitlePlate(Title);
         painter.TextCentered(help ? "H E L P" : "G  U  I  D  E", Title.Left, Title.Right, Title.Y + 7, TitleColor);
-        painter.Sprite(HudArt.HelpButton, OkPlateAt.X, OkPlateAt.Y);
-        painter.Sprite(OkButton.Contains(pointer) ? HudArt.OkYellow : HudArt.OkGray, OkButton.X, OkButton.Y);
+        painter.OkButton(OkButton, OkButton.Contains(pointer));
         if (!help)
         {
             painter.Sprite(HudHelpArt.NoticeLabel, NoticeLabelAt.X, NoticeLabelAt.Y);

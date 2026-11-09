@@ -109,6 +109,18 @@
 /processorParam:DebugMode=Auto
 /build:Shaders/Passes/PostBloom.fx;Effects/PostBloom.fx
 
+#begin Shaders/Passes/PostDepthOfField.fx
+/importer:EffectImporter
+/processor:SpirvEffectProcessor
+/processorParam:DebugMode=Auto
+/build:Shaders/Passes/PostDepthOfField.fx;Effects/PostDepthOfField.fx
+
+#begin Shaders/Passes/PostFsr.fx
+/importer:EffectImporter
+/processor:SpirvEffectProcessor
+/processorParam:DebugMode=Auto
+/build:Shaders/Passes/PostFsr.fx;Effects/PostFsr.fx
+
 #begin Shaders/Passes/PostFinal.fx
 /importer:EffectImporter
 /processor:SpirvEffectProcessor

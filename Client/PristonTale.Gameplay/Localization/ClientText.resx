@@ -310,6 +310,12 @@ go on to the high tower.</value></data>
   <data name="Game.GateNotAtStone" xml:space="preserve"><value>Stand on the warp gate first</value></data>
   <data name="Game.GateNotReached" xml:space="preserve"><value>Your wing does not reach this gate</value></data>
   <data name="Game.GateRefused" xml:space="preserve"><value>The warp gate refused</value></data>
+  <data name="Game.ExperienceGained" xml:space="preserve"><value>&gt; Gained {0} experience!</value></data>
+  <data name="Game.GoldGained" xml:space="preserve"><value>&gt; Gained {0} Gold!</value></data>
+  <data name="Game.ItemGained" xml:space="preserve"><value>&gt; Gained {0}!</value></data>
+  <data name="Game.MemberItemGained" xml:space="preserve"><value>&gt; {0} gained {1}!</value></data>
+  <data name="Game.PartyExperienceGained" xml:space="preserve"><value>&gt; Gained {0} experience [{1}% / {2}] in the party!</value></data>
+  <data name="Game.PartyGoldGained" xml:space="preserve"><value>&gt; {0} party members gained {1} Gold!</value></data>
   <data name="Game.GoldLimit" xml:space="preserve"><value>Exceeds maximum amount of gold in possession</value></data>
   <data name="Game.GravityStoneUsed" xml:space="preserve"><value>You used a Gravity Stone</value></data>
   <data name="Game.HestianLost" xml:space="preserve"><value>You lost to Hestian.</value></data>
@@ -687,7 +693,6 @@ go on to the high tower.</value></data>
   <data name="Settings.Clouds.Off" xml:space="preserve"><value>off</value></data>
   <data name="Settings.Frequency" xml:space="preserve"><value>Frequency: {0} Hz (0 = automatic)</value></data>
   <data name="Settings.FrequencyDesktop" xml:space="preserve"><value>Frequency: desktop</value></data>
-  <data name="Settings.Hint" xml:space="preserve"><value>Click: next   Shift+click: previous</value></data>
   <data name="Settings.Language" xml:space="preserve"><value>Language: {0}</value></data>
   <data name="Settings.MaxFps" xml:space="preserve"><value>Maximum FPS: {0}</value></data>
   <data name="Settings.MaxFpsUnlimited" xml:space="preserve"><value>Maximum FPS: unlimited</value></data>
@@ -710,14 +715,20 @@ go on to the high tower.</value></data>
   <data name="Settings.ShadowAnimationEveryFrame" xml:space="preserve"><value>Shadow animation: every frame</value></data>
   <data name="Settings.ShadowsOff" xml:space="preserve"><value>Shadows: off</value></data>
   <data name="Settings.ShadowsOn" xml:space="preserve"><value>Shadows: on</value></data>
+  <data name="Settings.DepthOfFieldOff" xml:space="preserve"><value>Depth of field: off</value></data>
+  <data name="Settings.DepthOfFieldOn" xml:space="preserve"><value>Depth of field: on</value></data>
+  <data name="Settings.RenderScale" xml:space="preserve"><value>FSR render scale: {0}%</value></data>
+  <data name="Settings.DynamicResolutionOff" xml:space="preserve"><value>Dynamic resolution: off</value></data>
+  <data name="Settings.DynamicResolution" xml:space="preserve"><value>Dynamic resolution: hold {0} FPS</value></data>
   <data name="Settings.SkyClassic" xml:space="preserve"><value>Sky: classic</value></data>
   <data name="Settings.SkyRealistic" xml:space="preserve"><value>Sky: realistic</value></data>
   <data name="Settings.SoundOff" xml:space="preserve"><value>Audio: off</value></data>
   <data name="Settings.SoundOn" xml:space="preserve"><value>Audio: on</value></data>
   <data name="Settings.SunShadow" xml:space="preserve"><value>Sun shadow: {0}</value></data>
+  <data name="Settings.TargetFrameNew" xml:space="preserve"><value>Target frame: new (top centre)</value></data>
+  <data name="Settings.TargetFrameClassic" xml:space="preserve"><value>Target frame: classic</value></data>
   <data name="Settings.TargetHealthAlways" xml:space="preserve"><value>Target HP: always, with percentage</value></data>
   <data name="Settings.TargetHealthClassic" xml:space="preserve"><value>Target HP: classic (after first hit)</value></data>
-  <data name="Settings.Title" xml:space="preserve"><value>Settings</value></data>
   <data name="Settings.VSyncOff" xml:space="preserve"><value>VSync: off</value></data>
   <data name="Settings.VSyncOn" xml:space="preserve"><value>VSync: on</value></data>
   <data name="Settings.WeatherOff" xml:space="preserve"><value>Weather: off</value></data>
@@ -887,15 +898,49 @@ go on to the high tower.</value></data>
   <data name="Status.SavingAndDisconnecting" xml:space="preserve"><value>Saving and disconnecting…</value></data>
   <data name="Status.SkillDelay" xml:space="preserve"><value>Skills recharge in half a second</value></data>
   <data name="Status.StaminaBooster" xml:space="preserve"><value>Raises stamina by {0}%</value></data>
-  <data name="TeleportCore.Page" xml:space="preserve"><value>[Teleport Core - Page {0}]</value></data>
-  <data name="TeleportCore.Row" xml:space="preserve"><value>{0}. {1} (Lvl {2})</value></data>
-  <data name="TeleportCore.Title" xml:space="preserve"><value>TELEPORT</value></data>
   <data name="Time.Days" xml:space="preserve"><value>{0} days</value></data>
   <data name="Time.Hours" xml:space="preserve"><value>{0} hours</value></data>
   <data name="Time.OneDay" xml:space="preserve"><value>1 day</value></data>
   <data name="Time.OneHour" xml:space="preserve"><value>1 hour</value></data>
   <data name="Time.Seconds" xml:space="preserve"><value>{0}sec</value></data>
   <data name="Trade.Gold" xml:space="preserve"><value>do you wanna trade?</value></data>
+  <data name="Party.Confirm.Delegate" xml:space="preserve"><value>Make this player the party leader?</value></data>
+  <data name="Party.Confirm.Disband" xml:space="preserve"><value>Disband the party?</value></data>
+  <data name="Party.Confirm.Kick" xml:space="preserve"><value>Expel this player from the party?</value></data>
+  <data name="Party.Confirm.Leave" xml:space="preserve"><value>Leave the party?</value></data>
+  <data name="Party.Menu.Delegate" xml:space="preserve"><value>Delegate</value></data>
+  <data name="Party.Menu.Disband" xml:space="preserve"><value>Disband</value></data>
+  <data name="Party.Menu.Kick" xml:space="preserve"><value>Kick</value></data>
+  <data name="Party.Menu.Leave" xml:space="preserve"><value>Leave</value></data>
+  <data name="Party.Fold" xml:space="preserve"><value>Hide/Show Party</value></data>
+  <data name="Social.Add" xml:space="preserve"><value>Add a friend</value></data>
+  <data name="Social.Blocked" xml:space="preserve"><value>Blocked list</value></data>
+  <data name="Social.Friends" xml:space="preserve"><value>Friend list</value></data>
+  <data name="Social.Recent" xml:space="preserve"><value>Recent list</value></data>
+  <data name="Game.RaidRequested" xml:space="preserve"><value>Raid request sent to {0}</value></data>
+  <data name="Game.RaidNotLeaders" xml:space="preserve"><value>A raid is formed between party leaders</value></data>
+  <data name="Game.RaidFull" xml:space="preserve"><value>A party is already in a raid</value></data>
+  <data name="Game.RaidFormed" xml:space="preserve"><value>The raid has formed</value></data>
+  <data name="Game.RaidEnded" xml:space="preserve"><value>The raid has ended</value></data>
+  <data name="Game.PartyModeNormal" xml:space="preserve"><value>The party changed to Normal mode</value></data>
+  <data name="Game.PartyModeExp" xml:space="preserve"><value>The party changed to EXP mode</value></data>
+  <data name="Game.PartyModeHunt" xml:space="preserve"><value>The party changed to Hunt mode</value></data>
+  <data name="Party.RaidRequest" xml:space="preserve"><value>asks your party to form a raid</value></data>
+  <data name="Party.Mode.Normal" xml:space="preserve"><value>Normal mode</value></data>
+  <data name="Party.Mode.Exp" xml:space="preserve"><value>EXP mode: more experience, fewer drops</value></data>
+  <data name="Party.Mode.Hunt" xml:space="preserve"><value>Hunt mode: more drops, less experience</value></data>
+  <data name="Party.Menu.Mode" xml:space="preserve"><value>Change Mode</value></data>
+  <data name="Party.Menu.LeaveRaid" xml:space="preserve"><value>Leave Raid</value></data>
+  <data name="Party.Confirm.Mode" xml:space="preserve"><value>Change the party mode?</value></data>
+  <data name="Party.Confirm.LeaveRaid" xml:space="preserve"><value>Leave the raid?</value></data>
+  <data name="TeleportCore.Bosses" xml:space="preserve"><value>BOSS TIMER</value></data>
+  <data name="TeleportCore.MapLevel" xml:space="preserve"><value>Map Level: {0}</value></data>
+  <data name="TeleportCore.MapType" xml:space="preserve"><value>Map Type:</value></data>
+  <data name="TeleportCore.NoBosses" xml:space="preserve"><value>No bosses are scheduled.</value></data>
+  <data name="TeleportCore.Tag.Exp" xml:space="preserve"><value>EXP</value></data>
+  <data name="TeleportCore.Tag.Pvp" xml:space="preserve"><value>PVP</value></data>
+  <data name="TeleportCore.Tag.Town" xml:space="preserve"><value>TOWN</value></data>
+  <data name="TeleportCore.Teleport" xml:space="preserve"><value>TELEPORT</value></data>
   <data name="Usable.AgingArmlet" xml:space="preserve"><value>armlet</value></data>
   <data name="Usable.AgingArmor" xml:space="preserve"><value>armor or robe</value></data>
   <data name="Usable.AgingBoots" xml:space="preserve"><value>boots</value></data>

@@ -170,9 +170,9 @@ Described in Etervale's terms; readers keep every field, including padding, for 
 | - | effects | caller | Rain (`PristonRain`), then particles, VFX, mesh effects into the bound HDR scene. |
 | 16 | `Temporal` | TAA | Resolve into history (`ComposeScene`). |
 | 17 | `Exposure` | auto exposure | Histogram and adaptation, no read-back. |
-| 18 | `Bloom` | bloom not `Off` | Six-level pyramid. |
+| 18 | `Bloom` | bloom not `Off`, or depth of field | First the far depth of field (`Post/PristonDepthOfField`, `depthOfField` on and the pre-pass ran: a 22-tap disc whose radius grows from 700 to 4200 units behind the focus, up to 7 px at 1080p), then the six-level pyramid. |
 | 19 | `DisplayTransform` | always | Final pass into the caller's target (or an 8-bit target for FXAA/SMAA). |
-| 20 | `PostAntiAliasing` | FXAA or SMAA | Filter into the caller's target. |
+| 20 | `PostAntiAliasing` | FXAA or SMAA, or a scaled scene | Filter into the caller's target; a scene below the display's size (`renderScale`, dynamic resolution; back buffer only) skips FXAA and SMAA and is upscaled by `Post/PristonFsr` (edge-adaptive upsampling, then sharpening). |
 
 Mode switches: `Taa` and `Msaa` are exclusive; MSAA (2-4 samples) disables the pre-pass and therefore AO, contact
 shadows, SSR, volumetric light, soft particles and depth-bounded tiles. `Overdraw` disables TAA, the pre-pass, the sky

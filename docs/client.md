@@ -398,7 +398,8 @@ destination. Renderer side of stage publication: [rendering.md](rendering.md).
 | `J` | `GameplayHud.UpdateKeys` | Open or close the stable (`HudPetWindow`: pets and mounts) |
 | `G` | `GameplayHud.UpdateKeys` | Get on or off the picked mount (sends `/mount`) |
 
-The Cabinet (`HudCabinet`, the U key or the `Cabinet` service of Knight Commander Derik) sells every worn-gear look for coins to the
+The Cabinet (`HudCabinet`, the U key or the `Cabinet` service of Knight Commander Derik; drawn in `HudPteuWindow`'s style with its
+title plate and CLOSE button) sells every worn-gear look for coins to the
 account (`SkinRules`, `SkinAppService`); the preview is `GameScene.PreviewLook`, and it lists and shows only looks of the worn item family and grip that the class can wear, plus the costumes of `Characters/Data/Costumes.json` (body files by class) , hair tints and numbered class heads (the `Hair` slot, `CharacterHead.CustomHair`; shown over the character's own hair while chosen) and its `gear` looks (weapons and off-hand items with a model but no world item; `like` names the item a CW look stands for).
 
 The Item Distributor (`HudItemBox`) opens instead of a server request when an NPC's `GiftExpress` service is chosen
@@ -530,16 +531,38 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
 - Minimap (`HudMinimap`): the field map around the player with NPC dots, other players in view as small blue squares
   (`HudCombat.CollectMapMarkers`) and the other party members as the party mark (`GameplayHud.CollectMinimapMarkers`;
   a member is not also marked as a player). The marker under the pointer shows its name beside it (NPCs yellow, party
-  green, players blue; `HudMinimap.MarkerAt`), drawn after the windows. A left press on the box or its title strip that
-  moves more than 3 pixels drags the map (not while a modal, the settings, a carried item or a lifted action bar
-  shortcut is open), kept on screen with its title; how far it was moved (`HudMinimap.Offset`) is saved with the
-  character's action bar (`MapX`, `MapY`).
+  green, players blue; `HudMinimap.MarkerAt`), drawn after the windows. A left press that moves more than 3 pixels
+  (not while a modal, the settings, a carried item or a lifted action bar shortcut is open) acts by where it started:
+  - on the title strip, it drags the map, kept on screen with its title; how far it was moved (`HudMinimap.Offset`) is
+    saved with the character's action bar (`MapX`, `MapY`);
+  - on the map, it pans the view (`HudMinimap.Pan`, at most 16,000 units from the player) as if the map were dragged
+    under the pointer. The player's arrow stays on the player and hides once outside the box.
+
+  A press outside the map, switching its size or changing fields recentres it on the player.
   Over the field title, a field with scheduled bosses shows `Next boss: <name> hh:mm:ss` (`HudBossTime`), counted down
   on the client from the server's `BossTime` (sent once per pass, kept in `GameScene.NextBoss`); `now` once the pass is
   due until the server sends the next, `tomorrow` for a pass on a later day.
   Each boss of the field shows at its spot (the server's `BossSpots`, kept in `GameScene.BossSpots`) as a 16-pixel skull:
   `Hud/Minimap/boss-inactive.png` (grey) until it is alive, `Hud/Minimap/boss-active.png` (red) while it is; hovering
   shows its name.
+  Icons (`Hud/Minimap/`, `HudMinimap.Art`): an NPC with a quest mark shows the quest's start, repeatable, progress or
+  finish icon (`HudQuestBook.FillMarks`). Otherwise it shows the icon of its first service, from `HudCombat.NpcMapIcon`:
+  - warp gate or teleporter: warp
+  - warehouse
+  - aging, mixing, smelting, manufacture or mixture reset: craft
+  - skill master
+  - shop: an anvil when the keeper's name says weapon, armor, defense or smith, the magic shop for magic or
+    witchcraft, the supply bag otherwise
+
+  An NPC with none of these keeps the dot. Clan mates show `friendly.png`, other players `player.png`. The field's
+  active monster spawn points (the server's `SpawnSpots`, sent once per field and kept in `GameScene.SpawnSpots`) show
+  as 4-pixel dots under every other marker; they have no name.
+  A field with a sharper map in `assets/Field/mapHD/<field>.png` (`HudArt.FieldMapHd`) draws that instead of
+  `Field/map/<field>.tga` once it is loaded. It covers the same area, so the same map rectangle places it. These
+  maps are the fields drawn from straight above with the game's renderer (`--render-minimaps`,
+  [testing.md](testing.md)), 2048 pixels on the longer side.
+  `N` switches to the large map (`HudMinimap.Large`): a 384-pixel box that grows up and left from the small box's
+  bottom-right corner, in `border_large.png`, and shows half again as far.
   A skull button left of the map's title (`HudBossList`) opens a window beside the map listing every scheduled boss of
   the world (the server's `BossList`, kept in `GameScene.BossList`): boss, field and the time to its next pass (`now`,
   `tomorrow`), soonest first, counted down from the list's arrival; the wheel scrolls it, the button, its `x` or Escape
@@ -765,7 +788,13 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   hovered entity. The frame stays after an attack is cancelled and closes when the entity is removed or has been dead
   for 0x50 frames at 70 Hz. With `classicTargetHealthBar` false (default) the bar shows with level and life
   percentage; when true the bar shows without numbers, only after the local player started attacking that monster at
-  full life.
+  full life. With `classicTargetFrame` false (default, the settings' "Target frame") the frame is the 301x80 bar at the
+  top centre (`HudCombat.TargetBar.cs`, art in `assets/Hud/Target/`). It shows the level in the ring (a player's tens
+  only, "12x"), the race, NPC or player icon, and the name over the life bar. It also shows current/maximum life on the
+  bar, the percentage at its right end, the distance in units and metres (27 units a metre) and, for a player in a clan,
+  a strip with its mark and clan name. The life always shows there; `classicTargetHealthBar` applies to the classic
+  frame only. It has no 3D portrait, and the player buttons hang under it. When true, the
+  frame is the classic `cw.tga` box with the portrait at the right.
 - Name boxes over the scene (`HudCombat.DrawNamePlates`, drawn right after the drop names in `GameplayHud.Draw`, at
   the speech bubbles' head point): an NPC's name always within 768 units of the camera (180, 180, 255, as in the chat);
   a monster's only while hovered or the clicked target (`TargetSelection.HoveredId`, `TracedId`), in (255, 210, 210),
@@ -841,17 +870,22 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   window (its button, Escape, another service window) cancels the trade; the server's end closes it without a cancel.
   Offered items keep their bag cells (`Withheld`), and the player is held while the window shows.
 - Party (`UI/Parties/`, art `HudPartyArt`; `GameplayHud.Parties.cs`, `GameScene.Parties.cs` as `IPartyClient`):
-  - The party page (`HudPartyWindow`, D or the bar's party button) stands where the quest page does, so one closes the
-    other; it opens when a party forms and closes when it is released. Members go down from (80, 38) at 30 px steps
+  - The party page (`HudPartyWindow`) no longer opens from a key or the bar: O and the bar's party button open the Social window, and
+    the party frames replace it. It still holds the friends and clan page data the Social window reads. Members go down from (80, 38) at 30 px steps
     with the life bar (94 px), the mark (the leader's own) and the level in tens past 10 (`L4x`); a click picks a
     member for delegate and kick, a double click whispers to it. Delegate, disband and kick work for the leader, leave
     for any member, close always.
+  - The party frames (`HudPartyFrames`, art `assets/Hud/Party/`) stand down the left of the screen while there is a party: each member's
+    class picture (dark while dead), level, name, life and mana bars, the leader crowned, faded past `PartyLimits.NearRange`. Dragging a frame moves the column, saved with the action bar (`PartyX`, `PartyY`). The icon beside the arrow shows the party mode and the raid's other party
+    is listed beside the column, with a raid crown on the raid leader. The arrow
+    over them folds them. A right click on a frame opens its menu (Delegate and Kick on a member, Disband and Leave on the leader's own
+    for the leader; Leave on your own for a member), and each choice asks yes or no first.
   - The request box (`HudRequestBox` with `HudPartyArt.Request`, the trade's too) at (513, 3) blinks, answers once from
     OK or cancel and closes after 20 s; a request is not shown while the warehouse is open.
   - A click on another player (not selling) approaches it as an NPC; once reached, its portrait shows the trade, party
     and friend buttons (`HudPlayerButtons`, on `cw-1.tga`) instead of the life bar while it stays the target within
     `TradeLimits.Reach`; the hovered button's tip shows 60 px to its left and 18 px below it, clear of the cursor. Trade asks it to trade, party to group; friend puts it on the friends list and opens the
-    friends page there. A clan chief or vice chief beside a player without a clan also gets the clan invitation
+    Social window on that list. A clan chief or vice chief beside a player without a clan also gets the clan invitation
     (`icon_clan.bmp`, tip `ButtonInfo-c10.bmp`): the box widens to 120 px and the four buttons start 10 px further left.
   - Clans (`GameplayHud.Clans.cs`, `GameScene.Clans.cs`): an invitation opens the party's request box (30 s) with the
     chief's name and "invites you to the clan ..."; OK accepts, cancel refuses. The Clan Master's "Clan" service opens
@@ -879,8 +913,27 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
     clan's for the chief, the vice's own, a figure for a member) and the name 35 px on, grey while offline. A click picks
     a member (green), a double click whispers to an online one (red, with the whisper mark); the chat button at (86, 220)
     opens the chat on its clan tab (`HudChatWindow.TalkOn`), close at (201, 220). Leaving the clan leaves the page.
+  - The Social window (`HudSocialWindow`, O, art `assets/Hud/Social/`) shows the same contact lists as the friends page. Its Friends tab
+    has recent, blocked and friend lists (11 rows, wheel), each row with block and remove buttons, and the add button makes the picked
+    recent player a friend; its Clan tab lists the members. A click picks a name, a double click whispers to it.
   - Members show on the minimap (`image/party.tga`, red past `PartyLimits.NearRange`), in name boxes with their life
     bar and in the bubbles' party colour.
+
+## RPT-style main screen
+
+The chat box (`HudChatWindow`, art `assets/Hud/Chat/`) and the action bar (`HudActionBar`, art `assets/Hud/ActionBar/`) use the RPT layouts. The chat box is 295x218 at the bottom left: the
+All, Clan, Party, Trade and PM tabs, a notice button that cycles chat only, the notice lines over the chat (split at the divider) and the notice page, and the input line with its send button.
+The action bar is 424x96 with nine by two 41-pixel slots, three page tabs, lock, turn and close buttons; turned, it is 96x424. Dragging any part of it that is not a slot or button moves it.
+
+The Settings window (`HudSettingsPanel`, art `assets/Hud/Settings/`) has four tabs (Video, Audio, General, UI) and one dropdown per option; a choice applies at once, Shift+click steps an option back, and Reset returns to the values at opening.
+The windows drawn with `HudPainter.HelpBox` (NPC dialogs, quests, help, settings, clans, castle and Bellatra pages, the wing gate) use the RPT frame, title plate and OK button (`assets/Hud/Window/`), and text fields `HudPainter.InputBox` (same folder).
+Every confirmation and count box uses `HudMessageBox` (art `assets/Hud/MessageBox/`), every tooltip `HudPainter.InfoBox` (art `assets/Hud/Tooltip/`), and the party frames' menu the art of `assets/Hud/Menu/`.
+
+## Graphics tuning panel
+
+F12 opens `HudTuningPanel`, over the HUD: sliders, switches and lists for the rendering settings (exposure, render scale, depth of field, anti-aliasing, tonemapper, fog, debug
+views, shadows, reflections and more), applied live through `PresentationSettings.Requested` and saved like the settings window. A slider applies at most every 0.15 s while
+dragged. Revert returns to the values at opening. Any change marks the quality preset as `Custom`.
 
 ## Audio
 

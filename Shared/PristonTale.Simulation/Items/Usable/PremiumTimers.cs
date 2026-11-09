@@ -95,6 +95,9 @@ public sealed class PremiumTimers
     public static bool PausesOffline(PremiumEffectKind kind) => kind is PremiumEffectKind.LifeBooster or PremiumEffectKind.ManaBooster
         or PremiumEffectKind.StaminaBooster or PremiumEffectKind.SkillDelay;
 
+    // The towns where personal timers stand still while the character is in them.
+    public static bool PausesInField(int fieldCode) => fieldCode is World.FieldCodes.Ricarten or World.FieldCodes.Pillai;
+
     public static bool IsVampiric(PremiumEffectKind kind) => kind is PremiumEffectKind.VampiricCuspid or PremiumEffectKind.VampiricCuspidEx;
 
     public bool IsRunning(PremiumEffectKind kind, long nowSeconds) => Find(kind) is { } timer && timer.ExpiresAtSeconds > nowSeconds;
@@ -151,6 +154,22 @@ public sealed class PremiumTimers
         _timers.RemoveAll(timer => timer.Kind == kind);
         _timers.Add(new PremiumTimer(kind, value, durationSeconds, nowSeconds + durationSeconds));
         Touch();
+    }
+
+    // Called before Expire while the character is in a town where the timers stand still: every expiry moves on by the
+    // time since the last pass, so the time left holds.
+    public void Hold(long nowSeconds)
+    {
+        var elapsed = nowSeconds - ClockSeconds;
+        if (ClockSeconds == 0 || elapsed <= 0)
+        {
+            return;
+        }
+
+        for (var index = 0; index < _timers.Count; index++)
+        {
+            _timers[index] = _timers[index] with { ExpiresAtSeconds = _timers[index].ExpiresAtSeconds + elapsed };
+        }
     }
 
     // Drops the timers whose expiry passed; true when one ended.

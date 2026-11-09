@@ -29,6 +29,13 @@ public sealed class HudBossList
 
     public bool Open { get; private set; }
 
+    public int Count => _list.Count;
+
+    public BossListInfo this[int index] => _list[index];
+
+    // A boss's time to its next pass as the list shows it, counted down from the list's arrival.
+    public string NextText(int index, double nowMs) => Time(index, _list[index], (long)((nowMs - _receivedMs) / 1000d));
+
     public void Receive(IReadOnlyList<BossListInfo> list, double nowMs)
     {
         if (ReferenceEquals(list, _list))

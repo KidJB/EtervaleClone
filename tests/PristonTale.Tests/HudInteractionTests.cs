@@ -31,7 +31,8 @@ internal static class HudInteractionTests
     {
         yield return ("original skill shortcuts bind the held mouse side without selecting on release", ShortcutsAsync);
         yield return ("the action bar takes skills from the skill window and bag items, moves, swaps and drops shortcuts, pages and saves them", ActionBarAsync);
-        yield return ("the minimap moves past a small drag, stays on screen, and names the marker under the pointer", MinimapMoveAsync);
+        yield return ("the minimap moves by its title past a small drag, pans by its map, stays on screen, and names the marker under the pointer",
+            MinimapMoveAsync);
         yield return ("name plate life bars follow the cursor when classic, the click or an attack otherwise; the outline fades", NamePlatesAsync);
         yield return ("UI color keys preserve crimson, metal and opaque world pixels", ColorKeysAsync);
         yield return ("original HUD uses the largest integer scale and the 800x600 bottom/right anchors", LayoutAsync);
@@ -51,12 +52,14 @@ internal static class HudInteractionTests
         yield return ("a ground item picked up with the window open comes to the cursor, and goes where any item goes with it closed", PickupToCursorAsync);
         yield return ("the pointer attacks over wild monsters, talks over NPCs and stays the arrow elsewhere", CursorKindAsync);
         yield return ("drop names on one spot rise into a column above the nearest, which keeps its place", DropNameColumnAsync);
+        yield return ("the settings tabs list every option once; a dropdown applies its choice and reset returns to the values at opening", SettingsWindowAsync);
         yield return ("the settings offer only the monitor's sizes: all in fullscreen, those that fit in a window, none borderless", ResolutionsAsync);
         yield return ("a carried item lands where the original sets it: free cells, one item to exchange, a potion to join, a slot of its kind", PlacementAsync);
         yield return ("original gauges crop bitmaps from the top and follow the source formulas", GaugeAsync);
         yield return ("atlas gauge separation preserves the frame and masks every rectangular corner", AtlasGaugeAsync);
         yield return ("HUD overlays tolerate uninitialized and tiny resized viewports", OverlayAsync);
         yield return ("bottom windows slide with the original 70 Hz steps", SlideAsync);
+        yield return ("the tuning panel drags a slider, flips a switch and reverts to the values it opened with", TuningPanelAsync);
         yield return ("minimap crops the field map around the player like the original", MinimapAsync);
     }
 
@@ -160,7 +163,7 @@ internal static class HudInteractionTests
             && HudSettingsPanel.Box.Contains(HudSettingsPanel.Row(15)), "settings rows escaped the help box");
         AssertDisjointInside([HudMessageBox.Accept, HudMessageBox.Reject], HudMessageBox.Bounds, "message box buttons");
         HudMessageBox.Place(HudLayout.Create(1920, 1080));
-        Assert.True(HudMessageBox.Bounds == new Rectangle(876, 478, HudMessageBox.VisibleWidth, HudMessageBox.Height) && HudMessageBox.Bounds.Contains(HudMessageBox.Accept)
+        Assert.True(HudMessageBox.Bounds == new Rectangle(845, 459, HudMessageBox.VisibleWidth, HudMessageBox.Height) && HudMessageBox.Bounds.Contains(HudMessageBox.Accept)
             && HudMessageBox.Bounds.Contains(HudMessageBox.Reject), "the message box is not centred on a wide screen, or its buttons stayed behind");
         var layout = HudLayout.Create(800, 600);
         HudMessageBox.Place(layout);
@@ -412,6 +415,36 @@ internal static class HudInteractionTests
             "a stored potion joined a bag stack");
         Assert.True(HudInventoryPlacement.OfStored(origin, items, kept, new Point(bag.X + 9 * 22 + 22, bag.Y + 3 * 22 + 33)).Kind == HudPlacementKind.Fits,
             "a stored item found no free bag cells");
+        return Task.CompletedTask;
+    }
+
+    private static Task SettingsWindowAsync()
+    {
+        var listed = HudSettingsPanel.ListedRows().Order().ToArray();
+        Assert.True(listed.SequenceEqual(Enumerable.Range(0, HudSettingsPanel.OptionRows)), "an option has no place, or two, in the settings tabs");
+
+        var presentation = new PresentationSettings();
+        var panel = new HudSettingsPanel(presentation);
+        panel.Opened();
+        var music = presentation.Requested.MusicEnabled;
+        var audioTab = new Point(HudSettingsPanel.BoxX + 70, HudSettingsPanel.BoxY + 90);
+        var resetButton = new Point(HudSettingsPanel.BoxX + 70, HudSettingsPanel.BoxY + 385);
+
+        panel.Click(audioTab, false);
+        panel.Click(HudSettingsPanel.Row(1).Center, false);
+        Assert.True(presentation.Requested.MusicEnabled == music, "opening a dropdown changed its option");
+        panel.Click(panel.OptionBounds(1).Center, false);
+        Assert.True(presentation.Requested.MusicEnabled != music, "a dropdown's choice was not applied");
+
+        panel.Click(HudSettingsPanel.Row(1).Center, false);
+        panel.Click(new Point(HudSettingsPanel.BoxX + 300, HudSettingsPanel.BoxY + 300), false);
+        Assert.True(presentation.Requested.MusicEnabled != music, "a click beside the list changed the option");
+
+        panel.Click(HudSettingsPanel.Row(1).Center, true);
+        Assert.True(presentation.Requested.MusicEnabled == music, "shift+click did not step the option");
+        panel.Click(HudSettingsPanel.Row(1).Center, true);
+        panel.Click(resetButton, false);
+        Assert.True(presentation.Requested.MusicEnabled == music, "reset did not return to the values at opening");
         return Task.CompletedTask;
     }
 
@@ -900,28 +933,66 @@ internal static class HudInteractionTests
         return Task.CompletedTask;
     }
 
+    private static Task TuningPanelAsync()
+    {
+        var layout = HudLayout.Create(800, 600);
+        var settings = new PristonTale.Engine3D.Rendering.PresentationSettings();
+        var panel = new HudTuningPanel(settings);
+        var down = Mouse(left: ButtonState.Pressed);
+        panel.Toggle();
+        // The first row (exposure) lies at the panel's top: its track runs from the label to the value text.
+        var left = layout.Width - 340 - 10 + 8 + 136;
+        var y = 30 + 22 + 9;
+        var track = 340 - 16 - 136 - 66;
+        panel.Update(layout, new Point(left + track - 1, y), down, default, 10);
+        panel.Update(layout, new Point(left + track - 1, y), default, down, 10.1);
+        Assert.True(settings.Requested.ExposureCompensation > 2.8f && panel.Contains(layout, new Point(left, y)), $"the slider did not move: {settings.Requested.ExposureCompensation}");
+        var dofRow = 30 + 22 + 4 * 18 + 9;
+        panel.Update(layout, new Point(left, dofRow), down, default, 11);
+        panel.Update(layout, new Point(left, dofRow), default, down, 11.1);
+        Assert.True(settings.Requested.DepthOfField, "the switch did not flip");
+        panel.Update(layout, new Point(layout.Width - 40, 34), down, default, 12);
+        panel.Update(layout, new Point(layout.Width - 40, 34), default, down, 12.1);
+        Assert.True(settings.Requested.ExposureCompensation == 0f && !settings.Requested.DepthOfField, "revert did not restore the values");
+        return Task.CompletedTask;
+    }
+
     private static Task MinimapMoveAsync()
     {
         var minimap = new HudMinimap();
         var layout = HudLayout.Create(800, 600);
         var home = HudMinimap.Box(layout);
+        var title = new Point(home.Center.X, home.Y - 8);
         var down = Mouse(left: ButtonState.Pressed);
 
         // A press that moves less than the threshold stays a click.
-        minimap.Drag(layout, home.Center, down, default, true);
-        minimap.Drag(layout, home.Center + new Point(2, 2), down, down, true);
-        minimap.Drag(layout, home.Center + new Point(2, 2), default, down, true);
+        minimap.Drag(layout, title, down, default, true);
+        minimap.Drag(layout, title + new Point(2, 2), down, down, true);
+        minimap.Drag(layout, title + new Point(2, 2), default, down, true);
         Assert.True(minimap.Offset == Point.Zero && minimap.Revision == 0, "a click moved the minimap");
 
-        // A drag carries it and counts a move once released.
+        // A drag on the map pans the view against the pointer and leaves the box where it is.
         minimap.Drag(layout, home.Center, down, default, true);
-        minimap.Drag(layout, home.Center - new Point(300, 200), down, down, true);
+        minimap.Drag(layout, home.Center + new Point(32, -16), down, down, true);
+        minimap.Drag(layout, home.Center + new Point(32, -16), default, down, true);
+        var perPixel = minimap.CurrentViewSize / (HudMinimap.SmallSize / 2);
+        Assert.True(minimap.Offset == Point.Zero && minimap.Revision == 0 && minimap.Pan == new Vector2(-32f * perPixel, 16f * perPixel),
+            $"the map drag did not pan the view: {minimap.Pan}");
+
+        // A press outside the box recentres the view on the player.
+        minimap.Drag(layout, new Point(10, 10), down, default, true);
+        minimap.Drag(layout, new Point(10, 10), default, down, true);
+        Assert.True(minimap.Pan == Vector2.Zero, "a press outside the map did not recentre it");
+
+        // A drag on the title strip carries it and counts a move once released.
+        minimap.Drag(layout, title, down, default, true);
+        minimap.Drag(layout, title - new Point(300, 200), down, down, true);
         Assert.True(minimap.Dragging, "the drag did not start");
-        minimap.Drag(layout, home.Center - new Point(300, 200), default, down, true);
+        minimap.Drag(layout, title - new Point(300, 200), default, down, true);
         Assert.True(minimap.Bounds(layout).Location == home.Location - new Point(300, 200) && minimap.Revision == 1, "the drag did not move the map");
 
         // Dragged off screen, it stops at the edge with its title strip in view; a refused press does nothing.
-        minimap.Drag(layout, minimap.Bounds(layout).Center, down, default, true);
+        minimap.Drag(layout, new Point(minimap.Bounds(layout).Center.X, minimap.Bounds(layout).Y - 8), down, default, true);
         minimap.Drag(layout, new Point(-500, -500), down, down, true);
         minimap.Drag(layout, new Point(-500, -500), default, down, true);
         Assert.True(minimap.Bounds(layout).X == 0 && minimap.Area(layout).Y == 0, "the map left the screen");

@@ -85,6 +85,7 @@ public sealed partial class GameplayHud : IDisposable
     private const string AutoSkillArt = "Hud/autoskill.png";
     private readonly HudWorldBuffs _worldBuffs = new();
     private int _savedBuffs;
+    private int _savedParty;
     private readonly HudBossList _bossList = new();
     private readonly HudPetWindow _petWindow = new();
     private readonly HudQuestBook _questBook = new();
@@ -164,7 +165,7 @@ public sealed partial class GameplayHud : IDisposable
         _settings = new HudSettingsPanel(context.Presentation);
         _sprites = new HudSprites(context.GraphicsDevice, context.AssetRoot, context.Log);
         _sprites.Request(HudArt.Static);
-        _sprites.Request([HudMinimap.BossAliveIcon, HudMinimap.BossWaitingIcon, .. Npc.HudArenaEvent.Art, .. Npc.HudCabinet.Art, .. HudWorldBuffs.Art, AutoSkillArt, .. HudQuestBook.Art, .. HudQuestTracker.Art, .. HudPetWindow.Art, .. Inventory.HudItemFrame.Art, Widgets.HudGroundLabels.BeamArt, .. HudCoinShop.Art, .. Npc.HudItemBox.Art]);
+        _sprites.Request([.. HudMinimap.Art, .. Npc.HudArenaEvent.Art, .. Npc.HudCabinet.Art, .. HudWorldBuffs.Art, .. HudCombat.TargetBarArt, AutoSkillArt, .. HudQuestBook.Art, .. HudQuestTracker.Art, .. HudPetWindow.Art, .. Inventory.HudItemFrame.Art, Widgets.HudGroundLabels.BeamArt, .. HudCoinShop.Art, .. Npc.HudItemBox.Art]);
         _arenaEvent.Teleport = () => _ = _chat.Send?.Invoke("/arena enter", false);
         _sprites.Request(HudNpcArt.All);
         _sprites.Request(HudCraftArt.All);
@@ -187,13 +188,13 @@ public sealed partial class GameplayHud : IDisposable
         _portrait = new HudTargetPortrait(context.GraphicsDevice);
         _services = new HudNpcServiceController(requestNpcService, context.Log);
         _prepareField = prepareField;
-        _itemUse = new HudItemUseController(UseItemAsync, context.Log);
+        _itemUse = new HudItemUseController(UseItemAsync, context.Log, _sprites);
         _actionBar = new HudActionBar(_bindings);
         _actionBarStore = new HudActionBarStore(HudActionBarStore.DefaultDirectory, context.Log);
         _bindings.ItemRequested += UseShortcutItem;
         _restart = new HudRestartPanel(context.Log);
         _premium = new HudPremiumTimers(_sprites);
-        _sprites.Request(HudTeleportCore.Art);
+        _sprites.Request(HudPteuWindow.Art);
         _wingGate = new HudWingGate(context.Log);
         _sprites.Request(HudWingGate.Art);
         _inventory.UseRequested = item => _itemUse.Request(item, _state);
@@ -225,6 +226,9 @@ public sealed partial class GameplayHud : IDisposable
         _inventoryPanel.Withheld = id => BenchHolds(id) || _personalShop.Holds(id) || _trade.Holds(id);
         _inventory.ShopRequested = OpenOwnShop;
         _sprites.Request(HudChatWindow.Art);
+        _sprites.Request(HudActionBar.Art);
+        _sprites.Request(HudMessageBox.Art);
+        _sprites.Request(HudSettingsPanel.Art);
         _sprites.Request(HudChatBubbles.Art);
         _chat.Lookup = id => (Combat.KindOf(id, out var owner), owner);
         _helpPet = new HudHelpPet(HelpPetMessages.LoadAsync(context.AssetRoot, context.Log, ClientText.Language), new Random(), context.Log,
@@ -269,6 +273,10 @@ public sealed partial class GameplayHud : IDisposable
 
     // The bosses of the player's field at their spot (grey until alive, red while alive on the minimap).
     public IReadOnlyList<PristonTale.Client.Net.Presence.BossSpotInfo> BossSpots { get; set; } = [];
+    public IReadOnlyList<PristonTale.Client.Net.Presence.SpawnSpotInfo> SpawnSpots { get; set; } = [];
+
+    // The player is in a town where personal premium timers stand still.
+    public bool PremiumPaused { get; set; }
 
     // The local player's pet collection, for the pet window.
     public PristonTale.Client.Net.Presence.PetCollectionInfo PetCollection { get; set; } = new(0, 0);
@@ -532,6 +540,9 @@ public sealed partial class GameplayHud : IDisposable
         _quests.LeaveNpc();
         _questWindow.Close();
         _partyWindow.Close();
+        _partyFrames.Close();
+        _social.Hide();
+        _tuning.Hide();
         _npcOpen = false;
         _settingsOpen = false;
         _systemMenu = false;
@@ -563,6 +574,7 @@ public sealed partial class GameplayHud : IDisposable
         _itemUse.Restore(state, InCastleField, _clock.Elapsed.TotalMilliseconds);
         _restart.Update(PlayerDead, _clock.Elapsed.TotalMilliseconds);
         _premium.Apply(PremiumTimers, _clock.Elapsed.TotalMilliseconds);
+        _premium.Hold(PremiumPaused, _clock.Elapsed.TotalMilliseconds);
         _quests.Update();
         _npc.Update(_context.Font);
         _minimap.Update(_sprites, World, elapsedSeconds);
@@ -635,6 +647,10 @@ public sealed partial class GameplayHud : IDisposable
         {
             _questDialog.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
         }
+        else if (_social.Contains(layout, pointer))
+        {
+            _social.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
+        }
         else if (_clanWindow.Contains(pointer))
         {
             _clanWindow.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
@@ -650,6 +666,10 @@ public sealed partial class GameplayHud : IDisposable
         else if (mouse.ScrollWheelValue != _previousMouse.ScrollWheelValue && _helpWindow.Contains(pointer))
         {
             _helpWindow.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
+        }
+        else if (_itemUse.Teleport.Contains(pointer))
+        {
+            _itemUse.Teleport.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue, pointer, _bossList.Count);
         }
         else if (MinimapShown && _bossList.Open && _bossList.Window(layout, _minimap.Area(layout)).Contains(pointer))
         {
@@ -794,7 +814,13 @@ public sealed partial class GameplayHud : IDisposable
         }
 
         // A right click on a crystal pet's icon in the running-effects bar asks whether to dismiss the pet.
-        if (mouse.RightButton == ButtonState.Pressed && _previousMouse.RightButton == ButtonState.Released && !ModalOpen && !_settingsOpen)
+        var rightPressed = mouse.RightButton == ButtonState.Pressed && _previousMouse.RightButton == ButtonState.Released;
+        if (rightPressed && !ModalOpen && !_settingsOpen && _partyFrames.RightClick(layout, Party, SelfId, pointer))
+        {
+            rightPressed = false;
+        }
+
+        if (rightPressed && !ModalOpen && !_settingsOpen)
         {
             _crystalDismiss.Offer(_skillHud.BuffAt(pointer));
         }
@@ -812,6 +838,9 @@ public sealed partial class GameplayHud : IDisposable
         _questTracker.Update(layout, pointer, mouse, _previousMouse, !ModalOpen && !_settingsOpen && !_minimap.Dragging && _inventory.Dragging == Guid.Empty
             && _warehouse.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty);
 
+        _tuning.Update(layout, pointer, mouse, _previousMouse, _clock.Elapsed.TotalSeconds);
+        _partyFrames.Drag(layout, Party, pointer, mouse, _previousMouse, !ModalOpen && !_settingsOpen && !_minimap.Dragging && !_questTracker.Dragging
+            && _inventory.Dragging == Guid.Empty && _warehouse.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty);
         _worldBuffs.Update(layout, pointer, mouse, _previousMouse, !ModalOpen && !_settingsOpen && !_minimap.Dragging && !_questTracker.Dragging
             && _inventory.Dragging == Guid.Empty && _warehouse.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty);
 
@@ -861,7 +890,10 @@ public sealed partial class GameplayHud : IDisposable
     // another target discards the back buffer.
     public void RenderPortrait()
     {
-        var subject = TargetId != 0 && Combat.TryGetPortraitSubject(TargetId, out var target) ? target : default;
+        // The new target frame shows no portrait.
+        var subject = TargetId != 0 && _context.Presentation.Requested.ClassicTargetFrame && Combat.TryGetPortraitSubject(TargetId, out var target)
+            ? target
+            : default;
         _portrait.Render(PortraitScene, subject, Layout());
     }
 
@@ -874,6 +906,7 @@ public sealed partial class GameplayHud : IDisposable
         _painter.Begin(layout);
         HudGroundLabels.DrawBeams(_painter, layout, GroundBeams, _clock.Elapsed.TotalMilliseconds);
         _dropNames.Draw(_painter, layout, GroundLabels, GroundLabelPlaced);
+        Combat.ClockMs = _clock.Elapsed.TotalMilliseconds;
         Combat.DrawNamePlates(_painter, layout, Overhead, HoveredId, TracedId, _context.Presentation.Requested.ClassicNamePlates);
         DrawPetLabels(layout);
         _chat.Bubbles.Signs = ShopSigns;
@@ -901,17 +934,18 @@ public sealed partial class GameplayHud : IDisposable
             _bossList.Draw(_painter, layout, _minimap.Area(layout), _clock.Elapsed.TotalMilliseconds);
         }
 
+        var classicFrame = _context.Presentation.Requested.ClassicTargetFrame;
         Combat.DrawTarget(_painter, layout, TargetId, _context.Presentation.Requested.ClassicTargetHealthBar, _portrait.Texture(TargetId),
-            ShowsPlayerButtons);
+            ShowsPlayerButtons, classicFrame);
         if (ShowsPlayerButtons)
         {
-            HudPlayerButtons.Draw(_painter, HudCombat.TargetFrame(layout), pointer, ClanButton);
+            HudPlayerButtons.Draw(_painter, HudCombat.TargetFrame(layout, classicFrame), pointer, ClanButton);
         }
         _worldBuffs.Draw(_painter, layout, _clock.Elapsed.TotalMilliseconds, pointer, _premium);
         _siegeBoard.Draw(_painter, layout, InCastleField, _clock.Elapsed.TotalMilliseconds, Combat.OwnClan);
         _bellatraBoard.Draw(_painter, layout);
         _personalShop.Draw(_painter);
-        _chat.Window.Draw(_painter, layout, SideWindowOpen);
+        _chat.Window.Draw(_painter, layout, SideWindowOpen, pointer);
 
         if (_statusSlide.Visible)
         {
@@ -945,6 +979,8 @@ public sealed partial class GameplayHud : IDisposable
         }
 
         _partyWindow.Draw(_painter, layout, Party, SelfId, pointer);
+        _partyFrames.Draw(_painter, layout, Party, SelfId, pointer);
+        _social.Draw(_painter, layout, pointer);
 
         var incoming = OwnedItemView.Find(_state?.Items, _inventory.Dragging);
         var serviceFrame = new HudServiceFrame(_painter, layout, _icons, _state, pointer, incoming, _settingsOpen, _clock.Elapsed.TotalMilliseconds);
@@ -1040,7 +1076,7 @@ public sealed partial class GameplayHud : IDisposable
         if (_itemUse.Teleport.IsOpen || _itemUse.Confirming)
         {
             _painter.Flush();
-            _itemUse.Draw(_painter, pointer);
+            _itemUse.Draw(_painter, pointer, _bossList, _clock.Elapsed.TotalMilliseconds);
         }
 
         if (_wingGate.IsOpen || _wingGate.Confirming)
@@ -1109,6 +1145,8 @@ public sealed partial class GameplayHud : IDisposable
         }
 
         _painter.Flush();
+        _tuning.Draw(_painter, layout, pointer);
+        _partyFrames.DrawConfirm(_painter, pointer);
         _premium.DrawHover(_painter, pointer, _clock.Elapsed.TotalMilliseconds);
         _painter.Flush();
         _partyRequest.Draw(_painter, pointer, _clock.Elapsed.TotalMilliseconds);
@@ -1178,6 +1216,7 @@ public sealed partial class GameplayHud : IDisposable
             _questTracker.Offset = new Point(saved.TrackerX, saved.TrackerY);
             _questTracker.Collapsed = saved.TrackerCollapsed;
             _worldBuffs.Offset = new Point(saved.BuffsX, saved.BuffsY);
+            _partyFrames.Offset = new Point(saved.PartyX, saved.PartyY);
             _worldBuffs.Collapsed = saved.BuffsCollapsed;
         }
 
@@ -1186,13 +1225,14 @@ public sealed partial class GameplayHud : IDisposable
         _savedMap = _minimap.Revision;
         _savedTracker = _questTracker.Revision;
         _savedBuffs = _worldBuffs.Revision;
+        _savedParty = _partyFrames.Revision;
     }
 
     // Saves the bar when a shortcut, the page or the window changed (not while the character's file is still read).
     private void SaveActionBar()
     {
         if (_actionBarStore.Reading || _savedSlots == _bindings.Slots.Revision && _savedBar == _actionBar.Revision && _savedMap == _minimap.Revision
-            && _savedTracker == _questTracker.Revision && _savedBuffs == _worldBuffs.Revision)
+            && _savedTracker == _questTracker.Revision && _savedBuffs == _worldBuffs.Revision && _savedParty == _partyFrames.Revision)
         {
             return;
         }
@@ -1202,6 +1242,7 @@ public sealed partial class GameplayHud : IDisposable
         _savedMap = _minimap.Revision;
         _savedTracker = _questTracker.Revision;
         _savedBuffs = _worldBuffs.Revision;
+        _savedParty = _partyFrames.Revision;
         _actionBarStore.Save(new HudActionBarDocument(HudActionBarDocument.CurrentVersion, _actionBar.Open, _actionBar.Locked, _actionBar.Vertical,
             _actionBar.Anchor.X, _actionBar.Anchor.Y, _bindings.Slots.Page, _bindings.Slots.Save(), _minimap.Offset.X, _minimap.Offset.Y)
         {
@@ -1209,6 +1250,8 @@ public sealed partial class GameplayHud : IDisposable
             TrackerY = _questTracker.Offset.Y,
             TrackerCollapsed = _questTracker.Collapsed,
             BuffsX = _worldBuffs.Offset.X,
+            PartyX = _partyFrames.Offset.X,
+            PartyY = _partyFrames.Offset.Y,
             BuffsY = _worldBuffs.Offset.Y,
             BuffsCollapsed = _worldBuffs.Collapsed
         });

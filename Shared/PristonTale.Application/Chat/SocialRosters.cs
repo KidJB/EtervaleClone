@@ -5,6 +5,9 @@ namespace PristonTale.Application.Chat;
 public interface IPartyRoster
 {
     IReadOnlyCollection<ulong> MembersOf(ulong entityId);
+
+    // Both parties of the player's raid, or its own party when it is not in one.
+    IReadOnlyCollection<ulong> RaidMembersOf(ulong entityId) => MembersOf(entityId);
 }
 
 // The clan a player belongs to, for clan chat; 0 when the player has no clan.

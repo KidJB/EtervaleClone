@@ -79,11 +79,13 @@ public sealed partial class HudCombat
         {
             if (entity.Spawn.Kind == EntityKind.Npc)
             {
-                markers.Add(new HudMapMarker(entity.Spawn.EntityId, WorldSpace.Mirror(entity.Position), HudMapMarkerKind.Npc));
+                markers.Add(new HudMapMarker(entity.Spawn.EntityId, WorldSpace.Mirror(entity.Position), HudMapMarkerKind.Npc, NpcMapIcon(entity)));
             }
             else if (entity.Spawn.Kind == EntityKind.Player && !entity.Spawn.IsSelf)
             {
-                markers.Add(new HudMapMarker(entity.Spawn.EntityId, WorldSpace.Mirror(entity.Position), HudMapMarkerKind.Player));
+                var mate = OwnClan != 0 && entity.Spawn.Player?.ClanId == OwnClan;
+                markers.Add(new HudMapMarker(entity.Spawn.EntityId, WorldSpace.Mirror(entity.Position), HudMapMarkerKind.Player,
+                    mate ? HudMinimap.FriendlyIcon : HudMinimap.PlayerIcon));
             }
         }
     }
@@ -165,6 +167,10 @@ public sealed partial class HudCombat
         return new HudTargetFrame(box, portrait, bar, brood, box.Bottom - NameLift, box.Bottom + 22);
     }
 
+    // The frame the player buttons hang under: the classic cw.tga box or the new bar at the top centre.
+    public static HudTargetFrame TargetFrame(HudLayout layout, bool classicFrame) =>
+        classicFrame ? TargetFrame(layout) : TargetFrame(layout) with { Box = TargetBarBox(layout) };
+
     public static int HealthPercent(int life, int maximum)
     {
         if (maximum <= 0 || life <= 0)
@@ -233,10 +239,16 @@ public sealed partial class HudCombat
     // what the original shows: the name, the race icon and the life bar once StateBarEnabled.
     // playerButtons: the trade, party and friend buttons take the life bar's place under the frame (HudPlayerButtons).
     public void DrawTarget(HudPainter painter, HudLayout layout, ulong target, bool classicHealthBar = false, Texture2D portrait = null,
-        bool playerButtons = false)
+        bool playerButtons = false, bool classicFrame = true)
     {
         if (target == 0 || !_entities.TryGetValue(target, out var entity))
         {
+            return;
+        }
+
+        if (!classicFrame)
+        {
+            DrawTargetBar(painter, layout, target, entity);
             return;
         }
 

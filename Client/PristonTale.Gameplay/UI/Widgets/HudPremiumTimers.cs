@@ -28,6 +28,7 @@ public sealed class HudPremiumTimers
     private int _left = Left;
     private int _width = Icon;
     private long _revision = -1;
+    private double _heldAt = -1;
 
     public HudPremiumTimers(HudSprites sprites)
     {
@@ -77,6 +78,21 @@ public sealed class HudPremiumTimers
 
         _entries.Clear();
         _entries.AddRange(next);
+    }
+
+    // In a town where personal timers stand still (PremiumTimers.PausesInField) the ends move on with the clock, as the
+    // server holds them, so the time left shown holds too.
+    public void Hold(bool paused, double nowMs)
+    {
+        if (paused && _heldAt >= 0)
+        {
+            foreach (var entry in _entries)
+            {
+                entry.EndMs += nowMs - _heldAt;
+            }
+        }
+
+        _heldAt = paused ? nowMs : -1;
     }
 
     public bool Contains(Point pointer) => At(pointer) is not null;

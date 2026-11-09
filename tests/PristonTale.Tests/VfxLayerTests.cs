@@ -12,6 +12,7 @@ internal static class VfxLayerTests
         yield return ("component particle pools respect their count, loops and the 100-particle cap", ComponentParticlesAsync);
         yield return ("sequence layers emit their budget, loop on clock events and stop on request", SequencesAsync);
         yield return ("child effects start late, follow their anchor with the particles that live until they stop, and stop with the parent", ChildrenAsync);
+        yield return ("components on the spawn point move with the effect, components fixed elsewhere stay", ComponentMoveAsync);
         yield return ("component and sequence updates allocate nothing once warmed up", AllocationsAsync);
         yield return ("parts wait for their delays, start on their ring and end with their life", PartRingAsync);
         yield return ("parts fly to their goal, start their end effect there and fade out", PartGoalAsync);
@@ -310,6 +311,23 @@ internal static class VfxLayerTests
         instance.Stop();
         Run(system, 0.1f);
         Assert.True(system.Instances.Count == 1, "stopping killed the live particle instead of letting it play out");
+        return Task.CompletedTask;
+    }
+
+    private static Task ComponentMoveAsync()
+    {
+        var (library, system) = Setup(new VfxDefinition
+        {
+            Name = "test.carried",
+            Duration = 10f,
+            Components = [new VfxComponentDefinition { Kind = VfxComponentKind.Ground, Texture = "x.bmp", EndTime = [5f, 5f], Loop = 1 }]
+        });
+        library.TryGet("test.carried", out var effect);
+        var instance = system.Spawn(effect, new VfxSpawn(0, 0, Vector3.Zero, 0f)).Instance!;
+        Run(system, 0.1f);
+        instance.MoveTo(new Vector3(50f, 0f, 20f));
+        Run(system, 0.1f);
+        Assert.True(instance.ComponentStates[0].Anchor == new Vector3(50f, 0f, 20f), $"the ring stayed at {instance.ComponentStates[0].Anchor}");
         return Task.CompletedTask;
     }
 

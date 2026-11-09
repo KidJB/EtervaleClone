@@ -558,6 +558,7 @@ public sealed partial class WorldServer
                 }
 
                 // A member who left or reloaded since the pickup was prepared, or who can no longer take its part, gets nothing.
+                var paid = new List<GoldShare>(pickup.Shares.Count);
                 foreach (var share in pickup.Shares)
                 {
                     if (_connections.TryGetValue(share.MemberId, out var member) && ReferenceEquals(member.Player.Character, share.Character)
@@ -565,11 +566,16 @@ public sealed partial class WorldServer
                     {
                         share.Character.TryChangeMoney(share.Gold);
                         pickedUp?.Gold(thrower, CharacterIdOf(member.Session), share.Gold);
+                        paid.Add(share);
                     }
                 }
 
                 pickup.Ground.Resolve(pickup.DropId, pickup.OperationId, committed: true);
                 Log(pickedUp);
+                if (TryGetOwnConnection(session, out var picker))
+                {
+                    NoticePickup(picker.Player, pickup, paid);
+                }
             }
             if (operation is PreparedThrowOperation thrown)
             {
@@ -804,6 +810,7 @@ public sealed partial class WorldServer
             WorldBuffs = WorldBuffState,
             NextBoss = field.NextBoss(localNow, bossMinute),
             BossSpots = field.BossSpots(),
+            SpawnSpots = field.SpawnSpots,
             BossList = _bossList,
             LocalNow = localNow.DateTime
         };

@@ -322,7 +322,7 @@ public sealed class HudPetWindow
         var line = At(window, NameLine);
         if (Naming)
         {
-            painter.ColorBox(line, 0, 0, 0, 230);
+            painter.InputBox(line);
             painter.Text(_name.CaretVisible ? _name.Text + "_" : _name.Text, line.X + 4, line.Y + 1, NameColor);
             return;
         }
