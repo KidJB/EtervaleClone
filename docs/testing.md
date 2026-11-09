@@ -75,7 +75,8 @@ Default case files by area (all `tests/PristonTale.Tests/<Name>.cs`):
 | HUD and screens | `HudInteractionTests`, `CharacterHeadTests`, `CharacterSelectTests` | 800x600 layout, hit tests |
 | Rendering | `RenderTests`, `RenderFidelityTests`, `PhotorealTests`, `MaterialAdapterTests`, `ShadowProjectionTests`, `SkyTests` | CPU-side renderer |
 | Meshes, effects | `SkinPaletteTests`, `ModelNormalTests`, `AnimationFallbackTests`, `TransientLightTests` | Skinning, lights |
-| Formats | `BinaryCursorTests`, `EffectLoadingTests`, `GltfExportTests` | Binary readers, shader load failure, glTF export |
+| Formats | `BinaryCursorTests`, `EffectLoadingTests`, `GltfExportTests`, `GltfModelTests` | Binary readers, shader load failure, glTF export, glTF reading |
+| glTF rendering | `GltfRenderingTests` | glTF animation sampling and skin matrices, material map packing, texture transform, batches of 64 bones and the clip timeline |
 
 ## Running
 
@@ -116,6 +117,14 @@ git diff --check
   for an `assets/` directory with `Effect/Vfx`, checks that every effect, child, texture, animation, model and sound the
   rules and definitions use exists there, and prints `(skipped: no assets/Effect/Vfx next to the repository)` when none
   is found. The authored definitions are checked without assets from `tools/PristonTale.VfxImport/Authored/`.
+- The `GltfModelTests` case on the Mythcreature reads `char/npc/Mythcreature/Mythcreature.glb` from the assets root when
+  it is there, and skips otherwise.
+- Test-only models live in `tests/assets/` (ignored by git and not distributed: their licenses are not cleared for
+  redistribution), found by `TestAssets.Find` walking up from the runner; a case using them skips with a message when
+  the folder is absent. `tests/assets/gltf/` holds `Solus_the_knight.glb` (75 joints, 21 clips with step and linear
+  keys), `FrostfangOrcShaman.glb` (28 joints, tangents), `base_basic_pbr.glb` (static, normal and metallic-roughness
+  maps), `base_basic_shaded.glb` (static, emissive map) and `cyber_warrior.glb` (53 joints with a static rock, normal,
+  occlusion and emissive maps; authored in centimetres, so drawn at 0.01).
 
 ## Multiplayer propagation
 
@@ -193,6 +202,7 @@ when reading those assets is authorized. GPU probes:
 | `--capture-sky <assets> <content> <output-dir>` | yes | One `sky-NN.png` per sky profile |
 | `--capture-weather <assets> <content> <output-dir>` | yes | Ricarten's start under each weather at 1920x1080 after two seconds: clear, overcast, light, heavy and storm rain, a lightning flash, rain at dusk and at night, close under the eaves, the clouds' shadows and a morning mist, a storm in the morning mist (`storm-dawn-mist`: the deck and the mist grey, not orange), also over the harbour toward the sunrise (`mist-harbour`: the water and the far quays must fade into the haze, without blue patches or bright silhouettes); the realistic sky toward the horizon at noon, at sunrise with and without the mist, in a broken afternoon, at sunset and dusk, under a full and a new moon, overcast, in a storm and its lightning, in a storm at night and at dawn, with a rainbow and the aurora, and the classic dome, also in the rain at noon, in the afternoon, at dusk and at night (`sky-classic-rain*`: the clouds must go on past the rain dome's rim, without a band of the hour's colour above it); `sky-drift`, eight frames of clouds in a strong wind with each frame's change from the last (`sky-drift-N-change.png`, and the count of pixels changed by more than 6 levels), where a wavering or flickering sky shows over the clouds' bodies (`WeatherCaptureProbe`) |
 | `--capture-npcs <assets> <content> <output.png>` | yes | NPC presentation capture |
+| `--capture-gltf <assets> <content> <output-dir> <model,model,...>` | yes | glTF models as actors beside a legacy NPC; `layers` is four built spheres (plain, clearcoat, sheen, diffuse transmission) |
 | `--capture-job-heads <assets> <content> <output.png>` | yes | Job-head presentation capture |
 | `--capture-equipment <assets> <content> <output-dir>` | yes | Equipment captures |
 | `--capture-ranged-equipment <assets> <content> <output-dir>` | yes | Bow and crossbow attachment captures |
@@ -286,6 +296,9 @@ Draws the static and skinned surface effects into a float target and checks agai
   of the same irradiance).
 - Shadow casters' depth (orthographic and perspective); skinning by a bone translation; motion target (camera, jitter,
   a skinned bone's previous pose).
+- glTF (`ShaderValidationProbe.Gltf.cs`): two weighted bones blended and one alone; the base colour through an offset,
+  a rotation (its sign), clamp and mirror wraps and the second UV set; the lit base surface with a flat normal map
+  against the legacy lit reference.
 - Post chain: HDR composition, automatic exposure (histogram, adaptation), bloom pyramid, the three display transforms
   and the colour grade against CPU references, temporal resolve of a still scene, display-referred output, mesopic
   vision in the final pass.
