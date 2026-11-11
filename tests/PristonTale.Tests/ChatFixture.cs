@@ -1,3 +1,4 @@
+using PristonTale.Simulation.World.Npcs;
 using System.Numerics;
 using PristonTale.Application.Chat;
 using PristonTale.Application.GameMasters;
@@ -32,13 +33,13 @@ internal sealed class ChatFixture
 
     public ChatFixture(GameMasterOptions? options = null, IPartyRoster? parties = null, IClanRoster? clans = null,
         FieldTerrain? terrain = null, IReadOnlyList<FieldPoint>? startPoints = null, FieldState state = FieldState.Forest, TimeProvider? clock = null,
-        IGmAudit? audit = null)
+        IGmAudit? audit = null, NpcCatalog? npcs = null, IReadOnlyList<FixedNpc>? fixedNpcs = null)
     {
         var empty = WorldData.Empty;
         Data = new WorldDataHolder
         {
-            Current = new WorldData(new ItemCatalog([Axe, Potion]), new MonsterCatalog([Hopy]), empty.Npcs,
-                new Dictionary<int, FieldSpawnData> { [Field] = FieldSpawnData.Empty }, empty.Motions)
+            Current = new WorldData(new ItemCatalog([Axe, Potion]), new MonsterCatalog([Hopy]), npcs ?? empty.Npcs,
+                new Dictionary<int, FieldSpawnData> { [Field] = FieldSpawnData.Empty with { FixedNpcs = fixedNpcs ?? [] } }, empty.Motions)
         };
         var catalog = Catalog = new WorldCatalog([new FieldDef("fixture", "Fixture Field", state, new FieldBackdrop("", "", ""), "", [])
         {

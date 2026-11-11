@@ -7,6 +7,7 @@ namespace PristonTale.Gameplay.UI.Rendering;
 public static class HudNameColors
 {
     public static readonly Color Player = new(255, 255, 200);
+    public static readonly Color Title = new(255, 170, 60);
     public static readonly Color Party = new(220, 255, 160);
     public static readonly Color Monster = new(255, 210, 210);
     public static readonly Color HoveredMonster = new(255, 230, 200);

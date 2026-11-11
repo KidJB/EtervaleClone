@@ -28,7 +28,7 @@ internal sealed partial class ClientSession
 
             offset += count;
             var packet = new SkinCatalogPacket(request.OperationId, view.Balance, offset >= view.Articles.Count, view.Skins.Weapon, view.Skins.Armor,
-                view.Skins.OffHand, view.Skins.Hair, part);
+                view.Skins.OffHand, view.Skins.Hair, part) { TwoHand = view.Skins.TwoHand };
             SendLarge(packet.Write, SkinCatalogPacket.MaxSize);
         }
         while (offset < view.Articles.Count);
@@ -47,7 +47,7 @@ internal sealed partial class ClientSession
         {
             reply = _session is null || _player is null
                 ? (SkinStatus.Rejected, 0L)
-                : await _services.Skins.ApplyAsync(RequireToken(), new SkinSet(request.Weapon, request.Armor, request.OffHand, request.Hair));
+                : await _services.Skins.ApplyAsync(RequireToken(), new SkinSet(request.Weapon, request.Armor, request.OffHand, request.Hair, request.TwoHand));
         }
         catch (WorldBusyException)
         {

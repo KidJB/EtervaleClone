@@ -66,6 +66,8 @@ public static class HudNpcArt
         NpcServiceKind.DailyQuest => "Daily quests",
         NpcServiceKind.BossArena => "Boss Arena",
         NpcServiceKind.Cabinet => "The Cabinet",
+        NpcServiceKind.CharacterMarket => "Character Market",
+        NpcServiceKind.Marketplace => "Marketplace",
         NpcServiceKind.StarPoint => ClientText.Get("NpcService.StarPoints"),
         NpcServiceKind.CollectMoney => ClientText.Get("NpcService.Donations"),
         NpcServiceKind.GiveMoney => ClientText.Get("NpcService.DonationBox"),

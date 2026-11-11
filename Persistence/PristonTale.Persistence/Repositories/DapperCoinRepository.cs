@@ -107,7 +107,7 @@ public sealed class DapperCoinRepository(IDbConnectionFactory connectionFactory)
     }
 
     // Changes the balance only when it stays at or above zero, and logs the change; null when it would not.
-    private static async Task<long?> ChangeAsync(DbConnection connection, DbTransaction transaction, long accountId, long change, string reason,
+    internal static async Task<long?> ChangeAsync(DbConnection connection, DbTransaction transaction, long accountId, long change, string reason,
         CancellationToken ct)
     {
         var rows = await connection.ExecuteAsync(new CommandDefinition(

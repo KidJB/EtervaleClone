@@ -6,6 +6,20 @@ namespace PristonTale.Application.GameMasters;
 // Commands on players: disconnecting, killing, finding, moving and hiding them, and lending a level.
 internal static class GmPlayerCommands
 {
+    // /achievement <player> <1 game master, 2 legacy member, 3 streamer>
+    public static async Task Achievement(GmCommandContext context)
+    {
+        var member = context.Commands.Directory.FindByName(context.Word());
+        var parsed = int.TryParse(context.Word(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id);
+        if (member is null || !parsed || context.Commands.GrantAchievement is not { } grant)
+        {
+            context.Reply("> /achievement <player> <1 game master, 2 legacy member, 3 streamer>");
+            return;
+        }
+
+        context.Reply(await grant(member, id) ? "> Achievement granted." : "> Not granted: unknown badge, or already held.");
+    }
+
     public static Task Kick(GmCommandContext context)
     {
         var target = Target(context);

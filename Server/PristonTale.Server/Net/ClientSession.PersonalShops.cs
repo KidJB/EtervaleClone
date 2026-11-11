@@ -8,7 +8,7 @@ internal sealed partial class ClientSession
 {
     private async Task OpenPersonalShopAsync(PersonalShopOpenPacket request)
     {
-        var entries = request.Entries.Select(static entry => new PersonalShopEntry(entry.ItemId, entry.UnitPrice, entry.Cell)).ToArray();
+        var entries = request.Entries.Select(static entry => new PersonalShopEntry(entry.ItemId, entry.UnitPrice, entry.Cell, (PersonalShopCurrency)entry.Currency)).ToArray();
         var outcome = _player is null
             ? PersonalShopOutcome.Failed(PersonalShopStatus.Rejected, 0)
             : await _services.PersonalShops.OpenAsync(RequireToken(), request.Sign, entries);
@@ -54,7 +54,7 @@ internal sealed partial class ClientSession
         if (reply.Listing is { } listing)
         {
             var offers = listing.Offers
-                .Select(static offer => new PersonalShopOfferWire(ItemWireMapping.StoreItem(offer.Item), offer.UnitPrice))
+                .Select(static offer => new PersonalShopOfferWire(ItemWireMapping.StoreItem(offer.Item), offer.UnitPrice, (byte)offer.Currency))
                 .ToArray();
             SendLarge(new PersonalShopListingPacket(operation, listing.SellerId, offers).Write,
                 PersonalShopListingPacket.MaxSize);

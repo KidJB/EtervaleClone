@@ -477,6 +477,18 @@ go on to the high tower.</value></data>
   <data name="Hud.TargetLevel" xml:space="preserve"><value>Lv. {0}</value></data>
   <data name="Hud.TimeLeft" xml:space="preserve"><value>Time left: {0}</value></data>
   <data name="Hud.TimeLeftSeconds" xml:space="preserve"><value>Time left: {0} s</value></data>
+  <data name="Inventory.Locked" xml:space="preserve"><value>Items locked. Click the lock button in the inventory to unlock them.</value></data>
+  <data name="Achievement.ActivateTitle" xml:space="preserve"><value>Activate title</value></data>
+  <data name="Achievement.HideTitle" xml:space="preserve"><value>Hide title</value></data>
+  <data name="Achievement.None" xml:space="preserve"><value>No achievements yet.</value></data>
+  <data name="Achievement.Top" xml:space="preserve"><value>Top {0}</value></data>
+  <data name="Achievement.TopText" xml:space="preserve"><value>The first {0} on the server to reach level {1}.</value></data>
+  <data name="Achievement.Name.GameMaster" xml:space="preserve"><value>Game Master</value></data>
+  <data name="Achievement.Text.GameMaster" xml:space="preserve"><value>A member of the game staff.</value></data>
+  <data name="Achievement.Name.LegacyMember" xml:space="preserve"><value>Legacy Member</value></data>
+  <data name="Achievement.Text.LegacyMember" xml:space="preserve"><value>One of the server's long-standing players.</value></data>
+  <data name="Achievement.Name.Streamer" xml:space="preserve"><value>Streamer</value></data>
+  <data name="Achievement.Text.Streamer" xml:space="preserve"><value>A streamer of the game.</value></data>
   <data name="Inventory.HintCarry" xml:space="preserve"><value>Click: carry</value></data>
   <data name="Inventory.HintDrink" xml:space="preserve"><value>Right-click: drink one</value></data>
   <data name="Inventory.HintEquip" xml:space="preserve"><value>Click: carry  Shift-click: split  Right-click: equip</value></data>
@@ -727,6 +739,8 @@ go on to the high tower.</value></data>
   <data name="Settings.SunShadow" xml:space="preserve"><value>Sun shadow: {0}</value></data>
   <data name="Settings.TargetFrameNew" xml:space="preserve"><value>Target frame: new (top centre)</value></data>
   <data name="Settings.TargetFrameClassic" xml:space="preserve"><value>Target frame: classic</value></data>
+  <data name="Settings.InventoryCentered" xml:space="preserve"><value>Inventory: centered</value></data>
+  <data name="Settings.InventoryDefault" xml:space="preserve"><value>Inventory: default (left)</value></data>
   <data name="Settings.TargetHealthAlways" xml:space="preserve"><value>Target HP: always, with percentage</value></data>
   <data name="Settings.TargetHealthClassic" xml:space="preserve"><value>Target HP: classic (after first hit)</value></data>
   <data name="Settings.VSyncOff" xml:space="preserve"><value>VSync: off</value></data>
@@ -998,4 +1012,7 @@ go on to the high tower.</value></data>
   <data name="WingGate.MoveThere" xml:space="preserve"><value>move there?</value></data>
   <data name="WingGate.Title" xml:space="preserve"><value>Warp gate</value></data>
   <data name="Workbench.TakeBack" xml:space="preserve"><value>Right-click: take back</value></data>
+  <data name="CharSelect.EnterFailure.ListedForSale" xml:space="preserve">
+    <value>This character is listed on the Character Market. Cancel the listing to play it.</value>
+  </data>
 </root>

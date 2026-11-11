@@ -49,6 +49,11 @@ public sealed record CharacterVisualSet(
     int HairIndex,
     int ArmorTableIndex)
 {
+    // The weapon actually worn when a skin (WeaponKey) stands in for it: it decides the motions and where the weapon is held.
+    public string HeldKey { get; init; } = "";
+
+    public string HeldAs => HeldKey.Length > 0 ? HeldKey : WeaponKey;
+
     public string WeaponKey { get; init; } = "";
     public string OffHandKey { get; init; } = "";
     public bool InVillage { get; init; }

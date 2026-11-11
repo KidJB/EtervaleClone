@@ -23,11 +23,11 @@ internal static class GameMasterCommandTests
     private static readonly (string Text, int Level)[] ExpectedLevels =
     [
         ("/localtime", 1), ("/get_bosstime", 1), ("/get_forceorb", 1), ("/get_primitem", 1), ("/get_currency", 1), ("/init_premiumitem", 4),
-        ("/specific", 1), ("/Performance", 1), ("/@get_perf", 4), ("/@get", 4), ("/@put_perf", 4), ("/@put", 4), ("/@coinshop_reload", 4), ("/@coins", 4), ("/@arena", 4), ("/@worldbuff", 4), ("/AgingSetting", 3), ("/get_potion", 1), ("/>", 2), ("/netlog", 1),
+        ("/specific", 1), ("/Performance", 1), ("/@rarity", 4), ("/@get_perf", 4), ("/@get", 4), ("/@put_rarity", 4), ("/@put_perf", 4), ("/@put", 4), ("/@coinshop_reload", 4), ("/@coins", 4), ("/market_listings", 1), ("/market_sales", 1), ("/market_remove", 2), ("/market_expire", 2), ("/@arena", 4), ("/@worldbuff", 4), ("/AgingSetting", 3), ("/get_potion", 1), ("/>", 2), ("/netlog", 1),
         ("//netlog", 1), ("/user_limit", 2), ("/kick", 2), ("/kill", 2), ("/open_warehouse", 2), ("/shutdown", 2), ("/weather", 2),
         ("/reload_settings", 4), ("/setting", 4), ("/insert", 2),
         ("/usercode", 1), ("/userid", 1), ("/username", 1), ("/near", 2), ("/call", 2), ("/where", 2), ("/field", 2),
-        ("/player_location", 2), ("/expup", 4), ("/GiveMeExp!", 4), ("/GiveMeMoney!", 4),
+        ("/player_location", 2), ("/expup", 4), ("/GiveMeExp!", 4), ("/GiveMeMoney!", 4), ("/achievement", 4),
         ("/user", 1), ("/sockets", 1), ("/talk", 1), ("/set_absorb", 4), ("/area_users", 1), ("/monster", 1), ("/mymonster", 1),
         ("/event_monster", 1), ("/area_monster", 1), ("/show_blackuser", 1), ("/reset_blackuser", 1), ("/free_blackuser", 1), ("/hide", 1),
         ("/show", 1), ("/get_money", 3), ("/dm_info", 1), ("/get_guid", 1), ("/grant", 1),
@@ -335,6 +335,13 @@ internal static class GameMasterCommandTests
             $"the perfect +12 copy was not stored and delivered to the player's bag ({axe?.UpgradeLevel}, {axe?.Roll}, {fixture.Characters.Updates - before})");
         await fixture.SayAsync(gm, "/@put_perf Nobody WA101");
         Assert.True(gm.Link.Last == "No player named Nobody is online", gm.Link.Last);
+
+        await fixture.SayAsync(gm, "/@put_rarity Ann WA101 legendary");
+        var graded = Enumerable.Range(0, ann.Session.Character.Inventory.Capacity).Select(anchor => ann.Session.Character.Inventory[anchor])
+            .Count(item => item is { Rarity: ItemRarity.Legendary } && item.Definition.CatalogKey == "WA101");
+        Assert.True(graded == 1 && gm.Link.Last == "Perfect WA101 (no spec) sent to Ann", $"the legendary copy was not delivered: {gm.Link.Last}");
+        await fixture.SayAsync(gm, "/@put_rarity Ann WA101 shiny");
+        Assert.True(gm.Link.Last.StartsWith("Usage: /@rarity", StringComparison.Ordinal), "an unknown grade was accepted");
     }
 
     private static async Task CharacterAsync()

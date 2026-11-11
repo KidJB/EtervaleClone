@@ -48,14 +48,14 @@ public sealed partial class WorldServer
     }
 
     // The session of a seller in the buyer's field whose shop is open, so the service can hold both characters.
-    public Task<PlayerSession?> PersonalShopSellerAsync(PlayerSession buyer, ulong sellerId)
+    public Task<PlayerSession?> PersonalShopSellerAsync(PlayerSession buyer, ulong sellerId, ulong marketNpc = 0)
     {
         return EnqueueAsync(buyer.EntityId, () =>
-            TryGetPlaying(buyer, out var connection) && TryGetShopSeller(connection, sellerId, out _, out var session) ? session : null);
+            TryGetPlaying(buyer, out var connection) && TryGetShopSeller(connection, sellerId, out _, out var session, marketNpc != 0 && AtMarketplace(connection, marketNpc)) ? session : null);
     }
 
     // Seller is null when no open shop of that seller was found; a retried purchase still answers its first outcome.
-    public Task<PreparedShopPurchase?> PreparePersonalShopPurchaseAsync(PlayerSession buyer, PlayerSession? seller, PersonalShopPurchase purchase)
+    public Task<PreparedShopPurchase?> PreparePersonalShopPurchaseAsync(PlayerSession buyer, PlayerSession? seller, PersonalShopPurchase purchase, ulong marketNpc = 0)
     {
         return EnqueueAsync<PreparedShopPurchase?>(buyer.EntityId, () =>
         {
@@ -65,12 +65,13 @@ public sealed partial class WorldServer
             }
 
             Connection? sellerConnection = null;
-            if (seller is { Loaded: not null } && TryGetPlaying(seller, out var playing) && playing.FieldId == connection.FieldId)
+            var remote = marketNpc != 0 && AtMarketplace(connection, marketNpc);
+            if (seller is { Loaded: not null } && TryGetPlaying(seller, out var playing) && (remote || playing.FieldId == connection.FieldId))
             {
                 sellerConnection = playing;
             }
 
-            return PersonalShopTransactions.Prepare(buyer, connection.Player, seller, sellerConnection?.Player, connection.FieldId, purchase);
+            return PersonalShopTransactions.Prepare(buyer, connection.Player, seller, sellerConnection?.Player, connection.FieldId, sellerConnection?.FieldId ?? connection.FieldId, purchase, remote);
         });
     }
 
@@ -81,7 +82,7 @@ public sealed partial class WorldServer
         {
             if (!ReferenceEquals(buyer.Character, purchase.Original) || purchase.Seller is not { } sold || !ReferenceEquals(seller.Character, sold)
                 || purchase.Candidate is null || purchase.SellerCandidate is null
-                || !purchase.Original.CanChangeMoney(-purchase.Price) || !sold.CanChangeMoney(purchase.Price))
+                || purchase.Currency == PersonalShopCurrency.Gold && (!purchase.Original.CanChangeMoney(-purchase.Price) || !sold.CanChangeMoney(purchase.Price)))
             {
                 throw new CommitInvariantException("Character ownership changed during a personal shop purchase.");
             }
@@ -89,14 +90,22 @@ public sealed partial class WorldServer
             if (Transfer(Persistence.Abstractions.GameLogs.ItemTransferKind.PersonalShop, Guid.NewGuid(), seller.FieldId) is { } log)
             {
                 log.Left(sold, purchase.SellerCandidate, CharacterIdOf(seller), CharacterIdOf(buyer));
-                log.Gold(CharacterIdOf(buyer), CharacterIdOf(seller), purchase.Price);
+                if (purchase.Currency == PersonalShopCurrency.Gold)
+                {
+                    log.Gold(CharacterIdOf(buyer), CharacterIdOf(seller), purchase.Price);
+                }
+
                 Log(log);
             }
 
             purchase.Original.CommitInventoryOperation(purchase.Candidate);
-            purchase.Original.TryChangeMoney(-purchase.Price);
             sold.CommitInventoryOperation(purchase.SellerCandidate);
-            sold.TryChangeMoney(purchase.Price);
+            if (purchase.Currency == PersonalShopCurrency.Gold)
+            {
+                purchase.Original.TryChangeMoney(-purchase.Price);
+                sold.TryChangeMoney(purchase.Price);
+            }
+
             if (!TryGetOwnConnection(seller, out var sellerConnection))
             {
                 return new PersonalShopReply(purchase.Outcome);
@@ -110,10 +119,10 @@ public sealed partial class WorldServer
         }, waitForCapacity: true);
     }
 
-    private bool TryGetShopSeller(Connection viewer, ulong sellerId, out Connection seller, out PlayerSession session)
+    private bool TryGetShopSeller(Connection viewer, ulong sellerId, out Connection seller, out PlayerSession session, bool anyField = false)
     {
         session = null!;
-        if (!_connections.TryGetValue(sellerId, out seller!) || seller.FieldId != viewer.FieldId || seller.Session is not { } owner)
+        if (!_connections.TryGetValue(sellerId, out seller!) || !anyField && seller.FieldId != viewer.FieldId || seller.Session is not { } owner)
         {
             return false;
         }

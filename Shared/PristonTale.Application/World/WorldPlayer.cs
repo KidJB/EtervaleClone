@@ -376,7 +376,7 @@ public sealed class WorldPlayer
     // Built on every read from the equipment and premium state: read InVillage for the flag alone.
     public PlayerAppearanceView Appearance => _appearance with
     {
-        WeaponKey = SkinRules.Look(_character.GetEquipped(EquipmentSlot.Weapon)?.Definition.CatalogKey ?? "", _character.Skins.Weapon),
+        WeaponKey = SkinRules.WeaponLook(_character.GetEquipped(EquipmentSlot.Weapon)?.Definition.CatalogKey ?? "", _character.Skins),
         ArmorKey = SkinRules.Look(_character.GetEquipped(EquipmentSlot.Armor)?.Definition.CatalogKey ?? "", _character.Skins.Armor),
         OffHandKey = SkinRules.Look(_character.GetEquipped(EquipmentSlot.OffHand)?.Definition.CatalogKey ?? "", _character.Skins.OffHand),
         WeaponGlow = HeldItemGlow.For(_character.GetEquipped(EquipmentSlot.Weapon)),
@@ -394,8 +394,13 @@ public sealed class WorldPlayer
         ShopSign = Shop?.Sign ?? "",
         ClanId = Clan?.ClanId ?? 0,
         ClanName = Clan?.Name ?? "",
-        ClanMark = Clan?.MarkVersion ?? 0
+        ClanMark = Clan?.MarkVersion ?? 0,
+        Title = AchievementTitle,
+        HeldWeaponKey = _character.GetEquipped(EquipmentSlot.Weapon)?.Definition.CatalogKey ?? ""
     };
+
+    // The title over its name (AchievementRules.TitleOf), 0 for none.
+    public int AchievementTitle { get; set; }
 
     // The clan the player shows over its head (ClanAppService keeps it), null for none.
     public Simulation.Social.Clans.ClanTag? Clan { get; set; }

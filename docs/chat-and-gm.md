@@ -87,6 +87,8 @@ Kinds: 0 server, 1 whisper, 2 system, 3 notice, 4 party, 5 clan, 6 trade, 9 assi
   name answers `name is currently offline, or cannot be found`.
 - English builds had no chat profanity filter, so none is applied.
 
+Market commands (`/market_listings`, `/market_sales`, `/market_remove`, `/market_expire`) are in [markets.md](markets.md#game-masters).
+
 ## Client chat window
 
 - Default window at (0,408), 305x210 logical pixels, 12 lines; with the status, skill or inventory window open it
@@ -153,7 +155,7 @@ Commands match by exact, case-sensitive prefix in table order. Levels:
 | Moderator | `/field`, `/player_location` |
 | Operator | `/get_money`, `/AgingSetting` |
 | Administrator | `/easy_castle` |
-| Administrator | `/init_premiumitem`, `/@get_perf`, `/@get`, `/@put_perf`, `/@put`, `/@coins`, `/@coinshop_reload`, `/GiveMeExp!`, `/expup`, `/GiveMeMoney!`, `/reload_settings`, `/setting`, `/set_absorb` |
+| Administrator | `/achievement`, `/init_premiumitem`, `/@rarity`, `/@get_perf`, `/@get`, `/@put_rarity`, `/@put_perf`, `/@put`, `/@coins`, `/@coinshop_reload`, `/GiveMeExp!`, `/expup`, `/GiveMeMoney!`, `/reload_settings`, `/setting`, `/set_absorb` |
 
 - Information: local time, boss minute, the issuer's force orb and premium timers, gold spent per sink, carried potions,
   connection packet counts, players and monsters, a player by entity id, account or name, damage range, session.
@@ -161,7 +163,8 @@ Commands match by exact, case-sensitive prefix in table order. Levels:
   position, `/field n` goes to field n's start point (a random one in the castle), `/player_location x y z` moves within
   the field (each move carries the running statuses), `/hide` and `/show` make the issuer invisible to other players' presence, `/grant` lends the issuer's level to a
   player until that player leaves the world.
-- Items: `/@get code` or `/@get "name"` drops an item (`code#U<n>` or a named unique's name makes that named unique,
+- Items: `/@rarity code grade [class] [aging]` drops the best copy with that rarity grade (common, uncommon, rare, epic
+  or legendary) and `/@put_rarity name code grade [class] [aging]` writes it into an online player's bag; `/@get code` or `/@get "name"` drops an item (`code#U<n>` or a named unique's name makes that named unique,
   `code#Q` the quest variant), `/@get_perf code [class] [aging]` its best copy, aged to the level when one is given
   (0 to 20, `AgingRules.MaxLevel`; the class may be `none`), `/@put name code` writes
   a copy into a player's bag before delivering it, `/@put_perf name code [class] [aging]` the same with the best copy, `/AgingSetting code level [class 1-8]` drops a weapon or armour aged

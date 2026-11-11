@@ -27,7 +27,12 @@ public enum PersonalShopStatus : ushort
     OutOfReach = 15,
     Conflict = 16,
     // The seller's character is held by its shop.
-    Selling = 17
+    Selling = 17,
+    // The item is shown, not sold.
+    ViewOnly = 18,
+    NotEnoughCoins = 19,
+    // The buyer bought a moment ago (PersonalShopRules.PurchaseCooldownMs).
+    TooSoon = 20
 }
 
 // A buyer's request for Count units of a listed item at the unit price it was shown, against its own inventory revision.

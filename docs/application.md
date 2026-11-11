@@ -25,6 +25,7 @@ into it is described in [server.md](server.md); skill resolution details are in 
 | [`Services/NpcAppService.cs`](../Shared/PristonTale.Application/Services/NpcAppService.cs) | NPC click and NPC service requests; warehouse load and joint character+warehouse write |
 | [`Services/QuestAppService.cs`](../Shared/PristonTale.Application/Services/QuestAppService.cs) | Quest requests and the quest upkeep (see [quests.md](quests.md)) |
 | `Services/ItemUseAppService.cs` | Use of a carried item: prepare, commit, then the save queue ([special-items.md](special-items.md)) |
+| `Markets/` | Character Market and Marketplace services ([markets.md](markets.md)) |
 | `Services/PersonalShopAppService.cs`, `World/WorldServer.PersonalShops.cs`, `World/PersonalShopTransactions.cs` | Personal shops: open, close, view, and a purchase that holds and stores two characters (below) |
 | `Services/PartyAppService.cs`, `World/WorldServer.Parties.cs`, `World/Parties/Party.cs` | Parties: requests, answers, the leader's commands, the members' view and the chat roster (below) |
 | `Services/TradeAppService.cs`, `World/WorldServer.Trades.cs`, `World/Trades/Trade.cs` | Trades between players: requests, offers, locks and the exchange that holds and stores two characters (below) |
@@ -532,6 +533,12 @@ it), so a listing never changes between a purchase's prepare and commit.
   clones of both characters; both snapshots are written in one transaction, then the commit applies both inventories
   and the gold, prunes the listing and answers what remains on sale. Both players read the sale as a trade chat line.
   A purchase that met another price, fewer units or a sold item answers what the shop offers now.
+- Each entry is paid in gold, coins or shown only (`PersonalShopCurrency`). A view-only entry is priced 0 and answers
+  `ViewOnly`. A coin entry brings no gold to the listing's total or the sale: the item moves on the tick as any other,
+  and storage writes both characters and moves the coins from the buyer's account to the seller's in one transaction
+  (`ICoinRepository.TradeWithCharactersAsync`); a buyer without them gets `NotEnoughCoins` and nothing moves.
+- After a purchase the buyer waits `shops.purchase_cooldown_ms` (2000 by default, `MarketOptionsHolder.PurchaseCooldownMs`)
+  before the next (`TooSoon`); a seller whose shop is viewed reads who visited, once a minute per visitor.
 
 ### Offline stalls
 
@@ -546,7 +553,9 @@ it is viewed and bought from as a personal shop is: `PersonalShopAppService.BuyA
 (`ISessionRegistry.TryGetCharacterSession`), the owner's gate without waiting. The tick checks reach, revision and
 `StallRules.TrySell` on a copy of the stock and the buyer; one transaction writes the buyer, the stall's stock (the row goes
 once sold out) and the owner's gold: its snapshot with the price when it plays, otherwise `money + price` on its row within
-its carry limit (`GoldLimit` otherwise). An account's own stall refuses its characters. `/stall close` works from anywhere:
+its carry limit (`GoldLimit` otherwise). A coin entry moves the price from the buyer's account to the stall's account in
+that transaction instead (`StallSale.Coins`), and stored stall items keep their currency (`StallItem.Currency`). An
+account's own stall refuses its characters. `/stall close` works from anywhere:
 one transaction removes the stall and puts each unsold item in the account's Item Distributor (`IStallRepository.CloseAsync`),
 then the stall leaves its field. Stored stalls stand again when the server starts (`StallRestoreService`).
 

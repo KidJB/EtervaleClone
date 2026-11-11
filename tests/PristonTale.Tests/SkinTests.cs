@@ -51,12 +51,23 @@ internal static class SkinTests
         var high = low with { RequiredLevel = 500 };
         Assert.True(SkinRules.Price(low) == SkinRules.MinPrice && SkinRules.Price(high) == SkinRules.MaxPrice, "skin prices left their range");
         Assert.True(SkinRules.SlotOf(low) == SkinSlot.OffHand && SkinRules.SlotOf(low with { EquipSlot = null }) is null, "skin slots");
-        var skins = new SkinSet("WA120", "", "DS101");
+        Assert.True(Costumes.Hidden.Contains("OM126") && Costumes.Hidden.Contains("WV151") && Costumes.Hidden.Contains("WN135"),
+            "the Cabinet lists a look that cannot show");
+        var both = new SkinSet("WA104", TwoHand: "WA120");
+        Assert.True(ItemEquipmentMetadata.IsTwoHanded("WA120") && !ItemEquipmentMetadata.IsTwoHanded("WA104"), "the test's weapons changed grip");
+        Assert.True(SkinRules.WeaponLook("WA101", both) == "WA104" && SkinRules.WeaponLook("WA105", both) == "WA120", "a weapon did not take its own grip's skin");
+        Assert.True(SkinRules.WeaponLook("WA101", new SkinSet(TwoHand: "CW131")) == "WA101", "a two-handed choice showed on a one-handed weapon");
+        Assert.True(SkinRules.WeaponLook("WA105", new SkinSet("CW131")) == "WA105", "a one-handed choice showed on a two-handed weapon");
+        Assert.True(SkinRules.Upgraded(new SkinSet("WA120")) == new SkinSet(TwoHand: "WA120") && SkinRules.Upgraded(new SkinSet("WA104")) == new SkinSet("WA104"),
+            "saved looks did not move to their grip's slot");
+        var skins = new SkinSet("WA104", "", "DS101");
         Assert.True(SkinCodec.Restore(SkinCodec.Capture(skins)) == skins && SkinCodec.Capture(SkinSet.None) == "", "the skin codec");
         Assert.True(SkinCatalogPacket.MaxSize <= PristonTale.Protocol.Binary.FrameCodec.MaxFrameSize, "a catalog part does not fit one frame");
         var buffer = new byte[SkinCatalogPacket.MaxSize];
         var packet = new SkinCatalogPacket(Guid.NewGuid(), 9, true, "WA120", "", "DS101", "BI116", [new SkinArticle("WA120", "Axe", 0, 50, 2800, true)]);
+        packet = packet with { TwoHand = "WA120" };
         var read = SkinCatalogPacket.Read(buffer.AsSpan(0, packet.Write(buffer)));
+        Assert.True(read.TwoHand == "WA120", "the two-handed look differs after the wire");
         Assert.True(read.Balance == 9 && read.Last && read.OffHand == "DS101" && read.Hair == "BI116" && read.Articles.Count == 1 && read.Articles[0] == packet.Articles[0], "the catalog packet");
         return Task.CompletedTask;
     }

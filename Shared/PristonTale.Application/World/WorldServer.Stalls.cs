@@ -28,7 +28,8 @@ public sealed record PreparedStallPurchase(
     PlayerCharacter? OwnerCandidate = null,
     CharacterSaveSnapshot? OwnerSnapshot = null,
     long Price = 0,
-    string ItemName = "")
+    string ItemName = "",
+    PersonalShopCurrency Currency = PersonalShopCurrency.Gold)
     : PreparedOperation(Original, Candidate, Snapshot);
 
 // Offline stalls in the fields: set up from an open personal shop, restored at start, viewed and bought from as a shop is,
@@ -108,13 +109,13 @@ public sealed partial class WorldServer
         }, waitForCapacity: true);
 
     // The owner of a stall in the viewer's field: its character and account, or null.
-    public Task<(long CharacterId, long AccountId)?> StallOwnerAsync(PlayerSession viewer, ulong stallEntityId) =>
+    public Task<(long CharacterId, long AccountId)?> StallOwnerAsync(PlayerSession viewer, ulong stallEntityId, ulong marketNpc = 0) =>
         EnqueueAsync(viewer.EntityId, () =>
-            TryGetPlaying(viewer, out var connection) && _fields[connection.FieldId].TryGetStall(stallEntityId, out var stall)
+            TryGetPlaying(viewer, out var connection) && TryFindStall(connection, stallEntityId, marketNpc, out var stall)
                 ? (stall.OwnerCharacterId, stall.AccountId)
                 : ((long, long)?)null);
 
-    public Task<PreparedStallPurchase?> PrepareStallPurchaseAsync(PlayerSession buyer, PlayerSession? owner, PersonalShopPurchase purchase)
+    public Task<PreparedStallPurchase?> PrepareStallPurchaseAsync(PlayerSession buyer, PlayerSession? owner, PersonalShopPurchase purchase, ulong marketNpc = 0)
     {
         return EnqueueAsync<PreparedStallPurchase?>(buyer.EntityId, () =>
         {
@@ -133,12 +134,12 @@ public sealed partial class WorldServer
                     : StallRefused(original, PersonalShopStatus.Conflict);
             }
 
-            if (!_fields[connection.FieldId].TryGetStall(purchase.SellerId, out var stall))
+            if (!TryFindStall(connection, purchase.SellerId, marketNpc, out var stall))
             {
                 return StallRefused(original, PersonalShopStatus.Closed);
             }
 
-            if (player.IsDead || !NpcInteraction.WithinReach(player.Position, stall.Position))
+            if (player.IsDead || marketNpc == 0 && !NpcInteraction.WithinReach(player.Position, stall.Position))
             {
                 return StallRefused(original, PersonalShopStatus.OutOfReach);
             }
@@ -180,9 +181,10 @@ public sealed partial class WorldServer
             }
 
             candidate.RecordShopPurchase(purchase);
+            var currency = stall.Shop.Find(purchase.ItemId)!.Value.Currency;
             PlayerCharacter? ownerCandidate = null;
             CharacterSaveSnapshot? ownerSnapshot = null;
-            if (ownerPlayer is not null && owner?.Loaded is { } ownerLoaded && TryGetPlaying(owner, out var paid))
+            if (currency == PersonalShopCurrency.Gold && ownerPlayer is not null && owner?.Loaded is { } ownerLoaded && TryGetPlaying(owner, out var paid))
             {
                 ownerCandidate = ownerPlayer.Character.CloneForInventoryOperation();
                 ownerCandidate.TryChangeMoney(price);
@@ -191,7 +193,7 @@ public sealed partial class WorldServer
 
             return new PreparedStallPurchase(original, candidate, CharacterRecordFactory.Capture(buyer.Loaded, candidate, connection.FieldId, player.Position),
                 new PersonalShopOutcome(true, PersonalShopStatus.Ok, candidate.InventoryRevision, GameText.None), stall, StallRules.Remaining(stall.Shop, stock), stock,
-                ownerPlayer?.Character, ownerCandidate, ownerSnapshot, price, item!.DisplayName);
+                ownerPlayer?.Character, ownerCandidate, ownerSnapshot, price, item!.DisplayName, currency);
         });
     }
 
@@ -200,8 +202,9 @@ public sealed partial class WorldServer
     {
         return EnqueueAsync(NoOwner, () =>
         {
+            var gold = prepared.Currency == PersonalShopCurrency.Gold;
             if (!ReferenceEquals(buyer.Character, prepared.Original) || prepared.Candidate is null || prepared.Stall is not { } stall
-                || !prepared.Original.CanChangeMoney(-prepared.Price))
+                || gold && !prepared.Original.CanChangeMoney(-prepared.Price))
             {
                 throw new CommitInvariantException("Character ownership changed during a stall purchase.");
             }
@@ -209,13 +212,21 @@ public sealed partial class WorldServer
             if (Transfer(Persistence.Abstractions.GameLogs.ItemTransferKind.PersonalShop, Guid.NewGuid(), stall.FieldId) is { } log)
             {
                 log.Arrived(prepared.Original, prepared.Candidate, stall.OwnerCharacterId, CharacterIdOf(buyer));
-                log.Gold(CharacterIdOf(buyer), stall.OwnerCharacterId, prepared.Price);
+                if (gold)
+                {
+                    log.Gold(CharacterIdOf(buyer), stall.OwnerCharacterId, prepared.Price);
+                }
+
                 Log(log);
             }
 
             prepared.Original.CommitInventoryOperation(prepared.Candidate);
-            prepared.Original.TryChangeMoney(-prepared.Price);
-            if (prepared.Owner is { } owner && prepared.OwnerCandidate is not null)
+            if (gold)
+            {
+                prepared.Original.TryChangeMoney(-prepared.Price);
+            }
+
+            if (gold && prepared.Owner is { } owner && prepared.OwnerCandidate is not null)
             {
                 owner.TryChangeMoney(prepared.Price);
             }
@@ -229,6 +240,31 @@ public sealed partial class WorldServer
 
             return new PersonalShopReply(prepared.Outcome, TryGetOwnConnection(buyer, out var connection) ? stall.Listing(connection.Player.Character) : null);
         }, waitForCapacity: true);
+    }
+
+    // A stall in the viewer's field, or in any field for a buyer at the Marketplace NPC.
+    private bool TryFindStall(Connection viewer, ulong stallEntityId, ulong marketNpc, out Stall stall)
+    {
+        if (marketNpc == 0)
+        {
+            return _fields[viewer.FieldId].TryGetStall(stallEntityId, out stall!);
+        }
+
+        stall = null!;
+        if (!AtMarketplace(viewer, marketNpc))
+        {
+            return false;
+        }
+
+        foreach (var field in _fields.Values)
+        {
+            if (field.TryGetStall(stallEntityId, out stall!))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void AddStall(Stall stall, PersonalShop shop, Inventory stock)

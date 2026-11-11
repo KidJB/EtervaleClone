@@ -86,6 +86,10 @@ public static class EtervaleOpcodes
     public const uint BellatraResultRequest = 0x45541304;
     public const uint BellatraResult = 0x45541305;
 
+    public const uint AchievementsRequest = 0x45541A00;
+    public const uint Achievements = 0x45541A01;
+    public const uint AchievementTitle = 0x45541A02;
+
     public const uint CoinShopOpen = 0x45541600;
     public const uint CoinShopTab = 0x45541601;
     public const uint CoinShopCatalog = 0x45541602;
@@ -107,6 +111,14 @@ public static class EtervaleOpcodes
     public const uint SkinBuy = 0x45541402;
     public const uint SkinApply = 0x45541403;
     public const uint SkinResult = 0x45541404;
+    public const uint CharacterMarketRequest = 0x45541B00;
+    public const uint CharacterMarketPage = 0x45541B01;
+    public const uint CharacterMarketDetail = 0x45541B02;
+    public const uint CharacterMarketItems = 0x45541B03;
+    public const uint MarketplaceQuery = 0x45541C00;
+    public const uint MarketplacePage = 0x45541C01;
+    public const uint MarketplaceDetails = 0x45541C02;
+    public const uint MarketplaceBuy = 0x45541C03;
 
     public const uint PresenceEntries = 0x45540900;
     public const uint DescribeEntity = 0x45540901;

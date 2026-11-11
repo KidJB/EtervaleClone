@@ -77,12 +77,56 @@ internal static class GmItemCommands
         }
     }
 
+    // /@rarity code grade [class] [aging]: the best copy with that rarity grade (common .. legendary), dropped at the issuer's feet.
+    // Its own command, apart from /@get_perf, so graded gear can always be made for testing.
+    public static async Task Graded(GmCommandContext context)
+    {
+        if (ReadGraded(context) is not { } copy)
+        {
+            return;
+        }
+
+        var dropped = await context.Commands.World.DropAsync(context.Issuer.EntityId, _ => copy.Make(), 0);
+        context.Reply(dropped ? copy.Done("created") : Format("No field to drop {0} on", copy.Code));
+    }
+
+    // /@put_rarity name code grade [class] [aging]: the same graded copy written into an online player's bag, as /@put.
+    public static async Task GiftGraded(GmCommandContext context)
+    {
+        var name = context.Word();
+        if (name.Length == 0 || context.Commands.Directory.FindByName(name) is not { } target)
+        {
+            context.Reply(Format("No player named {0} is online", name));
+            return;
+        }
+
+        if (ReadGraded(context) is { } copy && await GmGifts.GiveAsync(context.Commands, context.Issuer, target, _ => copy.Make()))
+        {
+            context.Reply(copy.Done(Format("sent to {0}", target.Name)));
+        }
+    }
+
+    // The code and grade come first, then the perfect copy's optional class and aging.
+    private static PerfectCopy? ReadGraded(GmCommandContext context)
+    {
+        var code = context.Word();
+        var gradeName = context.Word();
+        if (RarityNamed(gradeName) is not { } grade)
+        {
+            context.Reply("Usage: /@rarity <code> <common|uncommon|rare|epic|legendary> [class] [aging]");
+            return null;
+        }
+
+        return ReadPerfect(context, code, grade);
+    }
+
     // The arguments of a perfect copy: the item code, optionally a class (a class name, a short name MS FS PS AS KS ATA PRS
     // MG, its number 1 to 8, or none) and an aging level (0 to AgingRules.MaxLevel, as /AgingSetting); null after telling
     // what was wrong.
-    private static PerfectCopy? ReadPerfect(GmCommandContext context)
+    private static PerfectCopy? ReadPerfect(GmCommandContext context) => ReadPerfect(context, context.Word(), ItemRarity.None);
+
+    private static PerfectCopy? ReadPerfect(GmCommandContext context, string code, ItemRarity grade)
     {
-        var code = context.Word();
         var specName = context.Word();
         var aging = Math.Clamp(ChatCommandText.ToNumber(context.Word()), 0, Simulation.Items.Aging.AgingRules.MaxLevel);
         var job = SpecJobCode(specName);
@@ -106,10 +150,10 @@ internal static class GmItemCommands
             return null;
         }
 
-        return new PerfectCopy(definition, specBit, aging, code, className);
+        return new PerfectCopy(definition, specBit, aging, code, className, grade);
     }
 
-    private sealed class PerfectCopy(ItemDefinition definition, uint specBit, int aging, string code, string className)
+    private sealed class PerfectCopy(ItemDefinition definition, uint specBit, int aging, string code, string className, ItemRarity grade)
     {
         private int _aged;
 
@@ -118,6 +162,11 @@ internal static class GmItemCommands
         public ItemInstance Make()
         {
             var item = ItemRoller.CreatePerfect(definition, 1, specBit);
+            if (grade != ItemRarity.None)
+            {
+                ItemRarities.Apply(item, grade);
+            }
+
             Simulation.Items.Aging.AgingRules.AgeTo(item, aging);
             _aged = item.UpgradeLevel;
             return item;

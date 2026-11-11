@@ -27,6 +27,35 @@ internal static class CostumeProbe
             }
         }
 
+        foreach (var key in Gameplay.World.Remote.EquipmentVisuals.CatalogKeys.Where(static key => (key[0] is 'W' or 'w' || key.StartsWith("DS", StringComparison.OrdinalIgnoreCase)) && !Costumes.Hidden.Contains(key)))
+        {
+            try
+            {
+                loader.LoadRigid(Path.Combine(root, Gameplay.World.Remote.EquipmentVisuals.MeshPath(key).Replace('/', Path.DirectorySeparatorChar)));
+            }
+            catch (Exception failure) when (failure is InvalidDataException or IOException or ArgumentException or InvalidOperationException)
+            {
+                failures++;
+                Console.WriteLine($"BROKEN	{key}	model	{failure.Message}");
+            }
+        }
+
+        foreach (var row in Gameplay.World.Remote.EquipmentVisualTables.Armors)
+        {
+            foreach (var file in row.Where(static file => file.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    loader.Load(root, Path.Combine(root, "char", "tmABCD", file));
+                }
+                catch (Exception failure) when (failure is InvalidDataException or IOException or ArgumentException or InvalidOperationException)
+                {
+                    failures++;
+                    Console.WriteLine($"BROKEN	armor	{file}	{failure.Message}");
+                }
+            }
+        }
+
         foreach (var gear in Costumes.Gear)
         {
             try

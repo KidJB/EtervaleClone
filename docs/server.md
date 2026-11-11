@@ -203,6 +203,10 @@ show or write one row with `/setting name [value]` ([chat-and-gm.md](chat-and-gm
 | `aging.double_percent` | 100 | Chance of a level at once below +10, in percent of each level's chance. |
 | `mixing.price_percent` | 100 | Price of a mix or a reconstruction in percent of the item's price; carried to the client in the mixer's offer. |
 | `alchemy.price_percent` | 100 | Price of turning sheltoms into force orbs, in percent of the price per sheltom. |
+| `market.character.enabled` | true | Character Market trades ([markets.md](markets.md)); `market.shops.enabled` (true) the same for the Marketplace. |
+| `market.character.min_level`, `.max_listings`, `.min_price`, `.max_price` | 50, 3, 100, 1000000 | Lowest level to list, active listings per account, price range in coins. |
+| `market.character.listing_fee`, `.expiry_days`, `.tax_percent` | 0, 14, 5 | Coins to list, days a listing lasts, percent kept from the seller (rounded up). |
+| `shops.purchase_cooldown_ms` | 2000 | Milliseconds a buyer waits after a personal shop or stall purchase; 0 for none. |
 | `castle.mode` | 1 | Bless Castle siege: 0 off, 1 weekly, 2 league, during which players never fight each other in the castle ([application.md](application.md#bless-castle)). |
 | `castle.siege_day` | 0 | Day of the scheduled siege, 0 Sunday to 6 Saturday, server local time. |
 | `castle.siege_hour` | 20 | Hour of the scheduled siege, 0 to 23, server local time. |

@@ -5,7 +5,7 @@ using PristonTale.Simulation.Items;
 namespace PristonTale.Gameplay.UI.Inventory;
 
 // Original inventory slots, bag grid, arrows and text positions in 800x600 design coordinates of the fully open window.
-// Origin is the top-left of the bottom-anchored 800x600 frame; panel animation adds its slide offset to Y.
+// Origin is the top-left of the bottom-anchored, horizontally centred 800x600 frame; panel animation adds its slide offset to Y.
 public static class HudInventoryLayout
 {
     public const int Columns = Simulation.Items.Inventory.DefaultWidth;
@@ -14,7 +14,7 @@ public static class HudInventoryLayout
     // Which owned items lie on the bag grid, for HudGridPlacement.
     public static readonly Func<OwnedItemView, bool> InBag = static item => item.InBag;
 
-    public static Point Origin(HudLayout layout, int slideOffset = 0) => new(0, layout.BottomOffset + slideOffset);
+    public static Point Origin(HudLayout layout, int slideOffset = 0) => new(layout.CenterOffset, layout.BottomOffset + slideOffset);
 
     public static Rectangle Bag(Point origin) => new(origin.X + 23, origin.Y + 436, Columns * HudGridPlacement.CellSize, Rows * HudGridPlacement.CellSize);
 
@@ -132,7 +132,9 @@ public static class HudInventoryLayout
     // How far above its button a button's label is drawn.
     public const int HintRise = 27;
     public static Rectangle Money(Point origin) => new(origin.X + 147, origin.Y + 574, 110, 18);
-    public static Rectangle Weight(Point origin) => new(origin.X + 326, origin.Y + 471, 80, 15);
+    public static Rectangle Weight(Point origin) => new(origin.X + 326, origin.Y + 471, 62, 15);
+
+    public static Rectangle LockButton(Point origin) => new(origin.X + 391, origin.Y + 468, 20, 20);
     public static Rectangle Window(Point origin) => new(origin.X, origin.Y + 400, HudLayout.DesignWidth, 200);
 
     private static Rectangle Edges(int left, int top, int right, int bottom) => new(left, top, right - left, bottom - top);

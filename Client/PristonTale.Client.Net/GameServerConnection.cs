@@ -97,9 +97,12 @@ public sealed class GameServerConnection : IGameBackend
         _certificatePolicy = ServerCertificatePolicy.FromAddress(uri);
         _presence = new PresenceDecoder(_catalog, RequestDescription);
         PersonalShops = new PersonalShopRequests(packet => Send(packet));
+        Markets = new MarketRequests(packet => Send(packet));
     }
 
     internal PersonalShopRequests PersonalShops { get; }
+
+    internal MarketRequests Markets { get; }
 
     public string? SessionToken { get; private set; }
 
@@ -380,7 +383,7 @@ public sealed class GameServerConnection : IGameBackend
     internal Task<(PristonTale.Simulation.Characters.SkinStatus, long)> ApplySkinsAsync(PristonTale.Simulation.Characters.SkinSet skins, CancellationToken ct)
     {
         ThrowIfDisconnected();
-        var packet = new SkinApplyPacket(Guid.NewGuid(), skins.Weapon, skins.Armor, skins.OffHand, skins.Hair);
+        var packet = new SkinApplyPacket(Guid.NewGuid(), skins.Weapon, skins.Armor, skins.OffHand, skins.Hair, skins.TwoHand);
         return _skinResults.RequestAsync(packet.OperationId, () => Send(packet), ct);
     }
 
@@ -562,6 +565,7 @@ public sealed class GameServerConnection : IGameBackend
             _services.FailAll(error);
             _quests.FailAll(error);
             PersonalShops.FailAll(error);
+            Markets.FailAll(error);
 
             _presenceUpdates.Writer.TryComplete(error);
         }
@@ -717,7 +721,7 @@ public sealed class GameServerConnection : IGameBackend
                 {
                     _skinParts.Remove(part.OperationId);
                     _skinCatalogs.Complete(part.OperationId, new SkinCatalogInfo(part.Balance,
-                        new PristonTale.Simulation.Characters.SkinSet(part.Weapon, part.Armor, part.OffHand, part.Hair), articles));
+                        new PristonTale.Simulation.Characters.SkinSet(part.Weapon, part.Armor, part.OffHand, part.Hair, part.TwoHand), articles));
                 }
 
                 break;
@@ -790,6 +794,13 @@ public sealed class GameServerConnection : IGameBackend
 
                 break;
             }
+            case EtervaleOpcodes.CharacterMarketPage:
+            case EtervaleOpcodes.CharacterMarketDetail:
+            case EtervaleOpcodes.CharacterMarketItems:
+            case EtervaleOpcodes.MarketplacePage:
+            case EtervaleOpcodes.MarketplaceDetails:
+                Markets.Handle(code, packet);
+                break;
             default:
                 PersonalShops.Handle(code, packet);
                 break;

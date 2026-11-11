@@ -104,6 +104,12 @@ internal static class EquipmentTests
             return EquipmentVisuals.Apply(definition.DefaultVisuals, "", weapon, "", false, definition.MotionJobMask);
         }
 
+        var fighterDefinition = registry.Get(PlayerClass.Fighter).Definition;
+        var skinned = EquipmentVisuals.Apply(fighterDefinition.DefaultVisuals, "", "CW131", "", false, fighterDefinition.MotionJobMask, "WA101");
+        Assert.True(skinned.WeaponKey == "CW131" && EquipmentVisuals.MotionIndex(skinned.HeldAs) == EquipmentVisuals.MotionIndex("WA101")
+            && EquipmentVisuals.WeaponBone(skinned, false) == EquipmentVisuals.WeaponBone("WA101", false), "a skin decided how the worn weapon is held");
+        Assert.True(Armed(PlayerClass.Fighter, "WA101").HeldAs == "WA101", "a weapon without a skin is not held as itself");
+
         var assassin = Armed(PlayerClass.Assassin, "WD101");
         Assert.True(EquipmentVisuals.WeaponBone(assassin, false) == "Bip weapon01" && EquipmentVisuals.TwinBone(assassin, false) == "Bip weapon05"
             && EquipmentVisuals.WeaponBone(assassin, true) == "Bip in07" && EquipmentVisuals.TwinBone(assassin, true) == "Bip in08"

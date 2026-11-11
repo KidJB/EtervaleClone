@@ -49,12 +49,12 @@ public sealed partial class GameScene
         _heldSeconds = seconds;
         if (_equipmentPresentation is not null && _playerBody is not null)
         {
-            Hold(_remote.SelfEntityId, _equipmentPresentation.Handles, _ownWeaponGlow, _ownOffHandGlow, _equipmentPresentation.WeaponKey,
+            Hold(_remote.SelfEntityId, _equipmentPresentation.Handles, _ownWeaponGlow, _ownOffHandGlow, _equipmentPresentation.HeldWeaponKey,
                 !_playerController.IsDead);
         }
 
         _remote.ForEachHolder(_holdRemote ??= (entityId, handles, appearance, shown) =>
-            Hold(entityId, handles, appearance.WeaponGlow, appearance.OffHandGlow, appearance.WeaponKey, shown));
+            Hold(entityId, handles, appearance.WeaponGlow, appearance.OffHandGlow, HeldWeapon(appearance), shown));
         UpdateShots(seconds);
         _looks.EndGlowFrame();
         _weaponOrbits.EndFrame();
@@ -88,4 +88,8 @@ public sealed partial class GameScene
             }
         }
     }
+
+    // The weapon another player really holds, under any skin it shows.
+    private static string HeldWeapon(Client.Net.Presence.PlayerAppearanceInfo appearance) =>
+        appearance.HeldWeaponKey.Length > 0 ? appearance.HeldWeaponKey : appearance.WeaponKey;
 }

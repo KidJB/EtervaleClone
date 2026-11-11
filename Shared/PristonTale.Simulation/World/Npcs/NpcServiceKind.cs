@@ -65,7 +65,11 @@ public enum NpcServiceKind : byte
     BossArena = 27,
 
     // Etervale's skins (Characters.SkinRules), added to its NPC when the world data loads.
-    Cabinet = 28
+    Cabinet = 28,
+
+    // Etervale's Character Market and Marketplace (Markets), placed with their NPCs when the world data loads.
+    CharacterMarket = 29,
+    Marketplace = 30
 }
 
 public sealed record NpcService(NpcServiceKind Kind, int Value = 0, int Value2 = 0, string Text = "");

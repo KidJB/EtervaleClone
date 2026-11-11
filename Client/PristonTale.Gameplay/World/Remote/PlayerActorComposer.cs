@@ -208,7 +208,7 @@ public sealed class PlayerActorComposer(IActorScene scene, PristonActorLoader ac
     {
         var prepared = ResolvePrepared(assetRoot, visuals, faceIndex);
 
-        var context = new PristonMotionContext(EquipmentVisuals.MotionIndex(visuals.WeaponKey), visuals.JobMask, visuals.InVillage ? 1 : 2);
+        var context = new PristonMotionContext(EquipmentVisuals.MotionIndex(visuals.HeldAs), visuals.JobMask, visuals.InVillage ? 1 : 2);
         var handles = new PlayerActorHandles(ActorHandle.None, ActorHandle.None);
         try
         {
@@ -291,7 +291,7 @@ public sealed class PlayerActorComposer(IActorScene scene, PristonActorLoader ac
         bool visibleInMainPass = true)
     {
         var prepared = ResolvePrepared(assetRoot, visuals, faceIndex);
-        var context = new PristonMotionContext(EquipmentVisuals.MotionIndex(visuals.WeaponKey), visuals.JobMask, visuals.InVillage ? 1 : 2);
+        var context = new PristonMotionContext(EquipmentVisuals.MotionIndex(visuals.HeldAs), visuals.JobMask, visuals.InVillage ? 1 : 2);
         return _scene.AddActor(new PristonActorInstance(prepared.Head, world, motion)
         {
             MotionContext = context,

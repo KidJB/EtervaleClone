@@ -13,22 +13,24 @@ public sealed record StallLook(string Name, int Class, int Tier, int Face, int H
 // (StallItem JSON array).
 public sealed record StallRecord(long Id, long AccountId, long CharacterId, int FieldId, double X, double Y, double Z, double Facing, string Look, string Items);
 
-// One listed item of a stall's stock: the item, its price per unit and its store grid cell.
-public sealed record StallItem(SavedItem Item, long Price, int Cell);
+// One listed item of a stall's stock: the item, its price per unit, its store grid cell and what it is paid in (absent in
+// stalls stored before currencies: gold).
+public sealed record StallItem(SavedItem Item, long Price, int Cell, PersonalShopCurrency Currency = PersonalShopCurrency.Gold);
 
 public enum StallSaleStore
 {
     Stored,
     Gone,
     GoldLimit,
+    NotEnoughCoins,
     Failed
 }
 
-// A sale to store: the buyer's character, the stall's stock after it (empty closes the stall) and the price for the owner,
-// written to the owner's character row (Owner when it plays, its snapshot) or added to its gold (offline, within
-// OwnerMoneyLimit).
+// A sale to store: the buyer's character, the stall's stock after it (empty closes the stall) and the price for the owner.
+// Gold is written to the owner's character row (Owner when it plays, its snapshot) or added to its gold (offline, within
+// OwnerMoneyLimit); coins (Coins) move from the buyer's account to the stall's account instead.
 public sealed record StallSale(CharacterRecord Buyer, long StallId, string Items, bool Empty, long OwnerCharacterId, long Price, long OwnerMoneyLimit,
-    CharacterRecord? Owner);
+    CharacterRecord? Owner, bool Coins = false, long OwnerAccountId = 0);
 
 public interface IStallRepository
 {
@@ -55,7 +57,7 @@ public static class StallCodec
             var anchor = stock.Find(entry.ItemId);
             if (anchor >= 0 && stock[anchor] is { } item)
             {
-                items.Add(new StallItem(CharacterStateCodec.CaptureItem(item, entry.Cell, null), entry.UnitPrice, entry.Cell));
+                items.Add(new StallItem(CharacterStateCodec.CaptureItem(item, entry.Cell, null), entry.UnitPrice, entry.Cell, entry.Currency));
             }
         }
 
@@ -76,7 +78,7 @@ public static class StallCodec
                 throw new InvalidDataException("A stall item does not fit its cell.");
             }
 
-            entries.Add(new PersonalShopEntry(item.InstanceId, stored.Price, stored.Cell));
+            entries.Add(new PersonalShopEntry(item.InstanceId, stored.Price, stored.Cell, stored.Currency));
         }
 
         return (entries, stock);

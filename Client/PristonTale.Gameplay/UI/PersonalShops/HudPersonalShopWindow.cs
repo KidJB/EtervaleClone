@@ -41,6 +41,8 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
 
     private static readonly Color OfflineStripColor = new(12, 10, 8, 220);
     private static readonly Color OfflineTextColor = new(255, 214, 90);
+    private static readonly Color CoinColor = new(255, 140, 0);
+    private static readonly Color ViewOnlyColor = new(150, 190, 255);
 
     private enum Button
     {
@@ -72,6 +74,7 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
     public bool BlocksWorld => true;
     public Point Origin => HudStoreLayout.Origin(_slide.Offset);
 
+    // The gold the listing brings when it all sells; coin and view-only offers bring none.
     public long Total
     {
         get
@@ -79,7 +82,10 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
             long total = 0;
             foreach (var offer in _offers)
             {
-                total += offer.UnitPrice * offer.Item.Count;
+                if (offer.Currency == PersonalShopCurrency.Gold)
+                {
+                    total += offer.UnitPrice * offer.Item.Count;
+                }
             }
 
             return total;
@@ -130,10 +136,11 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
     // An item of the player's listing, which the bag keeps from being moved.
     public bool Holds(Guid itemId) => !Buying && Find(itemId) >= 0;
 
-    public IReadOnlyList<PersonalShopEntry> Entries() => _offers.Select(static offer => new PersonalShopEntry(offer.Item.InstanceId, offer.UnitPrice, offer.Item.Anchor)).ToArray();
+    public IReadOnlyList<PersonalShopEntry> Entries() =>
+        _offers.Select(static offer => new PersonalShopEntry(offer.Item.InstanceId, offer.UnitPrice, offer.Item.Anchor, offer.Currency)).ToArray();
 
     // Lays a bag item on the player's listing at the first free place; false when the listing is full or has no room.
-    public bool TryList(OwnedItemView item, long unitPrice)
+    public bool TryList(OwnedItemView item, long unitPrice, PersonalShopCurrency currency = PersonalShopCurrency.Gold)
     {
         if (Buying || _offers.Count >= PersonalShopLimits.MaxEntries || Find(item.InstanceId) >= 0)
         {
@@ -152,7 +159,7 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
             return false;
         }
 
-        _offers.Add(new PersonalShopOffer(item with { Anchor = anchor }, unitPrice));
+        _offers.Add(new PersonalShopOffer(item with { Anchor = anchor }, unitPrice, currency));
         IconRevision++;
         Changed();
         return true;
@@ -268,6 +275,10 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
             }
 
             _counts.Draw(painter, icons, view, bounds, Color.White);
+            if (CurrencyOf(view) is var currency and not PersonalShopCurrency.Gold)
+            {
+                painter.Text(currency == PersonalShopCurrency.Coins ? "cs" : "view", bounds.X + 2, bounds.Y + 1, currency == PersonalShopCurrency.Coins ? CoinColor : ViewOnlyColor);
+            }
         }
 
         var plate = HudStoreLayout.GoldPlate(origin);
@@ -304,7 +315,13 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
 
         if (!ReferenceEquals(offer, _described))
         {
-            var price = ClientText.Format(offer.Item.Count > 1 ? "PersonalShop.UnitPriceValue" : "PersonalShop.PriceValue", offer.UnitPrice.ToString("N0", System.Globalization.CultureInfo.InvariantCulture));
+            var number = offer.UnitPrice.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+            var price = offer.Currency switch
+            {
+                PersonalShopCurrency.ViewOnly => "View only: not for sale",
+                PersonalShopCurrency.Coins => (offer.Item.Count > 1 ? "Price per unit: " : "Price: ") + number + " coins",
+                _ => ClientText.Format(offer.Item.Count > 1 ? "PersonalShop.UnitPriceValue" : "PersonalShop.PriceValue", number)
+            };
             var hint = ClientText.Get(Buying ? "Shop.ClickBuy" : Selling ? "PersonalShop.OnSale" : "PersonalShop.TakeBack");
             (_described, _description) = (offer, HudItemDetailTooltip.Lines(_counts.Named(offer.Item), state, price, hint));
         }
@@ -385,6 +402,19 @@ public sealed class HudPersonalShopWindow : IHudServiceWindow
         }
 
         return null;
+    }
+
+    private PersonalShopCurrency CurrencyOf(OwnedItemView view)
+    {
+        foreach (var offer in _offers)
+        {
+            if (ReferenceEquals(offer.Item, view))
+            {
+                return offer.Currency;
+            }
+        }
+
+        return PersonalShopCurrency.Gold;
     }
 
     private int Find(Guid itemId)

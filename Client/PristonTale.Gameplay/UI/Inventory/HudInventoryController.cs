@@ -113,6 +113,11 @@ public sealed class HudInventoryController(ScreenContext context, Func<Inventory
     // Set by the HUD each frame: nothing is picked up while the player attacks or casts, as in the original.
     public bool PickupLocked { get; set; }
 
+    // The player's own lock: a click on an item only says so, and gear is not put on or taken off; potions and usable items
+    // still work.
+    public bool ItemsLocked { get; private set; }
+    public Action LockRefused { get; set; }
+
     // The player's swings and casts begun so far (GameScene.PlayerActionStarts).
     public long ActionStarts { get; set; }
 
@@ -291,6 +296,12 @@ public sealed class HudInventoryController(ScreenContext context, Func<Inventory
         // The side buttons take their clicks with an item on the cursor too, which is never set down on them.
         if (clicked)
         {
+            if (HudInventoryLayout.LockButton(_origin).Contains(pointer))
+            {
+                ItemsLocked = !ItemsLocked;
+                return;
+            }
+
             for (var side = 0; side < PlayerCharacter.Sides; side++)
             {
                 if (HudInventoryLayout.PageButton(_origin, side).Contains(pointer))
@@ -351,6 +362,12 @@ public sealed class HudInventoryController(ScreenContext context, Func<Inventory
 
         if (clicked)
         {
+            if (ItemsLocked)
+            {
+                LockRefused?.Invoke();
+                return;
+            }
+
             if (InterceptClick?.Invoke(hovered) != true && !PickupLocked)
             {
                 PickUp(hovered);
@@ -361,6 +378,12 @@ public sealed class HudInventoryController(ScreenContext context, Func<Inventory
 
         if (mouse.RightButton == ButtonState.Pressed && _previousMouse.RightButton == ButtonState.Released)
         {
+            if (ItemsLocked && hovered.Kind != ItemKind.Potion && !UsableItemCatalog.IsUsable(hovered.CatalogKey))
+            {
+                LockRefused?.Invoke();
+                return;
+            }
+
             Use(hovered);
         }
     }

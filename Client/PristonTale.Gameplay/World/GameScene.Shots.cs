@@ -34,12 +34,12 @@ public sealed partial class GameScene
         _shots.Content = _effectLibrary?.Vfx;
         if (_equipmentPresentation is not null && _playerBody is not null && !_playerController.IsDead)
         {
-            Shoot(_remote.SelfEntityId, _equipmentPresentation.Handles, _equipmentPresentation.WeaponKey, _ownWeaponGlow,
+            Shoot(_remote.SelfEntityId, _equipmentPresentation.Handles, _equipmentPresentation.HeldWeaponKey, _ownWeaponGlow,
                 _playerBody.Position + Vector3.Up * GroundTraversal.VisualOffset, _player is not null && ClassProfiles.CastsWithStaff(_player.Class.Class));
         }
 
         _remote.ForEachPlayer(_shootRemote ??= (entityId, handles, appearance, position) =>
-            Shoot(entityId, handles, appearance.WeaponKey, appearance.WeaponGlow, position, ClassProfiles.CastsWithStaff(appearance.Class)));
+            Shoot(entityId, handles, HeldWeapon(appearance), appearance.WeaponGlow, position, ClassProfiles.CastsWithStaff(appearance.Class)));
         _shots.Update(seconds, _shotTarget);
     }
 

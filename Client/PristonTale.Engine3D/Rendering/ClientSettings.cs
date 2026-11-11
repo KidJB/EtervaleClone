@@ -75,6 +75,7 @@ public sealed record ClientSettings
     public bool ClassicTargetHealthBar { get; init; }
     // Classic: the target frame is the original's portrait box at the top right; otherwise the bar at the top centre.
     public bool ClassicTargetFrame { get; init; }
+    public bool CenteredInventory { get; init; } = true;
     // Classic: the name boxes over monsters and NPCs use the speech bubble frame and the HUD text size, and a monster's
     // life bar shows while the cursor is on it; otherwise a compact box, the bar once the monster was clicked or attacked.
     public bool ClassicNamePlates { get; init; }
@@ -84,6 +85,9 @@ public sealed record ClientSettings
     public bool WeatherEnabled { get; init; } = true;
     // A helper pet beside the player fetches potions from the ground as well as gold; off: gold only.
     public bool PetPicksUpPotions { get; init; } = true;
+
+    // The player's Discord profile shows where they play (DiscordPresence.ApplicationId).
+    public bool DiscordPresence { get; init; } = true;
     // The physical sky (sun, moon, stars, volumetric clouds) instead of the original's painted domes, and its clouds.
     public bool RealisticSky { get; init; } = true;
     public CloudQuality CloudQuality { get; init; } = CloudQuality.Medium;

@@ -829,6 +829,8 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
     // The offline stalls standing in this field, by entity id; drawn as their owners standing with their signs.
     private readonly Dictionary<ulong, Stalls.Stall> _stalls = new();
 
+    public IEnumerable<Stalls.Stall> Stalls => _stalls.Values;
+
     public void AddStall(Stalls.Stall stall) => _stalls[stall.EntityId] = stall;
 
     public bool RemoveStall(ulong entityId) => _stalls.Remove(entityId);

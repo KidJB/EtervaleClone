@@ -9,7 +9,8 @@ public sealed class ServerSettingsAppService(
     WorldServer world,
     GameMasterCommands gameMasters,
     IServerOperations server,
-    WorldServerOptions hostWorld)
+    WorldServerOptions hostWorld,
+    Markets.MarketOptionsHolder? markets = null)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private bool _seeded;
@@ -43,6 +44,13 @@ public sealed class ServerSettingsAppService(
             }
 
             gameMasters.Options = settings.GameMasters;
+            if (markets is not null)
+            {
+                markets.Character = settings.CharacterMarket;
+                markets.MarketplaceEnabled = settings.MarketplaceEnabled;
+                markets.PurchaseCooldownMs = settings.ShopPurchaseCooldownMs;
+            }
+
             server.ServerName = settings.ServerName;
             if (previous is null || previous.MaxUsers != settings.MaxUsers)
             {

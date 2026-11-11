@@ -1021,10 +1021,10 @@ public sealed partial class PristonRenderer : IDisposable
 
         public Matrix[] SampleSkeleton()
         {
-            if (_clipAnimator is not null)
+            if (_clipAnimator is not null && Animator is PristonModelAnimator rider)
             {
                 _sampledFrame = float.NaN;
-                _sampledTransforms = Animator.Evaluate(Frame, Motion.EndFrame * GameUnits.FrameTicks, _clipAnimator.Evaluate(_clipFrame, _clipEnd), _clipBones);
+                _sampledTransforms = rider.Evaluate(Frame, Motion.EndFrame * GameUnits.FrameTicks, _clipAnimator.Evaluate(_clipFrame, _clipEnd), _clipBones);
                 return _sampledTransforms;
             }
 

@@ -1,4 +1,6 @@
 using PristonTale.Client.Net.Presence;
+using PristonTale.Protocol.Packets;
+using PristonTale.Simulation.PersonalShops;
 using PristonTale.Simulation.Shops;
 
 namespace PristonTale.Gameplay.World;
@@ -13,6 +15,24 @@ public sealed partial class GameScene
         _playChannel is { } channel
             ? channel.BuyCoinShopAsync(tabId, itemId, quantity, specClass, _presenceCts.Token)
             : Task.FromResult((CoinShopStatus.Rejected, 0L));
+
+    public Task<MarketplaceView> MarketplaceAsync(MarketplaceQueryPacket query) =>
+        _playChannel is { } channel ? channel.MarketplaceAsync(query, _presenceCts.Token) : Task.FromResult(new MarketplaceView((byte)Simulation.Markets.MarketplacePageStatus.Rejected, 0, 0, []));
+
+    public Task<PersonalShopReply> BuyFromMarketplaceAsync(ulong npcId, PersonalShopPurchase purchase) =>
+        _playChannel is { } channel
+            ? channel.BuyFromMarketplaceAsync(npcId, purchase, _presenceCts.Token)
+            : Task.FromResult(new PersonalShopReply(PersonalShopOutcome.Failed(PersonalShopStatus.Rejected, 0)));
+
+    public Task<CharacterMarketPagePacket> CharacterMarketAsync(CharacterMarketRequestPacket request) =>
+        _playChannel is { } channel
+            ? channel.CharacterMarketAsync(request, _presenceCts.Token)
+            : Task.FromResult(new CharacterMarketPagePacket(request.OperationId, (byte)Simulation.Markets.CharacterMarketStatus.Rejected, request.Action, 0, 0, 0, 0, 0, 0, 0, 0, []));
+
+    public Task<CharacterDetailView> CharacterMarketDetailAsync(CharacterMarketRequestPacket request) =>
+        _playChannel is { } channel
+            ? channel.CharacterMarketDetailAsync(request, _presenceCts.Token)
+            : Task.FromResult(new CharacterDetailView((byte)Simulation.Markets.CharacterMarketStatus.Rejected, 0, 0, 0, 0, 0, 0, []));
 
     public Task<ItemBoxListInfo> OpenItemBoxAsync(ulong npcId) =>
         _playChannel is { } channel ? channel.OpenItemBoxAsync(npcId, _presenceCts.Token) : Task.FromResult(new ItemBoxListInfo(8, []));

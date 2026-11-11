@@ -48,8 +48,23 @@ public sealed partial class GameplayHud
         set => _bellatraResult.Ask = value;
     }
 
+    public Action<uint> SendAchievementTitle
+    {
+        set => _achievements.Choose = value;
+    }
+
+    public Action SendAchievementsRequest
+    {
+        set => _achievements.Ask = value;
+    }
+
     public void ObserveBellatra(PresenceUpdate update)
     {
+        if (update.Achievements is { } achievements)
+        {
+            _achievements.Observe(achievements);
+        }
+
         if (update.BellatraClan is { } clan)
         {
             _bellatraWindow.Observe(clan);

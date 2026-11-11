@@ -157,7 +157,7 @@ public sealed class HudInventoryPanel
             }
         }
 
-        DrawButtons(painter, origin, state, boxShown, pointer, interactive);
+        DrawButtons(painter, origin, state, boxShown, controller.ItemsLocked, pointer, interactive);
         var money = HudInventoryLayout.Money(origin);
         painter.TextCentered(_gold, money.Left, money.Right, money.Y);
         var weight = HudInventoryLayout.Weight(origin);
@@ -268,10 +268,21 @@ public sealed class HudInventoryPanel
         _beltPlacement = default;
     }
 
+    private const int LockHintLeft = 1;
+    private const int LockHintRise = 28;
+
     // The original lights the shown page's and the held pair's arrow and the open special item box's button; the button
     // under the pointer lights too and shows its label above it, and the close button shows its exit sign.
-    private static void DrawButtons(HudPainter painter, Point origin, OwnerState state, bool boxShown, Point pointer, bool interactive)
+    private static void DrawButtons(HudPainter painter, Point origin, OwnerState state, bool boxShown, bool locked, Point pointer, bool interactive)
     {
+        var lockButton = HudInventoryLayout.LockButton(origin);
+        var lockHovered = interactive && lockButton.Contains(pointer);
+        painter.Sprite(locked || lockHovered ? HudArt.ItemLockOn : HudArt.ItemLock, lockButton.X, lockButton.Y);
+        if (lockHovered)
+        {
+            painter.Sprite(HudArt.ItemLockHint, lockButton.X - LockHintLeft, lockButton.Y - LockHintRise);
+        }
+
         var questBox = HudInventoryLayout.QuestBoxButton(origin);
         if (!boxShown)
         {

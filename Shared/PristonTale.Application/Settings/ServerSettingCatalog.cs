@@ -1,6 +1,7 @@
 using System.Globalization;
 using PristonTale.Application.World;
 using PristonTale.Persistence.Abstractions.Settings;
+using PristonTale.Simulation.Markets;
 using PristonTale.Simulation.World;
 
 namespace PristonTale.Application.Settings;
@@ -90,7 +91,28 @@ public static class ServerSettingCatalog
         Int("castle.siege_day", Application.Castle.CastleOptions.Default.SiegeDay, 0, 6, "Bless Castle: the siege's day of the week, 0 Sunday to 6 Saturday (server time).",
             static (s, v) => s with { Castle = s.Castle with { SiegeDay = v } }),
         Int("castle.siege_hour", Application.Castle.CastleOptions.Default.SiegeHour, 0, 23, "Bless Castle: the siege's starting hour, 0 to 23 (server time).",
-            static (s, v) => s with { Castle = s.Castle with { SiegeHour = v } })
+            static (s, v) => s with { Castle = s.Castle with { SiegeHour = v } }),
+        Bool("market.character.enabled", CharacterMarketOptions.Default.Enabled, "Character Market: whether its NPC trades.",
+            static (s, v) => CharacterMarket(s, s.CharacterMarket with { Enabled = v })),
+        Int("market.character.min_level", CharacterMarketOptions.Default.MinLevel, 1, 1000, "Character Market: the lowest level a character may be listed at.",
+            static (s, v) => CharacterMarket(s, s.CharacterMarket with { MinLevel = v })),
+        Int("market.character.max_listings", CharacterMarketOptions.Default.MaxListingsPerAccount, 0, 6, "Character Market: active listings one account may have.",
+            static (s, v) => CharacterMarket(s, s.CharacterMarket with { MaxListingsPerAccount = v })),
+        Int("market.character.min_price", (int)CharacterMarketOptions.Default.MinPrice, 1, int.MaxValue, "Character Market: the lowest price in coins.",
+            static (s, v) => CharacterMarket(s, s.CharacterMarket with { MinPrice = v })),
+        Int("market.character.max_price", (int)CharacterMarketOptions.Default.MaxPrice, 1, int.MaxValue, "Character Market: the highest price in coins.",
+            static (s, v) => CharacterMarket(s, s.CharacterMarket with { MaxPrice = v })),
+        Int("market.character.listing_fee", (int)CharacterMarketOptions.Default.ListingFee, 0, int.MaxValue, "Character Market: coins taken to list a character, not returned.",
+            static (s, v) => CharacterMarket(s, s.CharacterMarket with { ListingFee = v })),
+        Int("market.character.expiry_days", CharacterMarketOptions.Default.ExpiryDays, 1, 365, "Character Market: days until a listing closes unsold.",
+            static (s, v) => CharacterMarket(s, s.CharacterMarket with { ExpiryDays = v })),
+        Int("market.character.tax_percent", CharacterMarketOptions.Default.TaxPercent, 0, 100, "Character Market: percent of the price kept from the seller, rounded up.",
+            static (s, v) => CharacterMarket(s, s.CharacterMarket with { TaxPercent = v })),
+        Bool("market.shops.enabled", true, "Marketplace: whether its NPC shows and sells what personal shops offer.",
+            static (s, v) => s with { MarketplaceEnabled = v }),
+        Int("shops.purchase_cooldown_ms", Simulation.PersonalShops.PersonalShopRules.PurchaseCooldownMs, 0, 60_000,
+            "Personal shops and stalls: milliseconds a buyer waits after a purchase before the next; 0 for none.",
+            static (s, v) => s with { ShopPurchaseCooldownMs = v })
     ];
 
     // The definition of a setting by name, in any case; null for none.
@@ -125,6 +147,8 @@ public static class ServerSettingCatalog
     }
 
     private static ServerSettings World(ServerSettings settings, WorldServerOptions world) => settings with { World = world };
+
+    private static ServerSettings CharacterMarket(ServerSettings settings, CharacterMarketOptions market) => settings with { CharacterMarket = market };
 
     private static ServerSettingDefinition Text(string name, string value, int maxLength, string description,
         Func<ServerSettings, string, ServerSettings> apply) =>

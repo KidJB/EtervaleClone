@@ -20,6 +20,7 @@ public sealed class OpeningScreen : GameScreen
 
     public OpeningScreen(ScreenContext context) : base(context)
     {
+        context.Discord?.Show(Discord.DiscordPresenceText.Menu(context.Discord.StartUnixSeconds, "Logging in"));
     }
 
     public override string StatusText => _status;

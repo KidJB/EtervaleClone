@@ -13,6 +13,7 @@ public sealed class CharacterAppService
 {
     private readonly ISessionRegistry _sessions;
     private readonly Persistence.Abstractions.Clans.IClanRepository? _clans;
+    private readonly Persistence.Abstractions.Markets.ICharacterMarketRepository? _market;
     private readonly ICharacterRepository _characters;
     private readonly CharacterClassRegistry _classes;
     private readonly WorldDataHolder _worldData;
@@ -24,8 +25,10 @@ public sealed class CharacterAppService
         CharacterClassRegistry classes,
         WorldDataHolder worldData,
         WorldCatalog world,
-        Persistence.Abstractions.Clans.IClanRepository? clans = null)
+        Persistence.Abstractions.Clans.IClanRepository? clans = null,
+        Persistence.Abstractions.Markets.ICharacterMarketRepository? market = null)
     {
+        _market = market;
         _clans = clans;
         _sessions = sessions;
         _characters = characters;
@@ -111,6 +114,11 @@ public sealed class CharacterAppService
 
         try
         {
+            if (_market is not null && await _market.IsListedAsync(found.Id, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), ct))
+            {
+                return DeleteCharacterOutcome.Denied("the character is listed on the Character Market");
+            }
+
             return await _characters.DeleteByNameAsync(session.AccountId, trimmed, ct)
                 ? DeleteCharacterOutcome.Success()
                 : DeleteCharacterOutcome.Denied("character not found");
@@ -130,6 +138,8 @@ public sealed class CharacterAppService
 
     // A character whose saved equipment cannot be read is listed without its looks, so the rest of the account still logs
     // in; entering it is refused as an unsupported saved state.
+    public CharacterSummary Summary(CharacterRecord character) => BuildSummary(character);
+
     private CharacterSummary BuildSummary(CharacterRecord character)
     {
         var (armorKey, weaponKey, offHandKey) = (string.Empty, string.Empty, string.Empty);

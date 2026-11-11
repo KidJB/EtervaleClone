@@ -1,3 +1,4 @@
+using PristonTale.Protocol.Packets;
 using PristonTale.Simulation.Shops;
 using System.Numerics;
 using PristonTale.Client.Net.Presence;
@@ -46,6 +47,15 @@ public interface IPlayChannel : IAsyncDisposable
     Task<PersonalShopReply> ViewPersonalShopAsync(ulong sellerId, CancellationToken ct = default);
 
     Task<PersonalShopReply> BuyFromPersonalShopAsync(PersonalShopPurchase purchase, CancellationToken ct = default);
+
+    // The two markets at their NPCs; a request answers one page.
+    Task<CharacterMarketPagePacket> CharacterMarketAsync(CharacterMarketRequestPacket request, CancellationToken ct = default);
+
+    Task<CharacterDetailView> CharacterMarketDetailAsync(CharacterMarketRequestPacket request, CancellationToken ct = default);
+
+    Task<MarketplaceView> MarketplaceAsync(MarketplaceQueryPacket query, CancellationToken ct = default);
+
+    Task<PersonalShopReply> BuyFromMarketplaceAsync(ulong npcId, PersonalShopPurchase purchase, CancellationToken ct = default);
 
     // The coin shop: its catalog with the account's balance, and a purchase answering its status and the new balance.
     Task<CoinShopView> OpenCoinShopAsync(CancellationToken ct = default);
@@ -116,6 +126,12 @@ public interface IPlayChannel : IAsyncDisposable
     // CastleOwnerResult and the window's state.
     Task SendCastleOwnerAsync(Protocol.Packets.CastleOwnerAction action, ulong npcId, Simulation.Social.Castle.CastleSetup setup, long amount,
         CancellationToken ct = default);
+
+    // Asks the player's badges, answered by an Achievements update.
+    Task SendAchievementsRequestAsync(CancellationToken ct = default);
+
+    // Wears a badge's title, 0 hides it; answered by an Achievements update.
+    Task SendAchievementTitleAsync(uint id, CancellationToken ct = default);
 
     // A request of Bellatra's secretary (a redemption's gold), answered by a BellatraClanResult and the window's state.
     Task SendBellatraClanAsync(Protocol.Packets.BellatraClanAction action, ulong npcId, long amount, CancellationToken ct = default);

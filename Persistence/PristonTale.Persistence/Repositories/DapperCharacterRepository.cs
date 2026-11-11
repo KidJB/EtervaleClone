@@ -9,7 +9,7 @@ public sealed class DapperCharacterRepository(IDbConnectionFactory connectionFac
     // The full column projection shared by every read and the INSERT/RETURNING. The JSON columns
     // (inventory/equipment/skills/quests/premium) bind through the per-provider
     // JsonText type handler (Postgres jsonb / SQLite TEXT), so the SQL here stays provider-agnostic.
-    private const string Columns =
+    internal const string Columns =
         "id, account_id, name, slot, job_code, level, exp, money, brood, " +
         "strength, spirit, talent, agility, health, stat_points, " +
         "life, mana, stamina, field_id, pos_x, pos_z, model_name, model_name2, face_index, " +

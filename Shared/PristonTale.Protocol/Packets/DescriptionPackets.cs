@@ -9,7 +9,7 @@ internal static class DescriptionWire
 {
     // Version 2 carries the player's shop sign after the fields of version 1; version 3 then the player's clan, version 4 the
     // pet skin out, version 5 the pet's name and version 6 the mount ridden.
-    public const ushort Version = 6;
+    public const ushort Version = 8;
     public const int MaxNameBytes = 64;
     public const int MaxModelBytes = 160;
 
@@ -68,6 +68,8 @@ public sealed record DescribedPlayer(
 
     // The mount the player rides (Mounts id, 0 on foot).
     public int Mount { get; init; }
+    public int Title { get; init; }
+    public uint HeldWeapon { get; init; }
     // The player's clan (0 for none), its name and its mark's version (0 the default mark).
     public ulong ClanId { get; init; }
     public string ClanName { get; init; } = "";
@@ -128,7 +130,7 @@ public sealed record DescribedTemplate(
 // 0, varuint EntityId, uint8 Revision, uint8 Kind, varuint Level, varuint MoveSpeed, float32 AttackRate, text Name, text
 // Model}, then for a player {varuint Class, Tier, Face, Hair, text HeadModel, uint32 Weapon, Armor, OffHand, uint8 Flags (1
 // village, 2 Phoenix), uint8 HelperPet, uint8 BigHead, glow WeaponGlow, glow OffHandGlow (DescribedGlow), text ShopSign
-// (from version 2), uint8 PetSkin (from version 3), text PetName (from version 4), uint8 Mount (from version 5)}, else {varuint Template, float32 TemplateScale, varuint SoundCode, varint PortraitY, PortraitZ,
+// (from version 2), uint8 PetSkin (from version 3), text PetName (from version 4), uint8 Mount (from version 5), varuint Title (from version 7), uint32 HeldWeapon (from version 8: the weapon really worn)}, else {varuint Template, float32 TemplateScale, varuint SoundCode, varint PortraitY, PortraitZ,
 // uint8 Brood, varuint Owner, float32 InstanceScale, uint32 NpcServices, varuint Class (the monster class: 1 boss, 200
 // hammer), varint ShadowSize (-1 none, 0 small to 3 large)}. Text is UTF-8 with a uint16 byte length.
 public sealed record EntityDescriptionPacket(
@@ -146,7 +148,7 @@ public sealed record EntityDescriptionPacket(
     // The player part (four varuints, the head model, three codes, three bytes, two glows, the sign, the clan) is the larger tail.
     private const int PlayerPart = 5 * 4 + 2 + DescriptionWire.MaxModelBytes + 4 * 3 + 3 + 2 * DescribedGlow.Size + 2 + PersonalShopLimits.MaxSignBytes
         + VarInt.MaxBytes64 + 2 + ClanWire.MaxClanNameBytes + 5
-        + 1 + 2 + PetNameLimits.MaxBytes + 1;
+        + 1 + 2 + PetNameLimits.MaxBytes + 1 + VarInt.MaxBytes64 + 4;
     public const int MaximumSize = 8 + 4 + VarInt.MaxBytes64 + 2 + 5 * 2 + 4 + (2 + DescriptionWire.MaxNameBytes) + (2 + DescriptionWire.MaxModelBytes)
         + PlayerPart;
 
@@ -185,6 +187,8 @@ public sealed record EntityDescriptionPacket(
             writer.Byte((byte)Math.Clamp(player.PetSkin, 0, byte.MaxValue));
             NpcWire.Text(ref writer, player.PetName, PetNameLimits.MaxBytes);
             writer.Byte((byte)Math.Clamp(player.Mount, 0, byte.MaxValue));
+            writer.VarUInt((ulong)Math.Max(0, player.Title));
+            writer.UInt32(player.HeldWeapon);
         }
         else
         {
@@ -241,6 +245,8 @@ public sealed record EntityDescriptionPacket(
                 var petSkin = version >= 4 ? reader.Byte() : 0;
                 var petName = version >= 5 ? NpcWire.Text(ref reader, PetNameLimits.MaxBytes) : "";
                 var mount = version >= 6 ? reader.Byte() : 0;
+                var title = version >= 7 ? reader.VarUInt31() : 0;
+                var heldWeapon = version >= 8 ? reader.UInt32() : 0U;
                 return new EntityDescriptionPacket(entityId, revision, kind, level, moveSpeed, attackRate, name, model,
                     new DescribedPlayer(playerClass, tier, face, hair, head, weapon, armor, offHand, (flags & 1) != 0, (flags & 2) != 0, pet, bigHead)
                     {
@@ -252,7 +258,9 @@ public sealed record EntityDescriptionPacket(
                         ClanMark = clanMark,
                         PetSkin = petSkin,
                         PetName = petName,
-                        Mount = mount
+                        Mount = mount,
+                        Title = title,
+                        HeldWeapon = heldWeapon
                     });
             }
             case EntityKind.Monster or EntityKind.Npc:

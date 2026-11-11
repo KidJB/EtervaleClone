@@ -47,7 +47,7 @@ public sealed class Stall(long id, long accountId, long ownerCharacterId, int fi
             var anchor = Stock.Find(entry.ItemId);
             if (anchor >= 0 && Stock[anchor] is { } item)
             {
-                offers.Add(new PersonalShopOffer(OwnedItemView.Of(item, entry.Cell, -1) with { Details = ItemDetailView.Of(item, viewer) }, entry.UnitPrice));
+                offers.Add(new PersonalShopOffer(OwnedItemView.Of(item, entry.Cell, -1) with { Details = ItemDetailView.Of(item, viewer) }, entry.UnitPrice, entry.Currency));
             }
         }
 

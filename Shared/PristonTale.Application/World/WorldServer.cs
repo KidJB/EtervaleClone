@@ -80,6 +80,9 @@ public sealed partial class WorldServer
     {
         public OwnerState? LastOwner { get; set; }
 
+        // The level last seen by StepAchievements; 0 before the first look.
+        public int LastLevel { get; set; }
+
         public long CooldownRevision { get; set; } = -1;
 
         // The tick the next starter gift is due on, and whether the gift service holds a request for it.
@@ -766,6 +769,7 @@ public sealed partial class WorldServer
         ApplyCastleTax();
         RenewClanSkill(nowSeconds);
         StepBellatra(UnixNowMs);
+        StepAchievements();
         ApplyQuestTravels();
         Checkpoint(serverTick);
         OfferStarterGifts(serverTick);

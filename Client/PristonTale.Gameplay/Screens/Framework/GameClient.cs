@@ -31,6 +31,7 @@ public sealed class GameClient : IDisposable
     private PristonSkyLibrary _sky;
     private PristonTale.Gameplay.Effects.EffectLibrary _effects;
     private PristonAudioLibrary _audio;
+    private PristonTale.Gameplay.Discord.DiscordPresence _discord;
     private readonly PresentationSettings _presentation;
     private DisplayConfirmation _displayConfirmation;
 
@@ -70,6 +71,11 @@ public sealed class GameClient : IDisposable
         _audio = PristonAudioLibrary.LoadBootstrap(_assetRoot, ConsoleClientLog.Instance);
         _audio.ApplySettings(_presentation.Requested);
         _backend = new GameServerConnection(_serverAddress);
+        var settings = _presentation.Requested;
+        _discord = settings.DiscordPresence
+            ? new PristonTale.Gameplay.Discord.DiscordPresence(PristonTale.Gameplay.Discord.DiscordPresence.ApplicationId, PristonTale.Gameplay.Discord.DiscordTransports.ForThisPlatform(),
+                ConsoleClientLog.Instance)
+            : null;
         _context = new ScreenContext(
             _graphicsDevice,
             _content,
@@ -84,7 +90,10 @@ public sealed class GameClient : IDisposable
             _sky,
             _effects,
             _audio,
-            RenewBackend);
+            RenewBackend)
+        {
+            Discord = _discord
+        };
         _displayConfirmation = new DisplayConfirmation(_context);
         // First screen: the opening / authentication scene (the login form overlays it next).
         SetScreen(new OpeningScreen(_context));
@@ -218,6 +227,7 @@ public sealed class GameClient : IDisposable
         _sky?.Dispose();
         _effects?.Dispose();
         _audio?.Dispose();
+        _discord?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(2));
         _spriteBatch?.Dispose();
     }
 }

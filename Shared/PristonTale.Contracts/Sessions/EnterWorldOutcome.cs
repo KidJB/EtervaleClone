@@ -10,7 +10,8 @@ public enum EnterWorldFailure
     AlreadyActive = 5,
     UnsupportedSavedState = 6,
     SessionClosed = 7,
-    Rejected = 8
+    Rejected = 8,
+    ListedForSale = 9
 }
 
 public sealed record EnterWorldOutcome(
@@ -39,6 +40,7 @@ public sealed record EnterWorldOutcome(
         EnterWorldFailure.AlreadyActive => "character already active",
         EnterWorldFailure.UnsupportedSavedState => "invalid or unsupported saved character state; saved data preserved",
         EnterWorldFailure.SessionClosed => "session closed during entry",
+        EnterWorldFailure.ListedForSale => "this character is listed on the Character Market; cancel the listing to play it",
         _ => "world entry rejected"
     };
 }

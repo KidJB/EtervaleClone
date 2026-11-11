@@ -18,7 +18,8 @@ public sealed record PreparedShopPurchase(
     PlayerCharacter? SellerCandidate = null,
     CharacterSaveSnapshot? SellerSnapshot = null,
     long Price = 0,
-    string ItemName = "")
+    string ItemName = "",
+    PersonalShopCurrency Currency = PersonalShopCurrency.Gold)
     : PreparedOperation(Original, Candidate, Snapshot);
 
 internal static class PersonalShopTransactions
@@ -58,7 +59,7 @@ internal static class PersonalShopTransactions
     }
 
     public static PreparedShopPurchase Prepare(PlayerSession buyerSession, WorldPlayer buyer, PlayerSession? sellerSession, WorldPlayer? seller, int fieldId,
-        PersonalShopPurchase purchase)
+        int sellerFieldId, PersonalShopPurchase purchase, bool remote = false)
     {
         var original = buyer.Character;
         var revision = original.InventoryRevision;
@@ -74,7 +75,7 @@ internal static class PersonalShopTransactions
             return Final(original, PersonalShopOutcome.Failed(PersonalShopStatus.Closed, revision));
         }
 
-        if (!CanReach(buyer, seller))
+        if (remote ? buyer.IsDead || buyer.EntityId == seller.EntityId : !CanReach(buyer, seller))
         {
             return Final(original, PersonalShopOutcome.Failed(PersonalShopStatus.OutOfReach, revision));
         }
@@ -101,9 +102,9 @@ internal static class PersonalShopTransactions
 
         candidate.RecordShopPurchase(purchase);
         var snapshot = CharacterRecordFactory.Capture(buyerSession.Loaded!, candidate, fieldId, buyer.Position);
-        var sellerSnapshot = CharacterRecordFactory.Capture(sellerSession.Loaded!, sellerCandidate, fieldId, seller.Position);
+        var sellerSnapshot = CharacterRecordFactory.Capture(sellerSession.Loaded!, sellerCandidate, sellerFieldId, seller.Position);
         return new PreparedShopPurchase(original, candidate, snapshot, Done(candidate.InventoryRevision), seller.Character, sellerCandidate, sellerSnapshot,
-            price, item!.DisplayName);
+            price, item!.DisplayName, shop.Find(purchase.ItemId)!.Value.Currency);
     }
 
     private static PersonalShopOutcome Done(long revision) => new(true, PersonalShopStatus.Ok, revision, GameText.None);

@@ -19,10 +19,10 @@ public static class PersonalShopWire
     internal static string Text(ref PacketReader reader, int maxBytes) => Utf8Text.Read(ref reader, maxBytes, "Personal shop message");
 }
 
-// An item the seller lays out: {Guid ItemId, int64 UnitPrice, int32 Cell}.
-public readonly record struct PersonalShopEntryWire(Guid ItemId, long UnitPrice, int Cell) : IWireEntry<PersonalShopEntryWire>
+// An item the seller lays out: {Guid ItemId, int64 UnitPrice, int32 Cell, uint8 Currency (PersonalShopCurrency)}.
+public readonly record struct PersonalShopEntryWire(Guid ItemId, long UnitPrice, int Cell, byte Currency = 0) : IWireEntry<PersonalShopEntryWire>
 {
-    public const int Size = 16 + 8 + 4;
+    public const int Size = 16 + 8 + 4 + 1;
 
     static int IWireEntry<PersonalShopEntryWire>.Size => Size;
 
@@ -31,9 +31,10 @@ public readonly record struct PersonalShopEntryWire(Guid ItemId, long UnitPrice,
         writer.Guid(ItemId);
         writer.Int64(UnitPrice);
         writer.Int32(Cell);
+        writer.Byte(Currency);
     }
 
-    public static PersonalShopEntryWire Read(ref PacketReader reader) => new(reader.Guid(), reader.Int64(), reader.Int32());
+    public static PersonalShopEntryWire Read(ref PacketReader reader) => new(reader.Guid(), reader.Int64(), reader.Int32(), reader.Byte());
 }
 
 // C->S: open the shop. {header, Guid OperationId, text Sign, int32 Count, entries}.
@@ -183,15 +184,15 @@ public sealed record PersonalShopResultPacket(Guid OperationId, byte Action, ush
     }
 }
 
-// An offered item at its store grid cell (the entry's anchor) and the price of one unit.
-public readonly record struct PersonalShopOfferWire(StoreItemEntry Item, long UnitPrice);
+// An offered item at its store grid cell (the entry's anchor), the price of one unit and what it is paid in.
+public readonly record struct PersonalShopOfferWire(StoreItemEntry Item, long UnitPrice, byte Currency = 0);
 
 // S->C: a seller's shop as the viewer sees it. {header, Guid OperationId, uint64 SellerId, int32 Count, offers
-// {StoreItemEntry, int64 UnitPrice}}.
+// {StoreItemEntry, int64 UnitPrice, uint8 Currency}}.
 public sealed record PersonalShopListingPacket(Guid OperationId, ulong SellerId, IReadOnlyList<PersonalShopOfferWire> Offers)
 {
     private const int MinimumSize = 8 + WireHeader.Size + 16 + 8 + 4;
-    public const int MaxSize = MinimumSize + PersonalShopLimits.MaxEntries * (StoreItemEntry.MaxSize + 8);
+    public const int MaxSize = MinimumSize + PersonalShopLimits.MaxEntries * (StoreItemEntry.MaxSize + 8 + 1);
 
     public int Write(Span<byte> destination)
     {
@@ -209,6 +210,7 @@ public sealed record PersonalShopListingPacket(Guid OperationId, ulong SellerId,
         {
             offer.Item.Write(ref writer);
             writer.Int64(offer.UnitPrice);
+            writer.Byte(offer.Currency);
         }
 
         return writer.Finish();
@@ -229,7 +231,7 @@ public sealed record PersonalShopListingPacket(Guid OperationId, ulong SellerId,
         var offers = new PersonalShopOfferWire[count];
         for (var index = 0; index < count; index++)
         {
-            offers[index] = new PersonalShopOfferWire(StoreItemEntry.Read(ref reader), reader.Int64());
+            offers[index] = new PersonalShopOfferWire(StoreItemEntry.Read(ref reader), reader.Int64(), reader.Byte());
         }
 
         return new PersonalShopListingPacket(operation, seller, offers);

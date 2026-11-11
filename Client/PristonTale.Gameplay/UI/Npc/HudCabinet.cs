@@ -26,7 +26,8 @@ public sealed class HudCabinet
     public static readonly string[] Art = [CoinArt];
     private const string NothingText = "No skins fit your gear here. Equip an item to see its skins.";
     private static readonly string[] FilterNames = ["All", "Weapon", "Armor", "Off", "Hair"];
-    private static readonly string[] SlotNames = ["Weapon", "Armor", "Off-hand", "Hair"];
+    private static readonly string[] SlotNames = ["1-Hand", "Armor", "Off-hand", "Hair", "2-Hand"];
+    private const int TwoHandSlot = 4;
     private const int PlateWidth = 220;
     private static readonly Color BorderColor = HudPteuWindow.BorderColor;
     private static readonly Color TextColor = HudPteuWindow.TextColor;
@@ -45,7 +46,7 @@ public sealed class HudCabinet
 
     private readonly TextInputField _search = new() { MaxLength = 24 };
     private readonly List<SkinArticle> _shown = [];
-    private readonly string[] _chosen = ["", "", "", ""];
+    private readonly string[] _chosen = ["", "", "", "", ""];
     private readonly string[] _worn = ["", "", "", ""];
     private readonly List<string> _iconKeys = [];
     private IReadOnlyList<SkinArticle> _articles = [];
@@ -146,7 +147,7 @@ public sealed class HudCabinet
                 var info = loading.Result;
                 _articles = info.Articles;
                 _applied = info.Skins;
-                (_chosen[0], _chosen[1], _chosen[2], _chosen[3]) = (info.Skins.Weapon, info.Skins.Armor, info.Skins.OffHand, info.Skins.Hair);
+                (_chosen[0], _chosen[1], _chosen[2], _chosen[3], _chosen[TwoHandSlot]) = (info.Skins.Weapon, info.Skins.Armor, info.Skins.OffHand, info.Skins.Hair, info.Skins.TwoHand);
                 SetBalance(info.Balance);
                 Refilter();
             }
@@ -198,9 +199,15 @@ public sealed class HudCabinet
         }
     }
 
+    // A weapon skin goes to the slot of the grip worn now.
+    private int WornWeaponSlot => Simulation.Items.ItemEquipmentMetadata.IsTwoHanded(_worn[0]) ? TwoHandSlot : (int)SkinSlot.Weapon;
+
+    private int ChosenSlot(SkinArticle article) => article.Slot == (byte)SkinSlot.Weapon ? WornWeaponSlot : article.Slot;
+
     private void RefreshPreview()
     {
-        Preview = new SkinSet(SkinRules.Look(_worn[0], _chosen[0]), SkinRules.Look(_worn[1], _chosen[1]), SkinRules.Look(_worn[2], _chosen[2]), _chosen[3]);
+        var weapon = SkinRules.Look(_worn[0], _chosen[WornWeaponSlot]);
+        Preview = new SkinSet(weapon, SkinRules.Look(_worn[1], _chosen[1]), SkinRules.Look(_worn[2], _chosen[2]), _chosen[3], weapon);
         var cost = 0L;
         foreach (var key in _chosen)
         {
@@ -308,7 +315,8 @@ public sealed class HudCabinet
             if (index < _shown.Count && Card(window, card).Contains(pointer))
             {
                 var article = _shown[index];
-                _chosen[article.Slot] = string.Equals(_chosen[article.Slot], article.Key, StringComparison.OrdinalIgnoreCase) ? "" : article.Key;
+                var chosenSlot = ChosenSlot(article);
+                _chosen[chosenSlot] = string.Equals(_chosen[chosenSlot], article.Key, StringComparison.OrdinalIgnoreCase) ? "" : article.Key;
                 RefreshPreview();
                 return true;
             }
@@ -317,7 +325,7 @@ public sealed class HudCabinet
         if (Apply(window).Contains(pointer) && _applying is null && _loading is null)
         {
             _status = "";
-            _applying = BuyAndApplyAsync(new SkinSet(_chosen[0], _chosen[1], _chosen[2], _chosen[3]));
+            _applying = BuyAndApplyAsync(new SkinSet(_chosen[0], _chosen[1], _chosen[2], _chosen[3], _chosen[TwoHandSlot]));
         }
 
         return true;
@@ -325,7 +333,7 @@ public sealed class HudCabinet
 
     private async Task<SkinStatus> BuyAndApplyAsync(SkinSet skins)
     {
-        foreach (var key in (string[])[skins.Weapon, skins.Armor, skins.OffHand, skins.Hair])
+        foreach (var key in (string[])[skins.Weapon, skins.Armor, skins.OffHand, skins.Hair, skins.TwoHand])
         {
             if (Find(key) is { Owned: false })
             {
@@ -433,7 +441,7 @@ public sealed class HudCabinet
     private void DrawCard(HudPainter painter, HudItemIcons icons, Rectangle card, SkinArticle article, Point pointer)
     {
         painter.Fill(card, card.Contains(pointer) ? CardLitColor : CardColor);
-        var chosen = string.Equals(_chosen[article.Slot], article.Key, StringComparison.OrdinalIgnoreCase);
+        var chosen = string.Equals(_chosen[ChosenSlot(article)], article.Key, StringComparison.OrdinalIgnoreCase);
         HudPteuWindow.Border(painter, card, chosen ? ChosenColor : card.Contains(pointer) ? CoinColor : BorderColor);
         painter.Text(painter.Fit(article.Name, card.Width - 8), card.X + 4, card.Y + 6, NameColor);
         icons.Draw(painter, article.Key, new Rectangle(card.X + 15, card.Y + 34, 52, 68));

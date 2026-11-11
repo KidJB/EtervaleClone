@@ -59,6 +59,9 @@ public sealed class ScreenContext
 
     public IGameBackend Backend { get; private set; }
 
+    // The Discord profile line, or null when it is off or no application id is set.
+    public Discord.DiscordPresence Discord { get; init; }
+
     // Characters typed into the window (the operating system's text input, with its layout and repeat), drained by the
     // chat input each frame.
     public TypedText TypedText { get; } = new();

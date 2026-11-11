@@ -48,15 +48,33 @@ public sealed class DapperStallRepository(IDbConnectionFactory connectionFactory
             return StallSaleStore.Gone;
         }
 
-        var paid = sale.Owner is { } owner
-            ? await connection.ExecuteAsync(new CommandDefinition(DapperCharacterRepository.UpdateSql, owner, transaction, cancellationToken: ct))
-            : await connection.ExecuteAsync(new CommandDefinition(
-                "UPDATE characters SET money = money + @Price WHERE id = @OwnerCharacterId AND money + @Price <= @OwnerMoneyLimit",
-                new { sale.Price, sale.OwnerCharacterId, sale.OwnerMoneyLimit }, transaction, cancellationToken: ct));
-        if (paid == 0)
+        if (sale.Coins)
         {
-            await transaction.RollbackAsync(ct);
-            return sale.Owner is null ? StallSaleStore.GoldLimit : StallSaleStore.Failed;
+            var reason = $"stall sale {sale.StallId}";
+            if (await DapperCoinRepository.ChangeAsync(connection, transaction, sale.Buyer.AccountId, -sale.Price, reason, ct) is null)
+            {
+                await transaction.RollbackAsync(ct);
+                return StallSaleStore.NotEnoughCoins;
+            }
+
+            if (await DapperCoinRepository.ChangeAsync(connection, transaction, sale.OwnerAccountId, sale.Price, reason, ct) is null)
+            {
+                await transaction.RollbackAsync(ct);
+                return StallSaleStore.Failed;
+            }
+        }
+        else
+        {
+            var paid = sale.Owner is { } owner
+                ? await connection.ExecuteAsync(new CommandDefinition(DapperCharacterRepository.UpdateSql, owner, transaction, cancellationToken: ct))
+                : await connection.ExecuteAsync(new CommandDefinition(
+                    "UPDATE characters SET money = money + @Price WHERE id = @OwnerCharacterId AND money + @Price <= @OwnerMoneyLimit",
+                    new { sale.Price, sale.OwnerCharacterId, sale.OwnerMoneyLimit }, transaction, cancellationToken: ct));
+            if (paid == 0)
+            {
+                await transaction.RollbackAsync(ct);
+                return sale.Owner is null ? StallSaleStore.GoldLimit : StallSaleStore.Failed;
+            }
         }
 
         if (await connection.ExecuteAsync(new CommandDefinition(DapperCharacterRepository.UpdateSql, sale.Buyer, transaction, cancellationToken: ct)) == 0)

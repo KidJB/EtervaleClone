@@ -53,7 +53,7 @@ public static class HudSystemMenu
         var offset = layout.BottomOffset;
         painter.Sprite(HudArt.SystemMenu, X, Y + offset);
         painter.Sprite(HudArt.SystemSettings, X, SettingsY + offset);
-        if (At(new Point(pointer.X, pointer.Y - offset)) is { } entry && Hover[(int)entry] is { } hover)
+        if (At(layout.ToDesign(pointer)) is { } entry && Hover[(int)entry] is { } hover)
         {
             painter.Sprite(hover, X, Entry(entry).Y + offset);
         }

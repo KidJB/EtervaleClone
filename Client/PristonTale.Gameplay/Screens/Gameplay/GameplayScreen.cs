@@ -64,6 +64,8 @@ public sealed class GameplayScreen : GameScreen
         _hud.SendClan = _scene.SendClan;
         _hud.SendCastleOwner = _scene.SendCastleOwner;
         _hud.SendBellatraClan = _scene.SendBellatraClan;
+        _hud.SendAchievementsRequest = _scene.SendAchievementsRequest;
+        _hud.SendAchievementTitle = _scene.SendAchievementTitle;
         _hud.SendBellatraResult = _scene.SendBellatraResult;
         _hud.BellatraStage = _scene;
         _hud.SendClanMark = _scene.SendClanMark;
@@ -100,6 +102,11 @@ public sealed class GameplayScreen : GameScreen
         _hud.ItemBox.ListRequest = _scene.OpenItemBoxAsync;
         _hud.ItemBox.ActRequest = _scene.ActItemBoxAsync;
         _hud.Cabinet.ListRequest = _scene.OpenSkinsAsync;
+        _hud.Marketplace.QueryRequest = _scene.MarketplaceAsync;
+        _hud.Marketplace.BuyRequest = _scene.BuyFromMarketplaceAsync;
+        _hud.CharacterMarket.Request = _scene.CharacterMarketAsync;
+        _hud.CharacterMarket.DetailRequest = _scene.CharacterMarketDetailAsync;
+        _hud.CharacterMarket.Portrait = _scene.MarketPortrait;
         _hud.Cabinet.BuyRequest = _scene.BuySkinAsync;
         _hud.Cabinet.ApplyRequest = _scene.ApplySkinsAsync;
         _hud.DailyQuestRequest = _scene.DailyQuestAsync;
@@ -148,6 +155,26 @@ public sealed class GameplayScreen : GameScreen
         }
     }
 
+    // The Discord line is made again only when the field, level or party size changed.
+    private void ShowDiscord(Simulation.World.FieldDef field)
+    {
+        if (Context.Discord is not { } discord)
+        {
+            return;
+        }
+
+        var key = (field?.FieldCode ?? -1, _scene.PlayerLevel, _hud.Party.Members.Count);
+        if (key == _discordKey)
+        {
+            return;
+        }
+
+        _discordKey = key;
+        discord.Show(Discord.DiscordPresenceText.Playing(discord.StartUnixSeconds, _scene.Player.Name, _scene.Player.Class.Class, key.Item2, field?.Name ?? "", key.Item3));
+    }
+
+    private (int Field, int Level, int Party) _discordKey = (-2, 0, 0);
+
     public override void Update(GameTime gameTime)
     {
         var catalog = _pendingHudCatalog;
@@ -158,6 +185,7 @@ public sealed class GameplayScreen : GameScreen
         }
 
         var field = _scene.ActiveFieldDefinition;
+        ShowDiscord(field);
         _ = _scene.TryGetNeighbourMap(out var neighbour, out var neighbourMap);
         var mapHidden = field is not null && HudMinimap.HiddenOn(field.FieldCode, field.State);
         _hud.World = new HudWorldView(field?.Id, field?.Underground == true, _scene.ActiveMapRectangle, _scene.PlayerPosition,
@@ -225,6 +253,7 @@ public sealed class GameplayScreen : GameScreen
     {
         _hud.RenderPortrait();
         _scene.RenderArmorPreview();
+        _scene.RenderMarketPortraits();
         _hud.ArmorPreview = _scene.ArmorPreview;
         Context.GraphicsDevice.Clear(_scene.SkyColor);
         _scene.Draw();

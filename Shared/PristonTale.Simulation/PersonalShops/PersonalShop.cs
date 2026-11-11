@@ -2,14 +2,24 @@ using PristonTale.Simulation.Items;
 
 namespace PristonTale.Simulation.PersonalShops;
 
-// One item a seller offers: an item of its bag, the price of one unit (a stack sells by the unit) and the store grid cell
-// the item shows at.
-public readonly record struct PersonalShopEntry(Guid ItemId, long UnitPrice, int Cell);
+// How an offer is paid; carried on the wire and stored with stalls, so values are never renumbered. A view-only item shows
+// in the shop but never sells; its price is 0.
+public enum PersonalShopCurrency : byte
+{
+    Gold = 0,
+    Coins = 1,
+    ViewOnly = 2
+}
+
+// One item a seller offers: an item of its bag, the price of one unit (a stack sells by the unit), the store grid cell the
+// item shows at, and what it is paid in.
+public readonly record struct PersonalShopEntry(Guid ItemId, long UnitPrice, int Cell, PersonalShopCurrency Currency = PersonalShopCurrency.Gold);
 
 // A seller's open shop: its sign and what it offers. The items stay in the seller's bag until sold; an entry whose item
 // left the bag is dropped, and a shop with no entry left closes.
 public sealed class PersonalShop
 {
+    private static long _lastSequence;
     private readonly List<PersonalShopEntry> _entries;
 
     internal PersonalShop(string sign, List<PersonalShopEntry> entries)
@@ -17,6 +27,9 @@ public sealed class PersonalShop
         Sign = sign;
         _entries = entries;
     }
+
+    // Rises with each shop opened, for the Marketplace's newest-first order; a stall's remaining listing keeps its own.
+    public long Sequence { get; internal set; } = Interlocked.Increment(ref _lastSequence);
 
     public string Sign { get; }
 

@@ -84,6 +84,7 @@ public sealed record PresenceUpdate(
     public BellatraResultInfo? BellatraResult { get; init; }
     public BellatraClanInfo? BellatraClan { get; init; }
     public BellatraClanResultInfo? BellatraClanResult { get; init; }
+    public Protocol.Packets.AchievementsPacket? Achievements { get; init; }
 
     // The local player's trade window when it changed (TradeInfo.None once it ended), and a player's request to trade.
     public TradeInfo? Trade { get; init; }

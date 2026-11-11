@@ -31,7 +31,7 @@ public sealed class SkinAppService(ISessionRegistry sessions, ICoinRepository co
 
         foreach (var item in worldData.Current.Items.All)
         {
-            if (Costumes.Hidden.Contains(item.CatalogKey))
+            if (Costumes.Hidden.Contains(item.CatalogKey) || Costumes.FindGear(item.CatalogKey) is not null)
             {
                 continue;
             }
@@ -50,6 +50,11 @@ public sealed class SkinAppService(ISessionRegistry sessions, ICoinRepository co
 
         foreach (var gear in Costumes.Gear)
         {
+            if (Costumes.Hidden.Contains(gear.Key))
+            {
+                continue;
+            }
+
             articles.Add(new SkinArticle(gear.Key, gear.Name, (byte)gear.Slot, 0, SkinRules.GearPrice, owned.Contains(gear.Key)));
         }
 
@@ -95,7 +100,7 @@ public sealed class SkinAppService(ISessionRegistry sessions, ICoinRepository co
 
         var balance = await coins.BalanceAsync(session.AccountId, ct);
         var owned = await coins.OwnedSkinsAsync(session.AccountId, ct);
-        if (!Allowed(skins.Weapon, SkinSlot.Weapon, owned) || !Allowed(skins.Armor, SkinSlot.Armor, owned) || !Allowed(skins.OffHand, SkinSlot.OffHand, owned)
+        if (!Allowed(skins.Weapon, SkinSlot.Weapon, owned) || !Allowed(skins.TwoHand, SkinSlot.Weapon, owned) || !Allowed(skins.Armor, SkinSlot.Armor, owned) || !Allowed(skins.OffHand, SkinSlot.OffHand, owned)
             || !Allowed(skins.Hair, SkinSlot.Hair, owned))
         {
             return (SkinStatus.NotOwned, balance);

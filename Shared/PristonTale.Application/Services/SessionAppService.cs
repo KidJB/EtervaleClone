@@ -27,6 +27,7 @@ public sealed class SessionAppService
     private readonly DurableOperations _durable;
     private readonly WorldDataHolder _worldData;
     private readonly TimeProvider _clock;
+    private readonly Persistence.Abstractions.Markets.ICharacterMarketRepository? _market;
 
     public SessionAppService(
         ISessionRegistry sessions,
@@ -36,8 +37,10 @@ public sealed class SessionAppService
         WorldCatalog world,
         WorldServer? host = null,
         WorldDataHolder? worldData = null,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        Persistence.Abstractions.Markets.ICharacterMarketRepository? market = null)
     {
+        _market = market;
         _sessions = sessions;
         _classes = classes;
         _characters = characters;
@@ -77,6 +80,12 @@ public sealed class SessionAppService
             }
 
             claimedCharacter = found.Id;
+            // Under the claim, which a purchase holds too: a character on sale never enters while it changes hands.
+            if (_market is not null && await _market.IsListedAsync(found.Id, _clock.GetUtcNow().ToUnixTimeSeconds(), ct))
+            {
+                return EnterWorldOutcome.Denied(EnterWorldFailure.ListedForSale);
+            }
+
             // The previous session's leave save may have been stored, and its claim released, after the first read: the
             // record is read again under the claim, when nothing else writes it.
             var record = await _characters.FindByNameForAccountAsync(session.AccountId, found.Name, ct);

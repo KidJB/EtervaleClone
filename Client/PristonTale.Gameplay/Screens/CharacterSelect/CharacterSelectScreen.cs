@@ -87,6 +87,7 @@ public sealed class CharacterSelectScreen : GameScreen
 
     public CharacterSelectScreen(ScreenContext context) : base(context)
     {
+        context.Discord?.Show(Discord.DiscordPresenceText.Menu(context.Discord.StartUnixSeconds, "Choosing a character"));
         _reader = new PristonSmdReader(_assetCache);
         _actorLoader = new PristonActorLoader(_assetCache);
     }

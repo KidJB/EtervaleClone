@@ -96,6 +96,9 @@ public sealed class GameMasterCommands
     }
 
     public ChatDirectory Directory { get; }
+
+    // Stores a granted badge for an online player: false when refused or already held.
+    public Func<ChatMember, int, Task<bool>>? GrantAchievement { get; set; }
     public WorldServer World { get; }
     public WorldDataHolder WorldData { get; }
     public GameMasterOptions Options
@@ -115,6 +118,7 @@ public sealed class GameMasterCommands
     public IWarehouseRepository? Warehouses { get; init; }
     public Persistence.Abstractions.Coins.ICoinRepository? Coins { get; init; }
     public Services.CoinShopCatalogStore? CoinShop { get; init; }
+    public Persistence.Abstractions.Markets.ICharacterMarketRepository? CharacterMarket { get; init; }
     public ItemCreationOverrides ItemOverrides { get; } = new();
 
     // Milliseconds of the process clock used for the item overrides and connection times.
@@ -130,12 +134,18 @@ public sealed class GameMasterCommands
         new("/init_premiumitem", GameMasterLevel.Administrator, GmItemCommands.EndPremium),
         new("/specific", GameMasterLevel.Guide, GmItemCommands.Specialization),
         new("/Performance", GameMasterLevel.Guide, GmItemCommands.Performance),
+        new("/@rarity", GameMasterLevel.Administrator, GmItemCommands.Graded),
         new("/@get_perf", GameMasterLevel.Administrator, GmItemCommands.Perfect),
         new("/@get", GameMasterLevel.Administrator, GmItemCommands.Create),
+        new("/@put_rarity", GameMasterLevel.Administrator, GmItemCommands.GiftGraded),
         new("/@put_perf", GameMasterLevel.Administrator, GmItemCommands.GiftPerfect),
         new("/@put", GameMasterLevel.Administrator, GmItemCommands.Gift),
         new("/@coinshop_reload", GameMasterLevel.Administrator, GmCoinCommands.Reload),
         new("/@coins", GameMasterLevel.Administrator, GmCoinCommands.Grant),
+        new("/market_listings", GameMasterLevel.Guide, GmMarketCommands.Listings),
+        new("/market_sales", GameMasterLevel.Guide, GmMarketCommands.Sales),
+        new("/market_remove", GameMasterLevel.Moderator, GmMarketCommands.Remove),
+        new("/market_expire", GameMasterLevel.Moderator, GmMarketCommands.Expire),
         new("/@arena", GameMasterLevel.Administrator, GmArenaCommands.Arena),
         new("/@worldbuff", GameMasterLevel.Administrator, GmArenaCommands.WorldBuff),
         new("/AgingSetting", GameMasterLevel.Operator, GmItemCommands.Aged),
@@ -163,6 +173,7 @@ public sealed class GameMasterCommands
         new("/expup", TestOrAdministrator, GmItemCommands.ExperienceUp),
         new("/GiveMeExp!", TestOrAdministrator, GmItemCommands.Experience),
         new("/GiveMeMoney!", TestOrAdministrator, GmItemCommands.Gold),
+        new("/achievement", GameMasterLevel.Administrator, GmPlayerCommands.Achievement),
         new("/user", GameMasterLevel.Guide, GmInformationCommands.Users),
         new("/sockets", GameMasterLevel.Guide, GmInformationCommands.Sockets),
         new("/talk", GameMasterLevel.Guide, GmMonsterCommands.Talk),

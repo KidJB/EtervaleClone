@@ -52,6 +52,8 @@ internal static class HudInteractionTests
         yield return ("a ground item picked up with the window open comes to the cursor, and goes where any item goes with it closed", PickupToCursorAsync);
         yield return ("the pointer attacks over wild monsters, talks over NPCs and stays the arrow elsewhere", CursorKindAsync);
         yield return ("drop names on one spot rise into a column above the nearest, which keeps its place", DropNameColumnAsync);
+        yield return ("the inventory's lock stops a click from picking an item up and tells why, until it is unlocked", ItemLockAsync);
+        yield return ("the bottom bar and the inventory around it sit in the middle of a wide screen, the potion belt on the bar", BottomInterfaceCentredAsync);
         yield return ("the settings tabs list every option once; a dropdown applies its choice and reset returns to the values at opening", SettingsWindowAsync);
         yield return ("the settings offer only the monitor's sizes: all in fullscreen, those that fit in a window, none borderless", ResolutionsAsync);
         yield return ("a carried item lands where the original sets it: free cells, one item to exchange, a potion to join, a slot of its kind", PlacementAsync);
@@ -99,7 +101,7 @@ internal static class HudInteractionTests
             Assert.True(viewport.Contains(minimap) && minimap.Right == layout.Width - 16 && minimap.Bottom == layout.Height - 46,
                 "minimap is not bottom-right anchored");
             var window = HudInventoryLayout.Window(HudInventoryLayout.Origin(layout));
-            Assert.True(window.Bottom == layout.Height && window.X == 0, "bottom windows are not bottom-left anchored");
+            Assert.True(window.Bottom == layout.Height && window.X == layout.CenterOffset, "bottom windows are not centred on the bottom edge");
             Assert.True(viewport.Contains(HudCombat.TargetBox(layout)), "target box escaped the viewport");
             var scaled = new Point(minimap.Center.X * layout.Scale + layout.Scale - 1, minimap.Center.Y * layout.Scale);
             Assert.True(layout.ToLogical(scaled) == minimap.Center, "scaled pointer does not map back to logical pixels");
@@ -415,6 +417,58 @@ internal static class HudInteractionTests
             "a stored potion joined a bag stack");
         Assert.True(HudInventoryPlacement.OfStored(origin, items, kept, new Point(bag.X + 9 * 22 + 22, bag.Y + 3 * 22 + 33)).Kind == HudPlacementKind.Fits,
             "a stored item found no free bag cells");
+        return Task.CompletedTask;
+    }
+
+    private static Task ItemLockAsync()
+    {
+        var layout = HudLayout.Create(800, 600);
+        var item = new OwnedItemView(Guid.NewGuid(), 1, "Item", ItemKind.Axe, 1, 0, -1, 1, 1);
+        var state = OwnerState.Capture(new CharacterClassRegistry().CreatePlayer(PlayerClass.Fighter, "Lock")) with { Items = [item], InventoryRevision = 1 };
+        var sent = 0;
+        var controller = new HudInventoryController(null!, _ =>
+        {
+            sent++;
+            return Task.FromResult(new InventoryOutcome(true, 2, GameText.None));
+        });
+        var refused = 0;
+        controller.LockRefused = () => refused++;
+        var origin = HudInventoryLayout.Origin(layout);
+        var lockButton = HudInventoryLayout.LockButton(origin).Center;
+        var over = HudInventoryLayout.Bounds(origin, item).Center;
+
+        void Click(Point at)
+        {
+            controller.Update(state, layout, true, default, MouseAt(at, layout.Scale, ButtonState.Released));
+            controller.Update(state, layout, true, default, MouseAt(at, layout.Scale, ButtonState.Pressed));
+            controller.Update(state, layout, true, default, MouseAt(at, layout.Scale, ButtonState.Released));
+        }
+
+        Click(lockButton);
+        Assert.True(controller.ItemsLocked, "the lock button did not lock the items");
+        Click(over);
+        Assert.True(controller.Dragging == Guid.Empty && refused == 1 && sent == 0, "a locked item was picked up, or the refusal not told");
+        Click(lockButton);
+        Click(over);
+        Assert.True(!controller.ItemsLocked && controller.Dragging == item.InstanceId, "an unlocked item was not picked up");
+        return Task.CompletedTask;
+    }
+
+    private static Task BottomInterfaceCentredAsync()
+    {
+        var narrow = HudLayout.Create(800, 600);
+        Assert.True(HudInventoryLayout.Origin(narrow) == Point.Zero && narrow.ToDesign(new Point(10, 20)) == new Point(10, 20), "an 800-wide screen moved the interface");
+
+        var wide = HudLayout.Create(1920, 1080);
+        var origin = HudInventoryLayout.Origin(wide);
+        var window = HudInventoryLayout.Window(origin);
+        Assert.True(window.Left == wide.Width - window.Right, "the inventory is not centred");
+
+        var belt = HudInventoryLayout.Belt(origin, 0).Center;
+        Assert.True(wide.ToDesign(belt) == HudInventoryLayout.Belt(Point.Zero, 0).Center, "the potion belt left the bottom bar");
+
+        var left = HudLayout.Create(1920, 1080, centeredBottom: false);
+        Assert.True(HudInventoryLayout.Origin(left).X == 0 && left.ToDesign(new Point(10, 500)).X == 10, "the default inventory is not at the left");
         return Task.CompletedTask;
     }
 

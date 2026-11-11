@@ -19,6 +19,10 @@ public sealed partial class GameScene
 
     public void RestoreFieldMusic() => _fieldAudio?.RestoreFieldMusic();
 
+    public void SendAchievementTitle(uint id) => SendSocial(_playChannel?.SendAchievementTitleAsync(id, _presenceCts.Token), "Achievement title");
+
+    public void SendAchievementsRequest() => SendSocial(_playChannel?.SendAchievementsRequestAsync(_presenceCts.Token), "Achievements");
+
     public void SendBellatraClan(BellatraClanAction action, ulong npcId, long amount) =>
         SendSocial(_playChannel?.SendBellatraClanAsync(action, npcId, amount, _presenceCts.Token), "Bellatra secretary request");
 

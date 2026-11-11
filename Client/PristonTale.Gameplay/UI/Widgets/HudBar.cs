@@ -189,7 +189,7 @@ public sealed class HudBar
             _experience = ExperienceText(state);
         }
 
-        var design = new Point(pointer.X, pointer.Y - layout.BottomOffset);
+        var design = layout.ToDesign(pointer);
         var (text, position) = LifeHover.Contains(design) ? (_life, new Point(343, 500))
             : ManaHover.Contains(design) ? (_mana, new Point(490, 498))
             : StaminaHover.Contains(design) ? (_stamina, new Point(320, 513))
@@ -218,7 +218,7 @@ public sealed class HudBar
 
     private static void DrawGrow(HudPainter painter, HudLayout layout)
     {
-        if (layout.Width <= HudLayout.DesignWidth)
+        if (layout.Width - layout.CenterOffset <= HudLayout.DesignWidth)
         {
             return;
         }
@@ -226,7 +226,7 @@ public sealed class HudBar
         var top = layout.Height - 64;
         painter.Sprite(HudArt.GrowLeft, 800, top);
         var x = 866;
-        while (x + 40 < layout.Width)
+        while (x + 40 < layout.Width - layout.CenterOffset)
         {
             painter.Sprite(HudArt.GrowMiddle, x, top);
             x += 64;

@@ -27,6 +27,14 @@ public sealed class HudPersonalShopController(IClientLog log)
     private readonly HudRequest<PersonalShopReply> _request = new(log, "Personal shop request failed");
     private readonly HudSignBox _sign = new();
     private PersonalShopOffer _confirm;
+
+    // A bag item being priced: its seller first chooses gold, coins or view only.
+    private OwnedItemView _pricing;
+    private static readonly string[] CurrencyNames = ["Gold", "Coins", "View only"];
+    private static readonly PersonalShopCurrency[] Currencies = [PersonalShopCurrency.Gold, PersonalShopCurrency.Coins, PersonalShopCurrency.ViewOnly];
+    private static readonly Color ChoiceColor = new(52, 36, 24);
+    private static readonly Color ChoiceLitColor = new(110, 80, 40);
+    private static readonly Color ChoiceRimColor = new(170, 130, 70);
     private OwnerState _state;
     private long _followed = -1;
     private PersonalShopAction _sent;
@@ -50,7 +58,10 @@ public sealed class HudPersonalShopController(IClientLog log)
     // The player's own shop sells: its sign hangs, or an opened shop waits for it.
     public bool Selling => SignShown || _nowMs < _signWaitUntilMs;
 
-    public bool ModalOpen => _sign.IsOpen || _confirm is not null;
+    public bool ModalOpen => _sign.IsOpen || _confirm is not null || _pricing is not null;
+
+    // The seller's visits this play: shops whose sign is drawn in the visited colour.
+    public HashSet<ulong> Visited { get; } = [];
     public bool SignOpen => _sign.IsOpen;
     private bool ReopenShown => Selling && !Window.IsOpen;
 
@@ -127,25 +138,51 @@ public sealed class HudPersonalShopController(IClientLog log)
             return true;
         }
 
-        var room = PersonalShopRules.GoldRoom(state.Level, state.Tier, state.Money, Window.Total);
-        var highest = Math.Min(PersonalShopRules.MaxPrice, room / Math.Max(1, item.Count));
+        _pricing = item;
+        return true;
+    }
+
+    // Gold asks a price within what the seller may carry, coins any price up to the limit, view only none.
+    private void Price(OwnedItemView item, PersonalShopCurrency currency)
+    {
+        if (currency == PersonalShopCurrency.ViewOnly)
+        {
+            List(item, 0, currency);
+            return;
+        }
+
+        var highest = PersonalShopRules.MaxPrice / Math.Max(1, item.Count);
+        if (currency == PersonalShopCurrency.Gold && _state is { } state)
+        {
+            var room = PersonalShopRules.GoldRoom(state.Level, state.Tier, state.Money, Window.Total);
+            highest = Math.Min(highest, room / Math.Max(1, item.Count));
+        }
+
         if (highest < 1)
         {
             Notify(ClientText.Format(PersonalShopMessages.Of(PersonalShopStatus.GoldLimit)));
-            return true;
+            return;
         }
 
         var (first, second) = item.Count > 1
-            ? (ClientText.Get("PersonalShop.UnitPrice"), ClientText.Get("PersonalShop.UnitPrice2"))
-            : (ClientText.Get("PersonalShop.Register"), ClientText.Get("PersonalShop.Register2"));
-        AskCount(first, second, highest, price =>
+            ? (ClientText.Get("PersonalShop.UnitPrice"), currency == PersonalShopCurrency.Coins ? "(in coins)" : ClientText.Get("PersonalShop.UnitPrice2"))
+            : (ClientText.Get("PersonalShop.Register"), currency == PersonalShopCurrency.Coins ? "(in coins)" : ClientText.Get("PersonalShop.Register2"));
+        AskCount(first, second, highest, price => List(item, price, currency));
+    }
+
+    private void List(OwnedItemView item, long price, PersonalShopCurrency currency)
+    {
+        if (!Window.TryList(item, price, currency))
         {
-            if (!Window.TryList(item, price))
-            {
-                Notify(ClientText.Get("PersonalShop.NoRoom"));
-            }
-        });
-        return true;
+            Notify(ClientText.Get("PersonalShop.NoRoom"));
+        }
+    }
+
+    // The currency buttons of the pricing box: gold, coins, view only.
+    public static Rectangle Choice(int index)
+    {
+        var box = HudMessageBox.Bounds;
+        return new Rectangle(box.X + 22 + index * 62, box.Y + 74, 58, 26);
     }
 
     public bool Click(Point pointer)
@@ -153,6 +190,26 @@ public sealed class HudPersonalShopController(IClientLog log)
         if (_sign.IsOpen)
         {
             _sign.Click(pointer);
+            return true;
+        }
+
+        if (_pricing is { } pricing)
+        {
+            for (var index = 0; index < Currencies.Length; index++)
+            {
+                if (Choice(index).Contains(pointer))
+                {
+                    _pricing = null;
+                    Price(pricing, Currencies[index]);
+                    return true;
+                }
+            }
+
+            if (HudMessageBox.Reject.Contains(pointer))
+            {
+                _pricing = null;
+            }
+
             return true;
         }
 
@@ -214,10 +271,11 @@ public sealed class HudPersonalShopController(IClientLog log)
     // Escape closes the question first, then the window; false when nothing was open.
     public bool Close()
     {
-        if (_sign.IsOpen || _confirm is not null)
+        if (_sign.IsOpen || _confirm is not null || _pricing is not null)
         {
             _sign.Close();
             _confirm = null;
+            _pricing = null;
             return true;
         }
 
@@ -244,6 +302,17 @@ public sealed class HudPersonalShopController(IClientLog log)
         {
             _sign.Draw(painter, pointer);
         }
+        else if (_pricing is { } pricing)
+        {
+            HudMessageBox.Draw(painter, "Sell it for:", "", pointer, pricing.Name);
+            for (var index = 0; index < Currencies.Length; index++)
+            {
+                var choice = Choice(index);
+                painter.Fill(choice, ChoiceRimColor);
+                painter.Fill(new Rectangle(choice.X + 1, choice.Y + 1, choice.Width - 2, choice.Height - 2), choice.Contains(pointer) ? ChoiceLitColor : ChoiceColor);
+                painter.TextCentered(CurrencyNames[index], choice.X, choice.Right, choice.Y + 5, Color.White);
+            }
+        }
         else if (_confirm is { } confirm)
         {
             HudMessageBox.Draw(painter, ClientText.Get("Count.DoYouWant"), ClientText.Get(Window.Buying ? "PersonalShop.BuyItem" : "PersonalShop.CancelRegister"), pointer, confirm.Item.Name);
@@ -268,10 +337,18 @@ public sealed class HudPersonalShopController(IClientLog log)
         });
     }
 
-    // A stack asks how many, up to what the gold pays for; one item asks whether to buy it.
+    // A view-only item is not sold; a stack asks how many, up to what the gold pays for (coins the server checks); one item
+    // asks whether to buy it.
     private void Ask(PersonalShopOffer offer)
     {
-        var affordable = offer.UnitPrice > 0 ? (_state?.Money ?? 0) / offer.UnitPrice : 0;
+        if (offer.Currency == PersonalShopCurrency.ViewOnly)
+        {
+            Notify(PersonalShopMessages.ViewOnlyText);
+            return;
+        }
+
+        var affordable = offer.Currency == PersonalShopCurrency.Coins ? offer.Item.Count
+            : offer.UnitPrice > 0 ? (_state?.Money ?? 0) / offer.UnitPrice : 0;
         if (affordable < 1)
         {
             Notify(ClientText.Format(PersonalShopMessages.Of(PersonalShopStatus.NotEnoughGold)));
@@ -316,6 +393,7 @@ public sealed class HudPersonalShopController(IClientLog log)
         if (_sent == PersonalShopAction.View && reply.Listing is { } listing && (!Window.IsOpen || Window.Buying))
         {
             Window.Show(listing);
+            Visited.Add(listing.SellerId);
         }
         else if (_sent == PersonalShopAction.Buy && shown)
         {

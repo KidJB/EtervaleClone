@@ -53,12 +53,15 @@ public sealed class WorldDataAppService
                     }
                     : npc)
             .ToList();
+        npcDefs = Simulation.Markets.MarketNpcs.AddTo(npcDefs);
         // The boss arena stands where the imported Fury statue stood.
-        var fieldSpawns = WorldDataFactory.ToFieldSpawnData(fieldRecords.Select(static field => field with
+        var fieldSpawns = WorldDataFactory.ToFieldSpawnData(fieldRecords.Select(field => field with
         {
             Npcs = string.Equals(field.Stage, Simulation.World.BossArena.FieldStage, StringComparison.OrdinalIgnoreCase)
                 ? [.. field.Npcs.Where(static npc => npc.NpcId != Simulation.World.BossArena.StatueNpcId)]
-                : field.Npcs
+                : string.Equals(field.Stage, Simulation.Markets.MarketNpcs.Stage, StringComparison.OrdinalIgnoreCase) && npcDefs.Exists(static npc => npc.Code == Simulation.Markets.MarketNpcs.CharacterMarketCode)
+                    ? [.. field.Npcs, .. Simulation.Markets.MarketNpcs.Placements.Select((place, index) => new FieldNpcRecord(field.Stage, ushort.MaxValue + index, place.Code, place.X, place.Y, place.Z, place.Angle))]
+                    : field.Npcs
         }).ToList());
 
         var motions = WorldDataFactory.ToMotionTimings(motionModels, motionSlots);

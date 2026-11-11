@@ -31,6 +31,8 @@ balance after, reason). A change never takes the balance below zero: the update 
 `coins + change >= 0`. Game masters grant or take coins with `/@coins <online name> <amount>` (administrator); a
 donation site can later grant through the same repository call (`ICoinRepository.AddAsync`).
 
+The Character Market also spends and credits coins in its sale transaction ([markets.md](markets.md)).
+
 ## Catalog
 
 The shop is `data/coinshop.json` (setting `CoinShop:Path`), read at start and by `/@coinshop_reload`; a missing or

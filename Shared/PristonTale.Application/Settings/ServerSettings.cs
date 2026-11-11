@@ -22,4 +22,10 @@ public sealed record ServerSettings
     public GameMasterOptions GameMasters { get; init; } = GameMasterOptions.Default;
 
     public PristonTale.Application.Castle.CastleOptions Castle { get; init; } = PristonTale.Application.Castle.CastleOptions.Default;
+
+    public Simulation.Markets.CharacterMarketOptions CharacterMarket { get; init; } = Simulation.Markets.CharacterMarketOptions.Default;
+
+    public bool MarketplaceEnabled { get; init; } = true;
+
+    public int ShopPurchaseCooldownMs { get; init; } = Simulation.PersonalShops.PersonalShopRules.PurchaseCooldownMs;
 }

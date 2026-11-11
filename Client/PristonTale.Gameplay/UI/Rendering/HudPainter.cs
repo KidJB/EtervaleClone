@@ -91,6 +91,20 @@ public sealed class HudPainter : IDisposable
         BeginSprites();
     }
 
+    // Moves everything drawn from here on sideways; what was drawn before keeps its place.
+    public void Shift(int x)
+    {
+        if (x == 0 || !_active)
+        {
+            return;
+        }
+
+        Flush();
+        _batch.End();
+        _transform = Matrix.CreateTranslation(x, 0f, 0f) * _transform;
+        BeginSprites();
+    }
+
     public Texture2D Texture(string path) => _sprites.Get(path);
 
     // One white pixel, for fills drawn outside the painter.
@@ -165,11 +179,22 @@ public sealed class HudPainter : IDisposable
 
     public void ClanMark(int x, int y) => _batch.Draw(_clanMark, new Vector2(x, y), Color.White);
 
+    public void ClanMark(Rectangle bounds) => _batch.Draw(_clanMark, bounds, Color.White);
+
     public void Image(Texture2D texture, Rectangle destination, Color? tint = null)
     {
         if (texture is not null && destination.Width > 0 && destination.Height > 0)
         {
             _batch.Draw(texture, destination, tint ?? Color.White);
+        }
+    }
+
+    // A part of a picture (source, in its pixels) drawn into destination.
+    public void Image(Texture2D texture, Rectangle destination, Rectangle source)
+    {
+        if (texture is not null && destination.Width > 0 && destination.Height > 0)
+        {
+            _batch.Draw(texture, destination, source, Color.White);
         }
     }
 

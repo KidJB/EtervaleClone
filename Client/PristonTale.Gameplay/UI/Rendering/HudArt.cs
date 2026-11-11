@@ -127,6 +127,9 @@ public static class HudArt
     public const string ScrollBar = "Hud/Window/scrollbar.png";
     public const string ScrollButton = "Hud/Window/scrollknob.png";
     public const string WindowFrame = "Hud/Window/window.png";
+    public const string ItemLock = "Hud/Inventory/btnlock.png";
+    public const string ItemLockOn = "Hud/Inventory/btnlock_.png";
+    public const string ItemLockHint = "Hud/Inventory/LockViewing.png";
     public const string WindowOk = "Hud/Window/btnok.png";
     public const string WindowOkLit = "Hud/Window/btnok_.png";
     public const string InputLeft = "Hud/Window/input_left.png";
@@ -172,7 +175,7 @@ public static class HudArt
         QuestBoxButton, QuestBoxButtonOpen, QuestBoxTile, QuestBoxHint, QuestBoxCloseHint, QuestBoxGlow,
         Status, StatusPoint, StatusArrow, StatusArrowDown,
         .. InfoBox,
-        TooltipTopLeft, TooltipTopRight, TooltipBottomLeft, TooltipBottomRight, TooltipSide, TooltipEdge, MenuTop, MenuMiddle, MenuBottom, WindowFrame, WindowOk, WindowOkLit, InputLeft, InputCenter, InputRight,
+        TooltipTopLeft, TooltipTopRight, TooltipBottomLeft, TooltipBottomRight, TooltipSide, TooltipEdge, MenuTop, MenuMiddle, MenuBottom, WindowFrame, WindowOk, WindowOkLit, ItemLock, ItemLockOn, ItemLockHint, InputLeft, InputCenter, InputRight,
         HelpTopLeft, HelpTop, HelpTopRight, HelpLeft, HelpCenter, HelpRight, HelpBottomLeft, HelpBottom, HelpBottomRight, HelpLine,
         HelpTitle, ScrollBar, ScrollButton, .. GuideBox,
         MessageBox, NoticeLeft, NoticeCenter, NoticeRight, YesGray, YesYellow, NoGray, NoYellow,

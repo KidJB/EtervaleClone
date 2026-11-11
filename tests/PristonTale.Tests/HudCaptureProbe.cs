@@ -160,6 +160,7 @@ internal sealed class HudCaptureProbe : Game
         new("map-toggle-hover-800", 800, 600, Hover: Hover.MapToggle),
         new("low-resources-800", 800, 600, LowHealth: true),
         new("block-800", 800, 600, Block: true),
+        new("achievements-800", 800, 600, Keys.Y),
         new("inventory-800", 800, 600, Keys.I),
         new("inventory-item-hover-800", 800, 600, Keys.I, Hover.Item),
         new("inventory-1600x1200-scale2", 1600, 1200, Keys.I),

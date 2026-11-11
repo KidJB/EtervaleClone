@@ -87,6 +87,11 @@ public sealed partial class GameplayHud
             _tuning.Toggle();
         }
 
+        if (Pressed(keyboard, Keys.Y))
+        {
+            _achievements.Toggle();
+        }
+
         if (Pressed(keyboard, Keys.O))
         {
             ToggleSocial();
@@ -212,6 +217,18 @@ public sealed partial class GameplayHud
             return;
         }
 
+        if (_achievements.Contains(layout, pointer))
+        {
+            _achievements.Click(layout, pointer);
+            return;
+        }
+
+        if (MinimapShown && HudAchievements.Button(_minimap.Area(layout)).Contains(pointer))
+        {
+            _achievements.Toggle();
+            return;
+        }
+
         if (_settingsOpen && HudSettingsPanel.Box.Contains(pointer))
         {
             if (HudSettingsPanel.Closes(pointer))
@@ -262,7 +279,7 @@ public sealed partial class GameplayHud
             return;
         }
 
-        if (_itemBox.Click(layout, pointer) || _arenaEvent.Click(layout, pointer) || _cabinet.Click(layout, pointer))
+        if (_itemBox.Click(layout, pointer) || _arenaEvent.Click(layout, pointer) || _cabinet.Click(layout, pointer) || _marketplace.Click(layout, pointer) || _characterMarket.Click(layout, pointer))
         {
             return;
         }
@@ -525,7 +542,7 @@ public sealed partial class GameplayHud
 
         if (_actionBar.Captures(layout, pointer) || _petWindow.Captures(layout, _minimap.Area(layout), pointer, MinimapShown)
             || _questBook.Captures(layout, _minimap.Area(layout), pointer, MinimapShown) || _questTracker.Captures(layout, pointer) || _worldBuffs.Captures(layout, pointer)
-            || _coinShop.Captures(layout, _minimap.Area(layout), pointer, MinimapShown) || _itemBox.Captures(layout, pointer) || _arenaEvent.Captures(layout, pointer) || _cabinet.Captures(layout, pointer) || HudBar.Captures(design) || MinimapShown && (_minimap.Area(layout).Contains(pointer) || _minimap.Dragging || _bossList.Captures(layout, _minimap.Area(layout), pointer)) || _skillHud.BuffAt(pointer) != 0
+            || _coinShop.Captures(layout, _minimap.Area(layout), pointer, MinimapShown) || _itemBox.Captures(layout, pointer) || _arenaEvent.Captures(layout, pointer) || _cabinet.Captures(layout, pointer) || _marketplace.Captures(layout, pointer) || _characterMarket.Captures(layout, pointer) || HudBar.Captures(design) || MinimapShown && (_minimap.Area(layout).Contains(pointer) || _minimap.Dragging || _bossList.Captures(layout, _minimap.Area(layout), pointer)) || _skillHud.BuffAt(pointer) != 0
             || WindowContains(layout, _inventorySlide, pointer) || WindowContains(layout, _statusSlide, pointer) || WindowContains(layout, _skillSlide, pointer)
             || _skills.MasterBoxShown && HudSkillTreeLayout.MasterBox.Contains(pointer))
         {
@@ -546,6 +563,8 @@ public sealed partial class GameplayHud
         return _restart.Open && HudRestartPanel.Box(layout).Contains(pointer)
             || _systemMenu && HudSystemMenu.Bounds.Contains(design)
             || _settingsOpen && HudSettingsPanel.Box.Contains(pointer)
+            || _achievements.Contains(layout, pointer)
+            || MinimapShown && HudAchievements.Button(_minimap.Area(layout)).Contains(pointer)
             || _npcOpen && HudNpcPanel.Box.Contains(pointer)
             || _skills.TrainingPending && HudMessageBox.Bounds.Contains(pointer);
     }

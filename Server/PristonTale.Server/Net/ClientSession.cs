@@ -52,11 +52,14 @@ internal sealed record SessionServices(
     Application.Clans.ClanAppService Clans,
     Application.Castle.CastleAppService Castle,
     Application.Bellatra.BellatraClanAppService BellatraClans,
+    Application.Achievements.AchievementAppService Achievements,
     GameServerControl Control,
     CoinShopAppService CoinShop,
     ItemBoxAppService ItemBox,
     DailyQuestAppService DailyQuests,
-    SkinAppService Skins)
+    SkinAppService Skins,
+    Application.Markets.CharacterMarketAppService CharacterMarket,
+    Application.Markets.MarketplaceAppService Marketplace)
 {
     // Shared by every connection so a flood from many peers still yields one warning per interval.
     public LogSampler RejectedPackets { get; } = new(5000);
@@ -316,6 +319,15 @@ internal sealed partial class ClientSession : IMovementVerdictSink
                 case EtervaleOpcodes.PersonalShopView:
                     await ViewPersonalShopAsync(PersonalShopViewPacket.Read(memory.Span));
                     break;
+                case EtervaleOpcodes.CharacterMarketRequest:
+                    await CharacterMarketAsync(CharacterMarketRequestPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.MarketplaceQuery:
+                    await MarketplaceQueryAsync(MarketplaceQueryPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.MarketplaceBuy:
+                    await MarketplaceBuyAsync(MarketplaceBuyPacket.Read(memory.Span));
+                    break;
                 case EtervaleOpcodes.PersonalShopBuy:
                     await BuyFromPersonalShopAsync(PersonalShopBuyPacket.Read(memory.Span));
                     break;
@@ -351,6 +363,13 @@ internal sealed partial class ClientSession : IMovementVerdictSink
                     break;
                 case EtervaleOpcodes.BellatraClanRequest:
                     await BellatraClanAsync(BellatraClanRequestPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.AchievementTitle:
+                    await AchievementTitleAsync(AchievementTitlePacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.AchievementsRequest:
+                    AchievementsRequestPacket.Read(memory.Span);
+                    await AchievementsAsync();
                     break;
                 case EtervaleOpcodes.BellatraResultRequest:
                     await BellatraResultAsync(BellatraResultRequestPacket.Read(memory.Span));
@@ -567,6 +586,11 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         RefreshContacts();
         JoinCastle(session);
         await JoinClansAsync(session);
+        if (session.Loaded is { } saved)
+        {
+            await _services.Achievements.ApplyTitleAsync(session.EntityId, saved.Id);
+        }
+
     }
 
     private async Task PumpAsync(WorldOutbox outbox, PresenceEncoder encoder)

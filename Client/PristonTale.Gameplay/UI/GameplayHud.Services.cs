@@ -126,7 +126,7 @@ public sealed partial class GameplayHud
             keys = keys.Concat(_personalShop.Window.Offers.Select(static offer => offer.Item.CatalogKey));
         }
 
-        _icons.Request(keys.Concat(_itemBox.IconKeys).Concat(_coinShop.IconKeys).Concat(_cabinet.IconKeys));
+        _icons.Request(keys.Concat(_itemBox.IconKeys).Concat(_coinShop.IconKeys).Concat(_cabinet.IconKeys).Concat(_marketplace.IconKeys).Concat(_characterMarket.IconKeys));
     }
 
     // Keys of the items seen in the pack or the warehouse, so a sold or stored item still has its sound once it is gone.
@@ -184,6 +184,22 @@ public sealed partial class GameplayHud
             _npcOpen = false;
             _npc.Dismiss();
             _cabinet.Show();
+            return true;
+        }
+
+        if (kind == NpcServiceKind.CharacterMarket)
+        {
+            _npcOpen = false;
+            _npc.Dismiss();
+            _characterMarket.Show(npcId);
+            return true;
+        }
+
+        if (kind == NpcServiceKind.Marketplace)
+        {
+            _npcOpen = false;
+            _npc.Dismiss();
+            _marketplace.Show(npcId);
             return true;
         }
 

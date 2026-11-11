@@ -402,7 +402,7 @@ destination. Renderer side of stage publication: [rendering.md](rendering.md).
 
 The Cabinet (`HudCabinet`, the U key or the `Cabinet` service of Knight Commander Derik; drawn in `HudPteuWindow`'s style with its
 title plate and CLOSE button) sells every worn-gear look for coins to the
-account (`SkinRules`, `SkinAppService`); the preview is `GameScene.PreviewLook`, and it lists and shows only looks of the worn item family and grip that the class can wear, plus the costumes of `Characters/Data/Costumes.json` (body files by class) , hair tints and numbered class heads (the `Hair` slot, `CharacterHead.CustomHair`; shown over the character's own hair while chosen) and its `gear` looks (weapons and off-hand items with a model but no world item; `like` names the item a CW look stands for).
+account (`SkinRules`, `SkinAppService`); the preview is `GameScene.PreviewLook`, and weapons have a slot per grip (`SkinSet.Weapon` and `TwoHand`, `SkinRules.WeaponLook`): a chosen look goes to the grip worn then and shows only on that grip, and a skin supplies only the model: the worn weapon (`CharacterVisualSet.HeldKey`, `HeldWeapon` in the description from version 8) decides the motions and the hand or bone; orbs (they are not drawn in the hand), models repeated under another key and models that do not load are not sold (`Costumes.json` hidden); it lists and shows only looks of the worn item family and grip that the class can wear, plus the costumes of `Characters/Data/Costumes.json` (body files by class) , hair tints and numbered class heads (the `Hair` slot, `CharacterHead.CustomHair`; shown over the character's own hair while chosen) and its `gear` looks (weapons and off-hand items with a model but no world item; `like` names the item a CW look stands for).
 
 The Item Distributor (`HudItemBox`) opens instead of a server request when an NPC's `GiftExpress` service is chosen
 (`GameplayHud.OpenNpcService`), with the bag, on a dark frame with the art of `assets/Hud/Distributor/`: Retrieve Items
@@ -411,7 +411,10 @@ empty box; Send Items takes a bag item clicked while it shows (`HudItemBox.Inter
 in its box (Enter or Send). Its requests are read back without waiting; Escape leaves the name box, then closes it. An
 offline stall (`/stall`, `/stall close`) is drawn as a player standing with its sign and opens the personal shop window as
 a seller does. While the player's own shop sells, a strip under its window ("Go offline: leave this shop as a stall",
-`HudPersonalShopWindow.OfflineButton`) sends `/stall`.
+`HudPersonalShopWindow.OfflineButton`) sends `/stall`. Pricing a bag item first asks Gold, Coins or View only
+(`HudPersonalShopController.Choice`); a coin offer shows "cs" and a view-only one "view" over its cell, and its tooltip names
+the currency. Shops the player has looked in this play (`HudPersonalShopController.Visited`) draw their sign's frame in a
+blue rim (`HudChatBubbles.Visited`).
 | `L` | `GameplayHud.UpdateKeys` | Open or close the quest book (`HudQuestBook`) |
 | `B`, `Alt+1`..`Alt+3` | `GameplayHud.UpdateKeys` | Show or hide the action bar; show its page 1 to 3 (Alt keeps `1`-`3` from the potion belt) |
 | `Enter`, `Page Up`/`Page Down`, `Up`/`Down` | `HudChat.Update` | Open the chat input or send its line, scroll the chat, recall commands; while typing, HUD, binding, debug and motion keys and the `A` labels are suppressed |
@@ -442,7 +445,7 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
 ## HUD and windows
 
 - Layout: the HUD is authored in 800x600 logical units. `HudLayout.Create` picks the largest integer scale that fits;
-  bottom-anchored elements move down by `BottomOffset`, right-anchored ones right by `RightOffset`. Convert the mouse
+  bottom-anchored elements move down by `BottomOffset`, right-anchored ones right by `RightOffset`; the bottom bar and the inventory, status and skill windows around it also move right by `CenterOffset`, which centres them unless the setting `CenteredInventory` (Settings, Interface tab) is off (`HudPainter.Shift` for the bar, `HudLayout.ToDesign` for its pointer). Convert the mouse
   with `HudLayout.ToLogical`.
 - `HudPainter` draws original sprites at the integer scale with point sampling and queues text into a linear-filtered
   pass; call `Flush` before drawing a layer that must cover earlier text.
@@ -620,7 +623,7 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
 - Inventory window (`HudInventoryPanel`): a worn two-handed weapon is also drawn in the empty off-hand slot, as the
   original draws it in both hands: the pointer there is on the weapon, and an off-hand item set down there exchanges it
   (`HudInventoryLayout.TwoHandedShadow`, used by `ItemAt` and `HudInventoryPlacement`). Carried/maximum weight centred
-  in x 326..406 at y 471 of the window; items the character cannot use (level, attributes or class against `OwnedItemView.Details`, re-checked on every owner state)
+  in x 326..388 at y 471 of the window, and at its right the lock button (`HudInventoryController.ItemsLocked`, for the session): while lit a click on an item, or a right click on gear, only says the items are locked, and potions and usable items still work; items the character cannot use (level, attributes or class against `OwnedItemView.Details`, re-checked on every owner state)
   get the original red cell tint, in the bag and in their equipment slot. Under a carried item the landing cells or slot
   turn the original light blue, the item an exchange would pick up turns white, and a refused place turns red; the carried
   item is drawn on the cursor only, its place left empty, and once set down it stays where it was set down until the
@@ -927,6 +930,7 @@ The chat box (`HudChatWindow`, art `assets/Hud/Chat/`) and the action bar (`HudA
 All, Clan, Party, Trade and PM tabs, a notice button that cycles chat only, the notice lines over the chat (split at the divider) and the notice page, and the input line with its send button.
 The action bar is 424x96 with nine by two 41-pixel slots, three page tabs, lock, turn and close buttons; turned, it is 96x424. Dragging any part of it that is not a slot or button moves it.
 
+Achievements (`HudAchievements`, key Y or the button left of the minimap, art `assets/Hud/Achievements/`) ask the server for the player's badges and show one a page. The first player of each class to reach level 115, 125, 130 or 145 holds its top badge, announced to everyone (`WorldServer.StepAchievements`, `AchievementAppService`); game masters do not claim them, and an administrator grants the staff badges with `/achievement <player> <id>`. Each badge page has an Activate or Hide title button (saved per character); without a choice the player's best badge (`AchievementRules.TitleOf`) shows to everyone as the top `< title >` line of its name box, beside the clan emblem at its full 32 pixels, also when it earns one in play (`EntityDescriptionPacket` from version 7), and a titled player always has its name box shown.
 The Settings window (`HudSettingsPanel`, art `assets/Hud/Settings/`) has four tabs (Video, Audio, General, UI) and one dropdown per option; a choice applies at once, Shift+click steps an option back, and Reset returns to the values at opening.
 The windows drawn with `HudPainter.HelpBox` (NPC dialogs, quests, help, settings, clans, castle and Bellatra pages, the wing gate) use the RPT frame, title plate and OK button (`assets/Hud/Window/`), and text fields `HudPainter.InputBox` (same folder).
 Every confirmation and count box uses `HudMessageBox` (art `assets/Hud/MessageBox/`), every tooltip `HudPainter.InfoBox` (art `assets/Hud/Tooltip/`), and the party frames' menu the art of `assets/Hud/Menu/`.
@@ -1107,6 +1111,22 @@ budget; never read files in `Update`/`Draw` after `BeginRemotePresence`. Resolve
 - `IPlayChannel.SendSkillCommandAsync` has a default no-op implementation; test doubles inherit it silently.
 - `PresentationController.Pace`, called from `Game1.EndDraw`, sleeps on the game thread by design (frame limiter after
   present); do not move frame work after it.
+
+The two market windows are in `UI/Markets/` ([markets.md](markets.md#client)).
+
+## Discord presence
+
+`Discord/DiscordPresence.cs` shows the player's game on their Discord profile when `discordPresence` is on
+([client-settings.md](client-settings.md)), through the game's Discord application (`DiscordPresence.ApplicationId`). It speaks Discord's
+local RPC protocol in managed code (`DiscordIpc`: a handshake, then `SET_ACTIVITY` frames), over the named pipes
+`discord-ipc-0` to `9` on Windows (`DiscordPipeTransport`) and the Unix sockets of the same names in the temporary
+folder, `/tmp` and `/run/user/*` (with their Flatpak and Snap subfolders) on Linux and macOS (`DiscordSocketTransport`).
+One background task connects (every 30 s while Discord is not running), sends the latest activity at most every 15 s and
+clears it when the game closes; the game loop only hands it a new activity. The opening and character screens show
+"Logging in" and "Choosing a character"; in the world the profile reads the field, "Solo - Name (Lv N)" or
+"Party (n/6) - Name (Lv N)", the class as the picture's hover text and the time since the game started
+(`DiscordPresenceText`), made again only when the field, level or party size change. The picture is the application's
+art asset named `logo`.
 
 ## Related
 

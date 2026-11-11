@@ -16,6 +16,32 @@ public static class HudRarityColors
         return hovered ? Bright[index] : Normal[index];
     }
 
+    private const float WashAlpha = 0.18f;
+
+    // Gear of Uncommon grade and above: a faint wash of its grade's colour, drawn under its icon.
+    public static void Wash(HudPainter painter, Rectangle bounds, ItemRarity rarity)
+    {
+        if (rarity >= ItemRarity.Uncommon)
+        {
+            painter.Fill(bounds, Of(rarity) * WashAlpha);
+        }
+    }
+
+    // And a one-pixel border of that colour, drawn over its icon.
+    public static void Border(HudPainter painter, Rectangle bounds, ItemRarity rarity)
+    {
+        if (rarity < ItemRarity.Uncommon)
+        {
+            return;
+        }
+
+        var color = Of(rarity);
+        painter.Fill(new Rectangle(bounds.X, bounds.Y, bounds.Width, 1), color);
+        painter.Fill(new Rectangle(bounds.X, bounds.Bottom - 1, bounds.Width, 1), color);
+        painter.Fill(new Rectangle(bounds.X, bounds.Y, 1, bounds.Height), color);
+        painter.Fill(new Rectangle(bounds.Right - 1, bounds.Y, 1, bounds.Height), color);
+    }
+
     private static Color[] Build(float lighten)
     {
         var colors = new Color[ItemRarities.Colors.Length];

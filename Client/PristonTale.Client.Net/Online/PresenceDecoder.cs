@@ -149,6 +149,7 @@ internal sealed class PresenceDecoder : IEventHandleReader
             EtervaleOpcodes.BellatraBoard => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Bellatra = Bellatra(BellatraBoardPacket.Read(packet)) },
             EtervaleOpcodes.BellatraResult => new PresenceUpdate(_tick, [], [], [], [], FieldId) { BellatraResult = BellatraResult(BellatraResultPacket.Read(packet)) },
             EtervaleOpcodes.BellatraClanState => new PresenceUpdate(_tick, [], [], [], [], FieldId) { BellatraClan = BellatraClan(BellatraClanStatePacket.Read(packet)) },
+            EtervaleOpcodes.Achievements => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Achievements = AchievementsPacket.Read(packet) },
             EtervaleOpcodes.BellatraClanResult => new PresenceUpdate(_tick, [], [], [], [], FieldId)
             {
                 BellatraClanResult = BellatraClanResultPacket.Read(packet) is var bellatra ? new BellatraClanResultInfo(bellatra.Action, (Contracts.Social.BellatraClanStatus)bellatra.Status) : null
@@ -842,6 +843,8 @@ internal sealed class PresenceDecoder : IEventHandleReader
                 PetSkin = looks.PetSkin,
                 PetName = looks.PetName,
                 Mount = looks.Mount,
+                Title = looks.Title,
+                HeldWeaponKey = ItemCodes.KeyOf(looks.HeldWeapon),
                 Phoenix = looks.Phoenix,
                 BigHead = looks.BigHead,
                 WeaponGlow = Glow(looks.WeaponGlow),

@@ -47,6 +47,11 @@ public sealed class HudChatBubbles
     // The signs of the players selling from a personal shop, by player (RemoteEntityManager.ShopSigns, read only).
     public Dictionary<ulong, string> Signs { get; set; } = RemoteEntityManager.NoShopSigns;
 
+    // Shops the player has looked in this play; their signs take VisitedRim.
+    public IReadOnlySet<ulong> Visited { get; set; } = new HashSet<ulong>();
+
+    private static readonly Color VisitedRim = new(120, 200, 255);
+
     public bool TryGet(ulong entityId, out string text)
     {
         text = _lines.TryGetValue(entityId, out var line) ? line.Text : "";
@@ -98,7 +103,8 @@ public sealed class HudChatBubbles
         {
             painter.Flush();
             var text = sign ? Signs[id] : _lines[id].Text;
-            DrawBubble(painter, layout, text, (int)(point.Screen.X / scale), (int)(point.Screen.Y / scale), nameColor(id), id == selected, sign);
+            DrawBubble(painter, layout, text, (int)(point.Screen.X / scale), (int)(point.Screen.Y / scale), nameColor(id), id == selected, sign,
+                sign && Visited.Contains(id) ? VisitedRim : null);
         }
     }
 
@@ -110,7 +116,7 @@ public sealed class HudChatBubbles
         DrawBubble(painter, layout, text, (int)(point.Screen.X / scale), (int)(point.Screen.Y / scale), default, false, false);
     }
 
-    private void DrawBubble(HudPainter painter, HudLayout layout, string text, int anchorX, int anchorY, Color name, bool selected, bool sign)
+    private void DrawBubble(HudPainter painter, HudLayout layout, string text, int anchorX, int anchorY, Color name, bool selected, bool sign, Color? rim = null)
     {
         var lines = _wrap.Wrap(text, MaxLines, _measure ??= painter.Measure);
         if (lines.Count == 0)
@@ -136,7 +142,7 @@ public sealed class HudChatBubbles
             x -= 2;
         }
 
-        DrawFrame(painter, x, y, textWidth, lineHeight, lines.Count, named, selected, Framed || sign, sign);
+        DrawFrame(painter, x, y, textWidth, lineHeight, lines.Count, named, selected, Framed || sign, sign, rim);
         painter.Flush();
         for (var index = 0; index < lines.Count; index++)
         {
@@ -151,8 +157,9 @@ public sealed class HudChatBubbles
 
     // The fill is one translucent tile stretched over the inside; the border is cut from the corner, edge and tail tiles
     // (the shop sign's own tiles for a sign).
+    // rim tints the frame's edges (a visited shop's sign); null keeps the art's colours.
     public static void DrawFrame(HudPainter painter, int x, int y, int width, int lineHeight, int lineCount, bool tail, bool selected, bool framed = true,
-        bool shop = false)
+        bool shop = false, Color? rim = null)
     {
         var content = lineHeight * lineCount + 6;
         var bottom = y + 4 + content;
@@ -168,30 +175,30 @@ public sealed class HudChatBubbles
             for (var offset = 0; offset < content; offset += 16)
             {
                 var tile = Math.Min(16, content - offset);
-                painter.Stretch(set[3], new Rectangle(x, y + 4 + offset, 4, tile), new Rectangle(0, 0, 4, tile));
-                painter.Stretch(set[5], new Rectangle(x + 14 + width, y + 4 + offset, 4, tile), new Rectangle(12, 0, 4, tile));
+                painter.Stretch(set[3], new Rectangle(x, y + 4 + offset, 4, tile), new Rectangle(0, 0, 4, tile), rim);
+                painter.Stretch(set[5], new Rectangle(x + 14 + width, y + 4 + offset, 4, tile), new Rectangle(12, 0, 4, tile), rim);
             }
 
             var tailStart = tail && width >= 12 ? Math.Clamp(((width / 6 + 1) / 2 - 1) * 6, 0, width - 12) : -1;
             for (var offset = 0; offset < width; offset += 6)
             {
                 var tile = Math.Min(6, width - offset);
-                painter.Stretch(set[1], new Rectangle(x + 11 + offset, y, tile, 4), new Rectangle(0, 0, tile, 4));
+                painter.Stretch(set[1], new Rectangle(x + 11 + offset, y, tile, 4), new Rectangle(0, 0, tile, 4), rim);
                 if (tailStart < 0 || offset < tailStart || offset >= tailStart + 12)
                 {
-                    painter.Stretch(set[7], new Rectangle(x + 11 + offset, bottom, tile, 2), new Rectangle(0, 4, tile, 2));
+                    painter.Stretch(set[7], new Rectangle(x + 11 + offset, bottom, tile, 2), new Rectangle(0, 4, tile, 2), rim);
                 }
             }
 
             if (tailStart >= 0)
             {
-                painter.Stretch(set[9], new Rectangle(x + 11 + tailStart, bottom, 12, 10), new Rectangle(0, 4, 12, 10));
+                painter.Stretch(set[9], new Rectangle(x + 11 + tailStart, bottom, 12, 10), new Rectangle(0, 4, 12, 10), rim);
             }
 
-            painter.Stretch(set[0], new Rectangle(x, y, 11, 4), new Rectangle(0, 0, 11, 4));
-            painter.Stretch(set[2], new Rectangle(x + 11 + width, y, 7, 4), new Rectangle(9, 0, 7, 4));
-            painter.Stretch(set[6], new Rectangle(x, bottom, 11, 2), new Rectangle(0, 4, 11, 2));
-            painter.Stretch(set[8], new Rectangle(x + 11 + width, bottom, 7, 2), new Rectangle(9, 4, 7, 2));
+            painter.Stretch(set[0], new Rectangle(x, y, 11, 4), new Rectangle(0, 0, 11, 4), rim);
+            painter.Stretch(set[2], new Rectangle(x + 11 + width, y, 7, 4), new Rectangle(9, 0, 7, 4), rim);
+            painter.Stretch(set[6], new Rectangle(x, bottom, 11, 2), new Rectangle(0, 4, 11, 2), rim);
+            painter.Stretch(set[8], new Rectangle(x + 11 + width, bottom, 7, 2), new Rectangle(9, 4, 7, 2), rim);
         }
     }
 }

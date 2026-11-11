@@ -464,7 +464,7 @@ public sealed partial class RemoteEntityManager
             && _playerAppearances.TryGetValue(entityId, out var appearance))
         {
             playerClass = appearance.Class;
-            weaponKey = appearance.WeaponKey ?? "";
+            weaponKey = appearance.HeldWeaponKey.Length > 0 ? appearance.HeldWeaponKey : appearance.WeaponKey ?? "";
             position = entity.DrawnPosition;
             return true;
         }
@@ -853,7 +853,7 @@ public sealed partial class RemoteEntityManager
             CharacterHead.Apply(defaults, appearance.Class, appearance.Tier, appearance.FaceIndex, appearance.HairIndex),
             appearance.Class, appearance.BigHead);
         uint jobMask = _classRegistry.Get(appearance.Class).Definition.MotionJobMask;
-        return EquipmentVisuals.Apply(head, appearance.ArmorKey, appearance.WeaponKey, appearance.OffHandKey, appearance.InVillage, jobMask);
+        return EquipmentVisuals.Apply(head, appearance.ArmorKey, appearance.WeaponKey, appearance.OffHandKey, appearance.InVillage, jobMask, appearance.HeldWeaponKey);
     }
 
     private bool TryResolveVisuals(PlayerClass playerClass, out CharacterVisualSet visuals)

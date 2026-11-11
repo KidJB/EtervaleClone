@@ -41,6 +41,10 @@ public sealed partial class HudCombat
         public bool Attacked { get; set; }
         public string OwnerLabel { get; set; }
 
+        // "< title >" over a player's name, formatted again only when its title changes.
+        public int TitleOf { get; set; }
+        public string TitleLabel { get; set; }
+
         // "[Clan]" over a player's name, formatted again only when its clan name changes.
         public string ClanLabel { get; set; }
         public string ClanLabelOf { get; set; }
@@ -332,6 +336,23 @@ public sealed partial class HudCombat
     public long OwnClan { get; set; }
 
     public long ClanOf(ulong id) => _entities.TryGetValue(id, out var entity) && entity.Spawn.Player is { } player ? player.ClanId : 0;
+
+    private static string TitleLine(Entity entity)
+    {
+        if (entity.Spawn.Player is not { Title: not 0 } player)
+        {
+            return null;
+        }
+
+        if (entity.TitleOf != player.Title)
+        {
+            entity.TitleOf = player.Title;
+            var name = HudAchievements.Name(Simulation.Achievements.AchievementRules.TitleId(player.Title), Simulation.Achievements.AchievementRules.TitleHolder(player.Title));
+            entity.TitleLabel = $"< {name} >";
+        }
+
+        return entity.TitleLabel;
+    }
 
     private string ClanLine(ulong id)
     {

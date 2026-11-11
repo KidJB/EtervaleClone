@@ -83,9 +83,9 @@ public sealed class StallAppService(ISessionRegistry sessions, ICharacterSaves s
         }
     }
 
-    public async Task<PersonalShopReply> BuyAsync(PlayerSession buyer, DurableLease lease, PersonalShopPurchase purchase, CancellationToken ct = default)
+    public async Task<PersonalShopReply> BuyAsync(PlayerSession buyer, DurableLease lease, PersonalShopPurchase purchase, CancellationToken ct = default, ulong marketNpc = 0)
     {
-        if (await world.StallOwnerAsync(buyer, purchase.SellerId) is not { } owner)
+        if (await world.StallOwnerAsync(buyer, purchase.SellerId, marketNpc) is not { } owner)
         {
             return new PersonalShopReply(PersonalShopOutcome.Failed(PersonalShopStatus.Closed, 0));
         }
@@ -105,7 +105,7 @@ public sealed class StallAppService(ISessionRegistry sessions, ICharacterSaves s
         PersonalShopListing? listing = null;
         var refused = PersonalShopStatus.StorageFailed;
         var reply = await lease.RunAsync(
-            session => world.PrepareStallPurchaseAsync(session, ownerSession, purchase),
+            session => world.PrepareStallPurchaseAsync(session, ownerSession, purchase, marketNpc),
             async (session, prepared) =>
             {
                 listing = (await world.CommitStallPurchaseAsync(session, prepared)).Listing;
@@ -118,12 +118,13 @@ public sealed class StallAppService(ISessionRegistry sessions, ICharacterSaves s
                 var stall = prepared.Stall!;
                 var sale = new StallSale(session.Stamp(prepared.Snapshot!), stall.Id, StallCodec.CaptureItems(prepared.Shop!, prepared.Stock!), prepared.Shop!.IsEmpty,
                     stall.OwnerCharacterId, prepared.Price, MoneyLimits.CarryLimit(stall.Level, stall.Tier),
-                    prepared.OwnerSnapshot is { } snapshot ? ownerSession!.Stamp(snapshot) : null);
+                    prepared.OwnerSnapshot is { } snapshot ? ownerSession!.Stamp(snapshot) : null, prepared.Currency == PersonalShopCurrency.Coins, stall.AccountId);
                 var stored = await stalls.SellAsync(sale, CancellationToken.None);
                 refused = stored switch
                 {
                     StallSaleStore.Gone => PersonalShopStatus.Closed,
                     StallSaleStore.GoldLimit => PersonalShopStatus.GoldLimit,
+                    StallSaleStore.NotEnoughCoins => PersonalShopStatus.NotEnoughCoins,
                     _ => PersonalShopStatus.StorageFailed
                 };
                 return stored == StallSaleStore.Stored ? null : DurableFailure.StorageFailed;
@@ -145,7 +146,7 @@ public sealed class StallAppService(ISessionRegistry sessions, ICharacterSaves s
 
         if (owner is not null && chat.TryGet(owner.EntityId, out var seller))
         {
-            seller.Link.Deliver(new ChatLine(ChatKind.Trade, 0, StallMessages.Sold(prepared.Original.Name, count, prepared.ItemName, prepared.Price)));
+            seller.Link.Deliver(new ChatLine(ChatKind.Trade, 0, StallMessages.Sold(prepared.Original.Name, count, prepared.ItemName, prepared.Price, prepared.Currency)));
         }
     }
 

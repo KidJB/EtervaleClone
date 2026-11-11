@@ -26,8 +26,9 @@ public static class StallRules
         return stock;
     }
 
-    // Moves Count units of the listed item from the stock to the buyer and its price from the buyer, on candidates. The
-    // price and the units must be the ones the buyer was shown; ownerMoney and the owner's level and tier bound the gold.
+    // Moves Count units of the listed item from the stock to the buyer and, for gold, its price from the buyer, on candidates;
+    // coins move in storage. The price and the units must be the ones the buyer was shown; ownerMoney and the owner's level and
+    // tier bound the gold.
     public static PersonalShopStatus TrySell(PersonalShop shop, Inventory stock, PlayerCharacter buyer, PersonalShopPurchase purchase, int ownerLevel,
         int ownerTier, long ownerMoney, out long price)
     {
@@ -39,6 +40,11 @@ public static class StallRules
         }
 
         var item = stock[anchor];
+        if (entry.Currency == PersonalShopCurrency.ViewOnly)
+        {
+            return PersonalShopStatus.ViewOnly;
+        }
+
         if (entry.UnitPrice != purchase.UnitPrice)
         {
             return PersonalShopStatus.PriceChanged;
@@ -60,12 +66,13 @@ public static class StallRules
             return PersonalShopStatus.Rejected;
         }
 
-        if (buyer.Money < price)
+        var gold = entry.Currency == PersonalShopCurrency.Gold;
+        if (gold && buyer.Money < price)
         {
             return PersonalShopStatus.NotEnoughGold;
         }
 
-        if (PersonalShopRules.GoldRoom(ownerLevel, ownerTier, ownerMoney, price) < 0)
+        if (gold && PersonalShopRules.GoldRoom(ownerLevel, ownerTier, ownerMoney, price) < 0)
         {
             return PersonalShopStatus.GoldLimit;
         }
@@ -80,7 +87,7 @@ public static class StallRules
             return PersonalShopStatus.NoSpace;
         }
 
-        return buyer.TryChangeMoney(-price) ? PersonalShopStatus.Ok : PersonalShopStatus.Rejected;
+        return !gold || buyer.TryChangeMoney(-price) ? PersonalShopStatus.Ok : PersonalShopStatus.Rejected;
     }
 
     // A stall's listing restored from storage.
@@ -88,7 +95,7 @@ public static class StallRules
 
     // The listing with only the entries whose item the stock still holds.
     public static PersonalShop Remaining(PersonalShop shop, Inventory stock) =>
-        new(shop.Sign, [.. shop.Entries.Where(entry => stock.Find(entry.ItemId) >= 0)]);
+        new(shop.Sign, [.. shop.Entries.Where(entry => stock.Find(entry.ItemId) >= 0)]) { Sequence = shop.Sequence };
 }
 
 public static class StallMessages
@@ -101,6 +108,7 @@ public static class StallMessages
     public const string OwnStall = "You cannot buy from your own account's stall.";
     public const string Failed = "The stall could not be stored; nothing changed.";
 
-    public static string Sold(string buyer, int count, string item, long price) =>
-        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Your stall sold {count} {item} to {buyer} for {price:N0} Gold");
+    public static string Sold(string buyer, int count, string item, long price, PersonalShopCurrency currency = PersonalShopCurrency.Gold) =>
+        string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"Your stall sold {count} {item} to {buyer} for {price:N0} {(currency == PersonalShopCurrency.Coins ? "Coins" : "Gold")}");
 }

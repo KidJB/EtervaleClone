@@ -115,6 +115,30 @@ internal sealed class OnlinePlayChannel : IPlayChannel
         return await _connection.BuyCoinShopAsync(tabId, itemId, quantity, specClass, ct);
     }
 
+    public async Task<CharacterMarketPagePacket> CharacterMarketAsync(CharacterMarketRequestPacket request, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.Markets.CharacterMarketAsync(request, ct);
+    }
+
+    public async Task<CharacterDetailView> CharacterMarketDetailAsync(CharacterMarketRequestPacket request, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.Markets.CharacterMarketDetailAsync(request, ct);
+    }
+
+    public async Task<MarketplaceView> MarketplaceAsync(MarketplaceQueryPacket query, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.Markets.MarketplaceAsync(query, ct);
+    }
+
+    public async Task<PersonalShopReply> BuyFromMarketplaceAsync(ulong npcId, PersonalShopPurchase purchase, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.PersonalShops.BuyFromMarketplaceAsync(npcId, purchase, ct);
+    }
+
     public async Task<long> CoinBalanceAsync(CancellationToken ct = default)
     {
         await _start.WaitAsync(ct);
@@ -223,6 +247,18 @@ internal sealed class OnlinePlayChannel : IPlayChannel
     {
         await _start.WaitAsync(ct);
         _connection.SendSocial(new BellatraClanRequestPacket(action, npcId, (ulong)Math.Max(0, amount)));
+    }
+
+    public async Task SendAchievementTitleAsync(uint id, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        _connection.SendSocial(new AchievementTitlePacket(id));
+    }
+
+    public async Task SendAchievementsRequestAsync(CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        _connection.SendSocial(default(AchievementsRequestPacket));
     }
 
     public async Task SendBellatraResultAsync(int team, CancellationToken ct = default)

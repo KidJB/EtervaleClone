@@ -73,7 +73,7 @@ public static class EquipmentVisuals
         return $"image/sinimage/Items/DropItem/{prefix}{item.Mesh}.smd";
     }
 
-    public static CharacterVisualSet Apply(CharacterVisualSet defaults, string armor, string weapon, string offHand, bool village, uint jobMask)
+    public static CharacterVisualSet Apply(CharacterVisualSet defaults, string armor, string weapon, string offHand, bool village, uint jobMask, string held = "")
     {
         string body = defaults.Body.InxExtensionPath;
         // Premium costume bodies (CA) keep the class body; their wings are an effect (CostumeWings). An armour without a
@@ -102,6 +102,7 @@ public static class EquipmentVisuals
         {
             Body = new CharacterAssetRef(body),
             WeaponKey = visualWeapon,
+            HeldKey = visualWeapon.Length > 0 && !string.IsNullOrEmpty(held) && HasModel(held) ? held : "",
             OffHandKey = visualOffHand,
             InVillage = village,
             JobMask = jobMask
@@ -115,7 +116,7 @@ public static class EquipmentVisuals
     public static bool HeldInLeftHand(string key) => Items.TryGetValue(key, out var item) && item.LeftHand;
 
     public static string WeaponBone(CharacterVisualSet visuals, bool village) =>
-        Carry(visuals) is { } carry ? village ? carry.Back : carry.Held : WeaponBone(visuals.WeaponKey, village);
+        Carry(visuals) is { } carry ? village ? carry.Back : carry.Held : WeaponBone(visuals.HeldAs, village);
 
     // How the weapon sits off its bone, or null when it sits on it.
     public static (Matrix Offset, float Lift)? WeaponHover(CharacterVisualSet visuals) =>
@@ -131,14 +132,14 @@ public static class EquipmentVisuals
 
     private static Carriage Carry(CharacterVisualSet visuals)
     {
-        if (!Items.ContainsKey(visuals.WeaponKey))
+        if (!Items.ContainsKey(visuals.HeldAs))
         {
             return null;
         }
 
         foreach (var carry in Carries)
         {
-            if (visuals.JobMask == CharacterClassDef.JobMaskOf(carry.Class) && visuals.WeaponKey.StartsWith(carry.Family, StringComparison.OrdinalIgnoreCase))
+            if (visuals.JobMask == CharacterClassDef.JobMaskOf(carry.Class) && visuals.HeldAs.StartsWith(carry.Family, StringComparison.OrdinalIgnoreCase))
             {
                 return carry;
             }

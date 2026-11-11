@@ -28,17 +28,19 @@ public sealed class PlayerEquipmentPresentation
 
     public string WeaponKey => (_requestedPlayerVisuals ?? _basePlayerVisuals)?.WeaponKey ?? "";
 
+    public string HeldWeaponKey => (_requestedPlayerVisuals ?? _basePlayerVisuals)?.HeldAs ?? "";
+
     // The player's look with another body item worn in place of the current one (the armour preview); null before the
     // first look.
     public CharacterVisualSet Wearing(string armorKey)
     {
         var current = _requestedPlayerVisuals ?? _basePlayerVisuals;
-        return current is null ? null : EquipmentVisuals.Apply(_basePlayerVisuals, armorKey, current.WeaponKey, current.OffHandKey, current.InVillage, _jobMask);
+        return current is null ? null : EquipmentVisuals.Apply(_basePlayerVisuals, armorKey, current.WeaponKey, current.OffHandKey, current.InVillage, _jobMask, current.HeldKey);
     }
 
     // The worn gear as given, for The Cabinet's preview.
     public CharacterVisualSet Wearing(Simulation.Characters.SkinSet look) =>
-        _basePlayerVisuals is null ? null : EquipmentVisuals.Apply(_basePlayerVisuals, look.Armor, look.Weapon, look.OffHand, false, _jobMask);
+        _basePlayerVisuals is null ? null : EquipmentVisuals.Apply(_basePlayerVisuals, look.Armor, look.Weapon, look.OffHand, false, _jobMask, HeldWeaponKey);
 
     // The looks the character shows over its gear; a new set rebuilds the look. Set from a finished request.
     public Simulation.Characters.SkinSet Skins { get; set; } = Simulation.Characters.SkinSet.None;
@@ -122,11 +124,12 @@ public sealed class PlayerEquipmentPresentation
                 }
             }
 
-            weapon = Simulation.Characters.SkinRules.Look(weapon, skins.Weapon);
+            var worn = weapon;
+            weapon = Simulation.Characters.SkinRules.WeaponLook(weapon, skins);
             armor = Simulation.Characters.SkinRules.Look(armor, skins.Armor);
             offHand = Simulation.Characters.SkinRules.Look(offHand, skins.OffHand);
             ArmorKey = armor;
-            var desired = EquipmentVisuals.Apply(_basePlayerVisuals, armor, weapon, offHand, village, _jobMask);
+            var desired = EquipmentVisuals.Apply(_basePlayerVisuals, armor, weapon, offHand, village, _jobMask, worn);
             if (desired != _requestedPlayerVisuals)
             {
                 _requestedPlayerVisuals = desired;

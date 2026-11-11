@@ -24,7 +24,7 @@ public sealed record PersonalShopOutcome(bool Ok, PersonalShopStatus Status, lon
 
 // An item a shop offers as its viewer sees it: the copy's values (the viewer's class decides what it may use) at its store
 // grid cell (the view's anchor), and the price of one unit.
-public sealed record PersonalShopOffer(OwnedItemView Item, long UnitPrice);
+public sealed record PersonalShopOffer(OwnedItemView Item, long UnitPrice, PersonalShopCurrency Currency = PersonalShopCurrency.Gold);
 
 public sealed record PersonalShopListing(ulong SellerId, IReadOnlyList<PersonalShopOffer> Offers)
 {
@@ -36,7 +36,7 @@ public sealed record PersonalShopListing(ulong SellerId, IReadOnlyList<PersonalS
             var anchor = seller.Inventory.Find(entry.ItemId);
             if (anchor >= 0 && seller.Inventory[anchor] is { } item)
             {
-                offers.Add(new PersonalShopOffer(OwnedItemView.Of(item, entry.Cell, -1) with { Details = ItemDetailView.Of(item, viewer) }, entry.UnitPrice));
+                offers.Add(new PersonalShopOffer(OwnedItemView.Of(item, entry.Cell, -1) with { Details = ItemDetailView.Of(item, viewer) }, entry.UnitPrice, entry.Currency));
             }
         }
 
@@ -49,7 +49,21 @@ public sealed record PersonalShopReply(PersonalShopOutcome Outcome, PersonalShop
 // The texts a player sees, as the original words them.
 public static class PersonalShopMessages
 {
-    public static GameText Of(PersonalShopStatus status) => status == PersonalShopStatus.Ok ? GameText.None : GameText.Of(status switch
+    public static GameText Of(PersonalShopStatus status) => status switch
+    {
+        PersonalShopStatus.Ok => GameText.None,
+        PersonalShopStatus.ViewOnly => GameText.Plain(ViewOnlyText),
+        PersonalShopStatus.NotEnoughCoins => GameText.Plain("You do not have enough coins."),
+        PersonalShopStatus.TooSoon => GameText.Plain("Wait a moment before buying again."),
+        _ => Classic(status)
+    };
+
+    public const string ViewOnlyText = "That item is shown, not sold.";
+
+    // The person who opened a shop learns who looked at it.
+    public static string Visited(string viewer) => "> " + viewer + " visited your Personal Shop!";
+
+    private static GameText Classic(PersonalShopStatus status) => GameText.Of(status switch
     {
         PersonalShopStatus.NotInTown => GameTextId.ShopNotInTown,
         PersonalShopStatus.NotListable => GameTextId.ShopNotListable,

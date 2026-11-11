@@ -176,6 +176,8 @@ Every message code has the high word `0x4554` ("ET"); every message keeps the `{
 | `0x45540100` | `OwnerStatus` | S→C | Level, unsigned 64-bit experience (current, level start, next level), 64-bit money, resources, attributes, combat values and revisions, then the elite skill points and the class tier (0..4), the bag page shown and the weapon pair held (a byte each, 0 A, 1 B). 158 B. |
 | `0x45540101` | `Skills` | S→C | Skill revision and (code, rank, uses) entries, at most 512. |
 | `0x45540102` | `Inventory` | S→C | Inventory revision split into parts of up to 48 items, each `{Guid, uint32 Code, int32 Kind, Count, Anchor, Slot, int16 Width, Height, text Name (64 B), text Link (48 B: a bound Union Core's clan member)}`; the client replaces its inventory when all parts of a revision arrived. |
+| `0x45541A00` / `0x45541A01` | `AchievementsRequest` / `Achievements` | C→S / S→C | The player's own badges: id and holder key (a top badge's class), and the badge worn as a title |
+| `0x45541A02` | `AchievementTitle` | C→S | Wears a badge's title (0 hides it); answered by `Achievements` |
 | `0x45540110` / `0x45540111` | `InventoryCommand` / `InventoryResult` | C→S / S→C | Transactional inventory operation, correlated by operation id. A ground pickup (`InventoryAction.Pickup`) names the drop in `ItemId`, with `Destination` 0 (received as any item) or `InventoryCommand.PickupToBag` (1: into the bag as a stack of its own, for the client's cursor, or to the hand when the page shown is full; anything else is refused); a throw (`InventoryAction.Drop`) names the bag item or the item in the hand and the amount in `Count`; `Move`, `Merge` and `Swap` naming the item in the hand set it down on the page shown; a gold throw (`InventoryAction.DropGold`) only the amount. |
 | `0x45540120` / `0x45540121` | `ProgressionCommand` / `ProgressionResult` | C→S / S→C | Attribute allocation and skill learning. |
 | `0x45540130` | `NpcResult` | S→C | Completes an NPC click: name, typed services with availability and the line the NPC says. |
@@ -489,12 +491,12 @@ Every body starts with `{uint16 Version = 1, uint16 Flags = 0}`; text is UTF-8 w
 
 | Message | Layout after the header |
 | --- | --- |
-| `PersonalShopOpen` | `Guid OperationId, text Sign, int32 Count, entries {Guid ItemId, int64 UnitPrice, int32 Cell}` (a store grid cell) |
+| `PersonalShopOpen` | `Guid OperationId, text Sign, int32 Count, entries {Guid ItemId, int64 UnitPrice, int32 Cell, uint8 Currency}` (a store grid cell; currency 0 gold, 1 coins, 2 view only) |
 | `PersonalShopClose` | `Guid OperationId` |
 | `PersonalShopView` | `Guid OperationId, uint64 SellerId` |
 | `PersonalShopBuy` | `Guid OperationId, uint64 SellerId, Guid ItemId, int64 UnitPrice, int32 Count, int32 0, int64 ExpectedRevision` (the buyer's inventory) |
 | `PersonalShopResult` | `Guid OperationId, uint8 Action (0 open, 1 close, 2 view, 3 buy), uint8 0, uint16 Status, int32 Count, int64 Revision, int64 UnitPrice, game text Message` |
-| `PersonalShopListing` | `Guid OperationId, uint64 SellerId, int32 Count, offers {StoreItemEntry, int64 UnitPrice}`; a store item entry is `{Guid, uint32 Code, uint8 Kind, uint8 0, uint16 0, int32 Count, int32 Cell, int16 Width, int16 Height, text Name}` (the warehouse's too) |
+| `PersonalShopListing` | `Guid OperationId, uint64 SellerId, int32 Count, offers {StoreItemEntry, int64 UnitPrice, uint8 Currency}`; a store item entry is `{Guid, uint32 Code, uint8 Kind, uint8 0, uint16 0, int32 Count, int32 Cell, int16 Width, int16 Height, text Name}` (the warehouse's too) |
 | `PersonalShopDetails` | `Guid OperationId, uint64 SellerId, int32 Count, ItemDetailEntry entries` |
 
 `Status` is `PersonalShopStatus` (Simulation): 0 ok, `Rejected`, `NotInTown`, `NotListable`, `GoldLimit`, `Closed`,
@@ -750,6 +752,9 @@ when the received version has it.
   Etervale client does after a second), or a crowd entering view at once never appears.
 - Two monsters of one template share a description only while both are wild: a summon's description names its owner.
   Never send a summon's template in its presence entry, and never cache a user-brood description by template.
+
+Market messages (`0x45541B00` to `0x45541C03`) are in `Shared/PristonTale.Protocol/Packets/MarketPackets.cs`, each layout above its record; see
+[markets.md](markets.md). A page holds at most eight character cards or six offers.
 
 ## Related
 

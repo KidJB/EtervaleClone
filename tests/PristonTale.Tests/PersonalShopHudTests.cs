@@ -60,7 +60,8 @@ internal static class PersonalShopHudTests
         Assert.True(!shop.Window.IsOpen && notes[^1] == ClientText.Format(PersonalShopMessages.Of(PersonalShopStatus.NotInTown)), "a shop opens in a town only");
         shop.OpenOwn(inTown: true);
         shop.Window.Advance(1);
-        Assert.True(shop.InterceptBagClick(Potions) && asked is { First: "Selling price per unit", Highest: 19_900 },
+        Assert.True(shop.InterceptBagClick(Potions) && asked is null && shop.ModalOpen, "pricing asks for gold, coins or view only first");
+        Assert.True(shop.Click(HudPersonalShopController.Choice(0).Center) && asked is { First: "Selling price per unit", Highest: 19_900 },
             "a stack asks its price per unit within the gold the player may carry");
         asked!.Value.Accept(50);
         Assert.True(shop.Holds(Potions.InstanceId) && shop.InterceptBagClick(Potions), "a listed item stays in place");
@@ -93,6 +94,7 @@ internal static class PersonalShopHudTests
         waiting.OpenOwn(inTown: true);
         waiting.Window.Advance(1);
         waiting.InterceptBagClick(Potions);
+        waiting.Click(HudPersonalShopController.Choice(0).Center);
         asked!.Value.Accept(50);
         waiting.Click(HudStoreLayout.Repair(waiting.Window.Origin).Center);
         waiting.Type("Wait", _ => false, static _ => true, static text => text.Length);

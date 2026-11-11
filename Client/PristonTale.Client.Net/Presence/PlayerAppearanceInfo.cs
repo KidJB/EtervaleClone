@@ -22,6 +22,12 @@ public sealed record PlayerAppearanceInfo(
 
     // The mount the player rides (Mounts id, 0 on foot).
     public int Mount { get; init; }
+
+    // The achievement title over the name (AchievementRules.TitleOf), 0 for none.
+    public int Title { get; init; }
+
+    // The weapon really worn, under the skin of WeaponKey.
+    public string HeldWeaponKey { get; init; } = "";
     public bool Phoenix { get; init; }
     public int BigHead { get; init; }
 

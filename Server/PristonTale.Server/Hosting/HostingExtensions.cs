@@ -60,11 +60,15 @@ public static class HostingExtensions
         });
         builder.Services.AddSingleton<CoinShopAppService>();
         builder.Services.AddSingleton<ItemBoxAppService>();
+        builder.Services.AddSingleton<PristonTale.Application.Markets.MarketOptionsHolder>();
+        builder.Services.AddSingleton<PristonTale.Application.Markets.CharacterMarketAppService>();
+        builder.Services.AddSingleton<PristonTale.Application.Markets.MarketplaceAppService>();
         builder.Services.AddSingleton<StallAppService>();
         builder.Services.AddSingleton<DailyQuestAppService>();
         builder.Services.AddSingleton<SkinAppService>();
         builder.Services.AddSingleton<PristonTale.Application.Bellatra.BellatraClanAppService>();
         builder.Services.AddSingleton<BellatraAppService>();
+        builder.Services.AddSingleton<PristonTale.Application.Achievements.AchievementAppService>();
 
         var provider = builder.Configuration["Database:Provider"] ?? "Sqlite";
         if (string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
@@ -111,6 +115,7 @@ public static class HostingExtensions
             localizedData: services.GetRequiredService<WorldDataLanguagesHolder>()));
         builder.Services.AddHostedService<WorldTickService>();
         builder.Services.AddHostedService<PristonTale.Server.World.StallRestoreService>();
+        builder.Services.AddHostedService<PristonTale.Server.World.CharacterMarketExpiryService>();
         builder.Services.AddHostedService(services => new PristonTale.Server.World.WorldBuffService(services.GetRequiredService<WorldServer>(),
             DataPath.Resolve(Path.Combine("data", "worldbuffs.json")), services.GetRequiredService<ILogger<PristonTale.Server.World.WorldBuffService>>()));
         builder.Services.AddHostedService<PristonTale.Server.World.BossArenaPrizeService>();
@@ -119,7 +124,8 @@ public static class HostingExtensions
         {
             var gameMasters = services.GetRequiredService<GameMasterCommands>();
             var settings = new ServerSettingsAppService(services.GetRequiredService<IServerSettingsRepository>(),
-                services.GetRequiredService<WorldServer>(), gameMasters, services.GetRequiredService<GameServerControl>(), worldOptions);
+                services.GetRequiredService<WorldServer>(), gameMasters, services.GetRequiredService<GameServerControl>(), worldOptions,
+                services.GetRequiredService<PristonTale.Application.Markets.MarketOptionsHolder>());
             gameMasters.Settings = settings;
             gameMasters.Castle = services.GetRequiredService<PristonTale.Application.Castle.CastleAppService>();
             return settings;
@@ -134,6 +140,7 @@ public static class HostingExtensions
         builder.Services.AddHostedService<PristonTale.Server.World.QuestUpkeepService>();
         builder.Services.AddHostedService<PristonTale.Server.World.StarterGiftService>();
         builder.Services.AddHostedService<PristonTale.Server.World.BellatraService>();
+        builder.Services.AddHostedService<PristonTale.Server.World.AchievementService>();
 
         return builder;
     }
@@ -198,7 +205,8 @@ public static class HostingExtensions
                 Saves = services.GetRequiredService<ICharacterSaves>(),
                 Warehouses = services.GetRequiredService<IWarehouseRepository>(),
                 Coins = services.GetRequiredService<PristonTale.Persistence.Abstractions.Coins.ICoinRepository>(),
-                CoinShop = services.GetRequiredService<CoinShopCatalogStore>()
+                CoinShop = services.GetRequiredService<CoinShopCatalogStore>(),
+                CharacterMarket = services.GetRequiredService<PristonTale.Persistence.Abstractions.Markets.ICharacterMarketRepository>()
             };
         });
         builder.Services.AddSingleton(services => new ChatAppService(services.GetRequiredService<ChatDirectory>(),

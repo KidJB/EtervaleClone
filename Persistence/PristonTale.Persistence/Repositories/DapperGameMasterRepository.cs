@@ -70,6 +70,13 @@ public sealed class DapperGameMasterRepository(IDbConnectionFactory connectionFa
             return CharacterTransfer.NoCharacter;
         }
 
+        if (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT COUNT(*) FROM character_market_listings WHERE character_id = @character AND state = 0", new { character }, transaction, cancellationToken: ct)) > 0)
+        {
+            await transaction.RollbackAsync(ct);
+            return CharacterTransfer.NoCharacter;
+        }
+
         var used = await connection.QueryAsync<short>(new CommandDefinition(
             "SELECT slot FROM characters WHERE account_id = @account", new { account }, transaction, cancellationToken: ct));
         if (CharacterSlots.FirstFree(used) is not { } slot || slot >= maxSlots)

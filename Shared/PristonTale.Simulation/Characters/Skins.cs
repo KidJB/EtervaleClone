@@ -21,8 +21,9 @@ public enum SkinStatus : byte
     Rejected = 5
 }
 
-// The looks a character chose in The Cabinet, one catalog key per slot ("" for the worn item's own look).
-public sealed record SkinSet(string Weapon = "", string Armor = "", string OffHand = "", string Hair = "")
+// The looks a character chose in The Cabinet, one catalog key per slot ("" for the worn item's own look). Weapon is the look of a
+// one-handed weapon, TwoHand of a two-handed one, so a character switching between the two keeps a look on each.
+public sealed record SkinSet(string Weapon = "", string Armor = "", string OffHand = "", string Hair = "", string TwoHand = "")
 {
     public static readonly SkinSet None = new();
 }
@@ -128,4 +129,13 @@ public static class SkinRules
 
     // The key to show for the worn item: the skin when it fits, else the item's own.
     public static string Look(string worn, string skin) => Fits(worn, skin) ? skin : worn;
+
+    // The look of the worn weapon: only the skin chosen for its grip applies.
+    public static string WeaponLook(string worn, SkinSet skins) => Look(worn, ItemEquipmentMetadata.IsTwoHanded(worn) ? skins.TwoHand : skins.Weapon);
+
+    // Saved looks from before a two-handed weapon had its own slot.
+    public static SkinSet Upgraded(SkinSet skins) =>
+        skins.TwoHand.Length == 0 && skins.Weapon.Length > 0 && (Costumes.FindGear(skins.Weapon)?.Two ?? ItemEquipmentMetadata.IsTwoHanded(skins.Weapon))
+            ? skins with { Weapon = "", TwoHand = skins.Weapon }
+            : skins;
 }

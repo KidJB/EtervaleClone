@@ -12,7 +12,6 @@ public sealed class HudItemCounts
     private readonly Dictionary<Guid, string> _labels = new();
     private readonly Dictionary<Guid, OwnedItemView> _named = new();
     private long _revision = long.MinValue;
-    private const float WashAlpha = 0.18f;
 
     public void Refresh(long revision, IReadOnlyList<OwnedItemView> items)
     {
@@ -45,21 +44,9 @@ public sealed class HudItemCounts
     public void Draw(HudPainter painter, HudItemIcons icons, OwnedItemView item, Rectangle bounds, Color tint)
     {
         var rarity = item.Details?.Rarity ?? Simulation.Items.ItemRarity.None;
-        var graded = rarity >= Simulation.Items.ItemRarity.Uncommon;
-        if (graded)
-        {
-            painter.Fill(bounds, HudRarityColors.Of(rarity) * WashAlpha);
-        }
-
+        HudRarityColors.Wash(painter, bounds, rarity);
         icons.Draw(painter, item.CatalogKey, bounds, tint);
-        if (graded)
-        {
-            var color = HudRarityColors.Of(rarity);
-            painter.Fill(new Rectangle(bounds.X, bounds.Y, bounds.Width, 1), color);
-            painter.Fill(new Rectangle(bounds.X, bounds.Bottom - 1, bounds.Width, 1), color);
-            painter.Fill(new Rectangle(bounds.X, bounds.Y, 1, bounds.Height), color);
-            painter.Fill(new Rectangle(bounds.Right - 1, bounds.Y, 1, bounds.Height), color);
-        }
+        HudRarityColors.Border(painter, bounds, rarity);
 
         var label = Label(item);
         if (label.Length > 0)

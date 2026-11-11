@@ -15,7 +15,7 @@ internal sealed class PersonalShopRequests(Action<IFramePacket> send)
     public Task<PersonalShopReply> OpenAsync(string sign, IReadOnlyList<PersonalShopEntry> entries, CancellationToken ct)
     {
         var packet = new PersonalShopOpenPacket(Guid.NewGuid(), sign,
-            entries.Select(static entry => new PersonalShopEntryWire(entry.ItemId, entry.UnitPrice, entry.Cell)).ToArray());
+            entries.Select(static entry => new PersonalShopEntryWire(entry.ItemId, entry.UnitPrice, entry.Cell, (byte)entry.Currency)).ToArray());
         return RequestAsync(packet.OperationId, packet, ct);
     }
 
@@ -35,6 +35,10 @@ internal sealed class PersonalShopRequests(Action<IFramePacket> send)
         RequestAsync(purchase.OperationId, new PersonalShopBuyPacket(purchase.OperationId, purchase.SellerId, purchase.ItemId, purchase.UnitPrice,
             purchase.Count, purchase.ExpectedRevision), ct);
 
+    public Task<PersonalShopReply> BuyFromMarketplaceAsync(ulong npcId, PersonalShopPurchase purchase, CancellationToken ct) =>
+        RequestAsync(purchase.OperationId, new MarketplaceBuyPacket(purchase.OperationId, npcId, purchase.SellerId, purchase.ItemId, purchase.UnitPrice, purchase.Count,
+            purchase.ExpectedRevision), ct);
+
     public void Handle(uint code, ReadOnlySpan<byte> packet)
     {
         switch (code)
@@ -44,7 +48,7 @@ internal sealed class PersonalShopRequests(Action<IFramePacket> send)
                 var listing = PersonalShopListingPacket.Read(packet);
                 if (_pending.IsWaiting(listing.OperationId))
                 {
-                    var offers = listing.Offers.Select(static offer => new PersonalShopOffer(StoreItems.View(offer.Item), offer.UnitPrice)).ToArray();
+                    var offers = listing.Offers.Select(static offer => new PersonalShopOffer(StoreItems.View(offer.Item), offer.UnitPrice, (PersonalShopCurrency)offer.Currency)).ToArray();
                     _listings[listing.OperationId] = new PersonalShopListing(listing.SellerId, offers);
                 }
 

@@ -32,14 +32,16 @@ public sealed record SkinOpenPacket(Guid OperationId) : IFramePacket
     }
 }
 
-// S->C {header, Guid OperationId, int64 Balance, uint8 Last, 3 zero bytes, weapon, armor, off-hand and hair skin keys, uint16 Count,
+// S->C {header, Guid OperationId, int64 Balance, uint8 Last, 3 zero bytes, weapon, armor, off-hand, hair and two-handed weapon skin keys, uint16 Count,
 // articles}: one part of the catalog; Last marks the final part.
 public sealed record SkinCatalogPacket(Guid OperationId, long Balance, bool Last, string Weapon, string Armor, string OffHand, string Hair,
     IReadOnlyList<SkinArticle> Articles) : IFramePacket
 {
-    private const int MinimumSize = 8 + WireHeader.Size + 16 + 8 + 4 + 2 * 4 + 2;
+    public string TwoHand { get; init; } = "";
+
+    private const int MinimumSize = 8 + WireHeader.Size + 16 + 8 + 4 + 2 * 5 + 2;
     private const int ArticleMaxSize = 2 + SkinWire.MaxKeyBytes + 2 + SkinWire.MaxNameBytes + 1 + 4 + 4 + 1;
-    public const int MaxSize = MinimumSize + 4 * SkinWire.MaxKeyBytes + SkinWire.MaxArticles * ArticleMaxSize;
+    public const int MaxSize = MinimumSize + 5 * SkinWire.MaxKeyBytes + SkinWire.MaxArticles * ArticleMaxSize;
 
     public int Write(Span<byte> destination)
     {
@@ -53,6 +55,7 @@ public sealed record SkinCatalogPacket(Guid OperationId, long Balance, bool Last
         Utf8Text.Write(ref writer, Armor, SkinWire.MaxKeyBytes);
         Utf8Text.Write(ref writer, OffHand, SkinWire.MaxKeyBytes);
         Utf8Text.Write(ref writer, Hair, SkinWire.MaxKeyBytes);
+        Utf8Text.Write(ref writer, TwoHand, SkinWire.MaxKeyBytes);
         writer.UInt16((ushort)Articles.Count);
         foreach (var article in Articles)
         {
@@ -79,6 +82,7 @@ public sealed record SkinCatalogPacket(Guid OperationId, long Balance, bool Last
         var armor = Utf8Text.Read(ref reader, SkinWire.MaxKeyBytes, "Skin catalog");
         var offHand = Utf8Text.Read(ref reader, SkinWire.MaxKeyBytes, "Skin catalog");
         var hair = Utf8Text.Read(ref reader, SkinWire.MaxKeyBytes, "Skin catalog");
+        var twoHand = Utf8Text.Read(ref reader, SkinWire.MaxKeyBytes, "Skin catalog");
         var count = reader.UInt16();
         if (count > SkinWire.MaxArticles)
         {
@@ -96,7 +100,7 @@ public sealed record SkinCatalogPacket(Guid OperationId, long Balance, bool Last
             articles[index] = new SkinArticle(key, name, slot, level, price, reader.Byte() != 0);
         }
 
-        return new SkinCatalogPacket(operation, balance, last, weapon, armor, offHand, hair, articles);
+        return new SkinCatalogPacket(operation, balance, last, weapon, armor, offHand, hair, articles) { TwoHand = twoHand };
     }
 }
 
@@ -124,11 +128,11 @@ public sealed record SkinBuyPacket(Guid OperationId, string Key) : IFramePacket
     }
 }
 
-// C->S {header, Guid OperationId, weapon, armor, off-hand and hair keys}: the looks the character shows.
-public sealed record SkinApplyPacket(Guid OperationId, string Weapon, string Armor, string OffHand, string Hair) : IFramePacket
+// C->S {header, Guid OperationId, weapon, armor, off-hand, hair and two-handed weapon keys}: the looks the character shows.
+public sealed record SkinApplyPacket(Guid OperationId, string Weapon, string Armor, string OffHand, string Hair, string TwoHand) : IFramePacket
 {
-    private const int MinimumSize = 8 + WireHeader.Size + 16 + 2 * 4;
-    public const int MaxSize = MinimumSize + 4 * SkinWire.MaxKeyBytes;
+    private const int MinimumSize = 8 + WireHeader.Size + 16 + 2 * 5;
+    public const int MaxSize = MinimumSize + 5 * SkinWire.MaxKeyBytes;
 
     public int Write(Span<byte> destination)
     {
@@ -139,6 +143,7 @@ public sealed record SkinApplyPacket(Guid OperationId, string Weapon, string Arm
         Utf8Text.Write(ref writer, Armor, SkinWire.MaxKeyBytes);
         Utf8Text.Write(ref writer, OffHand, SkinWire.MaxKeyBytes);
         Utf8Text.Write(ref writer, Hair, SkinWire.MaxKeyBytes);
+        Utf8Text.Write(ref writer, TwoHand, SkinWire.MaxKeyBytes);
         return writer.Finish();
     }
 
@@ -150,7 +155,8 @@ public sealed record SkinApplyPacket(Guid OperationId, string Weapon, string Arm
         var weapon = Utf8Text.Read(ref reader, SkinWire.MaxKeyBytes, "Skin apply");
         var armor = Utf8Text.Read(ref reader, SkinWire.MaxKeyBytes, "Skin apply");
         var offHand = Utf8Text.Read(ref reader, SkinWire.MaxKeyBytes, "Skin apply");
-        return new SkinApplyPacket(operation, weapon, armor, offHand, Utf8Text.Read(ref reader, SkinWire.MaxKeyBytes, "Skin apply"));
+        var hair = Utf8Text.Read(ref reader, SkinWire.MaxKeyBytes, "Skin apply");
+        return new SkinApplyPacket(operation, weapon, armor, offHand, hair, Utf8Text.Read(ref reader, SkinWire.MaxKeyBytes, "Skin apply"));
     }
 }
 

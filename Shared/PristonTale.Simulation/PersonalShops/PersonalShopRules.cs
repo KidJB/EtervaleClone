@@ -13,6 +13,9 @@ public static class PersonalShopRules
 {
     public const long MaxPrice = 100_000_000;
 
+    // The wait after a purchase before the same buyer may buy again.
+    public const int PurchaseCooldownMs = 2000;
+
     private static readonly string[] UnlistedFamilies = ["PZ1", "PZ2"];
 
     public static bool IsListable(PlayerCharacter character, ItemInstance item) =>
@@ -26,12 +29,18 @@ public static class PersonalShopRules
     // The gold a seller may still take in: what it may carry less what it holds and what its listing brings.
     public static long GoldRoom(int level, int tier, long money, long listingTotal) => MoneyLimits.CarryLimit(level, tier) - money - listingTotal;
 
-    // What the listing brings when every unit sells, or -1 when a total passes MaxPrice.
+    // The gold the listing brings when every unit sells (coin and view-only entries bring none), or -1 when a total passes
+    // MaxPrice.
     public static long Total(Inventory bag, IReadOnlyList<PersonalShopEntry> entries)
     {
         long total = 0;
         foreach (var entry in entries)
         {
+            if (entry.Currency != PersonalShopCurrency.Gold)
+            {
+                continue;
+            }
+
             var anchor = bag.Find(entry.ItemId);
             var count = anchor >= 0 ? bag[anchor].Count : 0;
             var price = entry.UnitPrice * count;
@@ -65,7 +74,7 @@ public static class PersonalShopRules
         foreach (var entry in entries)
         {
             var anchor = seller.Inventory.Find(entry.ItemId);
-            if (anchor < 0 || entry.UnitPrice is < 1 or > MaxPrice || !grid.TryPlace(seller.Inventory[anchor], entry.Cell))
+            if (anchor < 0 || !PriceAllowed(entry) || !grid.TryPlace(seller.Inventory[anchor], entry.Cell))
             {
                 return PersonalShopStatus.Rejected;
             }
@@ -91,8 +100,17 @@ public static class PersonalShopRules
         return PersonalShopStatus.Ok;
     }
 
-    // Moves Count units of the listed item from the seller's bag to the buyer's and its price the other way, on candidates.
-    // The price and the units must be the ones the buyer was shown; otherwise the status names what changed.
+    // A view-only entry is priced 0; a sold one from 1 to MaxPrice.
+    public static bool PriceAllowed(PersonalShopEntry entry) => entry.Currency switch
+    {
+        PersonalShopCurrency.ViewOnly => entry.UnitPrice == 0,
+        PersonalShopCurrency.Gold or PersonalShopCurrency.Coins => entry.UnitPrice is >= 1 and <= MaxPrice,
+        _ => false
+    };
+
+    // Moves Count units of the listed item from the seller's bag to the buyer's and, for gold, its price the other way, on
+    // candidates; coins move in storage, between the accounts. The price and the units must be the ones the buyer was shown;
+    // otherwise the status names what changed.
     public static PersonalShopStatus TrySell(PersonalShop shop, PlayerCharacter seller, PlayerCharacter buyer, PersonalShopPurchase purchase, out long price)
     {
         price = 0;
@@ -103,6 +121,11 @@ public static class PersonalShopRules
         }
 
         var item = seller.Inventory[anchor];
+        if (entry.Currency == PersonalShopCurrency.ViewOnly)
+        {
+            return PersonalShopStatus.ViewOnly;
+        }
+
         if (entry.UnitPrice != purchase.UnitPrice)
         {
             return PersonalShopStatus.PriceChanged;
@@ -124,12 +147,13 @@ public static class PersonalShopRules
             return PersonalShopStatus.Rejected;
         }
 
-        if (buyer.Money < price)
+        var gold = entry.Currency == PersonalShopCurrency.Gold;
+        if (gold && buyer.Money < price)
         {
             return PersonalShopStatus.NotEnoughGold;
         }
 
-        if (GoldRoom(seller.Level, seller.Tier, seller.Money, price) < 0)
+        if (gold && GoldRoom(seller.Level, seller.Tier, seller.Money, price) < 0)
         {
             return PersonalShopStatus.GoldLimit;
         }
@@ -144,6 +168,6 @@ public static class PersonalShopRules
             return PersonalShopStatus.NoSpace;
         }
 
-        return seller.TryChangeMoney(price) && buyer.TryChangeMoney(-price) ? PersonalShopStatus.Ok : PersonalShopStatus.Rejected;
+        return !gold || seller.TryChangeMoney(price) && buyer.TryChangeMoney(-price) ? PersonalShopStatus.Ok : PersonalShopStatus.Rejected;
     }
 }
