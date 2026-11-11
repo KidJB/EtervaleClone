@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using PristonTale.Contracts.Characters;
 using PristonTale.Contracts.Units;
+using PristonTale.Engine3D.Equipment;
 using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items;
 
@@ -139,7 +140,7 @@ public static class EquipmentVisuals
 
         foreach (var carry in Carries)
         {
-            if (visuals.JobMask == CharacterClassDef.JobMaskOf(carry.Class) && visuals.HeldAs.StartsWith(carry.Family, StringComparison.OrdinalIgnoreCase))
+            if (visuals.JobMask == PlayerClasses.JobMask(carry.Class) && visuals.HeldAs.StartsWith(carry.Family, StringComparison.OrdinalIgnoreCase))
             {
                 return carry;
             }

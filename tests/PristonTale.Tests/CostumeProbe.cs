@@ -40,7 +40,7 @@ internal static class CostumeProbe
             }
         }
 
-        foreach (var row in Gameplay.World.Remote.EquipmentVisualTables.Armors)
+        foreach (var row in Engine3D.Equipment.EquipmentVisualTables.Armors)
         {
             foreach (var file in row.Where(static file => file.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
             {

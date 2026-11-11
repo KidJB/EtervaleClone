@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using PristonTale.Contracts.Motion;
+using PristonTale.Engine3D.Equipment;
 using PristonTale.Engine3D.Rendering;
 using PristonTale.Gameplay.Screens.CharacterSelect;
 using PristonTale.Gameplay.World.Remote;
