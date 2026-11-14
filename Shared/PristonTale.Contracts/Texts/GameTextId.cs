@@ -327,5 +327,11 @@ public enum GameTextId : ushort
     RaidEnded = 2010,
     PartyModeNormal = 2011,
     PartyModeExp = 2012,
-    PartyModeHunt = 2013
+    PartyModeHunt = 2013,
+    PartyFinderSaved = 2014,
+    PartyFinderClosed = 2015,
+    PartyFinderLevel = 2016,
+    PartyFinderClass = 2017,
+    PartyFinderPassword = 2018,
+    PartyFinderGone = 2019
 }

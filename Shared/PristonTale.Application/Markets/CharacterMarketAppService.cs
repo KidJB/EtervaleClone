@@ -278,9 +278,7 @@ public sealed class CharacterMarketAppService(ISessionRegistry sessions, ICharac
     }
 
     // A character at the last level has no next level to measure against.
-    private static int ExperienceShare(CharacterRecord record) => record.Level < 1 || record.Level >= ExperienceTable.MaximumLevel
-        ? 0
-        : CharacterMarketRules.ExperienceBasisPoints(unchecked((ulong)record.Exp), ExperienceTable.ForLevel(record.Level), ExperienceTable.ForLevel(record.Level + 1));
+    private static int ExperienceShare(CharacterRecord record) => ExperienceTable.ShareBasisPoints(record.Level, unchecked((ulong)record.Exp));
 
     private static string Trim(string search) => search.Length <= CharacterMarketRules.MaxSearchLength ? search : search[..CharacterMarketRules.MaxSearchLength];
 }

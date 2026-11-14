@@ -57,6 +57,7 @@ dotnet run --project tools/PristonTale.AssetDump -c Release --no-build -- --expo
 | --- | --- |
 | `<asset-path> [flags]` | `.inx` index dump; `.bmp`/`.tga` texture stats; other files by header (`SMD Stage data`/`SMD Model data`) |
 | `--export-field-textures <asset-root> <field-id> <output-dir>` | Exactly four arguments; see below |
+| `--pack-video <image-dir> <fps> <output.etv>` | Packs the directory's JPEG/PNG images of one size, in name order, into a frame video (format in `FrameVideo`); exit 1 on a bad rate, mixed sizes or I/O errors |
 | no arguments | Usage, exit 1; `-h`/`--help` prints usage, exit 0 |
 
 Flags (case-insensitive; flags that do not apply to the asset kind are ignored):
@@ -77,6 +78,13 @@ Summaries: a stage prints counts, light types (night, lens, dynamic), whether ea
 second UV set, bounds and material aggregates; a model prints object/material counts, animation, bounds, totals and
 material aggregates; an INX prints its files, LOD groups, motion counts, usable motions and the OR of the motion job
 bits. A texture prints size, bit count, average colour, alpha range, achromatic/green/near-black shares and samples.
+
+The login background is made once from a movie with ffmpeg, then packed (paths are examples):
+
+```bash
+ffmpeg -i login.asf -an -vf "scale=1280:720:flags=lanczos,fps=25" -q:v 3 /tmp/frames/f%04d.jpg
+dotnet run --project tools/PristonTale.AssetDump -c Release --no-build -- --pack-video /tmp/frames 25 assets/Video/login.etv
+```
 
 `--export-field-textures` resolves the complete texture set of one `WorldCatalog` field with the production readers
 and writes to `<output-dir>`: `manifest.json` (per texture: path, SHA-256, size, source alpha and its hash, opacity-only
@@ -336,6 +344,19 @@ python3 tools/ui/build_font.py <DejaVuSans.ttf> <LICENSE>
   drawn at half scale for the 14-pixel text: `HudPainter.BakePixels`, `TextScale`), kerning, and one character region
   per contiguous run of the glyphs it has among Basic Latin, Latin-1, Latin Extended-A and general punctuation.
   Rebuild the client afterwards to bake the glyphs.
+
+## Party finder art (`tools/ui/build_party_finder.py`)
+
+Draws the party finder's own interface art (`HudPartyFinder`) in the game's style: stone panels with a bevelled gold
+trim and corner studs, a title plate, list rows, tabs, buttons, check boxes, choices, text fields and a scroll bar, all
+without text (the game writes the titles and labels). Needs Python 3 with Pillow.
+
+```bash
+python3 tools/ui/build_party_finder.py assets/Hud/PartyFinder
+```
+
+Writes the `pt_*.png` files into the folder, replacing those it makes; the class icons beside them (`Class_icon/N.png`)
+are not its own.
 
 ## Blender scripts (`3d_glb/blender/`)
 

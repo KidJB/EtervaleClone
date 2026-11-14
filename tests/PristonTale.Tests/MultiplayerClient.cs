@@ -106,7 +106,7 @@ internal sealed class MultiplayerClient : IAsyncDisposable
         return await WaitAsync(world => world.CastResults.LastOrDefault(result => result.Sequence == sequence), $"{Name}: cast result {sequence}");
     }
 
-    public Task SayAsync(string text) => Play.SendChatAsync(text, party: false, _lifetime.Token);
+    public Task SayAsync(string text) => Play.SendChatAsync(text, party: false, ct: _lifetime.Token);
 
     public Task<RestartOutcome> RestartAsync(RestartChoice choice) => Play.RestartAsync(choice, _lifetime.Token);
 

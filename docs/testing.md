@@ -68,6 +68,7 @@ Default case files by area (all `tests/PristonTale.Tests/<Name>.cs`):
 | Skill client | `SkillPresentationTests`, `VfxLayerTests`, `VfxImportTests` | VFX definitions, catalog, layers, converter, authored data, cooldown and status books |
 | Quests | `QuestTests` (with `QuestFixture`), `QuestServiceTests`, `QuestHudTests` | Every quest family's steps, rank-ups and the tier; journal storage, quest messages, durable requests, kill credit, upkeep, the arena duel; quest HUD flows and layout |
 | Shop currency | `ShopCurrencyTests` (with `ChatFixture`) | Gold, coin and view-only offers, a coin sale stored with both characters, the purchase cooldown, the visit notice, a stall's coin sale on SQLite, wire |
+| Chat links | `ChatLinkTests` (with `ChatFixture`) | Raid tab and `$`/`#` shortcuts, raid lines in their tab, emote codes, Ctrl+F macros, Tab, dragging the window, an item linked on the client and carried to hearers by the server |
 | Discord | `DiscordPresenceTests` | IPC frames and payloads, the profile text, the application id check, a presence's handshake, activity and clearing over an in-process pipe |
 | Markets | `MarketTests` (with `ChatFixture`) | The Character Market on real SQLite: listing rules, browse, sale, tax, rollback, a race, refusals, the claim; the Marketplace over live shops: filters, purchase from afar, closed shops, removed items, full bag, no duplication; wire and settings |
 | Trades | `TradeTests` (with `ChatFixture`), `TradeHudTests` | Requests, offers, locks and their delay, the stored exchange, refusals, how a trade ends (also while it is stored), offered items changed elsewhere, both sides locking at once, rules, wire; the trade window |
@@ -209,6 +210,7 @@ when reading those assets is authorized. GPU probes:
 | `--capture-npcs <assets> <content> <output.png>` | yes | NPC presentation capture |
 | `--capture-gltf <assets> <content> <output-dir> <model,model,...>` | yes | glTF models (a file, or model info relative to the assets root: its Stand) as actors beside a legacy NPC; `layers` is four built spheres (plain, clearcoat, sheen, diffuse transmission) |
 | `--capture-job-heads <assets> <content> <output.png>` | yes | Job-head presentation capture |
+| `--capture-aging <assets> <content> <output-dir>` | yes | A fighter holding an axe aged +4 to +20 (one per level, in a grid), `aging-NNNN.png` at 1000, 1250, 1500, 1750 and 3000 ms of the glow clock: the pulse's trough, rise, peak and fall, and the texture's slide |
 | `--capture-equipment <assets> <content> <output-dir>` | yes | Equipment captures |
 | `--capture-ranged-equipment <assets> <content> <output-dir>` | yes | Bow and crossbow attachment captures |
 | `--capture-ground-loot <assets> <content> <output.png>` | yes | Ground drop elevation, coordinate remapping, the drop names with `A` held (one hovered) and a label click target per drop spot, and the plain and highlighted name box in the corner; `<output>-close.png` shows how the drops lie (weapons flat) |
@@ -272,7 +274,7 @@ Other probe details:
 - `--capture-vfx` plays each named effect (default: a representative set of converted scripts) with a caster at the
   origin and a target 85 units away, saves the scene and a `.dark.png` at 0.15, 0.45, 0.9 and 1.5 s, and fails when an
   effect draws nothing at all four moments. Run `ptvfx import assets` first (docs/tools.md).
-- `--capture-login` draws before the first Update with a preloaded shared atlas, then covers a 1x1 viewport and its
+- `--capture-login` draws the form with its atlas stand-ins (no `Hud/Login` art) before the first Update with a preloaded shared atlas, then covers a 1x1 viewport and its
   restoration, disabled credentials, keyboard navigation, masking and scaled mouse hit tests.
 - `--capture-hud` shows the typed NPC dialog, teleport destinations, the shop (buy and sell) and the warehouse in its
   `npc-*` scenarios, the item box with rolled values, red requirements and a specialization (`inventory-item-hover-*`),

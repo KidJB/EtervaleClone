@@ -8,6 +8,9 @@ namespace PristonTale.Application.Chat;
 // is (what players say, game-master lines) when Line is none.
 public readonly record struct ChatLine(ChatKind Kind, ulong SpeakerId, string Text, GameText Line = default)
 {
+    // An item the speaker linked into the line, with its values for the tooltip; null for none.
+    public Simulation.Characters.OwnedItemView? Item { get; init; }
+
     public static ChatLine Reply(string text) => new(ChatKind.Server, 0, text);
 
     public static ChatLine Reply(GameText line) => new(ChatKind.Server, 0, "", line);

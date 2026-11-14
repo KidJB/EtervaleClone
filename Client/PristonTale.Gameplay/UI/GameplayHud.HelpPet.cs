@@ -80,7 +80,7 @@ public sealed partial class GameplayHud
             return null;
         }
 
-        if (_chat.Window.Contains(layout, pointer, SideWindowOpen))
+        if (_chat.Window.Contains(layout, pointer, ChatYields(layout)))
         {
             return "ChatBox";
         }

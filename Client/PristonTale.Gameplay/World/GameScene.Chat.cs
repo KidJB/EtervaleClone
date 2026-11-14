@@ -19,14 +19,14 @@ public sealed partial class GameScene
     // Space cheers until this tick count; the server keeps its own window and checks the stamina.
     private long _yahooKeyUntilMs = long.MinValue;
 
-    public Task SendChatAsync(string text, bool party)
+    public Task SendChatAsync(string text, bool party, Guid itemId)
     {
         if (!party && YahooRules.IsWord(text))
         {
             _yahooKeyUntilMs = Environment.TickCount64 + YahooRules.KeyWindowMs;
         }
 
-        return _playChannel is not null ? _playChannel.SendChatAsync(text, party, _presenceCts.Token) : Task.CompletedTask;
+        return _playChannel is not null ? _playChannel.SendChatAsync(text, party, itemId, _presenceCts.Token) : Task.CompletedTask;
     }
 
     public void PressYahooKey()

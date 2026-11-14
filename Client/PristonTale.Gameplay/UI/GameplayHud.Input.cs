@@ -92,6 +92,17 @@ public sealed partial class GameplayHud
             _achievements.Toggle();
         }
 
+        if (Pressed(keyboard, Keys.F))
+        {
+            _partyFinder.Toggle();
+        }
+
+        if (Pressed(keyboard, Keys.H))
+        {
+            _rankings.Self = CharacterName ?? "";
+            _rankings.Toggle();
+        }
+
         if (Pressed(keyboard, Keys.O))
         {
             ToggleSocial();
@@ -152,7 +163,7 @@ public sealed partial class GameplayHud
 
         if (Pressed(keyboard, Keys.G))
         {
-            _ = _chat.Send?.Invoke(MountCommand.Of(null), false);
+            _ = _chat.Send?.Invoke(MountCommand.Of(null), false, Guid.Empty);
         }
 
         if (Pressed(keyboard, Keys.L))
@@ -223,6 +234,22 @@ public sealed partial class GameplayHud
             return;
         }
 
+        if (_rankings.Contains(layout, pointer))
+        {
+            _rankings.Click(layout, pointer);
+            return;
+        }
+
+        if (_partyFinder.Contains(layout, pointer))
+        {
+            if (!_partyFinder.Dragging)
+            {
+                _partyFinder.Click(layout, pointer);
+            }
+
+            return;
+        }
+
         if (MinimapShown && HudAchievements.Button(_minimap.Area(layout)).Contains(pointer))
         {
             _achievements.Toggle();
@@ -243,7 +270,8 @@ public sealed partial class GameplayHud
             return;
         }
 
-        if (_chat.Window.Click(layout, pointer, SideWindowOpen))
+        _chat.Window.DiscordClicked ??= OpenDiscordInvite;
+        if (_chat.Window.Click(layout, pointer, ChatYields(layout)))
         {
             return;
         }
@@ -263,7 +291,7 @@ public sealed partial class GameplayHud
         {
             if (_petWindow.TakeRequest() is { } command)
             {
-                _ = _chat.Send?.Invoke(command, false);
+                _ = _chat.Send?.Invoke(command, false, Guid.Empty);
             }
 
             return;
@@ -564,6 +592,8 @@ public sealed partial class GameplayHud
             || _systemMenu && HudSystemMenu.Bounds.Contains(design)
             || _settingsOpen && HudSettingsPanel.Box.Contains(pointer)
             || _achievements.Contains(layout, pointer)
+            || _rankings.Contains(layout, pointer)
+            || _partyFinder.Contains(layout, pointer)
             || MinimapShown && HudAchievements.Button(_minimap.Area(layout)).Contains(pointer)
             || _npcOpen && HudNpcPanel.Box.Contains(pointer)
             || _skills.TrainingPending && HudMessageBox.Bounds.Contains(pointer);

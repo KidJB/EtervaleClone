@@ -119,6 +119,12 @@ public static class EtervaleOpcodes
     public const uint MarketplacePage = 0x45541C01;
     public const uint MarketplaceDetails = 0x45541C02;
     public const uint MarketplaceBuy = 0x45541C03;
+    public const uint RankingsRequest = 0x45541D00;
+    public const uint Rankings = 0x45541D01;
+    public const uint PartyFinderRequest = 0x45541E00;
+    public const uint PartyFinder = 0x45541E01;
+    public const uint PartyFinderSettings = 0x45541E02;
+    public const uint PartyFinderJoin = 0x45541E03;
 
     public const uint PresenceEntries = 0x45540900;
     public const uint DescribeEntity = 0x45540901;

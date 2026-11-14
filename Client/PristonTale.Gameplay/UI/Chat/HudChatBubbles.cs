@@ -58,12 +58,88 @@ public sealed class HudChatBubbles
         return text.Length > 0;
     }
 
-    public void Say(ulong entityId, string text, double nowMs, int durationMs) => _lines[entityId] = (text, nowMs + durationMs);
+    // A line that is only an emote code shows the emote over its speaker instead of a bubble, as RuneTale's does, while the
+    // emote's icon is present; otherwise it is a bubble like any line.
+    public void Say(ulong entityId, string text, double nowMs, int durationMs)
+    {
+        if (HudEmotes.Of(text) is { } emote && _hasArt?.Invoke(emote) != false)
+        {
+            Emote(entityId, emote, nowMs);
+            _lines.Remove(entityId);
+            return;
+        }
 
-    public void Forget(ulong entityId) => _lines.Remove(entityId);
+        _lines[entityId] = (text, nowMs + durationMs);
+    }
+
+    // The emote's icon pops up over the entity, bobs and fades out after EmoteMs.
+    public void Emote(ulong entityId, string art, double nowMs) => _emotes[entityId] = (art, nowMs);
+
+    public void Forget(ulong entityId)
+    {
+        _lines.Remove(entityId);
+        _emotes.Remove(entityId);
+    }
+
+    private const double EmoteMs = 5000;
+    private const double EmotePopMs = 180;
+    private const double EmoteFadeMs = 600;
+    private const int EmoteSize = 64;
+    // The emote's bottom sits this far above its character's name plate (PlateTops), or above the overhead point when it has
+    // none; emotes draw after the plates, so the icon is always above and never under one.
+    private const int EmoteGap = 4;
+    private const int EmoteLift = 24;
+
+    // The top of each character's name plate this frame (HudCombat.PlateTops); set by the HUD.
+    public IReadOnlyDictionary<ulong, int> PlateTops { get; set; } = new Dictionary<ulong, int>();
+    private const int EmoteBob = 3;
+    private const double EmoteBobMs = 900;
+    private readonly Dictionary<ulong, (string Art, double StartMs)> _emotes = new();
+    private Func<string, bool> _hasArt;
+
+    // Each emote over its entity: a quick overshooting pop to its size, a slow bob, a fade over its last moments.
+    private void DrawEmotes(HudPainter painter, HudLayout layout, double nowMs, Func<ulong, HudOverheadPoint?> project)
+    {
+        _expired.Clear();
+        var scale = Math.Max(1, layout.Scale);
+        foreach (var (id, (art, start)) in _emotes)
+        {
+            var age = nowMs - start;
+            if (age >= EmoteMs)
+            {
+                _expired.Add(id);
+                continue;
+            }
+
+            if (project(id) is not { } point || point.Depth >= MaxDepth)
+            {
+                continue;
+            }
+
+            var pop = Math.Min(1.0, age / EmotePopMs);
+            var grow = pop < 1.0 ? 1.0 + 0.25 * Math.Sin(pop * Math.PI) : 1.0;
+            var size = (int)(EmoteSize * pop * grow);
+            var alpha = (float)Math.Clamp((EmoteMs - age) / EmoteFadeMs, 0.0, 1.0);
+            var bob = (int)(EmoteBob * Math.Sin(age / EmoteBobMs * Math.PI * 2));
+            var x = (int)(point.Screen.X / scale) - size / 2;
+            var bottom = PlateTops.TryGetValue(id, out var plate) ? plate - EmoteGap : (int)(point.Screen.Y / scale) - EmoteLift;
+            var y = bottom - size + bob;
+            if (size > 0)
+            {
+                painter.Stretch(art, new Rectangle(x, y, size, size), null, Color.White * alpha);
+            }
+        }
+
+        foreach (var id in _expired)
+        {
+            _emotes.Remove(id);
+        }
+    }
 
     public void Draw(HudPainter painter, HudLayout layout, double nowMs, Func<ulong, HudOverheadPoint?> project, Func<ulong, Color> nameColor, ulong selected)
     {
+        _hasArt ??= art => painter.Texture(art) is not null;
+        DrawEmotes(painter, layout, nowMs, project);
         _visible.Clear();
         _measure ??= painter.Measure;
         _expired.Clear();

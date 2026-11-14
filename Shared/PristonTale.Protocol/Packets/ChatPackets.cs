@@ -7,16 +7,16 @@ namespace PristonTale.Protocol.Packets;
 // Chat text is UTF-8; the composed lines stay within ChatRules' character limits, which fit these fields.
 public static class ChatWire
 {
-    public const ushort CurrentVersion = 1;
+    public const ushort CurrentVersion = 2;
     public const int MaxTextBytes = 1024;
     public const int HeaderSize = 8 + 4;
 }
 
-// C->S {header, uint16 Version = 1, uint8 Party (0 nearby or a command, 1 the party channel), uint8 0, text Text}: a line
-// typed in the chat window.
-public readonly record struct ChatSayPacket(bool Party, string Text) : IFramePacket
+// C->S {header, uint16 Version = 2, uint8 Party (0 nearby or a command, 1 the party channel), uint8 0, text Text, Guid ItemId}:
+// a line typed in the chat window; ItemId names a carried item linked into it (empty for none).
+public readonly record struct ChatSayPacket(bool Party, string Text, Guid ItemId = default) : IFramePacket
 {
-    public const int MaxSize = ChatWire.HeaderSize + 2 + ChatWire.MaxTextBytes;
+    public const int MaxSize = ChatWire.HeaderSize + 2 + ChatWire.MaxTextBytes + 16;
 
     public int Write(Span<byte> destination)
     {
@@ -25,6 +25,7 @@ public readonly record struct ChatSayPacket(bool Party, string Text) : IFramePac
         writer.Byte(Party ? (byte)1 : (byte)0);
         writer.Byte(0);
         Utf8Text.Write(ref writer, Text, ChatWire.MaxTextBytes);
+        writer.Guid(ItemId);
         return writer.Finish();
     }
 
@@ -39,15 +40,20 @@ public readonly record struct ChatSayPacket(bool Party, string Text) : IFramePac
             throw new InvalidDataException("Chat line names an unknown channel.");
         }
 
-        return new ChatSayPacket(party == 1, Utf8Text.Read(ref reader, ChatWire.MaxTextBytes, "Chat line"));
+        var text = Utf8Text.Read(ref reader, ChatWire.MaxTextBytes, "Chat line");
+        return new ChatSayPacket(party == 1, text, reader.Guid());
     }
 }
 
-// S->C {header, uint16 Version = 1, uint8 Kind (ChatKind), uint8 0, uint64 Speaker (0 for server lines), text Text}:
-// one chat line for this receiver.
+// S->C {header, uint16 Version = 2, uint8 Kind (ChatKind), uint8 0, uint64 Speaker (0 for server lines), text Text, game text
+// Line, uint8 Linked, then when 1 {StoreItemEntry, ItemDetailEntry}}: one chat line for this receiver, with the item its
+// speaker linked.
 public readonly record struct ChatLinePacket(ChatKind Kind, ulong Speaker, string Text, GameText Line = default)
 {
-    public const int MaxSize = ChatWire.HeaderSize + 8 + 2 + ChatWire.MaxTextBytes + GameTextWire.MaximumSize;
+    public const int MaxSize = ChatWire.HeaderSize + 8 + 2 + ChatWire.MaxTextBytes + GameTextWire.MaximumSize + 1 + StoreItemEntry.MaxSize + ItemDetailEntry.Size;
+
+    public StoreItemEntry? Item { get; init; }
+    public ItemDetailEntry? Detail { get; init; }
 
     public int Write(Span<byte> destination)
     {
@@ -58,6 +64,13 @@ public readonly record struct ChatLinePacket(ChatKind Kind, ulong Speaker, strin
         writer.UInt64(Speaker);
         Utf8Text.Write(ref writer, Text, ChatWire.MaxTextBytes);
         GameTextWire.Write(ref writer, Line);
+        writer.Byte((byte)(Item is null ? 0 : 1));
+        if (Item is { } item)
+        {
+            item.Write(ref writer);
+            (Detail ?? new ItemDetailEntry { InstanceId = item.InstanceId }).Write(ref writer);
+        }
+
         return writer.Finish();
     }
 
@@ -69,7 +82,14 @@ public readonly record struct ChatLinePacket(ChatKind Kind, ulong Speaker, strin
         reader.Skip(1);
         var speaker = reader.UInt64();
         var text = Utf8Text.Read(ref reader, ChatWire.MaxTextBytes, "Chat line");
-        return new ChatLinePacket(kind, speaker, text, GameTextWire.Read(ref reader));
+        var line = GameTextWire.Read(ref reader);
+        if (reader.Byte() == 0)
+        {
+            return new ChatLinePacket(kind, speaker, text, line);
+        }
+
+        var item = StoreItemEntry.Read(ref reader);
+        return new ChatLinePacket(kind, speaker, text, line) { Item = item, Detail = ItemDetailEntry.Read(ref reader) };
     }
 }
 

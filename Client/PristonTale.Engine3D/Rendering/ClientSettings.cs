@@ -12,6 +12,9 @@ public enum WindowMode
     Fullscreen
 }
 
+// The character an account last entered the world with, as the login screen's recent accounts show it.
+public sealed record RecentCharacter(string Account, string Name, int Level, string ClassName);
+
 public sealed record ClientSettings
 {
     // MSAA takes 2 or 4 samples.
@@ -88,6 +91,52 @@ public sealed record ClientSettings
 
     // The player's Discord profile shows where they play (DiscordPresence.ApplicationId).
     public bool DiscordPresence { get; init; } = true;
+
+    // The lines Ctrl+F1 to Ctrl+F10 type into the chat (at most ten, each at most ChatMacroLength characters).
+    public string[] ChatMacros { get; init; } = [];
+    public const int ChatMacroCount = 10;
+    public const int ChatMacroLength = 78;
+
+    // The accounts that logged in on this computer, newest first; the login screen lists them (never their passwords).
+    public string[] RecentAccounts { get; init; } = [];
+    public const int RecentAccountCount = 8;
+    public const int AccountNameLength = 20;
+
+    // The account "Remember me" was ticked for and the server's token for it (never the password): the token logs that
+    // account in with the password left empty until it expires or is forgotten.
+    public string RememberedAccount { get; init; } = string.Empty;
+    public string RememberToken { get; init; } = string.Empty;
+    public const int RememberTokenLength = 64;
+
+    public ClientSettings WithRemembered(string account, string token) => this with { RememberedAccount = account, RememberToken = token };
+
+    public ClientSettings WithoutRemembered() => this with { RememberedAccount = string.Empty, RememberToken = string.Empty };
+
+    public bool Remembers(string account) =>
+        RememberToken.Length > 0 && string.Equals(RememberedAccount, account, StringComparison.OrdinalIgnoreCase);
+
+    // The last character each recent account entered the world with.
+    public RecentCharacter[] RecentCharacters { get; init; } = [];
+
+    public RecentCharacter LastCharacter(string account) =>
+        Array.Find(RecentCharacters ?? [], character => string.Equals(character.Account, account, StringComparison.OrdinalIgnoreCase));
+
+    public ClientSettings WithLastCharacter(RecentCharacter character) => this with
+    {
+        RecentCharacters = new[] { character }
+            .Concat((RecentCharacters ?? []).Where(recent => !string.Equals(recent.Account, character.Account, StringComparison.OrdinalIgnoreCase)))
+            .Take(RecentAccountCount)
+            .ToArray()
+    };
+
+    // These settings with account first among the recent ones (once, case-insensitively), keeping RecentAccountCount.
+    public ClientSettings WithRecentAccount(string account) => this with
+    {
+        RecentAccounts = new[] { account }
+            .Concat((RecentAccounts ?? []).Where(recent => !string.Equals(recent, account, StringComparison.OrdinalIgnoreCase)))
+            .Take(RecentAccountCount)
+            .ToArray()
+    };
     // The physical sky (sun, moon, stars, volumetric clouds) instead of the original's painted domes, and its clouds.
     public bool RealisticSky { get; init; } = true;
     public CloudQuality CloudQuality { get; init; } = CloudQuality.Medium;
@@ -132,9 +181,18 @@ public sealed record ClientSettings
     public ClientSettings Validate(IClientLog log)
     {
         var defaults = new ClientSettings();
+        var remembered = RememberedAccount is { Length: > 0 and <= AccountNameLength } && RememberToken is { Length: > 0 and <= RememberTokenLength };
         var valid = this with
         {
             ServerAddress = string.IsNullOrWhiteSpace(ServerAddress) ? defaults.ServerAddress : ServerAddress,
+            ChatMacros = ((ChatMacros ?? []).Take(ChatMacroCount).Select(static macro => macro is null ? "" : macro.Length > ChatMacroLength ? macro[..ChatMacroLength] : macro).ToArray()),
+            RecentAccounts = ((RecentAccounts ?? []).Where(static account => !string.IsNullOrWhiteSpace(account) && account.Length <= AccountNameLength)
+                .Distinct(StringComparer.OrdinalIgnoreCase).Take(RecentAccountCount).ToArray()),
+            RecentCharacters = (RecentCharacters ?? []).Where(static character => character is { Account.Length: > 0 and <= AccountNameLength, Name.Length: > 0, Level: >= 1 }
+                    && character.ClassName is not null)
+                .DistinctBy(static character => character.Account, StringComparer.OrdinalIgnoreCase).Take(RecentAccountCount).ToArray(),
+            RememberedAccount = remembered ? RememberedAccount : string.Empty,
+            RememberToken = remembered ? RememberToken : string.Empty,
             Language = NormalizeLanguage(Language),
             Monitor = Monitor >= -1 ? Monitor : defaults.Monitor,
             WindowWidth = WindowWidth is >= 800 and <= 16384 ? WindowWidth : defaults.WindowWidth,
@@ -171,7 +229,11 @@ public sealed record ClientSettings
             LampShadowCount = LampShadowCount is 0 or 2 or PristonLampShadows.MaxLamps ? LampShadowCount : defaults.LampShadowCount
         };
 
-        if (valid != this)
+        // Records compare arrays by reference, so the lists are compared by their values.
+        var replaced = valid with { ChatMacros = ChatMacros, RecentAccounts = RecentAccounts, RecentCharacters = RecentCharacters } != this
+            || !(ChatMacros ?? []).SequenceEqual(valid.ChatMacros) || !(RecentAccounts ?? []).SequenceEqual(valid.RecentAccounts)
+            || !(RecentCharacters ?? []).SequenceEqual(valid.RecentCharacters);
+        if (replaced)
         {
             log.Warn("[Settings] Invalid presentation values replaced with defaults.");
         }

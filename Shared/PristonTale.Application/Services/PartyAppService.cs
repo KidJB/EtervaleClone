@@ -14,6 +14,12 @@ public sealed class PartyAppService(ISessionRegistry sessions, WorldServer world
     public Task AnswerAsync(string sessionToken, ulong fromId, bool accept) =>
         WorldNoticeRequests.RunAsync(sessions, chat, sessionToken, session => world.AnswerPartyAsync(session, fromId, accept));
 
+    public Task SetFinderAsync(string sessionToken, Simulation.Parties.PartyFinderSettings settings) =>
+        WorldNoticeRequests.RunAsync(sessions, chat, sessionToken, session => world.SetPartyFinderAsync(session, settings));
+
+    public Task JoinFromFinderAsync(string sessionToken, ulong leaderId, string password) =>
+        WorldNoticeRequests.RunAsync(sessions, chat, sessionToken, session => world.JoinFromPartyFinderAsync(session, leaderId, password));
+
     public Task CommandAsync(string sessionToken, PartyCommand command, ulong memberId) =>
         WorldNoticeRequests.RunAsync(sessions, chat, sessionToken, session => world.CommandPartyAsync(session, command, memberId));
 }

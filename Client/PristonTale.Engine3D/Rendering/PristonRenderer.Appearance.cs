@@ -17,7 +17,8 @@ public readonly record struct PristonActorAppearance(
     bool CastsShadow,
     string Overlay,
     uint OverlayForm,
-    float Scale)
+    float Scale,
+    Vector2 OverlayScroll = default)
 {
     public static PristonActorAppearance Normal => new(Vector3.Zero, 1f, false, true, "", 0, 1f);
 }
@@ -37,6 +38,8 @@ internal sealed class ActorShade
     public bool CastsShadow = true;
     public Texture2D Overlay;
     public uint OverlayForm;
+    // Texture units a second the overlay slides in U and V; zero scrolls it by OverlayForm instead.
+    public Vector2 OverlayScroll;
     public float Scale = 1f;
     public bool EchoHidden;
 
@@ -70,6 +73,7 @@ public sealed partial class PristonRenderer
         shade.Wobble = appearance.Wobble;
         shade.CastsShadow = appearance.CastsShadow && !runtime.EchoSource.IsValid;
         shade.OverlayForm = appearance.OverlayForm;
+        shade.OverlayScroll = appearance.OverlayScroll;
         shade.Overlay = string.IsNullOrEmpty(appearance.Overlay) ? null : PreparedOverlay(appearance.Overlay);
         shade.Scale = appearance.Scale > 0f ? appearance.Scale : 1f;
     }

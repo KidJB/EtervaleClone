@@ -38,13 +38,15 @@ public sealed class ChatAppService
     private bool Floods(ChatMember member, string line, bool channel) =>
         member.Flood.Check(line, channel, whisper: false, NowMs()) != ChatFloodVerdict.Allowed;
 
-    // A line typed in the chat input.
-    public async Task SayAsync(ulong entityId, string text)
+    // A line typed in the chat input; itemId names an item of the speaker's linked into it (Guid.Empty for none).
+    public async Task SayAsync(ulong entityId, string text, Guid itemId = default)
     {
         if (!Directory.TryGet(entityId, out var member))
         {
             return;
         }
+
+        var linked = await LinkedAsync(entityId, itemId);
 
         text = ChatRules.WithoutRoute(ChatRules.ClipToCapacity(ChatCommandText.Clean(text)));
         if (text.Length == 0)
@@ -68,7 +70,7 @@ public sealed class ChatAppService
 
         if (!ChatRules.IsCommand(text))
         {
-            await SpeakAsync(member, text);
+            await SpeakAsync(member, text, linked);
             return;
         }
 
@@ -163,27 +165,27 @@ public sealed class ChatAppService
             return;
         }
 
-        if (!await PlayerCommandAsync(member, text))
+        if (!await PlayerCommandAsync(member, text, linked))
         {
             await GameMasters.HandleAsync(member, text);
         }
     }
 
     // A party line: every other member of the speaker's party receives it.
-    public Task PartyAsync(ulong entityId, string text)
+    public async Task PartyAsync(ulong entityId, string text, Guid itemId = default)
     {
         if (!Directory.TryGet(entityId, out var member))
         {
-            return Task.CompletedTask;
+            return;
         }
 
         text = ChatRules.ClipToCapacity(ChatCommandText.Clean(text));
         if (text.Length == 0 || Floods(member, text, channel: true))
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        var line = new ChatLine(ChatKind.Party, entityId, ChatRules.Shorten(ChatRules.Compose(member.Name, text)));
+        var line = new ChatLine(ChatKind.Party, entityId, ChatRules.Shorten(ChatRules.Compose(member.Name, text))) { Item = await LinkedAsync(entityId, itemId) };
         foreach (var id in _parties.MembersOf(entityId))
         {
             if (id != entityId && Directory.TryGet(id, out var hearer))
@@ -191,8 +193,24 @@ public sealed class ChatAppService
                 hearer.Link.Deliver(line);
             }
         }
+    }
 
-        return Task.CompletedTask;
+    // The item a speaker linked, as it holds it now; a busy tick or an item it no longer holds links nothing.
+    private async Task<Simulation.Characters.OwnedItemView?> LinkedAsync(ulong entityId, Guid itemId)
+    {
+        if (itemId == Guid.Empty)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await World.LinkedItemAsync(entityId, itemId);
+        }
+        catch (WorldBusyException)
+        {
+            return null;
+        }
     }
 
     // Called with each heartbeat: a standing notice the player has not received yet goes out now.
@@ -204,14 +222,14 @@ public sealed class ChatAppService
         }
     }
 
-    private async Task SpeakAsync(ChatMember member, string text)
+    private async Task SpeakAsync(ChatMember member, string text, Simulation.Characters.OwnedItemView? linked)
     {
         if (Floods(member, text, channel: false))
         {
             return;
         }
 
-        var line = new ChatLine(ChatKind.Player, member.EntityId, ChatRules.Shorten(ChatRules.Compose(member.Name, text)));
+        var line = new ChatLine(ChatKind.Player, member.EntityId, ChatRules.Shorten(ChatRules.Compose(member.Name, text))) { Item = linked };
         ulong[] near;
         try
         {
@@ -231,7 +249,7 @@ public sealed class ChatAppService
         }
     }
 
-    private Task<bool> PlayerCommandAsync(ChatMember member, string text)
+    private Task<bool> PlayerCommandAsync(ChatMember member, string text, Simulation.Characters.OwnedItemView? linked)
     {
         if (ChatCommandText.Match("/bosstime", text) > 0)
         {
@@ -244,7 +262,7 @@ public sealed class ChatAppService
             var message = ChatCommandText.Rest(text, trade);
             if (message.Length > 0 && !Floods(member, message, channel: true))
             {
-                Directory.Broadcast(new ChatLine(ChatKind.Trade, 0, ChatRules.ClipToCapacity(ChatRules.Compose(member.Name, message))));
+                Directory.Broadcast(new ChatLine(ChatKind.Trade, 0, ChatRules.ClipToCapacity(ChatRules.Compose(member.Name, message))) { Item = linked });
             }
 
             return Task.FromResult(true);
@@ -252,7 +270,7 @@ public sealed class ChatAppService
 
         if (ChatRules.IsWhisper(text))
         {
-            Whisper(member, text);
+            Whisper(member, text, linked);
             return Task.FromResult(true);
         }
 
@@ -285,7 +303,7 @@ public sealed class ChatAppService
             var message = ChatCommandText.Rest(text, raidLine);
             if (message.Length > 0 && !Floods(member, message, channel: true))
             {
-                var line = new ChatLine(ChatKind.Party, 0, ChatRules.ClipToCapacity("[Raid] " + member.Name + "> " + message));
+                var line = new ChatLine(ChatKind.Party, 0, ChatRules.ClipToCapacity("[Raid] " + member.Name + "> " + message)) { Item = linked };
                 foreach (var id in _parties.RaidMembersOf(member.EntityId))
                 {
                     if (Directory.TryGet(id, out var hearer))
@@ -304,7 +322,7 @@ public sealed class ChatAppService
             var message = ChatCommandText.Rest(text, clanLength);
             if (message.Length > 0 && !Floods(member, message, channel: true))
             {
-                var line = new ChatLine(ChatKind.Clan, 0, ChatRules.ClipToCapacity(member.Name + "> " + message));
+                var line = new ChatLine(ChatKind.Clan, 0, ChatRules.ClipToCapacity(member.Name + "> " + message)) { Item = linked };
                 foreach (var other in Directory.Members)
                 {
                     if (_clans.ClanOf(other.EntityId) == clan)
@@ -344,7 +362,7 @@ public sealed class ChatAppService
 
     // "/:name text" or "/;name text": the sender sees "To> name: text", the receiver "From> sender: text". A receiver who
     // refuses whispers or ignores the sender, or a missing text, gets the sender a server line instead.
-    private void Whisper(ChatMember sender, string text)
+    private void Whisper(ChatMember sender, string text, Simulation.Characters.OwnedItemView? linked)
     {
         var index = 2;
         var name = ChatCommandText.ReadWord(text, ref index);
@@ -379,7 +397,7 @@ public sealed class ChatAppService
             return;
         }
 
-        sender.Link.Deliver(new ChatLine(ChatKind.Whisper, 0, ChatRules.ClipToCapacity("To> " + name + ": " + message)));
-        target.Link.Deliver(new ChatLine(ChatKind.Whisper, 0, ChatRules.ClipToCapacity("From> " + sender.Name + ": " + message)));
+        sender.Link.Deliver(new ChatLine(ChatKind.Whisper, 0, ChatRules.ClipToCapacity("To> " + name + ": " + message)) { Item = linked });
+        target.Link.Deliver(new ChatLine(ChatKind.Whisper, 0, ChatRules.ClipToCapacity("From> " + sender.Name + ": " + message)) { Item = linked });
     }
 }

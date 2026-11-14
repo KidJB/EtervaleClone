@@ -205,10 +205,10 @@ internal sealed class OnlinePlayChannel : IPlayChannel
         _connection.SendSkillCast(sequence, skillCode, targetEntityId, point);
     }
 
-    public async Task SendChatAsync(string text, bool party, CancellationToken ct = default)
+    public async Task SendChatAsync(string text, bool party, Guid itemId = default, CancellationToken ct = default)
     {
         await _start.WaitAsync(ct);
-        _connection.SendChat(text, party);
+        _connection.SendChat(text, party, itemId);
     }
 
     public async Task SendYahooKeyAsync(CancellationToken ct = default)
@@ -253,6 +253,30 @@ internal sealed class OnlinePlayChannel : IPlayChannel
     {
         await _start.WaitAsync(ct);
         _connection.SendSocial(new AchievementTitlePacket(id));
+    }
+
+    public async Task SendPartyFinderRequestAsync(CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        _connection.SendSocial(default(PartyFinderRequestPacket));
+    }
+
+    public async Task SendPartyFinderSettingsAsync(PartyFinderSettingsPacket settings, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        _connection.SendSocial(settings);
+    }
+
+    public async Task SendPartyFinderJoinAsync(ulong leaderId, string password, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        _connection.SendSocial(new PartyFinderJoinPacket(leaderId, password));
+    }
+
+    public async Task SendRankingsRequestAsync(RankingBoard board, byte job, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        _connection.SendSocial(new RankingsRequestPacket(board, job));
     }
 
     public async Task SendAchievementsRequestAsync(CancellationToken ct = default)

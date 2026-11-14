@@ -23,6 +23,8 @@ public static class PersistenceServiceCollectionExtensions
         Func<IMigrationRunnerBuilder, IMigrationRunnerBuilder> provider)
     {
         services.AddSingleton<IAccountRepository, DapperAccountRepository>();
+        services.AddSingleton<IRememberTokenRepository, DapperRememberTokenRepository>();
+        services.AddSingleton<Abstractions.Rankings.IRankingRepository, DapperRankingRepository>();
         services.AddSingleton<ICharacterRepository, DapperCharacterRepository>();
         services.AddSingleton<IWorldDataRepository, DapperWorldDataRepository>();
         services.AddSingleton<IWarehouseRepository, DapperWarehouseRepository>();

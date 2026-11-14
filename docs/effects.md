@@ -536,13 +536,20 @@ reports (Energy Shield, Holy Reflection, Divine Inhalation, Physical Absorption,
 appearance (`PlayerAppearanceView.WeaponGlow`, `OffHandGlow`) and description, so every viewer draws the same:
 
 - A unique's file glow (`ItemDefinition.Glow`: signed colour offsets, the pulse `Blink`, the peak `Scale`).
-- An item aged +4 to +20 (`UpgradeLevel`) takes its level's colour with blink 9 instead: +4 light purple, +5 yellow,
+- An item aged +4 to +20 (`UpgradeLevel`) takes its level's colour with blink 9 instead (+4 light purple, +5 yellow,
   +6 green, +7 blue, +8 purple, +9 orange, +10 red, +11 teal, +12 light green, +13 purple, +14 deep pink, +15 sky blue,
-  +16 light orange, +17 brown, +18 blue violet, +19 light yellow, +20 white.
+  +16 light orange, +17 brown, +18 blue violet, +19 light yellow, +20 white) and its `Age`, which draws it with the
+  level's `AgingLook` (`Simulation/Items/AgingLooks.cs`, a typed table): its own texture
+  `image/sinImage/Items/DropItem/agingN.bmp` over the item, a light eased (smoothstep) from none to the level's colour
+  and back, stronger and quicker the higher the level (the peak grows from 1.5 times the colour at +4 to three
+  times it at +20, overbright, and the loop shortens from 1000 ms to 700 ms), and from +11 a diagonal slide of the texture (0.05 texture units a second, 0.1
+  from +15, 0.2 at +20; `PristonActorAppearance.OverlayScroll`). The look replaces the mix texture and the stepped
+  pulse; a mixed copy's colour clears the age.
 - A mixed copy whose highest sheltom is Devine (6) to Mirage (10) takes the matching mixing colour with blink 9.
-- A colour of the aging table (from +7) or of the mixing table brings its item mix texture (`mixS_01..05`,
+- A colour of the aging table (from +7) on an item that is not aged (a unique's file colour), or of the mixing table, brings its item mix texture (`mixS_01..05`,
   `mixM_01..05` under `image/sinImage/Items/DropItem`) and scroll form (8..14), whatever gave the colour.
-- `ItemDefinition.DisplayEffect` non-zero: the class-up light.
+- `ItemDefinition.DisplayEffect` non-zero, or a weapon of Rare rarity or higher that has been aged (`UpgradeLevel` 1 or
+  more, `HeldItemGlow.SparklesWhenAged`; shields, orbs and other off-hand items never): the class-up light.
 
 `HeldItemGlow.Sample(ms)`: each way of the pulse lasts `2^Blink` ms; the added light is `step * channel >> Blink`
 (255 = a full white light), alpha below 0 fades the item with the pulse and above 0 keeps it translucent; a negative

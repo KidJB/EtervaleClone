@@ -69,6 +69,7 @@ public static class HostingExtensions
         builder.Services.AddSingleton<PristonTale.Application.Bellatra.BellatraClanAppService>();
         builder.Services.AddSingleton<BellatraAppService>();
         builder.Services.AddSingleton<PristonTale.Application.Achievements.AchievementAppService>();
+        builder.Services.AddSingleton<PristonTale.Application.Rankings.RankingAppService>();
 
         var provider = builder.Configuration["Database:Provider"] ?? "Sqlite";
         if (string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase))

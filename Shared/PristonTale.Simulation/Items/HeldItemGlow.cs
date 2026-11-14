@@ -2,9 +2,10 @@ namespace PristonTale.Simulation.Items;
 
 // How a held weapon or shield glows: the colour offsets and pulse of its glow, the scale at the pulse's peak, the
 // item mix texture that scrolls over it (-1 none) with its scroll form, and the class-up light a weapon's effect
-// setting gives it. A unique's file sets the glow; an item aged to +4..+20 takes its level's colour instead. Colours
-// that belong to the aging or mixing tables bring their mix texture with them, whatever gave the colour.
-public readonly record struct HeldItemGlow(short R, short G, short B, short A, int Blink, float Scale, int Mix, int MixScroll, bool ClassUp)
+// setting (or a Rare or rarer aged weapon) gives it. A unique's file sets the glow; an item aged to +4..+20 takes its level's colour instead, and Age
+// (the level) draws it with that level's AgingLook: its aging texture and eased pulse. Colours that belong to the
+// aging or mixing tables bring their mix texture with them, whatever gave the colour.
+public readonly record struct HeldItemGlow(short R, short G, short B, short A, int Blink, float Scale, int Mix, int MixScroll, bool ClassUp, int Age = 0)
 {
     public static readonly HeldItemGlow None = new(0, 0, 0, 0, 0, 0f, -1, 0, false);
 
@@ -56,7 +57,17 @@ public readonly record struct HeldItemGlow(short R, short G, short B, short A, i
 
     public bool Glows => Blink != 0;
     public bool IsNone => !Glows && !ClassUp;
-    public string MixTexture => Mix >= 0 && Mix < MixTextures.Length ? MixTextures[Mix] : "";
+    public string MixTexture => Look is { } look ? look.Texture : Mix >= 0 && Mix < MixTextures.Length ? MixTextures[Mix] : "";
+
+    // The aging look this glow is drawn with, or null.
+    public AgingLook Look => Age > 0 ? AgingLooks.For(Age) : null;
+
+    // A Rare or rarer weapon that has been aged carries the circling class-up lights, whatever its file says; shields,
+    // orbs and other off-hand items do not.
+    public const ItemRarity SparklingRarity = ItemRarity.Rare;
+
+    public static bool SparklesWhenAged(ItemInstance item) =>
+        item.UpgradeLevel > 0 && item.Rarity >= SparklingRarity && item.Definition.IsWeapon;
 
     public static HeldItemGlow For(ItemInstance item)
     {
@@ -66,11 +77,11 @@ public readonly record struct HeldItemGlow(short R, short G, short B, short A, i
         }
 
         var glow = item.Definition.Glow;
-        var held = new HeldItemGlow(glow.R, glow.G, glow.B, glow.A, glow.Blink, glow.Scale, -1, 0, item.Definition.DisplayEffect != 0);
+        var held = new HeldItemGlow(glow.R, glow.G, glow.B, glow.A, glow.Blink, glow.Scale, -1, 0, item.Definition.DisplayEffect != 0 || SparklesWhenAged(item));
         if (item.UpgradeLevel is >= FirstGlowingAge and <= LastGlowingAge)
         {
             var aged = AgedColors[item.UpgradeLevel - FirstGlowingAge];
-            held = held with { R = aged.R, G = aged.G, B = aged.B, A = aged.A, Blink = AgedBlink };
+            held = held with { R = aged.R, G = aged.G, B = aged.B, A = aged.A, Blink = AgedBlink, Age = item.UpgradeLevel };
         }
 
         // A mix whose highest sheltom is Transparo (6) or above, up to Mirage (10), glows in its colour; the first colour is a
@@ -78,12 +89,17 @@ public readonly record struct HeldItemGlow(short R, short G, short B, short A, i
         if (item.MixSheltom is >= 6 and <= 10)
         {
             var mixed = MixedColors[item.MixSheltom - 5];
-            held = held with { R = mixed.R, G = mixed.G, B = mixed.B, A = mixed.A, Blink = AgedBlink };
+            held = held with { R = mixed.R, G = mixed.G, B = mixed.B, A = mixed.A, Blink = AgedBlink, Age = 0 };
         }
 
         if (!held.Glows)
         {
             return held with { R = 0, G = 0, B = 0, A = 0, Scale = 0f };
+        }
+
+        if (held.Look is not null)
+        {
+            return held;
         }
 
         foreach (var table in (ReadOnlySpan<(short R, short G, short B, short A, int Mix, int Scroll)[]>)[AgedColors, MixedColors])
@@ -106,6 +122,12 @@ public readonly record struct HeldItemGlow(short R, short G, short B, short A, i
         if (!Glows)
         {
             return HeldGlowSample.Plain;
+        }
+
+        if (Look is { } look)
+        {
+            var (r, g, b) = look.Light(nowMs);
+            return new HeldGlowSample(r, g, b, 1f, Scale < 0f ? -Scale : 1f);
         }
 
         if (Blink < 0)

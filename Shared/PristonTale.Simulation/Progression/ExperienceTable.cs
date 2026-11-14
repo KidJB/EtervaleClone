@@ -44,6 +44,26 @@ public static class ExperienceTable
     // Experience saturates one below the unsigned 64-bit maximum, so no award or sum wraps; it is not a level cap.
     public const ulong Ceiling = ulong.MaxValue - 1;
 
+    public const int BasisPoints = 10_000;
+
+    // The share of its level's experience a character at level has earned, in hundredths of a percent; 0 at the last level.
+    public static int ShareBasisPoints(int level, ulong experience)
+    {
+        if (level < 1 || level >= MaximumLevel)
+        {
+            return 0;
+        }
+
+        var start = ForLevel(level);
+        var next = ForLevel(level + 1);
+        if (next <= start || experience <= start)
+        {
+            return 0;
+        }
+
+        return (int)Math.Min(BasisPoints, (experience - start) / Math.Max(1UL, (next - start) / BasisPoints));
+    }
+
     public static ulong ForLevel(int level)
     {
         if (level < 1 || level > MaximumLevel)

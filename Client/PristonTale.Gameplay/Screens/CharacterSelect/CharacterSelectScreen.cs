@@ -380,6 +380,19 @@ public sealed class CharacterSelectScreen : GameScreen
         _enterTask = Context.Backend.EnterWorldAsync(name, _backendCts.Token);
     }
 
+    // The login screen lists this character beside the account that logged in (the first recent account).
+    private void RememberCharacter(CharacterSummary summary)
+    {
+        var settings = Context.Presentation.Requested;
+        if (settings.RecentAccounts is not [var account, ..])
+        {
+            return;
+        }
+
+        var className = _scene.Info(_selectedIndex)?.ClassName ?? summary.Class.ToString();
+        Context.Presentation.Requested = settings.WithLastCharacter(new RecentCharacter(account, summary.Name ?? string.Empty, summary.Level, className));
+    }
+
     private void PollEnterWorld()
     {
         if (_enterTask is not { IsCompleted: true })
@@ -395,6 +408,7 @@ public sealed class CharacterSelectScreen : GameScreen
                 s.Class, s.Name ?? string.Empty, s.Level, s.FaceIndex,
                 outcome.FieldId, outcome.SpawnX, outcome.SpawnZ, s.Tier, s.HairIndex);
             _enterTask = null;
+            RememberCharacter(s);
             Context.RequestScreen(new GameplayScreen(Context, entered));
             return;
         }

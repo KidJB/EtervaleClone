@@ -20,6 +20,9 @@ public sealed class Party
 
     public PartyMode Mode { get; internal set; }
 
+    // How the party finder lets players join, set by the leader; it stays with the party when the lead passes.
+    public Simulation.Parties.PartyFinderSettings Finder { get; internal set; } = Simulation.Parties.PartyFinderSettings.Default;
+
     // The other party of its raid, and whether this party leads it. Two parties at most, as the original's raids.
     public Party? Raid { get; internal set; }
     public bool LeadsRaid { get; internal set; }

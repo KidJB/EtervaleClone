@@ -149,6 +149,8 @@ internal sealed class PresenceDecoder : IEventHandleReader
             EtervaleOpcodes.BellatraBoard => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Bellatra = Bellatra(BellatraBoardPacket.Read(packet)) },
             EtervaleOpcodes.BellatraResult => new PresenceUpdate(_tick, [], [], [], [], FieldId) { BellatraResult = BellatraResult(BellatraResultPacket.Read(packet)) },
             EtervaleOpcodes.BellatraClanState => new PresenceUpdate(_tick, [], [], [], [], FieldId) { BellatraClan = BellatraClan(BellatraClanStatePacket.Read(packet)) },
+            EtervaleOpcodes.PartyFinder => new PresenceUpdate(_tick, [], [], [], [], FieldId) { PartyFinder = PartyFinderPacket.Read(packet) },
+            EtervaleOpcodes.Rankings => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Rankings = RankingsPacket.Read(packet) },
             EtervaleOpcodes.Achievements => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Achievements = AchievementsPacket.Read(packet) },
             EtervaleOpcodes.BellatraClanResult => new PresenceUpdate(_tick, [], [], [], [], FieldId)
             {
@@ -366,7 +368,13 @@ internal sealed class PresenceDecoder : IEventHandleReader
         new PresenceUpdate(_tick, [], [], [], [], FieldId) { PartyRequest = new PartyRequestInfo(packet.FromId, packet.FromName, packet.Recommended, packet.Raid) };
 
     private PresenceUpdate OnChat(ChatLinePacket packet) =>
-        new PresenceUpdate(_tick, [], [], [], [], FieldId) { Chat = [new ChatLineInfo(packet.Kind, packet.Speaker, packet.Text, packet.Line)] };
+        new PresenceUpdate(_tick, [], [], [], [], FieldId)
+        {
+            Chat = [new ChatLineInfo(packet.Kind, packet.Speaker, packet.Text, packet.Line)
+            {
+                Item = packet.Item is { } item && packet.Detail is { } detail ? StoreItems.View(item) with { Details = OwnerItemDecoder.View(detail) } : null
+            }]
+        };
 
     private PresenceUpdate OnQuestNotices(QuestNoticesPacket packet) =>
         new PresenceUpdate(_tick, [], [], [], [], FieldId) { QuestNotices = QuestWireReader.ToNotices(packet.Notices), QuestPrompt = QuestWireReader.ToPrompt(packet.Prompt) };
@@ -827,7 +835,7 @@ internal sealed class PresenceDecoder : IEventHandleReader
         new(_tick, spawns, states, removed ?? [], events ?? [], FieldId);
 
     private static Simulation.Items.HeldItemGlow Glow(in DescribedGlow glow) =>
-        new(glow.R, glow.G, glow.B, glow.A, glow.Blink, glow.Scale, glow.Mix, glow.MixScroll, glow.ClassUp);
+        new(glow.R, glow.G, glow.B, glow.A, glow.Blink, glow.Scale, glow.Mix, glow.MixScroll, glow.ClassUp, glow.Age);
 
     private EntitySpawnInfo Spawn(ulong entityId, Tracked tracked)
     {

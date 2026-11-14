@@ -24,6 +24,32 @@ if (args.Length == 4 && args[0] == "--export-field-textures")
     }
 }
 
+// A movie cut into images of one size (ffmpeg ... frame%04d.jpg) becomes a FrameVideo the client plays without a codec.
+if (args.Length == 4 && args[0] == "--pack-video")
+{
+    if (!int.TryParse(args[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var framesPerSecond) || framesPerSecond is < 1 or > 120)
+    {
+        Console.Error.WriteLine("error packing video: frames per second must be 1 to 120");
+        return 1;
+    }
+
+    try
+    {
+        var images = Directory.GetFiles(args[1]).Where(static file => Path.GetExtension(file).ToLowerInvariant() is ".jpg" or ".jpeg" or ".png")
+            .Order(StringComparer.Ordinal).ToArray();
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(args[3]))!);
+        using var output = File.Create(args[3]);
+        var header = PristonTale.Engine3D.IO.FrameVideoReader.Pack(images, framesPerSecond, output);
+        Console.WriteLine($"{args[3]}: {header.FrameCount} frames, {header.Width}x{header.Height}, {header.FramesPerSecond} fps, {output.Length} bytes");
+        return 0;
+    }
+    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
+    {
+        Console.Error.WriteLine($"error packing video: {exception.Message}");
+        return 1;
+    }
+}
+
 // Headless inspector for PristonTale binary assets (.smd stage, .smd/.smb model, .inx index).
 // Prints the decoded structure so material/geometry/light decisions are grounded in real bytes
 // instead of assumption (see docs/rendering.md for the material and render conventions and docs/tools.md for
@@ -46,6 +72,7 @@ if (args.Length == 0 || args[0] is "-h" or "--help")
     Console.WriteLine(
         "ptdump <asset-path> [--materials] [--lights] [--objects] [--normals] [--motions] [--matbounds] [--physique] [--full]\n" +
         "ptdump --export-field-textures <asset-root> <field-id> <output-directory>\n" +
+        "ptdump --pack-video <image-directory> <frames-per-second> <output.etv>\n" +
         "  Inspects a PristonTale .smd (stage or model), .smb (model) or .inx (index).\n" +
         "  A .bmp/.tga path decodes the texture and prints content stats (size/alpha/grayscale%).");
     return args.Length == 0 ? 1 : 0;

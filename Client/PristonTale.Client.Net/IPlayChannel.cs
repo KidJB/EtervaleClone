@@ -95,7 +95,7 @@ public interface IPlayChannel : IAsyncDisposable
     Task SendSkillCommandAsync(uint sequence, uint skillCode, SkillCastCommand command, CancellationToken ct = default);
 
     // A line typed in the chat window (party: the party channel); replies arrive as PresenceUpdate.Chat.
-    Task SendChatAsync(string text, bool party, CancellationToken ct = default);
+    Task SendChatAsync(string text, bool party, Guid itemId = default, CancellationToken ct = default);
 
     // Space inside the minute a yahoo word opened; the cheer arrives on the presence timeline.
     Task SendYahooKeyAsync(CancellationToken ct = default);
@@ -126,6 +126,18 @@ public interface IPlayChannel : IAsyncDisposable
     // CastleOwnerResult and the window's state.
     Task SendCastleOwnerAsync(Protocol.Packets.CastleOwnerAction action, ulong npcId, Simulation.Social.Castle.CastleSetup setup, long amount,
         CancellationToken ct = default);
+
+    // Asks the party finder's list, answered by PartyFinder updates (a player alone joins a listed party with
+    // InviteToPartyAsync to its leader).
+    Task SendPartyFinderRequestAsync(CancellationToken ct = default);
+
+    // The leader's finder settings for its party, and a join through the finder (answered by the party or a server line).
+    Task SendPartyFinderSettingsAsync(Protocol.Packets.PartyFinderSettingsPacket settings, CancellationToken ct = default);
+
+    Task SendPartyFinderJoinAsync(ulong leaderId, string password, CancellationToken ct = default);
+
+    // Asks a rankings board (a PlayerClass for one class's level board, 0 all), answered by a Rankings update.
+    Task SendRankingsRequestAsync(Protocol.Packets.RankingBoard board, byte job, CancellationToken ct = default);
 
     // Asks the player's badges, answered by an Achievements update.
     Task SendAchievementsRequestAsync(CancellationToken ct = default);

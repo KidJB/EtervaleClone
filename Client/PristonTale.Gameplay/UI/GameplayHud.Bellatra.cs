@@ -58,11 +58,41 @@ public sealed partial class GameplayHud
         set => _achievements.Ask = value;
     }
 
+    public Action SendPartyFinderRequest
+    {
+        set => _partyFinder.Ask = value;
+    }
+
+    public Action<PartyFinderSettingsPacket> SendPartyFinderSettings
+    {
+        set => _partyFinder.Save = value;
+    }
+
+    public Action<ulong, string> SendPartyFinderJoin
+    {
+        set => _partyFinder.Join = value;
+    }
+
+    public Action<RankingBoard, byte> SendRankingsRequest
+    {
+        set => _rankings.Ask = value;
+    }
+
     public void ObserveBellatra(PresenceUpdate update)
     {
         if (update.Achievements is { } achievements)
         {
             _achievements.Observe(achievements);
+        }
+
+        if (update.PartyFinder is { } finder)
+        {
+            _partyFinder.Observe(finder);
+        }
+
+        if (update.Rankings is { } rankings)
+        {
+            _rankings.Observe(rankings);
         }
 
         if (update.BellatraClan is { } clan)

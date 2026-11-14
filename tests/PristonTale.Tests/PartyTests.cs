@@ -38,6 +38,9 @@ internal static class PartyTests
         yield return ("party modes change the shares and drops; two leaders link their parties in a raid, its lines reach both, and it ends cleanly", RaidAndModesAsync);
         yield return ("party rules: shares by size, the average level, the level gap, the share range and the gold split", RulesAsync);
         yield return ("party messages round-trip on the wire and refuse unknown commands and answers", WireAsync);
+        yield return ("the party finder lists open parties to all and its settings to the leader, and joins by them: approval, open, level, class, password and closed", FinderAsync);
+        yield return ("the party finder's list round-trips on the wire in parts a frame holds", FinderWireAsync);
+        yield return ("party finder settings are made valid: a known mode, a level in range, a password only with its mode", SettingsRulesAsync);
     }
 
     private static (ChatFixture Fixture, PartyAppService Parties) Fixture(TimeProvider? clock = null)
@@ -66,6 +69,95 @@ internal static class PartyTests
     {
         fixture.Tick(1);
         return ChatFixture.Latest(player)?.Party?.Members.Select(member => member.EntityId).ToArray() ?? [];
+    }
+
+    private static async Task FinderAsync()
+    {
+        var (fixture, parties) = Fixture();
+        var ann = await fixture.JoinAsync("Ann", 0, 0);
+        var bob = await fixture.JoinAsync("Bob", 100, 0);
+        var cid = await fixture.JoinAsync("Cid", 0, 100);
+        Assert.True((await fixture.RunAsync(fixture.World.PartyFinderAsync(cid.Session))).Listings.Count == 0, "a list without parties was not empty");
+
+        await Group(fixture, parties, ann, bob);
+        var seen = await fixture.RunAsync(fixture.World.PartyFinderAsync(cid.Session));
+        Assert.True(seen is { Own: null, Listings: [{ FieldId: ChatFixture.Field, JoinMode: PartyJoinMode.Approval, Members: [{ Name: "Ann" }, { Name: "Bob" }] } listing] }
+            && listing.LeaderId == ann.Id, $"the finder did not list Ann's party: {seen.Listings.Count}");
+        var led = await fixture.RunAsync(fixture.World.PartyFinderAsync(ann.Session));
+        Assert.True(led.Own == PartyFinderSettings.Default && led.OwnMembers.Count == 2, "the leader did not get its party's settings");
+
+        // Approval asks the leader, who answers for its party.
+        await fixture.RunAsync(parties.JoinFromFinderAsync(cid.Session.SessionToken, ann.Id, ""));
+        await Answer(fixture, parties, ann, cid);
+        Assert.True(Members(fixture, cid).SequenceEqual([ann.Id, bob.Id, cid.Id]), "an approved player did not join");
+
+        (fixture, parties) = Fixture();
+        var dan = await fixture.JoinAsync("Dan", 0, 0);
+        var eve = await fixture.JoinAsync("Eve", 100, 0);
+        var fay = await fixture.JoinAsync("Fay", 0, 100);
+        await Group(fixture, parties, dan, eve);
+        Task Settings(PartyFinderSettings settings) => fixture.RunAsync(parties.SetFinderAsync(dan.Session.SessionToken, settings));
+        Task TryJoin(string password = "") => fixture.RunAsync(parties.JoinFromFinderAsync(fay.Session.SessionToken, dan.Id, password));
+        var job = fay.Session.Character!.Class.Class;
+
+        await Settings(new PartyFinderSettings(PartyJoinMode.Closed, 0, "", PartyFinderSettings.AllClasses));
+        Assert.True((await fixture.RunAsync(fixture.World.PartyFinderAsync(fay.Session))).Listings.Count == 0, "a closed party was listed");
+        await TryJoin();
+        Assert.True(Members(fixture, fay).Length == 0, "a closed party took a member");
+
+        await Settings(new PartyFinderSettings(PartyJoinMode.Open, PartyFinderSettings.MaxMinLevel, "", PartyFinderSettings.AllClasses));
+        await TryJoin();
+        Assert.True(Members(fixture, fay).Length == 0, "a party took a member below its level");
+
+        await Settings(new PartyFinderSettings(PartyJoinMode.Open, 0, "", (ushort)(PartyFinderSettings.AllClasses & ~PartyFinderSettings.Bit(job))));
+        await TryJoin();
+        Assert.True(Members(fixture, fay).Length == 0, "a party took a class it does not take");
+
+        var high = await fixture.JoinAsync("Gil", 0, -100, level: 150);
+        await Settings(new PartyFinderSettings(PartyJoinMode.Password, 0, "secret", PartyFinderSettings.AllClasses));
+        await fixture.RunAsync(parties.JoinFromFinderAsync(high.Session.SessionToken, dan.Id, "secret"));
+        Assert.True(Members(fixture, high).Length == 0, "a player beyond the level gap joined with the password");
+        await TryJoin("wrong");
+        Assert.True(Members(fixture, fay).Length == 0, "a wrong password joined");
+        await TryJoin("secret");
+        Assert.True(Members(fixture, fay).SequenceEqual([dan.Id, eve.Id, fay.Id]), "the right password did not join at once");
+
+        await fixture.RunAsync(parties.SetFinderAsync(eve.Session.SessionToken, PartyFinderSettings.Default));
+        Assert.True((await fixture.RunAsync(fixture.World.PartyFinderAsync(dan.Session))).Own?.Mode == PartyJoinMode.Password, "a member changed the leader's settings");
+    }
+
+    private static Task SettingsRulesAsync()
+    {
+        var valid = new PartyFinderSettings((PartyJoinMode)9, 500, "  pw  ", 0).Valid();
+        Assert.True(valid == new PartyFinderSettings(PartyJoinMode.Approval, PartyFinderSettings.MaxMinLevel, "", PartyFinderSettings.AllClasses),
+            $"invalid settings were not made valid: {valid}");
+        Assert.True(new PartyFinderSettings(PartyJoinMode.Password, 0, "", PartyFinderSettings.AllClasses).Valid().Mode == PartyJoinMode.Approval,
+            "a password mode without a password stayed");
+        Assert.True(new PartyFinderSettings(PartyJoinMode.Password, 0, new string('x', 40), PartyFinderSettings.AllClasses).Valid().Password.Length
+            == PartyFinderSettings.MaxPasswordLength, "a long password was not cut");
+        return Task.CompletedTask;
+    }
+
+    private static Task FinderWireAsync()
+    {
+        Assert.True(PartyFinderPacket.MaxSize <= Protocol.Binary.FrameCodec.MaxFrameSize, $"a full finder part ({PartyFinderPacket.MaxSize} bytes) exceeds a frame");
+        var members = Enumerable.Range(0, PartyLimits.MaxMembers).Select(static index => new PartyFinderWireMember("Member" + index, (byte)(index + 1), 100 + index)).ToArray();
+        var listings = Enumerable.Range(0, PartyFinderWire.MaxPerPart)
+            .Select(index => new PartyFinderWireListing((ulong)(1000 + index), 3, PartyMode.Exp, 120, members, PartyJoinMode.Open, 80, 0x0FE)).ToArray();
+        var buffer = new byte[PartyFinderPacket.MaxSize];
+        var own = new PartyFinderWireOwn(PartyJoinMode.Password, 90, "secret", 0x7FE, members);
+        var read = PartyFinderPacket.Read(buffer.AsSpan(0, new PartyFinderPacket(PartyFinderWire.MaxPerPart, listings, own).Write(buffer)));
+        Assert.True(read.Own is { JoinMode: PartyJoinMode.Password, MinLevel: 90, Password: "secret", Classes: 0x7FE } && read.Own.Members.SequenceEqual(members),
+            "the leader's settings changed on the wire");
+        var settings = new PartyFinderSettingsPacket(PartyJoinMode.Open, 50, "", 0x0F0);
+        Assert.True(PartyFinderSettingsPacket.Read(buffer.AsSpan(0, settings.Write(buffer))) == settings, "the settings message changed on the wire");
+        var join = new PartyFinderJoinPacket(42, "pw");
+        Assert.True(PartyFinderJoinPacket.Read(buffer.AsSpan(0, join.Write(buffer))) == join, "the join message changed on the wire");
+        Assert.True(read.First == PartyFinderWire.MaxPerPart && read.Listings.Count == listings.Length
+            && read.Listings.Zip(listings).All(static pair => pair.First.LeaderId == pair.Second.LeaderId && pair.First.Mode == PartyMode.Exp
+                && pair.First.Members.SequenceEqual(pair.Second.Members) && pair.First is { JoinMode: PartyJoinMode.Open, MinLevel: 80, Classes: 0x0FE }),
+            "the finder's list changed on the wire");
+        return Task.CompletedTask;
     }
 
     private static async Task FormAsync()

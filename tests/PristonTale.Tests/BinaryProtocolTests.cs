@@ -102,8 +102,8 @@ internal static class BinaryProtocolTests
         Assert.True(ServerHelloPacket.Read(buffer.AsSpan(0, hello.Write(buffer))) == hello, "server hello round trip changed fields");
         var login = new LoginPacket(ProtocolVersion.Current, "conta", "sênha✓", "pt-BR");
         Assert.True(LoginPacket.Read(buffer.AsSpan(0, login.Write(buffer))) == login, "login round trip changed the account, password or language");
-        // A client before protocol 4 sends no language; its login still reads, so the server can tell it is outdated.
-        var outdated = buffer.AsSpan(0, login.Write(buffer) - 2 - "pt-BR".Length).ToArray();
+        // A client before protocol 4 sends no language (nor the later mode byte); its login still reads, so the server can tell it is outdated.
+        var outdated = buffer.AsSpan(0, login.Write(buffer) - 1 - 2 - "pt-BR".Length).ToArray();
         System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(outdated, outdated.Length);
         var read3 = LoginPacket.Read(outdated);
         Assert.True(read3.Language == "" && read3.Password == "sênha✓", "a login without the language did not read");

@@ -12,9 +12,20 @@ public enum LoginFailure
     OutdatedClient = 5
 }
 
+// How a login proves the account: its password, its password asking for a "remember me" token, or such a token.
+public enum LoginMode : byte
+{
+    Password = 0,
+    Remember = 1,
+    Token = 2
+}
+
 public sealed record LoginOutcome(bool Ok, string SessionToken, string Message)
 {
     public LoginFailure Failure { get; init; }
+
+    // The "remember me" token a Remember login was given, else empty.
+    public string RememberToken { get; init; } = string.Empty;
 
     public static LoginOutcome Denied(LoginFailure failure) => new(false, string.Empty, MessageFor(failure)) { Failure = failure };
 

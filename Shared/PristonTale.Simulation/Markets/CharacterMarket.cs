@@ -54,7 +54,6 @@ public static class CharacterMarketRules
     public const int MaxSearchLength = 16;
     public const int SecondsPerDay = 86_400;
     private const int PercentScale = 100;
-    private const ulong BasisPoints = 10_000;
 
     public static bool PriceAllowed(CharacterMarketOptions options, long price) => price >= options.MinPrice && price <= options.MaxPrice;
 
@@ -62,15 +61,4 @@ public static class CharacterMarketRules
     public static long Tax(long price, int percent) => (price * percent + PercentScale - 1) / PercentScale;
 
     public static long ExpiresAt(long now, int days) => now + days * (long)SecondsPerDay;
-
-    // The share of the level's experience earned, in hundredths of a percent.
-    public static int ExperienceBasisPoints(ulong experience, ulong levelStart, ulong nextLevel)
-    {
-        if (nextLevel <= levelStart || experience <= levelStart)
-        {
-            return 0;
-        }
-
-        return (int)Math.Min(BasisPoints, (experience - levelStart) / Math.Max(1, (nextLevel - levelStart) / BasisPoints));
-    }
 }

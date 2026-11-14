@@ -371,6 +371,13 @@ public sealed partial class GameplayHud
 
     private bool InterceptInventoryClick(OwnedItemView item)
     {
+        // Shift and a click links the item into an open chat line.
+        var keyboard = Keyboard.GetState();
+        if ((keyboard.IsKeyDown(Keys.LeftShift) || keyboard.IsKeyDown(Keys.RightShift)) && _chat.LinkItem(item))
+        {
+            return true;
+        }
+
         if (InterceptTradeClick(item) || _personalShop.InterceptBagClick(item) || _itemBox.InterceptBagClick(item))
         {
             return true;

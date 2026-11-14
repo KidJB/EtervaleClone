@@ -77,10 +77,10 @@ public sealed record DescribedPlayer(
 }
 
 // A held item's glow: {int8 Blink (0 none, below 0 steady), int16 R, G, B, A, float32 Scale, int8 Mix (-1 none), uint8
-// MixScroll, uint8 Flags (1 class-up light)}.
-public readonly record struct DescribedGlow(int Blink, short R, short G, short B, short A, float Scale, int Mix, int MixScroll, bool ClassUp)
+// MixScroll, uint8 Flags (1 class-up light), uint8 Age (the aging level drawn with its AgingLook, 0 none)}.
+public readonly record struct DescribedGlow(int Blink, short R, short G, short B, short A, float Scale, int Mix, int MixScroll, bool ClassUp, int Age = 0)
 {
-    public const int Size = 1 + 8 + 4 + 3;
+    public const int Size = 1 + 8 + 4 + 3 + 1;
 
     public static readonly DescribedGlow None = new(0, 0, 0, 0, 0, 0f, -1, 0, false);
 
@@ -95,6 +95,7 @@ public readonly record struct DescribedGlow(int Blink, short R, short G, short B
         writer.Byte((byte)(sbyte)Math.Clamp(Mix, sbyte.MinValue, sbyte.MaxValue));
         writer.Byte((byte)Math.Clamp(MixScroll, 0, byte.MaxValue));
         writer.Byte((byte)(ClassUp ? 1 : 0));
+        writer.Byte((byte)Math.Clamp(Age, 0, byte.MaxValue));
     }
 
     public static DescribedGlow Read(ref PacketReader reader)
@@ -107,7 +108,8 @@ public readonly record struct DescribedGlow(int Blink, short R, short G, short B
         var scale = reader.Single();
         var mix = (sbyte)reader.Byte();
         var scroll = reader.Byte();
-        return new DescribedGlow(blink, r, g, b, a, scale, mix, scroll, (reader.Byte() & 1) != 0);
+        var classUp = (reader.Byte() & 1) != 0;
+        return new DescribedGlow(blink, r, g, b, a, scale, mix, scroll, classUp, reader.Byte());
     }
 }
 

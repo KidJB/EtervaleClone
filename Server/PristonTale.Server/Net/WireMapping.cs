@@ -26,7 +26,7 @@ internal static class WireMapping
 
 
     private static DescribedGlow Glow(in Simulation.Items.HeldItemGlow glow) =>
-        new(glow.Blink, glow.R, glow.G, glow.B, glow.A, glow.Scale, glow.Mix, glow.MixScroll, glow.ClassUp);
+        new(glow.Blink, glow.R, glow.G, glow.B, glow.A, glow.Scale, glow.Mix, glow.MixScroll, glow.ClassUp, glow.Age);
 
     // An entity's description for one revision (the answer to DescribeEntity).
     public static EntityDescriptionPacket Describe(in EntityView view, byte revision, WorldData data)

@@ -86,6 +86,12 @@ public sealed record PresenceUpdate(
     public BellatraClanResultInfo? BellatraClanResult { get; init; }
     public Protocol.Packets.AchievementsPacket? Achievements { get; init; }
 
+    // A part of the party finder's list the player asked for.
+    public Protocol.Packets.PartyFinderPacket? PartyFinder { get; init; }
+
+    // A rankings board the player asked for.
+    public Protocol.Packets.RankingsPacket? Rankings { get; init; }
+
     // The local player's trade window when it changed (TradeInfo.None once it ended), and a player's request to trade.
     public TradeInfo? Trade { get; init; }
     public TradeRequestInfo? TradeRequest { get; init; }
@@ -179,6 +185,10 @@ public sealed record PartyRequestInfo(ulong FromId, string FromName, string Reco
 // One chat line: Kind is the server's colour and tab code, SpeakerId the entity that said it (0 for server lines).
 // Direct lines (the plain chat message) go to the log as they are; the others show over a speaker the client sees.
 // Line is a server line the client words in its language; Text is shown as it is when Line is none.
-public sealed record ChatLineInfo(ChatKind Kind, ulong SpeakerId, string Text, GameText Line = default);
+public sealed record ChatLineInfo(ChatKind Kind, ulong SpeakerId, string Text, GameText Line = default)
+{
+    // The item its speaker linked into it, with its values; null for none.
+    public PristonTale.Simulation.Characters.OwnedItemView? Item { get; init; }
+}
 
 public sealed record WarpInfo(int FieldId, System.Numerics.Vector3 Position, bool Forced);

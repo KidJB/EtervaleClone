@@ -120,7 +120,10 @@ public sealed class GameServerConnection : IGameBackend
 
     public long BytesSent => _connection?.BytesSent ?? 0;
 
-    public async Task<LoginOutcome> LoginAsync(string account, string password, string language, CancellationToken ct = default)
+    public Task<LoginOutcome> LoginAsync(string account, string password, string language, CancellationToken ct = default) =>
+        LoginAsync(account, password, language, LoginMode.Password, ct);
+
+    public async Task<LoginOutcome> LoginAsync(string account, string password, string language, LoginMode mode, CancellationToken ct = default)
     {
         await ConnectAsync(ct);
         await _requestGate.WaitAsync(ct);
@@ -135,7 +138,7 @@ public sealed class GameServerConnection : IGameBackend
             var pending = new PendingLogin();
             _login = pending;
             _account = account;
-            Send(new LoginPacket(ProtocolVersion.Current, account, password, language));
+            Send(new LoginPacket(ProtocolVersion.Current, account, password, language, mode));
             var outcome = await pending.Completion.Task.WaitAsync(ct);
             if (outcome.Ok)
             {
@@ -465,9 +468,9 @@ public sealed class GameServerConnection : IGameBackend
     }
 
     // A typed line: party lines or everything else (spoken lines, whispers, commands); the server adds the speaker's name.
-    internal void SendChat(string text, bool party)
+    internal void SendChat(string text, bool party, Guid itemId = default)
     {
-        var input = new ChatSayPacket(party, text);
+        var input = new ChatSayPacket(party, text, itemId);
         Send(input);
     }
 
@@ -907,7 +910,7 @@ public sealed class GameServerConnection : IGameBackend
 
         login.Completion.TrySetResult(ProtocolVersion.Current < _minimumProtocol
             ? LoginOutcome.Denied(LoginFailure.OutdatedClient)
-            : LoginOutcome.Success(_account, $"welcome, {_account}"));
+            : LoginOutcome.Success(_account, $"welcome, {_account}") with { RememberToken = result.RememberToken });
     }
 
     private void OnCharacterList(CharacterListPacket list)

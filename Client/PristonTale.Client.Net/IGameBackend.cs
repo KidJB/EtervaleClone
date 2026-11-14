@@ -12,7 +12,12 @@ public interface IGameBackend : IAsyncDisposable
     // through a new backend.
     bool RequiresNewConnection { get; }
 
-    Task<LoginOutcome> LoginAsync(string account, string password, string language, CancellationToken ct = default);
+    Task<LoginOutcome> LoginAsync(string account, string password, string language, CancellationToken ct = default) =>
+        LoginAsync(account, password, language, LoginMode.Password, ct);
+
+    // secret is the password, or the "remember me" token with LoginMode.Token; a Remember login's outcome carries its
+    // new token.
+    Task<LoginOutcome> LoginAsync(string account, string secret, string language, LoginMode mode, CancellationToken ct = default);
 
     Task<IReadOnlyList<CharacterSummary>> ListCharactersAsync(CancellationToken ct = default);
 

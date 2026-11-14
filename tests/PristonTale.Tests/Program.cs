@@ -107,6 +107,13 @@ if (args.Length == 4 && args[0] == "--capture-equipment")
     return 0;
 }
 
+if (args.Length == 4 && args[0] == "--capture-aging")
+{
+    using var probe = new AgingCaptureProbe(args[1], args[2], args[3]);
+    probe.Run();
+    return 0;
+}
+
 if (args.Length == 4 && args[0] == "--capture-combat-effects")
 {
     using var probe = new CombatEffectsCaptureProbe(args[1], args[2], args[3]);

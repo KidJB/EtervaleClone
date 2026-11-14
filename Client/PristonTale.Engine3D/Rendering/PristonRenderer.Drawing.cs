@@ -193,7 +193,7 @@ public sealed partial class PristonRenderer
                 else
                 {
                     _shaders.SelectSkinnedSurface(batch.Material, batch.Material.SelectTexture(_renderTime), ComputeUvScrollOffset(batch.Material),
-                        batch.SkinPalette, Vector3.Zero, LayerOffset(batch.Material), false, batch.FloorLight, batch.Shade, 0f, WobblePhase, batch.IsActor);
+                        batch.SkinPalette, Vector3.Zero, LayerOffset(batch.Material), false, batch.FloorLight, batch.Shade, Vector2.Zero, WobblePhase, batch.IsActor);
                     _shaders.SelectSkinnedOutline(batch.Material.AlphaTest, parameters, color).CurrentTechnique.Passes[0].Apply();
                 }
 
@@ -316,7 +316,7 @@ public sealed partial class PristonRenderer
             var effect = batch.Gltf is { } gltf
                 ? _shaders.SelectGltfSurface(gltf, batch.SkinPalette, rim, _prepassMode, _neutralActorPass ? 1f : batch.FloorLight,
                     _neutralActorPass ? null : batch.Shade,
-                    batch.Shade is { Overlay: not null } shown ? TextureUOffset(shown.OverlayForm) : 0f, WobblePhase, batch.IsActor)
+                    batch.Shade is { Overlay: not null } shown ? OverlayOffset(shown).X : 0f, WobblePhase, batch.IsActor)
                 : _shaders.SelectSkinnedSurface(
                     batch.Material,
                     batch.Material.SelectTexture(_renderTime),
@@ -327,7 +327,7 @@ public sealed partial class PristonRenderer
                     _prepassMode,
                     _neutralActorPass ? 1f : batch.FloorLight,
                     _neutralActorPass ? null : batch.Shade,
-                    batch.Shade is { Overlay: not null } overlaid ? TextureUOffset(overlaid.OverlayForm) : 0f,
+                    batch.Shade is { Overlay: not null } overlaid ? OverlayOffset(overlaid) : Vector2.Zero,
                     WobblePhase,
                     batch.IsActor);
             effect.CurrentTechnique.Passes[0].Apply();
@@ -425,6 +425,20 @@ public sealed partial class PristonRenderer
     // Scroll of the material's second texture layer, from its own form state.
     private Vector2 LayerOffset(PristonMaterialRuntime material) =>
         material.Layer is { } layer ? new Vector2(TextureUOffset(layer.FormState), 0f) : Vector2.Zero;
+
+    // An overlay slides at its own speed (wrapped to one texture) or by its texture form state.
+    private Vector2 OverlayOffset(ActorShade shade)
+    {
+        if (shade.OverlayScroll == Vector2.Zero)
+        {
+            return new Vector2(TextureUOffset(shade.OverlayForm), 0f);
+        }
+
+        var seconds = _renderTime / 1000f;
+        var u = shade.OverlayScroll.X * seconds;
+        var v = shade.OverlayScroll.Y * seconds;
+        return new Vector2(u - MathF.Floor(u), v - MathF.Floor(v));
+    }
 
     private float TextureUOffset(uint textureFormState)
     {

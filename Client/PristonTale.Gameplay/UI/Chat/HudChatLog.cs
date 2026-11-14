@@ -3,21 +3,24 @@ using PristonTale.Contracts.Social;
 
 namespace PristonTale.Gameplay.UI.Chat;
 
-// The chat tabs, in their button order: All, Clan, Party, Trade, Whisper, and the assistant's page the notice toggle shows.
+// The chat tabs, in their button order: All, Clan, Party, Raid, Trade, Whisper, and the assistant's page the notice toggle
+// shows.
 public enum HudChatTab
 {
     All = 0,
     Clan = 1,
     Party = 2,
-    Trade = 3,
-    Whisper = 4,
-    Assist = 5
+    Raid = 3,
+    Trade = 4,
+    Whisper = 5,
+    Assist = 6
 }
 
-public readonly record struct HudChatEntry(string Text, ChatKind Kind);
+// A line of the log; Item is the item its speaker linked into it, or null.
+public readonly record struct HudChatEntry(string Text, ChatKind Kind, PristonTale.Simulation.Characters.OwnedItemView Item = null);
 
-// The chat history the window shows: one ring of 64 lines per tab. A line lands in the tab of its kind; clan, party,
-// trade and whisper lines also land in All, and server, system and notice lines also land in those four tabs. The
+// The chat history the window shows: one ring of 64 lines per tab. A line lands in the tab of its kind (a party line from
+// the raid channel, "[Raid] ...", in Raid); clan, party, raid, trade and whisper lines also land in All, and server, system and notice lines also land in those four tabs. The
 // scroll position counts lines back from the newest and moves with new lines while scrolled.
 public sealed class HudChatLog
 {
@@ -35,8 +38,10 @@ public sealed class HudChatLog
     private static readonly Color AssistColor = new(200, 128, 128);
     private static readonly Color DefaultColor = new(255, 255, 192);
 
-    private readonly HudChatEntry[][] _tabs = Enumerable.Range(0, 6).Select(_ => new HudChatEntry[Capacity]).ToArray();
-    private readonly int[] _counts = new int[6];
+    private const int TabCount = (int)HudChatTab.Assist + 1;
+    private const string RaidPrefix = "[Raid] ";
+    private readonly HudChatEntry[][] _tabs = Enumerable.Range(0, TabCount).Select(_ => new HudChatEntry[Capacity]).ToArray();
+    private readonly int[] _counts = new int[TabCount];
 
     public int Scroll { get; private set; }
 
@@ -67,10 +72,10 @@ public sealed class HudChatLog
         _ => HudChatTab.All
     };
 
-    public void Add(string text, ChatKind kind)
+    public void Add(string text, ChatKind kind, PristonTale.Simulation.Characters.OwnedItemView item = null)
     {
-        var entry = new HudChatEntry(text, kind);
-        var tab = TabOf(kind);
+        var entry = new HudChatEntry(text, kind, item);
+        var tab = kind == ChatKind.Party && text.StartsWith(RaidPrefix, StringComparison.Ordinal) ? HudChatTab.Raid : TabOf(kind);
         Push(tab, entry);
         if (tab is >= HudChatTab.Clan and <= HudChatTab.Whisper)
         {

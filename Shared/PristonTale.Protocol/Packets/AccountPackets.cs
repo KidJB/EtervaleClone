@@ -8,8 +8,8 @@ namespace PristonTale.Protocol.Packets;
 // of any message's layout raises both.
 public static class ProtocolVersion
 {
-    public const uint Current = 34;
-    public const uint Minimum = 34;
+    public const uint Current = 40;
+    public const uint Minimum = 40;
 }
 
 // Account messages: the server greets every connection, the client logs in, manages its characters and keeps the
@@ -20,6 +20,7 @@ public static class AccountWire
     public const int MaxAccountBytes = 64;
     public const int MaxPasswordBytes = 128;
     public const int MaxLanguageBytes = 16;
+    public const int MaxRememberTokenBytes = 64;
     public const int MaxNameBytes = 64;
 }
 
@@ -54,10 +55,11 @@ public readonly record struct ServerHelloPacket(uint Protocol, uint MinimumProto
 }
 
 // C->S {header, uint16 Version = 1, uint16 0, uint32 Protocol, text Account (64 B), text Password (128 B), text Language
-// (16 B)}. A login without the language is read only so that a client older than protocol 4 is told it is outdated.
-public readonly record struct LoginPacket(uint Protocol, string Account, string Password, string Language) : IFramePacket
+// (16 B), uint8 Mode (LoginMode)}. With Mode Token, Password carries the "remember me" token. A login without the
+// language is read only so that a client older than protocol 4 is told it is outdated.
+public readonly record struct LoginPacket(uint Protocol, string Account, string Password, string Language, LoginMode Mode = LoginMode.Password) : IFramePacket
 {
-    public const int MaxSize = 8 + 4 + 4 + 2 + AccountWire.MaxAccountBytes + 2 + AccountWire.MaxPasswordBytes + 2 + AccountWire.MaxLanguageBytes;
+    public const int MaxSize = 8 + 4 + 4 + 2 + AccountWire.MaxAccountBytes + 2 + AccountWire.MaxPasswordBytes + 2 + AccountWire.MaxLanguageBytes + 1;
 
     public int Write(Span<byte> destination)
     {
@@ -67,6 +69,7 @@ public readonly record struct LoginPacket(uint Protocol, string Account, string 
         Utf8Text.Write(ref writer, Account, AccountWire.MaxAccountBytes);
         Utf8Text.Write(ref writer, Password, AccountWire.MaxPasswordBytes);
         Utf8Text.Write(ref writer, Language, AccountWire.MaxLanguageBytes);
+        writer.Byte((byte)Mode);
         return writer.Finish();
     }
 
@@ -79,15 +82,22 @@ public readonly record struct LoginPacket(uint Protocol, string Account, string 
         var account = Utf8Text.Read(ref reader, AccountWire.MaxAccountBytes, "Login");
         var password = Utf8Text.Read(ref reader, AccountWire.MaxPasswordBytes, "Login");
         var language = reader.Remaining > 0 ? Utf8Text.Read(ref reader, AccountWire.MaxLanguageBytes, "Login") : "";
-        return new LoginPacket(protocol, account, password, language);
+        var mode = reader.Remaining > 0 ? (LoginMode)reader.Byte() : LoginMode.Password;
+        if (!Enum.IsDefined(mode))
+        {
+            throw new InvalidDataException($"Login mode {(byte)mode} is unknown.");
+        }
+
+        return new LoginPacket(protocol, account, password, language, mode);
     }
 }
 
-// S->C {header, uint16 Version = 1, uint8 Status (LoginFailure, None for a login), uint8 0}; a successful login sends the
-// character list first.
-public readonly record struct LoginResultPacket(LoginFailure Status)
+// S->C {header, uint16 Version = 1, uint8 Status (LoginFailure, None for a login), uint8 0, text RememberToken (64 B)}; a
+// successful login sends the character list first, and a Remember login is given its token (empty otherwise).
+public readonly record struct LoginResultPacket(LoginFailure Status, string RememberToken = "")
 {
     public const int Size = 8 + 4;
+    public const int MaxSize = Size + 2 + AccountWire.MaxRememberTokenBytes;
 
     public int Write(Span<byte> destination)
     {
@@ -95,6 +105,7 @@ public readonly record struct LoginResultPacket(LoginFailure Status)
         writer.UInt16(AccountWire.CurrentVersion);
         writer.Byte((byte)Status);
         writer.Byte(0);
+        Utf8Text.Write(ref writer, RememberToken ?? "", AccountWire.MaxRememberTokenBytes);
         return writer.Finish();
     }
 
@@ -102,7 +113,9 @@ public readonly record struct LoginResultPacket(LoginFailure Status)
     {
         var reader = new PacketReader(packet, Size);
         WireHeader.ReadVersion(ref reader, "Login result");
-        return new LoginResultPacket((LoginFailure)reader.Byte());
+        var status = (LoginFailure)reader.Byte();
+        reader.Skip(1);
+        return new LoginResultPacket(status, reader.Remaining > 0 ? Utf8Text.Read(ref reader, AccountWire.MaxRememberTokenBytes, "Login result") : "");
     }
 }
 

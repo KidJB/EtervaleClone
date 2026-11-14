@@ -19,7 +19,8 @@ into it is described in [server.md](server.md); skill resolution details are in 
 
 | Path | Responsibility |
 | --- | --- |
-| `Services/AuthAppService.cs` | Login against `IAccountRepository`, creates a `PlayerSession` with the account's `GmLevel` |
+| `Services/AuthAppService.cs` | Login against `IAccountRepository` (or a "remember me" token through `IRememberTokenRepository`), creates a `PlayerSession` with the account's `GmLevel`; issues tokens |
+| `Rankings/RankingAppService.cs` | The rankings window's boards: the level board (`IRankingRepository.TopLevelsAsync`, 100 lines, all classes or one, game masters and blocked accounts left out, each kept a minute) and Bellatra's best clans (`BellatraClanAppService`) |
 | `Services/CharacterAppService.cs` | List, name check, create, delete characters; builds `CharacterSummary` for the select screen |
 | [`Services/SessionAppService.cs`](../Shared/PristonTale.Application/Services/SessionAppService.cs) | World entry, saves, durable inventory and progression operations (`ApplyDurableAsync`) |
 | [`Services/NpcAppService.cs`](../Shared/PristonTale.Application/Services/NpcAppService.cs) | NPC click and NPC service requests; warehouse load and joint character+warehouse write |
@@ -79,6 +80,7 @@ to `PristonTale.Tests`. No sockets, packets, SQL or MonoGame.
 | Service and method | Contract |
 | --- | --- |
 | `AuthAppService.LoginAsync` | Empty input, unknown account, wrong password: `BadCredentials` (-2); blocked: `LoginDenied` (-24). Values are wire codes. Success returns a token. |
+| `AuthAppService.LoginWithTokenAsync` | The token's SHA-256 must name an unexpired row of that account (case-insensitive user id), else `BadCredentials`; blocked: `LoginDenied`. `RememberAsync` makes 32 random bytes (base64url) lasting `RememberLifetime` (30 days) and keeps the account's `RememberedPerAccount` (5) newest. Only hashes are stored. |
 | `CharacterAppService.ListCharactersAsync` | Summaries with armour/weapon/off-hand catalog keys, `InVillage` and the clan's name (`IClanRepository.ClanNamesAsync`); throws `InvalidDataException` on corrupt saved equipment |
 | `CharacterAppService.CreateCharacterAsync` | Trimmed name 3-16, defined class, valid face, unique name, `CharacterSlots.Maximum` per account, first free slot, starter record in its class's town (`DeathPenalty.TownField`: Ricarten for the Tempskron classes and the assassin, Pillai for the Morion classes) |
 | `CharacterAppService.DeleteCharacterAsync` | Account-scoped delete by name. |

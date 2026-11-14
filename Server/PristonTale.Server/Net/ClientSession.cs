@@ -59,7 +59,8 @@ internal sealed record SessionServices(
     DailyQuestAppService DailyQuests,
     SkinAppService Skins,
     Application.Markets.CharacterMarketAppService CharacterMarket,
-    Application.Markets.MarketplaceAppService Marketplace)
+    Application.Markets.MarketplaceAppService Marketplace,
+    Application.Rankings.RankingAppService Rankings)
 {
     // Shared by every connection so a flood from many peers still yields one warning per interval.
     public LogSampler RejectedPackets { get; } = new(5000);
@@ -367,6 +368,19 @@ internal sealed partial class ClientSession : IMovementVerdictSink
                 case EtervaleOpcodes.AchievementTitle:
                     await AchievementTitleAsync(AchievementTitlePacket.Read(memory.Span));
                     break;
+                case EtervaleOpcodes.PartyFinderSettings:
+                    await SetPartyFinderAsync(PartyFinderSettingsPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.PartyFinderJoin:
+                    await JoinFromPartyFinderAsync(PartyFinderJoinPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.PartyFinderRequest:
+                    PartyFinderRequestPacket.Read(memory.Span);
+                    await PartyFinderAsync();
+                    break;
+                case EtervaleOpcodes.RankingsRequest:
+                    await RankingsAsync(RankingsRequestPacket.Read(memory.Span));
+                    break;
                 case EtervaleOpcodes.AchievementsRequest:
                     AchievementsRequestPacket.Read(memory.Span);
                     await AchievementsAsync();
@@ -449,7 +463,9 @@ internal sealed partial class ClientSession : IMovementVerdictSink
             return;
         }
 
-        var outcome = await _services.Auth.LoginAsync(request.Account, request.Password);
+        var outcome = request.Mode == LoginMode.Token
+            ? await _services.Auth.LoginWithTokenAsync(request.Account, request.Password)
+            : await _services.Auth.LoginAsync(request.Account, request.Password);
         if (!outcome.Ok || !_services.Registry.TryGet(outcome.SessionToken, out var session))
         {
             if (outcome.Failure == LoginFailure.BadCredentials)
@@ -483,13 +499,15 @@ internal sealed partial class ClientSession : IMovementVerdictSink
             throw;
         }
 
+        // A Remember login is given a new token; a token login keeps the one it used.
+        var remember = request.Mode == LoginMode.Remember ? await _services.Auth.RememberAsync(session.AccountId) : string.Empty;
         Volatile.Write(ref _token, outcome.SessionToken);
         _session = session;
-        SendLoginResult(LoginFailure.None);
+        SendLoginResult(LoginFailure.None, remember);
     }
 
-    private void SendLoginResult(LoginFailure failure) =>
-        SendLarge(new LoginResultPacket(failure).Write, LoginResultPacket.Size);
+    private void SendLoginResult(LoginFailure failure, string rememberToken = "") =>
+        SendLarge(new LoginResultPacket(failure, rememberToken).Write, LoginResultPacket.MaxSize);
 
     private async Task SendCharacterListAsync(string token)
     {

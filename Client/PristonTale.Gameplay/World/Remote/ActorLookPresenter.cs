@@ -99,6 +99,7 @@ public sealed class ActorLookPresenter
         var sample = glow.Sample(nowMs);
         var overlay = look.Overlay;
         var form = look.OverlayForm;
+        var scroll = look.OverlayScroll;
         if (glow.MixTexture.Length > 0)
         {
             if (!_mixOverlays.TryGetValue(glow.MixTexture, out overlay))
@@ -108,6 +109,7 @@ public sealed class ActorLookPresenter
             }
 
             form = (uint)glow.MixScroll;
+            scroll = glow.Look is { } aging ? new Vector2(aging.ScrollU, aging.ScrollV) : Vector2.Zero;
             if (_overlays.Add(overlay))
             {
                 _ = _scene.PrepareActorOverlayAsync(overlay);
@@ -120,6 +122,7 @@ public sealed class ActorLookPresenter
             Opacity = look.Opacity * sample.Opacity,
             Overlay = overlay,
             OverlayForm = form,
+            OverlayScroll = scroll,
             Scale = look.Scale * sample.Scale
         });
         _glowing.Add(handle);

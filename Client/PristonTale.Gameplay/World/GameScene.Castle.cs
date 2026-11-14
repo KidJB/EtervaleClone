@@ -21,6 +21,17 @@ public sealed partial class GameScene
 
     public void SendAchievementTitle(uint id) => SendSocial(_playChannel?.SendAchievementTitleAsync(id, _presenceCts.Token), "Achievement title");
 
+    public void SendPartyFinderSettings(Protocol.Packets.PartyFinderSettingsPacket settings) =>
+        SendSocial(_playChannel?.SendPartyFinderSettingsAsync(settings, _presenceCts.Token), "PartyFinderSettings");
+
+    public void SendPartyFinderJoin(ulong leaderId, string password) =>
+        SendSocial(_playChannel?.SendPartyFinderJoinAsync(leaderId, password, _presenceCts.Token), "PartyFinderJoin");
+
+    public void SendPartyFinderRequest() => SendSocial(_playChannel?.SendPartyFinderRequestAsync(_presenceCts.Token), "PartyFinder");
+
+    public void SendRankingsRequest(Protocol.Packets.RankingBoard board, byte job) =>
+        SendSocial(_playChannel?.SendRankingsRequestAsync(board, job, _presenceCts.Token), "Rankings");
+
     public void SendAchievementsRequest() => SendSocial(_playChannel?.SendAchievementsRequestAsync(_presenceCts.Token), "Achievements");
 
     public void SendBellatraClan(BellatraClanAction action, ulong npcId, long amount) =>

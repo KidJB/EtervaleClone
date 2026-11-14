@@ -20,6 +20,12 @@ public sealed class TextInputField
 
     public void Clear() => _text.Clear();
 
+    public void Set(string text)
+    {
+        _text.Clear();
+        _text.Append(text.AsSpan(0, Math.Min(text.Length, MaxLength)));
+    }
+
     // The characters the window typed since the last frame (TypedText): the system's own key repeat makes a held
     // Backspace ('\b') or letter repeat, as in any text box. The characters Accepts allows are taken.
     public void Update(ReadOnlySpan<char> typed, double dtSeconds)

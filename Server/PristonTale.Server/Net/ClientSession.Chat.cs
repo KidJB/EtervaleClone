@@ -27,11 +27,11 @@ internal sealed partial class ClientSession
 
         if (input.Party)
         {
-            await _services.Chat.PartyAsync(session.EntityId, input.Text);
+            await _services.Chat.PartyAsync(session.EntityId, input.Text, input.ItemId);
         }
         else
         {
-            await _services.Chat.SayAsync(session.EntityId, input.Text);
+            await _services.Chat.SayAsync(session.EntityId, input.Text, input.ItemId);
         }
     }
 
@@ -67,7 +67,11 @@ internal sealed partial class ClientSession
 
     private void SendChat(ChatLine line)
     {
-        var packet = new ChatLinePacket(line.Kind, line.SpeakerId, line.Text, line.Line);
+        var packet = new ChatLinePacket(line.Kind, line.SpeakerId, line.Text, line.Line)
+        {
+            Item = line.Item is { } item ? ItemWireMapping.StoreItem(item) : null,
+            Detail = line.Item is { } linked ? ItemWireMapping.Detail(linked) : null
+        };
         SendLarge(packet.Write, ChatLinePacket.MaxSize);
     }
 

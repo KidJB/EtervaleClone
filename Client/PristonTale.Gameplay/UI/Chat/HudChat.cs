@@ -22,8 +22,52 @@ public sealed class HudChat
     private double _updatedMs;
     private HudChatTab _updatedTab;
 
-    // Sends a typed line (party: the party channel); set by the screen.
-    public Func<string, bool, Task> Send { get; set; }
+    // Sends a typed line (party: the party channel) with the item linked into it; set by the screen.
+    public Func<string, bool, Guid, Task> Send { get; set; }
+
+    // The lines Ctrl+F1 to Ctrl+F10 type (client-settings.json chatMacros); set by the HUD.
+    public IReadOnlyList<string> Macros { get; set; } = [];
+
+    // The system clipboard (Ctrl+C, Ctrl+X, Ctrl+V); tests replace it.
+    public Func<string> ReadClipboard { get; set; } = Clipboard.GetText;
+    public Action<string> WriteClipboard { get; set; } = Clipboard.SetText;
+
+    private static readonly Keys[] MacroKeys = [Keys.F1, Keys.F2, Keys.F3, Keys.F4, Keys.F5, Keys.F6, Keys.F7, Keys.F8, Keys.F9, Keys.F10];
+
+    // Links an item into the open input line (Shift and a click on a bag or worn item); false when the input is closed.
+    public bool LinkItem(PristonTale.Simulation.Characters.OwnedItemView item)
+    {
+        if (!Window.Focused)
+        {
+            return false;
+        }
+
+        Window.Input.Link(item.InstanceId, LinkName(item));
+        _linked = item;
+        return true;
+    }
+
+    // The name a link shows: an Uncommon or rarer item's grade first and its aging after ("Legendary Wand +20"); an item
+    // without details keeps its plain name.
+    internal static string LinkName(PristonTale.Simulation.Characters.OwnedItemView item)
+    {
+        if (item.Details is not { } details)
+        {
+            return item.Name;
+        }
+
+        var level = details.UpgradeLevel;
+        var prefix = level > 0 ? "+" + level + " " : "";
+        var name = prefix.Length > 0 && item.Name.StartsWith(prefix, StringComparison.Ordinal) ? item.Name[prefix.Length..] : item.Name;
+        if (details.Rarity > PristonTale.Simulation.Items.ItemRarity.Common)
+        {
+            name = PristonTale.Simulation.Items.ItemRarities.Names[(int)details.Rarity] + " " + name;
+        }
+
+        return level > 0 ? name + " +" + level : name;
+    }
+
+    private PristonTale.Simulation.Characters.OwnedItemView _linked;
 
     // What the client knows of an entity in view (HudCombat): its kind and a summon's owner.
     public Func<ulong, (EntityKind Kind, ulong OwnerId)> Lookup { get; set; } = static _ => (EntityKind.None, 0);
@@ -64,13 +108,13 @@ public sealed class HudChat
             Bubbles.Say(line.SpeakerId, text, nowMs, ChatRules.OtherBubbleMs);
             if (kind == EntityKind.Player)
             {
-                Window.Log.Add(text, ChatKind.Player);
+                Window.Log.Add(text, ChatKind.Player, line.Item);
             }
 
             return;
         }
 
-        Window.Log.Add(text, line.Kind);
+        Window.Log.Add(text, line.Kind, line.Item);
         if (HudChatWindow.WhisperPartnerOf(line.Kind, text) is { } partner)
         {
             WhisperPartner?.Invoke(partner);
@@ -104,6 +148,13 @@ public sealed class HudChat
         Window.SendClicked ??= SendTyped;
         bool Pressed(Keys key) => keyboard.IsKeyDown(key) && !previous.IsKeyDown(key);
         var control = keyboard.IsKeyDown(Keys.LeftControl) || keyboard.IsKeyDown(Keys.RightControl);
+        if (control && Macro(Pressed) is { Length: > 0 } macro)
+        {
+            Window.OpenInput();
+            Window.Input.Set(macro);
+            return;
+        }
+
         if (!Window.Focused)
         {
             if (Pressed(Keys.Enter) && !control)
@@ -112,6 +163,16 @@ public sealed class HudChat
             }
 
             return;
+        }
+
+        if (Pressed(Keys.Tab))
+        {
+            Window.Input.Set("/CLAN> ");
+        }
+
+        if (control)
+        {
+            EditKeys(Pressed(Keys.A), Pressed(Keys.C), Pressed(Keys.X), Pressed(Keys.V));
         }
 
         foreach (var character in typed)
@@ -152,6 +213,45 @@ public sealed class HudChat
         }
     }
 
+    // Ctrl+A selects the line, Ctrl+C copies it, Ctrl+X cuts it and Ctrl+V pastes the clipboard.
+    private void EditKeys(bool selectAll, bool copy, bool cut, bool paste)
+    {
+        var input = Window.Input;
+        if (selectAll)
+        {
+            input.SelectAll();
+        }
+
+        if (copy && input.Text.Length > 0)
+        {
+            WriteClipboard(input.Copied);
+        }
+
+        if (cut && input.Text.Length > 0)
+        {
+            WriteClipboard(input.Cut());
+        }
+
+        if (paste && ReadClipboard() is { Length: > 0 } text)
+        {
+            input.Paste(text);
+        }
+    }
+
+    // The macro of the Ctrl+F key pressed this frame, or null.
+    private string Macro(Func<Keys, bool> pressed)
+    {
+        for (var index = 0; index < MacroKeys.Length && index < Macros.Count; index++)
+        {
+            if (pressed(MacroKeys[index]))
+            {
+                return Macros[index];
+            }
+        }
+
+        return null;
+    }
+
     // The send button beside the input line does what Enter does.
     private void SendTyped()
     {
@@ -173,6 +273,7 @@ public sealed class HudChat
         if (complaint is not null)
         {
             Bubbles.Say(SelfId, complaint, nowMs, ChatRules.FloodPenaltyMs);
+            Bubbles.Emote(SelfId, HudEmotes.Art[HudEmotes.Crying - 1], nowMs);
         }
 
         if (send is not { } line)
@@ -181,18 +282,20 @@ public sealed class HudChat
             return;
         }
 
+        var linked = line.ItemId != Guid.Empty && _linked?.InstanceId == line.ItemId ? _linked : null;
+        _linked = null;
         switch (line.Kind)
         {
             case HudChatSendKind.Spoken:
-                Window.Log.Add(line.Shown, ChatKind.Player);
+                Window.Log.Add(line.Shown, ChatKind.Player, linked);
                 Bubbles.Say(SelfId, line.Shown, nowMs, ChatRules.SelfBubbleMs);
                 break;
             case HudChatSendKind.Party:
-                Window.Log.Add(line.Shown, ChatKind.Party);
+                Window.Log.Add(line.Shown, ChatKind.Party, linked);
                 break;
         }
 
-        _ = Send?.Invoke(line.Text, line.Kind == HudChatSendKind.Party);
+        _ = Send?.Invoke(line.Text, line.Kind == HudChatSendKind.Party, line.ItemId);
     }
 
     // Whether a player is in the local player's party (its name takes the party colour).

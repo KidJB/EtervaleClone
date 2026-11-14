@@ -94,9 +94,22 @@ OpeningScreen --login ok--> CharacterSelectScreen --enter world ok--> GameplaySc
 - `GameScreen` lifecycle: `Enter` (after the previous screen is disposed), `Update`, `Draw`, `HandleEscape`, `Dispose`.
 - A screen requests a transition with `Context.RequestScreen(next)`. `GameClient` stores it as pending and swaps after
   the current `Update` returns: `Dispose` old, then `Enter` new. Never swap from `Draw`.
-- `OpeningScreen`: cinematic (`StartImage/Opening/Map/stage.smd` and its camera path); any key or the end of the
-  cinematic reveals the login form. `OpeningLoginController` starts `IGameBackend.LoginAsync` and polls the task each
-  frame. The server accepts one login per connection, so when `IGameBackend.RequiresNewConnection` is set (a login
+- `OpeningScreen`: with `Video/login.etv` present, the login form shows at once over that looping, silent background
+  video (`LoginVideo`: a thread-pool task decodes frames up to three ahead, `Update` uploads the due one into one
+  texture, `Draw` fills the window without stretching, cropping the overflow; the format is `FrameVideo` in
+  `Engine3D/IO`, made with `ptdump --pack-video`, see docs/tools.md). Without it the opening cinematic
+  (`StartImage/Opening/Map/stage.smd` and its camera path) plays and any key or its end reveals the form. The form
+  (`LoginPanel`, places in `LoginLayout`'s 1024x768 design space scaled to fit) draws `Hud/Login/*.png` (atlas frames
+  stand in while they are missing): Game settings opens the in-play settings window (`HudSettingsPanel`, Escape
+  closes it), the Recent Accounts panel lists `recentAccounts` (a click fills the account and focuses the password)
+  and folds away by its tab, Exit quits. Each row shows under the account the character it last played
+  (`recentCharacters`: recorded by `CharacterSelectScreen` on entering the world, its level followed by
+  `GameplayScreen` as it rises). `OpeningLoginController` starts `IGameBackend.LoginAsync` and polls the task each
+  frame; a success records the account in `recentAccounts`. Remember me (ticked while a token is kept) logs in with
+  `LoginMode.Remember` and keeps the token the result carries in `rememberedAccount`/`rememberToken`; with that account
+  typed and the password left empty the field shows as filled and the login sends `LoginMode.Token` with the token. A
+  token refused as bad credentials (expired or replaced) is forgotten with a notice to type the password; unticking the
+  box, or a plain password login of that account, forgets it too. The server accepts one login per connection, so when `IGameBackend.RequiresNewConnection` is set (a login
   succeeded or the connection closed) the controller first calls `ScreenContext.RenewBackend`: `GameClient` installs a
   new `GameServerConnection` and disposes the old one off the game thread.
 - `CharacterSelectScreen`: sub-states `CharacterSelect`, `RaceSelect`, `JobSelect`, `FaceSelect`, `Name`. The roster
@@ -937,9 +950,24 @@ All, Clan, Party, Trade and PM tabs, a notice button that cycles chat only, the 
 The action bar is 424x96 with nine by two 41-pixel slots, three page tabs, lock, turn and close buttons; turned, it is 96x424. Dragging any part of it that is not a slot or button moves it.
 
 Achievements (`HudAchievements`, key Y or the button left of the minimap, art `assets/Hud/Achievements/`) ask the server for the player's badges and show one a page. The first player of each class to reach level 115, 125, 130 or 145 holds its top badge, announced to everyone (`WorldServer.StepAchievements`, `AchievementAppService`); game masters do not claim them, and an administrator grants the staff badges with `/achievement <player> <id>`. Each badge page has an Activate or Hide title button (saved per character); without a choice the player's best badge (`AchievementRules.TitleOf`) shows to everyone as the top `< title >` line of its name box, beside the clan emblem at its full 32 pixels, also when it earns one in play (`EntityDescriptionPacket` from version 7), and a titled player always has its name box shown.
+
+Rankings (`HudRankings`, key H, art `assets/Hud/Rankings/`, the rank-list window): tabs down the left choose the level
+board of all classes, of each class (Martial Artist on the plain tab with its name) or Bellatra's best clans of the day
+before (`RankingsRequest`, answered by `Rankings`); the top bar titles the columns and the list shows up to 100 lines
+with medals for the first three, class icons, level, experience share and clan (or a clan's points), scrolls by the
+wheel and highlights the player's own line. Close or H shuts it.
 The Settings window (`HudSettingsPanel`, art `assets/Hud/Settings/`) has four tabs (Video, Audio, General, UI) and one dropdown per option; a choice applies at once, Shift+click steps an option back, and Reset returns to the values at opening.
 The windows drawn with `HudPainter.HelpBox` (NPC dialogs, quests, help, settings, clans, castle and Bellatra pages, the wing gate) use the RPT frame, title plate and OK button (`assets/Hud/Window/`), and text fields `HudPainter.InputBox` (same folder).
-Every confirmation and count box uses `HudMessageBox` (art `assets/Hud/MessageBox/`), every tooltip `HudPainter.InfoBox` (art `assets/Hud/Tooltip/`), and the party frames' menu the art of `assets/Hud/Menu/`.
+Every confirmation and count box uses `HudMessageBox` (art `assets/Hud/MessageBox/`), every tooltip `HudPainter.InfoBox` (art `assets/Hud/Tooltip/`), and the party frames' menu the art of `assets/Hud/Menu/`.
+
+Party finder (`HudPartyFinder`, key F, its own art `assets/Hud/PartyFinder/pt_*.png` drawn by `tools/ui/build_party_finder.py`, the titles and labels written over it): two tabs over the list. All Group asks for the
+parties with room that are not closed (`PartyFinderRequest`, answered by `PartyFinder`): each leader's class icon and
+name and the other members' icons; a click opens the party's information beside it (the field and its level from
+`WorldCatalog`, the classes it takes, its average level, party mode and join mode, its members) whose Join sends
+`PartyFinderJoin` (with a password box when the party asks one). My Group shows the player's party and, for its leader,
+the settings panel: join mode (Open, Approval, Closed, Password), lowest level, password and class check boxes; Save
+sends `PartyFinderSettings`. The text boxes take the keyboard while focused. Both windows drag by their top strip
+(`HudWindowDrag`); the close buttons, F or Escape shut them.
 
 ## Graphics tuning panel
 

@@ -47,8 +47,8 @@ character).
 
 | Direction | Message | Body |
 | --- | --- | --- |
-| Client to server | `ChatSay` `0x45540C01` | `uint8 Party (0 spoken line or command, 1 party), uint8 0, text` |
-| Server to client | `ChatLine` `0x45540C00` | `uint8 Kind, uint8 0, uint64 Speaker (0 for server lines), text, game text Line`: over the speaker when the receiver sees it, else in the log. A server line of the game (party, trade, contacts, whisper answers, gifts, sales) is `Line`, which the client words in its language; what players say and game-master lines are `text`, shown as they are |
+| Client to server | `ChatSay` `0x45540C01` | `uint8 Party (0 spoken line or command, 1 party), uint8 0, text, Guid ItemId` (the linked item; empty for none) |
+| Server to client | `ChatLine` `0x45540C00` | `uint8 Kind, uint8 0, uint64 Speaker (0 for server lines), text, game text Line, uint8 Linked, then {StoreItemEntry, ItemDetailEntry} when 1` (the item the speaker linked): over the speaker when the receiver sees it, else in the log. A server line of the game (party, trade, contacts, whisper answers, gifts, sales) is `Line`, which the client words in its language; what players say and game-master lines are `text`, shown as they are |
 | Server to client | `CloseRequest` `0x45540D03` | The client saves nothing more and quits (the shutdown) |
 
 Kinds: 0 server, 1 whisper, 2 system, 3 notice, 4 party, 5 clan, 6 trade, 9 assistant; a player's spoken line carries
@@ -92,14 +92,31 @@ Market commands (`/market_listings`, `/market_sales`, `/market_remove`, `/market
 ## Client chat window
 
 - Default window at (0,408), 305x210 logical pixels, 12 lines; with the status, skill or inventory window open it
-  shrinks to (0,294), 300x116, 8 lines. Lines wrap at 264 pixels; the newest sits at the bottom. The UI font is taller than the
+  shrinks to (0,294), 300x116, 8 lines, unless the centred bottom interface puts those windows clear of it
+  (`CenterOffset` at least the window's right edge), where it stays put. Lines wrap at 264 pixels; the newest sits at the bottom. The UI font is taller than the
   classic 12-pixel line, so each block shows as many lines as fit its classic area.
-- Tabs at the bottom: All, Clan, Party, Trade, Whisper; each holds 64 lines and scrolls back 32 (Page Up, Page Down).
+- Tabs at the bottom: All, Clan, Party, Raid, Trade, Whisper (raid lines, `[Raid] ...`, file under Raid); each holds 64 lines and scrolls back 32 (Page Up, Page Down).
   The notice button cycles the assistant lines: off, a 3-line split above the chat, the assistant page.
 - Colours: server (255,128,96), whisper (150,190,255), notice (230,160,255), party (200,255,0), clan (255,255,80),
   trade (200,255,255), assistant (200,128,128), players (255,255,192).
-- Enter opens the input or sends; Escape closes the window before anything else; Up and Down recall the last 16
+- The window is open (without the keyboard) when the player enters the world. Enter opens the input or sends; a click in the world (to move or act) lets go of the input, keeping what was typed; Escape closes the window before anything else; Up and Down recall the last 16
   commands (by first word). The input holds 78 characters. Typing suppresses the HUD and movement keys.
+- `$text` goes to the trade channel and `#text` to the raid (`/raid`); the Raid tab sends there too. Tab puts `/CLAN> `
+  in the line. Ctrl+F1 to Ctrl+F10 type the `chatMacros` lines of `client-settings.json`.
+- Shift and a click on a bag or worn item while the line is open links it: its name in brackets joins the line (an Uncommon or rarer item's grade first and its aging after, "[Legendary Wand +20]"; `HudChat.LinkName`), and the
+  line goes with the item's id (`ChatSay` version 2). The server links only an item the speaker still holds
+  (`WorldServer.LinkedItemAsync`) and sends it with every copy of the line (`ChatLine.Item`, `ChatLine` version 2); the
+  bracketed item name shows in its rarity grade's colour (Uncommon and up, `HudRarityColors`; yellow otherwise) (the speaker and the rest of the line keep the channel's colour,
+  `HudChatWindow.SplitLink`) and the item's tooltip opens while the pointer is on that name.
+- Ctrl+A selects the input line (drawn highlighted): typing replaces it, Backspace erases it. Ctrl+C copies the line,
+  Ctrl+X cuts it and Ctrl+V pastes the system clipboard (MonoGame fork's `Clipboard`, issue 020) in place of a
+  selection; line breaks and tabs become spaces, other control characters are dropped, and the line stops at its limit.
+- An emote word (`/sweat`, `/love`, ... `/pogchamp`, `HudEmotes`) goes as its code `e1` to `e20`; a line that is only a
+  code shows the icon `assets/Hud/Emotes/emoteN.png` after the speaker's name, and over the speaker the emote replaces the
+  speech bubble: it pops up, bobs and fades out over five seconds (`HudChatBubbles.Emote`). A chat frozen for flooding
+  also shows emote 6 (crying) over the player.
+- The window drags by its log within the screen (`HudChatWindow.Drag`, `Offset`) and darkens while the player types. A
+  Discord button beside the send button opens `HudChatLinks.DiscordInvite` in the browser; an empty invite hides it.
 - On the All tab a line is spoken; on the Clan and Trade tabs it is prefixed `/CLAN> ` or `/TRADE> `; on the Party tab,
   or with a leading `@`, it goes as party chat. After a whisper the input keeps `/:name ` for the next line. The classic
   routing marks `~/` (every server) and `` `/ `` (the data server) are dropped before a command is sent, and the server

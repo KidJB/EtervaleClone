@@ -81,6 +81,8 @@ public sealed partial class GameplayHud : IDisposable
     private int _questDialogs;
     private readonly HudSettingsPanel _settings;
     private readonly HudAchievements _achievements = new();
+    private readonly HudRankings _rankings = new();
+    private readonly HudPartyFinder _partyFinder = new();
     private readonly HudMinimap _minimap = new();
     private readonly HudBossTime _bossTime = new();
     private const string AutoSkillArt = "Hud/autoskill.png";
@@ -169,7 +171,7 @@ public sealed partial class GameplayHud : IDisposable
         _sprites = new HudSprites(context.GraphicsDevice, context.AssetRoot, context.Log);
         _sprites.Request(HudArt.Static);
         _sprites.Request([.. HudMinimap.Art, .. Npc.HudArenaEvent.Art, .. Npc.HudCabinet.Art, .. HudWorldBuffs.Art, .. HudCombat.TargetBarArt, AutoSkillArt, .. HudQuestBook.Art, .. HudQuestTracker.Art, .. HudPetWindow.Art, .. Inventory.HudItemFrame.Art, Widgets.HudGroundLabels.BeamArt, .. HudCoinShop.Art, .. Npc.HudItemBox.Art, .. Markets.HudMarketplace.Art, .. Markets.HudCharacterMarket.Art]);
-        _arenaEvent.Teleport = () => _ = _chat.Send?.Invoke("/arena enter", false);
+        _arenaEvent.Teleport = () => _ = _chat.Send?.Invoke("/arena enter", false, Guid.Empty);
         _sprites.Request(HudNpcArt.All);
         _sprites.Request(HudCraftArt.All);
         _sprites.Request(HudArt.BlockText);
@@ -179,7 +181,7 @@ public sealed partial class GameplayHud : IDisposable
         _painter = new HudPainter(context.SpriteBatch, context.Font, _sprites);
         _icons = new HudItemIcons(context.GraphicsDevice, context.AssetRoot, context.Log);
         _icons.Request([PetSkins.IconKey]);
-        _personalShop = new HudPersonalShopController(context.Log) { Notify = _notice.Show, Command = line => _ = _chat.Send?.Invoke(line, false), AskCount = (first, second, maximum, accepted) => _countBox.Open(first, second, maximum, accepted) };
+        _personalShop = new HudPersonalShopController(context.Log) { Notify = _notice.Show, Command = line => _ = _chat.Send?.Invoke(line, false, Guid.Empty), AskCount = (first, second, maximum, accepted) => _countBox.Open(first, second, maximum, accepted) };
         _benches = [_aging, _mix, _smelting, _manufacture, _mixtureReset];
         _serviceWindows = [_shop, _warehouse, .. _benches, _personalShop.Window, _trade];
         _sprites.Request(HudPersonalShopArt.All);
@@ -234,6 +236,8 @@ public sealed partial class GameplayHud : IDisposable
         _sprites.Request(HudMessageBox.Art);
         _sprites.Request(HudSettingsPanel.Art);
         _sprites.Request(HudAchievements.Art);
+        _sprites.Request(HudRankings.Art);
+        _sprites.Request(HudPartyFinder.Art);
         _sprites.Request(HudChatBubbles.Art);
         _chat.Lookup = id => (Combat.KindOf(id, out var owner), owner);
         _helpPet = new HudHelpPet(HelpPetMessages.LoadAsync(context.AssetRoot, context.Log, ClientText.Language), new Random(), context.Log,
@@ -565,6 +569,8 @@ public sealed partial class GameplayHud : IDisposable
         _social.Hide();
         _tuning.Hide();
         _achievements.Hide();
+        _rankings.Hide();
+        _partyFinder.Hide();
         _npcOpen = false;
         _settingsOpen = false;
         _systemMenu = false;
@@ -683,6 +689,14 @@ public sealed partial class GameplayHud : IDisposable
         {
             _partyWindow.Clan.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
         }
+        else if (_rankings.Contains(layout, pointer))
+        {
+            _rankings.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
+        }
+        else if (_partyFinder.Contains(layout, pointer))
+        {
+            _partyFinder.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
+        }
         else if (_npcOpen && HudNpcPanel.Box.Contains(pointer))
         {
             _npc.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
@@ -753,12 +767,15 @@ public sealed partial class GameplayHud : IDisposable
         _hoveredToggle = ToggleAt(design);
         UpdateHelpPet(state, layout, pointer, design, mouse, _clock.Elapsed.TotalMilliseconds);
         UpdateHelp(state);
+        _chat.Window.Drag(layout, mouse, _previousMouse, pointer, ChatYields(layout));
+        _partyFinder.Drag(layout, mouse, _previousMouse, pointer);
+        _chat.Macros = _context.Presentation.Requested.ChatMacros;
         var clicked = mouse.LeftButton == ButtonState.Pressed && _previousMouse.LeftButton == ButtonState.Released;
         // A click the HUD takes stays its own when it closes the window under it (a close button over the ground).
         var clickTaken = clicked && Captures(layout, pointer, design);
         var typedText = _context.TypedText.Drain();
         // A count box or the shop's sign box takes the keyboard: neither the chat nor a game key sees what is typed there.
-        var boxTyping = _countBox.IsOpen || _personalShop.SignOpen || _petWindow.Naming || _itemBox.Naming || _cabinet.Searching || _marketplace.Searching || _characterMarket.Typing || _clanWindow.Typing;
+        var boxTyping = _countBox.IsOpen || _personalShop.SignOpen || _petWindow.Naming || _itemBox.Naming || _cabinet.Searching || _marketplace.Searching || _characterMarket.Typing || _clanWindow.Typing || _partyFinder.Typing;
         if (_countBox.IsOpen)
         {
             _typingKeyboard = keyboard;
@@ -777,6 +794,10 @@ public sealed partial class GameplayHud : IDisposable
         {
             _characterMarket.Type(typedText, elapsedSeconds);
         }
+        else if (_partyFinder.Typing)
+        {
+            _partyFinder.Type(typedText, elapsedSeconds);
+        }
         else if (_cabinet.Searching)
         {
             _cabinet.Type(typedText, elapsedSeconds);
@@ -792,7 +813,7 @@ public sealed partial class GameplayHud : IDisposable
             _petWindow.Type(typedText, elapsedSeconds, _typedKey ??= key => Pressed(_typingKeyboard, key));
             if (_petWindow.TakeRequest() is { } command)
             {
-                _ = _chat.Send?.Invoke(command, false);
+                _ = _chat.Send?.Invoke(command, false, Guid.Empty);
             }
         }
         else if (_clanWindow.Typing)
@@ -889,7 +910,13 @@ public sealed partial class GameplayHud : IDisposable
             ModalOpen || _settingsOpen);
         _bindings.Update(typing ? default : keyboard, mouse, hoveredSkill);
         SaveActionBar();
-        PointerCaptured = clickTaken || Captures(layout, pointer, design) || _chat.Window.Contains(layout, pointer, SideWindowOpen) || _inventory.Dragging != Guid.Empty || _warehouse.Dragging != Guid.Empty;
+        PointerCaptured = clickTaken || Captures(layout, pointer, design) || _chat.Window.Contains(layout, pointer, ChatYields(layout)) || _inventory.Dragging != Guid.Empty || _warehouse.Dragging != Guid.Empty;
+        // A click in the world (to move or act) lets go of the chat's input line, keeping what was typed.
+        if (clicked && !PointerCaptured && _chat.Window.Focused)
+        {
+            _chat.Window.Unfocus();
+        }
+
         _inventory.PickupLocked = PlayerActing || storedCarried;
         _inventory.ActionStarts = PlayerActionStarts;
         _inventory.Update(state, layout, _inventorySlide.FullyOpen && !_settingsOpen && !ModalOpen, keyboard, mouse);
@@ -899,6 +926,10 @@ public sealed partial class GameplayHud : IDisposable
 
     // A status, skill or inventory window shrinks the chat window above it.
     private bool SideWindowOpen => _inventorySlide.Visible || _statusSlide.Visible || _skillSlide.Visible;
+
+    // The chat shrinks out of a side window's way only where that window reaches it: with the bottom interface centred on
+    // a screen wide enough, the windows open beside the chat and it stays put.
+    private bool ChatYields(HudLayout layout) => SideWindowOpen && layout.CenterOffset < HudChatWindow.Box(layout, false).Right;
 
     private long QuestTimeLeftMs => _questView is null ? 0 : Math.Max(0, _questView.TimerMs - (long)(_clock.Elapsed.TotalMilliseconds - _questViewMs));
 
@@ -950,6 +981,7 @@ public sealed partial class GameplayHud : IDisposable
         Combat.DrawNamePlates(_painter, layout, Overhead, HoveredId, TracedId, _context.Presentation.Requested.ClassicNamePlates);
         DrawPetLabels(layout);
         _chat.Bubbles.Signs = ShopSigns;
+        _chat.Bubbles.PlateTops = Combat.PlateTops;
         _chat.Bubbles.Visited = _personalShop.Visited;
         _chat.Bubbles.Draw(_painter, layout, _clock.Elapsed.TotalMilliseconds, Overhead, _nameColor ??= id => _chat.NameColor(id, TargetId), TargetId);
         if (_helpPet.Bubble is { } petLine && HelperPet.Point is { } petPoint)
@@ -986,7 +1018,7 @@ public sealed partial class GameplayHud : IDisposable
         _siegeBoard.Draw(_painter, layout, InCastleField, _clock.Elapsed.TotalMilliseconds, Combat.OwnClan);
         _bellatraBoard.Draw(_painter, layout);
         _personalShop.Draw(_painter);
-        _chat.Window.Draw(_painter, layout, SideWindowOpen, pointer);
+        _chat.Window.Draw(_painter, layout, ChatYields(layout), pointer);
 
         if (_statusSlide.Visible)
         {
@@ -1028,6 +1060,8 @@ public sealed partial class GameplayHud : IDisposable
         }
 
         _achievements.Draw(_painter, layout, pointer);
+        _rankings.Draw(_painter, layout, pointer);
+        _partyFinder.Draw(_painter, layout, pointer);
 
         var incoming = OwnedItemView.Find(_state?.Items, _inventory.Dragging);
         var serviceFrame = new HudServiceFrame(_painter, layout, _icons, _state, pointer, incoming, _settingsOpen, _clock.Elapsed.TotalMilliseconds);
@@ -1224,6 +1258,7 @@ public sealed partial class GameplayHud : IDisposable
         _painter.Flush();
         DrawMinimapName(layout, pointer);
         _actionBar.DrawOverlay(_painter, layout, _state, _icons, _skillHud, pointer);
+        DrawChatLink(layout, pointer);
         _painter.Flush();
         _notice.Draw(_painter, layout);
         _painter.End();
@@ -1310,6 +1345,25 @@ public sealed partial class GameplayHud : IDisposable
             BuffsCollapsed = _worldBuffs.Collapsed
         });
     }
+
+    // The tooltip of an item linked in the chat line under the pointer.
+    private void DrawChatLink(HudLayout layout, Point pointer)
+    {
+        if (_chat.Window.HoveredItem is not { } item || _state is null)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(item, _chatLinkShown))
+        {
+            (_chatLinkShown, _chatLinkLines) = (item, HudItemDetailTooltip.Lines(item, _state, "", ""));
+        }
+
+        HudItemDetailTooltip.Draw(_painter, layout, pointer, _chatLinkLines, null, HudItemDetailTooltip.RarityOf(item));
+    }
+
+    private OwnedItemView _chatLinkShown;
+    private List<(string Text, Color Color)> _chatLinkLines;
 
     private HudLayout Layout() => HudLayout.Of(_context.GraphicsDevice.Viewport, _context.Presentation.Requested.CenteredInventory);
 

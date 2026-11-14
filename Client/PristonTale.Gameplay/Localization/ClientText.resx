@@ -582,10 +582,13 @@ go on to the high tower.</value></data>
   <data name="Login.Failure.LoginDenied" xml:space="preserve"><value>The account is blocked.</value></data>
   <data name="Login.Failure.None" xml:space="preserve"><value>Login failed.</value></data>
   <data name="Login.Failure.OutdatedClient" xml:space="preserve"><value>This client is older than the server requires.</value></data>
-  <data name="Login.Hint" xml:space="preserve"><value>Connect to the game server</value></data>
+  <data name="Login.Exit" xml:space="preserve"><value>Exit</value></data>
   <data name="Login.LogIn" xml:space="preserve"><value>Log in</value></data>
   <data name="Login.Password" xml:space="preserve"><value>Password</value></data>
-  <data name="Login.Subtitle" xml:space="preserve"><value>Your adventure begins here</value></data>
+  <data name="Login.RecentCharacter" xml:space="preserve"><value>{0} - Lv.{1} {2}</value></data>
+  <data name="Login.RememberMe" xml:space="preserve"><value>Remember me</value></data>
+  <data name="Login.Settings" xml:space="preserve"><value>Game settings</value></data>
+  <data name="Login.TokenExpired" xml:space="preserve"><value>Your saved login has expired. Enter your password.</value></data>
   <data name="Login.Unreachable" xml:space="preserve"><value>Could not reach the game server.</value></data>
   <data name="Loot.Gold" xml:space="preserve"><value>{0} Gold</value></data>
   <data name="Manufacture.Done" xml:space="preserve"><value>The item was manufactured.</value></data>
@@ -1015,4 +1018,49 @@ go on to the high tower.</value></data>
   <data name="CharSelect.EnterFailure.ListedForSale" xml:space="preserve">
     <value>This character is listed on the Character Market. Cancel the listing to play it.</value>
   </data>
+  <data name="Rankings.Clan" xml:space="preserve"><value>Clan</value></data>
+  <data name="Rankings.Empty" xml:space="preserve"><value>No one is ranked yet.</value></data>
+  <data name="Rankings.Exp" xml:space="preserve"><value>Exp</value></data>
+  <data name="Rankings.LevelColumn" xml:space="preserve"><value>Lv.</value></data>
+  <data name="Rankings.Loading" xml:space="preserve"><value>Loading…</value></data>
+  <data name="Rankings.Name" xml:space="preserve"><value>Name</value></data>
+  <data name="Rankings.Place" xml:space="preserve"><value>#</value></data>
+  <data name="Rankings.Points" xml:space="preserve"><value>Points</value></data>
+  <data name="Rankings.Unavailable" xml:space="preserve"><value>The rankings are unavailable right now.</value></data>
+  <data name="PartyFinder.Level" xml:space="preserve"><value>Party level: {0}</value></data>
+  <data name="PartyFinder.Loading" xml:space="preserve"><value>Looking for parties…</value></data>
+  <data name="PartyFinder.Members" xml:space="preserve"><value>Party members</value></data>
+  <data name="PartyFinder.Mode.Exp" xml:space="preserve"><value>Mode: Experience</value></data>
+  <data name="PartyFinder.Mode.Hunt" xml:space="preserve"><value>Mode: Hunt</value></data>
+  <data name="PartyFinder.Mode.Normal" xml:space="preserve"><value>Mode: Normal</value></data>
+  <data name="PartyFinder.UnknownField" xml:space="preserve"><value>Unknown field</value></data>
+  <data name="Game.PartyFinderSaved" xml:space="preserve"><value>Party settings saved.</value></data>
+  <data name="Game.PartyFinderClosed" xml:space="preserve"><value>This party is closed to new members.</value></data>
+  <data name="Game.PartyFinderLevel" xml:space="preserve"><value>This party takes members from level {0}.</value></data>
+  <data name="Game.PartyFinderClass" xml:space="preserve"><value>This party does not take your class.</value></data>
+  <data name="Game.PartyFinderPassword" xml:space="preserve"><value>Wrong party password.</value></data>
+  <data name="Game.PartyFinderGone" xml:space="preserve"><value>This party has broken up or changed leader.</value></data>
+  <data name="PartyFinder.TabAll" xml:space="preserve"><value>All Group</value></data>
+  <data name="PartyFinder.TabMy" xml:space="preserve"><value>My Group</value></data>
+  <data name="PartyFinder.NoParty" xml:space="preserve"><value>You are not in a party.</value></data>
+  <data name="PartyFinder.Settings" xml:space="preserve"><value>Party Settings</value></data>
+  <data name="PartyFinder.JoinMode" xml:space="preserve"><value>Join mode:</value></data>
+  <data name="PartyFinder.Join.Open" xml:space="preserve"><value>Open</value></data>
+  <data name="PartyFinder.Join.Approval" xml:space="preserve"><value>Approval</value></data>
+  <data name="PartyFinder.Join.Closed" xml:space="preserve"><value>Closed</value></data>
+  <data name="PartyFinder.Join.Password" xml:space="preserve"><value>Password</value></data>
+  <data name="PartyFinder.MinLevel" xml:space="preserve"><value>Min level:</value></data>
+  <data name="PartyFinder.Password" xml:space="preserve"><value>Password:</value></data>
+  <data name="PartyFinder.Classes" xml:space="preserve"><value>Classes:</value></data>
+  <data name="PartyFinder.Save" xml:space="preserve"><value>Save</value></data>
+  <data name="PartyFinder.Close" xml:space="preserve"><value>Close</value></data>
+  <data name="PartyFinder.MapLevel" xml:space="preserve"><value>Map level: {0}</value></data>
+  <data name="PartyFinder.AllClasses" xml:space="preserve"><value>[All classes allowed]</value></data>
+  <data name="PartyFinder.SomeClasses" xml:space="preserve"><value>[{0} classes allowed]</value></data>
+  <data name="PartyFinder.Empty" xml:space="preserve"><value>No party has room right now.</value></data>
+  <data name="PartyFinder.Title" xml:space="preserve"><value>Party Finder</value></data>
+  <data name="PartyFinder.Information" xml:space="preserve"><value>Party Information</value></data>
+  <data name="PartyFinder.Leader" xml:space="preserve"><value>Leader</value></data>
+  <data name="PartyFinder.MembersColumn" xml:space="preserve"><value>Members</value></data>
+  <data name="PartyFinder.JoinButton" xml:space="preserve"><value>JOIN</value></data>
 </root>

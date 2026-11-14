@@ -55,6 +55,8 @@ Every change is marked `Etervale fork` in the source and has a document in `../i
   device creates its swapchain.
 
 **The fork's additions:**
+- `Clipboard.GetText`/`SetText` (`Input/Clipboard.cs`, `Platform/Native/Clipboard.Native.cs`, issue 020): the system
+  clipboard's text through the runtime.
 - `Platform/Native/Graphics.Interop.Etervale.cs`: the P/Invokes of the runtime fork's own exports, and the interface
   version check that runs before anything else (`MGG.EnsureRuntimeVersion`, issue 002).
 - `GraphicsDevice.BeginFrameCapture`/`TryPopFrame`/`EndFrameCapture`, `PresentedFrame` (`Graphics/GraphicsDevice.FrameCapture.cs`,

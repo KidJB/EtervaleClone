@@ -164,6 +164,8 @@ Since the C# half was forked too (`../issues/001-framework-from-source.md`), eac
     interface version 7): whether the SDL window is maximized, and maximizing it.
 30. **Mono pan** (`common/mg_audio.cpp`, `../issues/019-mono-pan.md`, `upstream/20-mono-pan.md`): a mono voice's right
     channel was `-pan - 1` at or left of the centre (phase inverted, louder to the left); it is `pan + 1`.
+31. **Clipboard** (`MGP_Clipboard_GetText`, `MGP_Clipboard_SetText`, `../issues/020-clipboard.md`; interface version 8):
+    the system clipboard's UTF-8 text through SDL.
 
 The runtime also prints the swapchain image count and present mode, an early submission when the uniform buffer is
 full, and a warning when two resources of one shader share a binding.

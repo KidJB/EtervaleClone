@@ -13,10 +13,10 @@ public sealed class HudAchievements
 {
     private const string Folder = "Hud/Achievements/";
     private const string ButtonArt = Folder + "achievement_btn.png";
-    private const string LeftArt = Folder + "leftarrow.png";
-    private const string LeftLit = Folder + "leftarrow_.png";
-    private const string RightArt = Folder + "rightarrow.png";
-    private const string RightLit = Folder + "rightarrow_.png";
+    internal const string LeftArt = Folder + "leftarrow.png";
+    internal const string LeftLit = Folder + "leftarrow_.png";
+    internal const string RightArt = Folder + "rightarrow.png";
+    internal const string RightLit = Folder + "rightarrow_.png";
     private const string Smoke = Folder + "background_smoke.png";
     private const int Width = 320;
     private const int Height = 260;

@@ -41,6 +41,7 @@ public sealed class GameplayScreen : GameScreen
             _scene.RequestNpcServiceAsync,
             _scene.PrepareField,
             _scene.RequestQuestAsync);
+        _hud.Chat.Window.Reveal();
         _hud.CharacterName = _scene.Player.Name;
         _hud.CharacterClass = _scene.Player.Class.Class;
         _hud.PortraitScene = _scene;
@@ -65,6 +66,10 @@ public sealed class GameplayScreen : GameScreen
         _hud.SendCastleOwner = _scene.SendCastleOwner;
         _hud.SendBellatraClan = _scene.SendBellatraClan;
         _hud.SendAchievementsRequest = _scene.SendAchievementsRequest;
+        _hud.SendRankingsRequest = _scene.SendRankingsRequest;
+        _hud.SendPartyFinderRequest = _scene.SendPartyFinderRequest;
+        _hud.SendPartyFinderSettings = _scene.SendPartyFinderSettings;
+        _hud.SendPartyFinderJoin = _scene.SendPartyFinderJoin;
         _hud.SendAchievementTitle = _scene.SendAchievementTitle;
         _hud.SendBellatraResult = _scene.SendBellatraResult;
         _hud.BellatraStage = _scene;
@@ -174,6 +179,24 @@ public sealed class GameplayScreen : GameScreen
     }
 
     private (int Field, int Level, int Party) _discordKey = (-2, 0, 0);
+    private int _recordedLevel;
+
+    // The login screen's recent accounts show this character's level as it grows.
+    private void RecordLevel()
+    {
+        var level = _scene.PlayerLevel;
+        if (level == _recordedLevel || level <= 0)
+        {
+            return;
+        }
+
+        _recordedLevel = level;
+        var settings = Context.Presentation.Requested;
+        if (settings.RecentAccounts is [var account, ..] && settings.LastCharacter(account) is { } last && last.Name == _entered.Name && last.Level != level)
+        {
+            Context.Presentation.Requested = settings.WithLastCharacter(last with { Level = level });
+        }
+    }
 
     public override void Update(GameTime gameTime)
     {
@@ -186,6 +209,7 @@ public sealed class GameplayScreen : GameScreen
 
         var field = _scene.ActiveFieldDefinition;
         ShowDiscord(field);
+        RecordLevel();
         _ = _scene.TryGetNeighbourMap(out var neighbour, out var neighbourMap);
         var mapHidden = field is not null && HudMinimap.HiddenOn(field.FieldCode, field.State);
         _hud.World = new HudWorldView(field?.Id, field?.Underground == true, _scene.ActiveMapRectangle, _scene.PlayerPosition,

@@ -28,9 +28,15 @@ internal static class ChatClientTests
         var buffer = new byte[FrameCodec.MaxFrameSize];
         var say = new ChatSayPacket(false, "/:Bob olá ✓");
         var size = say.Write(buffer);
-        Assert.True(size == 8 + 4 + 2 + System.Text.Encoding.UTF8.GetByteCount(say.Text) && BitConverter.ToInt32(buffer, 0) == size,
-            "a typed line must be {header, version, channel, UTF-8 text}");
+        Assert.True(size == 8 + 4 + 2 + System.Text.Encoding.UTF8.GetByteCount(say.Text) + 16 && BitConverter.ToInt32(buffer, 0) == size,
+            "a typed line must be {header, version, channel, UTF-8 text, linked item}");
         Assert.True(ChatSayPacket.Read(buffer.AsSpan(0, size)) == say, "typed line did not read back");
+        var linking = say with { ItemId = Guid.NewGuid() };
+        Assert.True(ChatSayPacket.Read(buffer.AsSpan(0, linking.Write(buffer))) == linking, "the linked item did not read back");
+        var item = new StoreItemEntry(linking.ItemId, 0x0101_0100, 1, 1, 0, 2, 3, "Stone Axe");
+        var linked = new ChatLinePacket(ChatKind.Player, 7, "Ann: look [Stone Axe]") { Item = item, Detail = new ItemDetailEntry { InstanceId = item.InstanceId, DamageMin = 4 } };
+        var back = ChatLinePacket.Read(buffer.AsSpan(0, linked.Write(buffer)));
+        Assert.True(back.Item == item && back.Detail is { DamageMin: 4 } && back.Text == linked.Text, "the linked item did not ride on the received line");
         var party = ChatSayPacket.Read(buffer.AsSpan(0, new ChatSayPacket(true, "pull").Write(buffer)));
         Assert.True(party.Party && party.Text == "pull", "party lines lost their channel");
         size = say.Write(buffer);
@@ -211,7 +217,7 @@ internal static class ChatClientTests
     {
         var chat = new HudChat { PlayerName = "Ann", SelfId = 1 };
         var sent = new List<(string Text, bool Party)>();
-        chat.Send = (text, party) =>
+        chat.Send = (text, party, _) =>
         {
             sent.Add((text, party));
             return Task.CompletedTask;
@@ -229,7 +235,7 @@ internal static class ChatClientTests
         chat.Update(enter, none, [], 40, chat.Window.Log.Tab);
         Assert.True(chat.Window.Open && !chat.Window.Focused, "Enter on an empty line releases the keyboard and keeps the window");
         var layout = Gameplay.UI.HudLayout.Create(800, 600);
-        Assert.True(chat.Window.Click(layout, HudChatWindow.TabButton(layout, 4).Center, side: false) && chat.Window.Log.Tab == HudChatTab.Whisper,
+        Assert.True(chat.Window.Click(layout, HudChatWindow.TabButton(layout, (int)HudChatTab.Whisper).Center, side: false) && chat.Window.Log.Tab == HudChatTab.Whisper,
             "the whisper tab did not select");
         Assert.True(chat.Window.Click(layout, HudChatWindow.NoticeButton(layout).Center, side: false) && chat.Window.NoticeMode == 1
             && chat.Window.Click(layout, HudChatWindow.NoticeButton(layout).Center, side: false) && chat.Window.NoticeMode == 2

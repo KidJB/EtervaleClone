@@ -29,6 +29,9 @@ public sealed partial class HudCombat
     private const int PlateBarHeight = 11;
     private readonly List<(ulong Id, HudOverheadPoint Point, bool Focus)> _plates = new();
 
+    // The top edge of each name plate drawn this frame, in design pixels; what draws over a character keeps above it.
+    public Dictionary<ulong, int> PlateTops { get; } = new();
+
     // The quest mark art over an NPC, by its name (HudQuestBook.FillMarks).
     public IReadOnlyDictionary<string, string> QuestMarks { get; set; } = new Dictionary<string, string>();
 
@@ -46,6 +49,7 @@ public sealed partial class HudCombat
     {
         DrawQuestTargets(painter, layout, project);
         _plates.Clear();
+        PlateTops.Clear();
         foreach (var (id, entity) in _entities)
         {
             var focus = id == hovered || id == traced;
@@ -86,12 +90,14 @@ public sealed partial class HudCombat
             if (classic)
             {
                 DrawClassicPlate(painter, layout, Name(id), owner ?? clan, owner is null && clan is not null, x, y, color, id == hovered,
-                    member || ownSummon || monster && !summon && ShowsPlateBar(true, id == hovered, id == traced, entity.Attacked) ? entity : null, title);
+                    member || ownSummon || monster && !summon && ShowsPlateBar(true, id == hovered, id == traced, entity.Attacked) ? entity : null, title, out var classicTop);
+                PlateTops[id] = classicTop;
             }
             else
             {
                 DrawPlate(painter, layout, Name(id), owner ?? clan, owner is null && clan is not null, x, y, color, id == hovered,
-                    member || ownSummon || monster && !summon && ShowsPlateBar(false, id == hovered, id == traced, entity.Attacked) ? entity : null, title);
+                    member || ownSummon || monster && !summon && ShowsPlateBar(false, id == hovered, id == traced, entity.Attacked) ? entity : null, title, out var plateTop);
+                PlateTops[id] = plateTop;
             }
         }
     }
@@ -114,7 +120,7 @@ public sealed partial class HudCombat
     // A box that would leave the screen is not drawn, as in the original. A second line (a summon's owner under the name,
     // a player's clan over it) and an achievement title, the top line, grow the box upwards.
     private static void DrawClassicPlate(HudPainter painter, HudLayout layout, string name, string owner, bool clanLine, int anchorX, int anchorY, Color color,
-        bool hovered, Entity bar, string title = null)
+        bool hovered, Entity bar, string title, out int top)
     {
         var nameWidth = painter.Measure(name);
         var ownerWidth = owner is null ? 0 : painter.Measure(owner);
@@ -130,6 +136,7 @@ public sealed partial class HudCombat
         var frameHeight = 4 + lineHeight + extraLine + 6 + 2;
         var x = anchorX - width / 2 - 9;
         var y = anchorY - ClassicPlateLift - extraLine;
+        top = y;
         if (x < 0 || y < 0 || x + width + 18 > layout.Width || y + frameHeight + PlateBarHeight > layout.Height)
         {
             return;
@@ -164,11 +171,11 @@ public sealed partial class HudCombat
 
     // A lone name in the NPCs' name box over an anchor (the pets' names).
     public static void DrawNamePlate(HudPainter painter, HudLayout layout, string name, int anchorX, int anchorY, Color color) =>
-        DrawPlate(painter, layout, name, null, false, anchorX, anchorY, color, false, null);
+        DrawPlate(painter, layout, name, null, false, anchorX, anchorY, color, false, null, null, out _);
 
     // The name box around the smaller text, the capitals centred inside with room for descenders.
     private static void DrawPlate(HudPainter painter, HudLayout layout, string name, string owner, bool clanLine, int anchorX, int anchorY, Color color, bool hovered,
-        Entity bar, string title = null)
+        Entity bar, string title, out int boxTop)
     {
         var nameWidth = painter.MeasureAt(name, PlateTextScale);
         var ownerWidth = owner is null ? 0 : painter.MeasureAt(owner, PlateTextScale);
@@ -185,6 +192,7 @@ public sealed partial class HudCombat
         var height = textHeight + emblemPad;
         var x = anchorX - width / 2;
         var y = anchorY - PlateLift - height;
+        boxTop = y;
         if (x < 0 || y < 0 || x + width > layout.Width || y + height + 1 + PlateBarHeight > layout.Height)
         {
             return;
