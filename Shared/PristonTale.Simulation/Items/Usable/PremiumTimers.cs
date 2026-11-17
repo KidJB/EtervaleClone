@@ -73,6 +73,22 @@ public sealed class PremiumTimers
 
     private int _worldBuffMask;
 
+    // The ranking aura the player wears (Progression.RankAuraBonus), which the world sets from the level boards.
+    public Contracts.Characters.RankAura RankAura
+    {
+        get => _rankAura;
+        set
+        {
+            if (value != _rankAura)
+            {
+                _rankAura = value;
+                Changed?.Invoke();
+            }
+        }
+    }
+
+    private Contracts.Characters.RankAura _rankAura;
+
     // The real clock (Unix seconds) of the last expiry pass; a save records it so offline time can be measured.
     public long ClockSeconds { get; private set; }
 

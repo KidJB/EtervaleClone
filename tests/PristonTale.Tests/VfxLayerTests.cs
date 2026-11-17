@@ -11,6 +11,7 @@ internal static class VfxLayerTests
         yield return ("component layers keep the original keyed-event, loop and delay rules", ComponentsAsync);
         yield return ("component particle pools respect their count, loops and the 100-particle cap", ComponentParticlesAsync);
         yield return ("sequence layers emit their budget, loop on clock events and stop on request", SequencesAsync);
+        yield return ("a sequence trail keeps one position per game tick, up to its length, whatever the frame rate", TrailTicksAsync);
         yield return ("child effects start late, follow their anchor with the particles that live until they stop, and stop with the parent", ChildrenAsync);
         yield return ("components on the spawn point move with the effect, components fixed elsewhere stay", ComponentMoveAsync);
         yield return ("component and sequence updates allocate nothing once warmed up", AllocationsAsync);
@@ -349,6 +350,37 @@ internal static class VfxLayerTests
         instance.Stop();
         Run(system, 0.1f);
         Assert.True(system.Instances.Count == 1, "stopping killed the live particle instead of letting it play out");
+        return Task.CompletedTask;
+    }
+
+    private static Task TrailTicksAsync()
+    {
+        static int PointsAfter(float seconds, float step)
+        {
+            var (library, system) = Setup(new VfxDefinition
+            {
+                Name = "test.trail",
+                Duration = 10f,
+                Sequences =
+                [
+                    new VfxSequenceDefinition
+                    {
+                        Texture = "x.bmp", Shape = VfxSequenceShape.Trail, Count = 1, Loops = 1, Rate = [100f, 100f], Lifetime = [5f, 5f],
+                        Events = [new VfxSequenceEvent { T = 0f, Set = VfxSequenceProperty.Stretch, Min = [400f], Max = [400f] }]
+                    }
+                ]
+            });
+            library.TryGet("test.trail", out var effect);
+            var instance = system.Spawn(effect, new VfxSpawn(0, 0, Vector3.Zero, 0f)).Instance!;
+            Run(system, seconds, step);
+            return instance.SequenceStates[0].Particles[0].TrailCount;
+        }
+
+        // A second is 70 game ticks: as many positions at 60 or 240 frames a second, and the trail stops at its cap.
+        var slow = PointsAfter(1f, 1f / 60f);
+        var fast = PointsAfter(1f, 1f / 240f);
+        Assert.True(Math.Abs(slow - fast) <= 2 && slow is >= 65 and <= 72, $"positions per second depend on the frame rate ({slow} at 60, {fast} at 240)");
+        Assert.True(PointsAfter(4f, 1f / 60f) == CompiledSequence.MaxTrailPoints, "a long trail went past its cap");
         return Task.CompletedTask;
     }
 

@@ -15,7 +15,7 @@ namespace PristonTale.Gameplay.UI;
 public sealed partial class GameplayHud
 {
     private readonly HudClanWindow _clanWindow;
-    private readonly HudRequestBox _clanRequest = new(HudPartyArt.Request, ClanRules.InvitationSeconds * 1000);
+    private readonly HudRequestBox _clanRequest = new(ClanRules.InvitationSeconds * 1000);
     private Action<ClanAction, ulong, string> _sendClan;
 
     // Sends the clan requests; set by the screen.
@@ -50,8 +50,8 @@ public sealed partial class GameplayHud
 
         if (update.ClanInvitation is { } invitation)
         {
-            _clanRequest.Show(invitation.RecruiterId, invitation.ChiefName, ClientText.Format("Clan.InviteLine", invitation.ClanName),
-                _clock.Elapsed.TotalMilliseconds);
+            _clanRequest.Show(invitation.RecruiterId, invitation.ChiefName, ClientText.Get("Request.ClanTitle"),
+                ClientText.Format("Request.Clan", invitation.ChiefName, invitation.ClanName), _clock.Elapsed.TotalMilliseconds);
         }
 
         if (update.ClanResult is { } result)
@@ -73,12 +73,12 @@ public sealed partial class GameplayHud
         _clanWindow.Open(npcId);
     }
 
-    // The clan button shows for a recruiter beside a player without a clan.
-    private bool ClanButton => Clan.CanRecruit && ButtonsPlayerId != 0 && Combat.ClanOf(ButtonsPlayerId) == 0;
+    // A recruiter may invite a targeted player without a clan.
+    private bool OffersClan(ulong player) => Clan.CanRecruit && player != 0 && Combat.ClanOf(player) == 0;
 
-    private bool ClickClan(Point pointer)
+    private bool ClickClan(HudLayout layout, Point pointer)
     {
-        if (_clanRequest.Click(pointer) is { } answer)
+        if (_clanRequest.Click(layout, pointer) is { } answer)
         {
             _sendClan?.Invoke(answer ? ClanAction.Accept : ClanAction.Refuse, 0, "");
             return true;
@@ -89,5 +89,5 @@ public sealed partial class GameplayHud
 
     private void InviteToClan(ulong playerId) => _sendClan?.Invoke(ClanAction.Invite, playerId, "");
 
-    private bool CapturesClan(Point pointer) => _clanRequest.Captures(pointer) || _clanWindow.Contains(pointer);
+    private bool CapturesClan(HudLayout layout, Point pointer) => _clanRequest.Captures(layout, pointer) || _clanWindow.Contains(pointer);
 }

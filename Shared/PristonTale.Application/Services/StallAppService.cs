@@ -65,8 +65,10 @@ public sealed class StallAppService(ISessionRegistry sessions, ICharacterSaves s
     }
 
     // The stored stalls stand in their fields again, at start.
-    public async Task RestoreAsync(CancellationToken ct = default)
+    // The number of stored stalls stood back in their fields.
+    public async Task<int> RestoreAsync(CancellationToken ct = default)
     {
+        var restored = 0;
         foreach (var record in await stalls.ListAsync(ct))
         {
             var look = StallCodec.RestoreLook(record.Look);
@@ -80,7 +82,10 @@ public sealed class StallAppService(ISessionRegistry sessions, ICharacterSaves s
             var stall = new Stall(record.Id, record.AccountId, record.CharacterId, record.FieldId, new Vector3((float)record.X, (float)record.Y, (float)record.Z),
                 (float)record.Facing, appearance, look.Level, look.Tier);
             await world.RestoreStallAsync(stall, StallRules.Listing(look.Sign, entries), stock);
+            restored++;
         }
+
+        return restored;
     }
 
     public async Task<PersonalShopReply> BuyAsync(PlayerSession buyer, DurableLease lease, PersonalShopPurchase purchase, CancellationToken ct = default, ulong marketNpc = 0)

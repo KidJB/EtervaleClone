@@ -72,6 +72,7 @@ public sealed partial class GameScene
 
     private void OnSelfSpawn(EntitySpawnInfo spawn)
     {
+        _selfRankAura = spawn.Player?.RankAura ?? RankAura.None;
         OnSelfState(new EntityStateInfo(spawn.EntityId, spawn.Position, spawn.Facing, spawn.MoveState,
             spawn.Life, spawn.MoveSpeed, spawn.AttackRate, spawn.AttackTargetId, spawn.AttackSequence));
         if (!_selfArrived && _playerBody is not null)

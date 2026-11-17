@@ -111,6 +111,12 @@ public static class EtervaleOpcodes
     public const uint SkinBuy = 0x45541402;
     public const uint SkinApply = 0x45541403;
     public const uint SkinResult = 0x45541404;
+    public const uint SkinUnlock = 0x45541405;
+    public const uint SkinUnlockResult = 0x45541406;
+    public const uint CabinetDealsRequest = 0x45541407;
+    public const uint CabinetDeals = 0x45541408;
+    public const uint CabinetBid = 0x45541409;
+    public const uint CabinetBidResult = 0x4554140A;
     public const uint CharacterMarketRequest = 0x45541B00;
     public const uint CharacterMarketPage = 0x45541B01;
     public const uint CharacterMarketDetail = 0x45541B02;
@@ -125,6 +131,12 @@ public static class EtervaleOpcodes
     public const uint PartyFinder = 0x45541E01;
     public const uint PartyFinderSettings = 0x45541E02;
     public const uint PartyFinderJoin = 0x45541E03;
+    public const uint ArenaStatus = 0x45541F00;
+    public const uint CourierBoardRequest = 0x45542000;
+    public const uint CourierBoard = 0x45542001;
+    public const uint CourierRequest = 0x45542002;
+    public const uint CourierResult = 0x45542003;
+    public const uint CourierState = 0x45542004;
 
     public const uint PresenceEntries = 0x45540900;
     public const uint DescribeEntity = 0x45540901;

@@ -315,13 +315,11 @@ internal static class ClanTests
         window.Click(Gameplay.UI.Widgets.HudNpcPanel.OkButton.Center);
         Assert.True(!window.IsOpen, "OK did not close a window waiting for its result");
 
-        var frame = new Gameplay.UI.Widgets.HudTargetFrame(new Microsoft.Xna.Framework.Rectangle(300, 10, 200, 60), default, default, default, 0, 0);
-        var menu = Gameplay.UI.Parties.HudPlayerButtons.Menu(frame, clan: true);
-        var buttons = Enum.GetValues<Gameplay.UI.Parties.HudPlayerButton>().Select(button => Gameplay.UI.Parties.HudPlayerButtons.Button(frame, button, clan: true))
-            .ToArray();
-        Assert.True(menu.Width == 120 && buttons.All(button => menu.Contains(button.Center))
-            && Gameplay.UI.Parties.HudPlayerButtons.At(frame, buttons[3].Center, clan: true) == Gameplay.UI.Parties.HudPlayerButton.Clan
-            && Gameplay.UI.Parties.HudPlayerButtons.At(frame, buttons[3].Center) is null, "the clan button differs");
+        var menu = new Gameplay.UI.Parties.HudTargetMenu();
+        menu.Offer(5, raid: false, clan: true);
+        var offered = Enumerable.Range(0, menu.Count).Select(index => menu[index]).ToArray();
+        menu.Offer(5, raid: false, clan: false);
+        Assert.True(offered[^1] == Gameplay.UI.Parties.HudTargetAction.Clan && menu.Count == offered.Length - 1, "the clan invitation differs");
         return Task.CompletedTask;
     }
 

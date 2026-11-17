@@ -11,6 +11,7 @@ internal static class BossArenaTests
     {
         yield return ("boss arena: starts every six hours alternating its bosses, entry opens fifteen minutes before", ScheduleAsync);
         yield return ("boss arena: a faster kill gives more experience, and the bosses are made from Fury", RewardsAsync);
+        yield return ("boss arena: its timer counts down to the next boss, then the time run and the boss's life, and goes on the wire", TimerAsync);
     }
 
     private static Task ScheduleAsync()
@@ -22,6 +23,24 @@ internal static class BossArenaTests
         Assert.True(BossArena.NextStart(at.AddHours(13)) is { Hour: 0, Day: 6 }, "the last start of the day did not roll to midnight");
         Assert.True(BossArena.EntryOpen(at, start) && !BossArena.EntryOpen(start.AddMinutes(-16), start) && !BossArena.EntryOpen(start, start),
             "the entry window is not the fifteen minutes before the start");
+        return Task.CompletedTask;
+    }
+
+    private static Task TimerAsync()
+    {
+        var at = new DateTimeOffset(2026, 11, 5, 5, 50, 30, TimeSpan.Zero);
+        var waiting = PristonTale.Application.World.ArenaStatusView.Waiting(at);
+        Assert.True(waiting is { Running: false, Seconds: 570, BossLife: 0 } && waiting.EventId == BossArena.EventAt(6).Id, $"the wait differs: {waiting}");
+
+        var hagios = BossArena.EventAt(6);
+        var running = PristonTale.Application.World.ArenaStatusView.During(hagios, at, at.AddSeconds(3725), -5, 9000);
+        Assert.True(running is { Running: true, Seconds: 3725, BossLife: 0, BossMaxLife: 9000 } && running.EventId == hagios.Id, $"the run differs: {running}");
+
+        var buffer = new byte[Protocol.Packets.ArenaStatusPacket.MaxSize];
+        var sent = new Protocol.Packets.ArenaStatusPacket(true, (byte)hagios.Id, true, 3725, 4500, 9000);
+        Assert.True(Protocol.Packets.ArenaStatusPacket.Read(buffer.AsSpan(0, sent.Write(buffer))) == sent
+            && Protocol.Packets.ArenaStatusPacket.Read(buffer.AsSpan(0, Protocol.Packets.ArenaStatusPacket.Hidden.Write(buffer))) == Protocol.Packets.ArenaStatusPacket.Hidden,
+            "the arena status changed on the wire");
         return Task.CompletedTask;
     }
 

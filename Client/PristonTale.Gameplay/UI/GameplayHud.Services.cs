@@ -211,6 +211,14 @@ public sealed partial class GameplayHud
             return true;
         }
 
+        if (kind == NpcServiceKind.Courier)
+        {
+            _npcOpen = false;
+            _npc.Dismiss();
+            _courierWindow.Show(npcId);
+            return true;
+        }
+
         if (kind == NpcServiceKind.DailyQuest)
         {
             _npcOpen = false;

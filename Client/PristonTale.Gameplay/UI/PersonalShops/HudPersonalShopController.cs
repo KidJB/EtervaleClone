@@ -30,7 +30,8 @@ public sealed class HudPersonalShopController(IClientLog log)
 
     // A bag item being priced: its seller first chooses gold, coins or view only.
     private OwnedItemView _pricing;
-    private static readonly string[] CurrencyNames = ["Gold", "Coins", "View only"];
+    private static string[] _currencyNames;
+    private static string[] CurrencyNames => _currencyNames ??= [ClientText.Get("PersonalShop.Gold"), ClientText.Get("PersonalShop.Coins"), ClientText.Get("PersonalShop.ViewOnly")];
     private static readonly PersonalShopCurrency[] Currencies = [PersonalShopCurrency.Gold, PersonalShopCurrency.Coins, PersonalShopCurrency.ViewOnly];
     private static readonly Color ChoiceColor = new(52, 36, 24);
     private static readonly Color ChoiceLitColor = new(110, 80, 40);
@@ -178,11 +179,26 @@ public sealed class HudPersonalShopController(IClientLog log)
         }
     }
 
-    // The currency buttons of the pricing box: gold, coins, view only.
+    // The pricing box: its title, the item on its own line, the currency buttons (gold, coins, view only) in a row across
+    // the box and one Cancel button where the box's Yes and No sit.
+    private const int ChoiceWidth = 66;
+    private const int ChoiceHeight = 26;
+    private const int ChoiceGap = 4;
+
     public static Rectangle Choice(int index)
     {
         var box = HudMessageBox.Bounds;
-        return new Rectangle(box.X + 22 + index * 62, box.Y + 74, 58, 26);
+        var left = box.X + (box.Width - 3 * ChoiceWidth - 2 * ChoiceGap) / 2;
+        return new Rectangle(left + index * (ChoiceWidth + ChoiceGap), box.Y + 76, ChoiceWidth, ChoiceHeight);
+    }
+
+    public static Rectangle PricingCancel
+    {
+        get
+        {
+            var box = HudMessageBox.Bounds;
+            return new Rectangle(box.X + (box.Width - 88) / 2, box.Y + 116, 88, 35);
+        }
     }
 
     public bool Click(Point pointer)
@@ -205,7 +221,7 @@ public sealed class HudPersonalShopController(IClientLog log)
                 }
             }
 
-            if (HudMessageBox.Reject.Contains(pointer))
+            if (PricingCancel.Contains(pointer))
             {
                 _pricing = null;
             }
@@ -304,14 +320,21 @@ public sealed class HudPersonalShopController(IClientLog log)
         }
         else if (_pricing is { } pricing)
         {
-            HudMessageBox.Draw(painter, "Sell it for:", "", pointer, pricing.Name);
+            var box = HudMessageBox.Bounds;
+            HudMessageBox.DrawFrame(painter);
+            painter.TextCentered(ClientText.Get("PersonalShop.SellFor"), box.Left, box.Right, box.Y + HudMessageBox.TitleY, HudTextColors.BoxTitle);
+            painter.TextCentered(painter.Fit(pricing.Name, box.Width - 24), box.Left, box.Right, box.Y + 48, HudTextColors.Highlight);
             for (var index = 0; index < Currencies.Length; index++)
             {
                 var choice = Choice(index);
+                var lit = choice.Contains(pointer);
                 painter.Fill(choice, ChoiceRimColor);
-                painter.Fill(new Rectangle(choice.X + 1, choice.Y + 1, choice.Width - 2, choice.Height - 2), choice.Contains(pointer) ? ChoiceLitColor : ChoiceColor);
-                painter.TextCentered(CurrencyNames[index], choice.X, choice.Right, choice.Y + 5, Color.White);
+                painter.Fill(new Rectangle(choice.X + 1, choice.Y + 1, choice.Width - 2, choice.Height - 2), lit ? ChoiceLitColor : ChoiceColor);
+                painter.TextCentered(painter.Fit(CurrencyNames[index], ChoiceWidth - 6), choice.X, choice.Right, choice.Y + 6, lit ? HudTextColors.Highlight : Color.White);
             }
+
+            var cancel = PricingCancel;
+            painter.Sprite(cancel.Contains(pointer) ? HudMessageBox.CancelLit : HudMessageBox.CancelArt, cancel.X, cancel.Y);
         }
         else if (_confirm is { } confirm)
         {

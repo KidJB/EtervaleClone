@@ -69,7 +69,10 @@ public enum NpcServiceKind : byte
 
     // Etervale's Character Market and Marketplace (Markets), placed with their NPCs when the world data loads.
     CharacterMarket = 29,
-    Marketplace = 30
+    Marketplace = 30,
+
+    // Etervale's Quest Couriers (Quests.CourierCatalog), placed in their fields when the world data loads.
+    Courier = 31
 }
 
 public sealed record NpcService(NpcServiceKind Kind, int Value = 0, int Value2 = 0, string Text = "");

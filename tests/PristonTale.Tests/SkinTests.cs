@@ -53,6 +53,11 @@ internal static class SkinTests
         Assert.True(SkinRules.SlotOf(low) == SkinSlot.OffHand && SkinRules.SlotOf(low with { EquipSlot = null }) is null, "skin slots");
         Assert.True(Costumes.Hidden.Contains("OM126") && Costumes.Hidden.Contains("WV151") && Costumes.Hidden.Contains("WN135"),
             "the Cabinet lists a look that cannot show");
+        var cabinet = new PristonTale.Gameplay.UI.Npc.HudCabinet { Favorites = " WA104, ,da120 " };
+        Assert.True(cabinet.Favorites == "WA104,da120", "the Cabinet favourites did not read back from the settings");
+        Assert.True(CabinetRules.Category("DA130", SkinSlot.Armor) == CosmeticCategory.Armor && CabinetRules.Category("DA405", SkinSlot.Armor) == CosmeticCategory.Robe
+            && CabinetRules.Category("DA157", SkinSlot.Armor) == CosmeticCategory.Costume
+            && CabinetRules.Category("DA148", SkinSlot.Armor) == CosmeticCategory.Costume && CabinetRules.Category("DA102", SkinSlot.Armor) == CosmeticCategory.Armor, "an armor set or robe was listed as a costume");
         var both = new SkinSet("WA104", TwoHand: "WA120");
         Assert.True(ItemEquipmentMetadata.IsTwoHanded("WA120") && !ItemEquipmentMetadata.IsTwoHanded("WA104"), "the test's weapons changed grip");
         Assert.True(SkinRules.WeaponLook("WA101", both) == "WA104" && SkinRules.WeaponLook("WA105", both) == "WA120", "a weapon did not take its own grip's skin");

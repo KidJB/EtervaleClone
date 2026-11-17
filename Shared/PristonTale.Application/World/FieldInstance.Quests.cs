@@ -105,6 +105,35 @@ public sealed partial class FieldInstance
         }
     }
 
+    // The Courier catalog in use (the world sets it; none: no hunt counts).
+    internal Func<CourierCatalog> CourierCatalog { get; set; } = static () => Simulation.Quests.CourierCatalog.Empty;
+
+    // A kill counts once for the credited player's Courier hunts of this field and, for hunts that share party credit, once
+    // for each living party member in share range here; a member is never credited twice for one kill.
+    private void CreditCouriers(WorldPlayer credited, MonsterInstance killed)
+    {
+        var catalog = CourierCatalog();
+        if (catalog.Quests.Count == 0)
+        {
+            return;
+        }
+
+        credited.Character.Couriers.OnKill(killed.Def.Code, FieldId, catalog);
+        if (credited.Party is null)
+        {
+            return;
+        }
+
+        foreach (var member in _players.Values)
+        {
+            if (!ReferenceEquals(member, credited) && !member.IsDead && member.SharesPartyWith(credited)
+                && Simulation.Parties.PartyRules.InShareRange(killed.Position, member.Position))
+            {
+                member.Character.Couriers.OnPartyKill(killed.Def.Code, FieldId, catalog);
+            }
+        }
+    }
+
     // Kill credit for the credited player's hunts; quest and ingredient drops leave the ground loot for its pack.
     private KillPayout CreditQuests(KillPayout reward)
     {
@@ -126,6 +155,7 @@ public sealed partial class FieldInstance
 
             Publish(credited, context, revision);
             credited.Character.DailyQuests.OnKill(killed.Def.Combat.Level, Simulation.Quests.DailyQuests.DayOf(DateTimeOffset.FromUnixTimeMilliseconds(QuestClock())));
+            CreditCouriers(credited, killed);
         }
 
         if (killed is not null && killed.DuelPlayerId != 0)

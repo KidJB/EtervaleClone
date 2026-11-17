@@ -10,6 +10,14 @@ public static class PristonCloudNoise
 {
     public const int Size = 64;
 
+    // The volume is the same for every renderer: generated once, on a worker when Prepare runs ahead (at the login
+    // screen), so building a renderer only uploads it.
+    private static readonly Lazy<HalfVector4[]> Volume = new(() => Generate(), LazyThreadSafetyMode.ExecutionAndPublication);
+
+    public static HalfVector4[] Shared => Volume.Value;
+
+    public static void Prepare() => _ = Task.Run(() => Volume.Value);
+
     public static HalfVector4[] Generate(int size = Size)
     {
         var values = new float[size * size * size * 4];

@@ -139,6 +139,8 @@ public sealed partial class WorldServer
         field.Event = _catalog.TryGetFieldByCode(fieldId, out var described) ? described.FieldEvent : FieldEventKind.None;
         field.Rains = described is not null && WeatherSchedule.Rains(described);
         field.DropLedger = DropLedgerFor(_worldData.Current.Items);
+        field.CourierCatalog = () => Couriers;
+        field.Cabinet = () => Cabinet;
         _fields.Add(fieldId, field);
         OpenSiegeIn(field);
         if (fieldId == Simulation.World.Bellatra.BellatraArena.Field)
@@ -227,6 +229,7 @@ public sealed partial class WorldServer
 
             player.EnterField(position, definition.State == FieldState.Village);
             player.Guard(PlayerGrace.ArrivalMs);
+            ApplyRankAura(player);
             field.Add(player);
             _connections.Add(player.EntityId, new Connection(fieldId, player, outbound, session) { NextGiftTick = GiftTick(StarterGifts.FirstDelay) });
             _membershipChanged = true;
@@ -835,7 +838,8 @@ public sealed partial class WorldServer
                     PartyRequest = connection.Player.PartyRequest,
                     Trade = connection.Player.Trade?.ViewFor(entityId),
                     TradeRequest = connection.Player.TradeRequest,
-                    Bellatra = BellatraViewOf(connection)
+                    Bellatra = BellatraViewOf(connection),
+                    Arena = ArenaViewOf(connection)
                 });
                 // Only an outbox pins and releases frames; any other writer may keep the snapshot forever.
                 frame.Retained |= connection.Outbound is not WorldOutbox.OutboxWriter;

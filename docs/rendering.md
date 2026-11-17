@@ -312,7 +312,8 @@ they took the domes.
 - Cirrus: a few patches of fine fibres combed along the wind at 8 km, most of the sky left clear, under a clear sky
   and fading as the clouds gather.
 - Volumetric clouds (`cloudQuality`; after Schneider's Nubis): a cumulus layer from 1.5 to 4 km in a 64^3 half-float
-  tiling noise volume (`PristonCloudNoise`: Perlin-Worley shape, Worley fBm detail) under a broad coverage pattern; the
+  tiling noise volume (`PristonCloudNoise`: Perlin-Worley shape, Worley fBm detail; generated once and shared by every
+  renderer, on a worker from the login screen) under a broad coverage pattern; the
   coverage grows from a fair sky's 30 % to 95 % of the visible sky as the clouds gather and closes further in rain,
   where a stratus deck fills the layer's lower half and the denser clouds go dark below. Single scattering with the
   powder effect, a diffuse multiple-scattering term that keeps a deck's base grey, and the sky's light; a strike lights the clouds from inside on its side of the sky (`PristonWeather.FlashAzimuth`, added

@@ -15,7 +15,7 @@ namespace PristonTale.Gameplay.UI;
 public sealed partial class GameplayHud
 {
     private readonly HudTradeWindow _trade = new();
-    private readonly HudRequestBox _tradeRequest = new(HudTradeArt.Request, TradeLimits.RequestMs);
+    private readonly HudRequestBox _tradeRequest = new(TradeLimits.RequestMs);
 
     // Sends the trade requests; set by the screen.
     public ITradeClient Trades { get; set; }
@@ -53,7 +53,7 @@ public sealed partial class GameplayHud
 
         if (update.TradeRequest is { } request && !ServiceWindowOpen(blockingOnly: false))
         {
-            _tradeRequest.Show(request.FromId, request.FromName, null, nowMs);
+            _tradeRequest.Show(request.FromId, request.FromName, ClientText.Get("Request.TradeTitle"), ClientText.Format("Request.Trade", request.FromName), nowMs);
         }
     }
 
@@ -94,10 +94,10 @@ public sealed partial class GameplayHud
         return true;
     }
 
-    private bool ClickTrade(Point pointer)
+    private bool ClickTrade(HudLayout layout, Point pointer)
     {
         var from = _tradeRequest.FromId;
-        if (_tradeRequest.Click(pointer) is { } answer)
+        if (_tradeRequest.Click(layout, pointer) is { } answer)
         {
             Trades?.AnswerTradeAsync(from, answer);
             return true;

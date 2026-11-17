@@ -13,7 +13,7 @@ public sealed partial class GameplayHud
 {
     private readonly HudPartyWindow _partyWindow = new();
     private readonly HudPartyFrames _partyFrames = new();
-    private readonly HudRequestBox _partyRequest = new(HudPartyArt.Request, Simulation.Parties.PartyRules.InviteMs);
+    private readonly HudRequestBox _partyRequest = new(Simulation.Parties.PartyRules.InviteMs);
 
     // Sends the party requests; set by the screen.
     public IPartyClient Parties { get; set; }
@@ -21,10 +21,8 @@ public sealed partial class GameplayHud
     public PartyInfo Party { get; private set; } = PartyInfo.None;
 
     // The player whose portrait shows the trade, party and friend buttons (the scene reached it); 0 for none.
-    public ulong ButtonsPlayerId { get; set; }
 
     // A button under the portrait was pressed: the row closes until the player is reached again.
-    public event Action PlayerButtonsUsed;
 
     // The party part of each presence update. As in the original, a request is not shown while the warehouse is open.
     public void ObserveParty(PresenceUpdate update)
@@ -37,10 +35,11 @@ public sealed partial class GameplayHud
 
         if (update.PartyRequest is { } request && !_warehouse.IsOpen)
         {
-            var line = request.Raid ? ClientText.Get("Party.RaidRequest") : request.Recommended.Length > 0
-                ? ClientText.Format(Simulation.Parties.PartyMessages.Recommends(request.Recommended))
-                : ClientText.Format(Simulation.Parties.PartyMessages.Request);
-            _partyRequest.Show(request.FromId, request.FromName, line, _clock.Elapsed.TotalMilliseconds);
+            var title = ClientText.Get(request.Raid ? "Request.RaidTitle" : "Request.PartyTitle");
+            var question = request.Raid ? ClientText.Format("Request.Raid", request.FromName)
+                : request.Recommended.Length > 0 ? ClientText.Format("Request.Recommended", request.FromName, request.Recommended)
+                : ClientText.Format("Request.Party", request.FromName);
+            _partyRequest.Show(request.FromId, request.FromName, title, question, _clock.Elapsed.TotalMilliseconds);
         }
     }
 
@@ -62,6 +61,7 @@ public sealed partial class GameplayHud
     {
         _sprites.Request(HudPartyArt.All);
         _sprites.Request(HudPartyFrames.Art);
+        _sprites.Request(HudTargetMenu.Art);
         _partyFrames.Commanded = (command, member) => Parties?.CommandPartyAsync(command, member);
         _partyWindow.Commanded = (command, member) => Parties?.CommandPartyAsync(command, member);
         _partyWindow.Whispered = _chat.Window.WhisperTo;
@@ -70,7 +70,17 @@ public sealed partial class GameplayHud
         Combat.QuestMarks = _npcQuestMarks;
     }
 
-    private bool ShowsPlayerButtons => ButtonsPlayerId != 0 && TargetId == ButtonsPlayerId;
+    private readonly HudTargetMenu _targetMenu = new();
+
+    // The targeted player whose frame carries the menu; 0 when the target is not another player.
+    private ulong MenuPlayerId => TargetId != 0 && TargetId != SelfId && Combat.KindOf(TargetId, out _) == Contracts.World.EntityKind.Player ? TargetId : 0;
+
+    private bool ClassicFrame => _context.Presentation.Requested.ClassicTargetFrame;
+
+    private HudTargetFrame MenuFrame(HudLayout layout) => HudCombat.TargetFrame(layout, ClassicFrame);
+
+    // A party leader may ask a raid of a player outside its party.
+    private bool OffersRaid(ulong player) => Party.Members.Count > 0 && Party.Members[0].EntityId == SelfId && !Party.Members.Any(member => member.EntityId == player);
 
     private bool ClickParty(HudLayout layout, Point pointer)
     {
@@ -80,41 +90,45 @@ public sealed partial class GameplayHud
         }
 
         var from = _partyRequest.FromId;
-        if (_partyRequest.Click(pointer) is { } answer)
+        if (_partyRequest.Click(layout, pointer) is { } answer)
         {
             Parties?.AnswerPartyAsync(from, answer);
             return true;
         }
 
-        if (ShowsPlayerButtons && HudPlayerButtons.At(HudCombat.TargetFrame(layout, _context.Presentation.Requested.ClassicTargetFrame), pointer, ClanButton) is { } button)
+        var player = MenuPlayerId;
+        if (player != 0 && _targetMenu.Contains(MenuFrame(layout), ClassicFrame, pointer))
         {
-            if (button == HudPlayerButton.Clan)
+            switch (_targetMenu.Click(MenuFrame(layout), ClassicFrame, pointer))
             {
-                InviteToClan(ButtonsPlayerId);
-            }
-            else if (button == HudPlayerButton.Party)
-            {
-                Parties?.InviteToPartyAsync(ButtonsPlayerId);
-            }
-            else if (button == HudPlayerButton.Trade)
-            {
-                Trades?.RequestTradeAsync(ButtonsPlayerId);
-            }
-            else
-            {
-                BefriendReached();
+                case HudTargetAction.Trade:
+                    Trades?.RequestTradeAsync(player);
+                    break;
+                case HudTargetAction.Friend:
+                    Befriend(player);
+                    break;
+                case HudTargetAction.Party:
+                    Parties?.InviteToPartyAsync(player);
+                    break;
+                case HudTargetAction.Raid when Combat.PlayerName(player) is { } name:
+                    _ = _chat.Send?.Invoke("//raid " + name, false, Guid.Empty);
+                    break;
+                case HudTargetAction.Clan:
+                    InviteToClan(player);
+                    break;
             }
 
-            PlayerButtonsUsed?.Invoke();
             return true;
         }
+
+        _targetMenu.Close();
 
         return _partyWindow.Click(layout, pointer, Party, SelfId, _clock.Elapsed.TotalSeconds);
     }
 
     private bool CapturesParty(HudLayout layout, Point pointer) =>
-        _partyRequest.Captures(pointer) || _partyWindow.Contains(layout, pointer) || _partyFrames.Contains(layout, Party, pointer) || _social.Contains(layout, pointer) || _tuning.Contains(layout, pointer)
-        || ShowsPlayerButtons && HudPlayerButtons.At(HudCombat.TargetFrame(layout, _context.Presentation.Requested.ClassicTargetFrame), pointer, ClanButton) is not null;
+        _partyRequest.Captures(layout, pointer) || _partyWindow.Contains(layout, pointer) || _partyFrames.Contains(layout, Party, pointer) || _social.Contains(layout, pointer) || _tuning.Contains(layout, pointer)
+        || MenuPlayerId != 0 && _targetMenu.Contains(MenuFrame(layout), ClassicFrame, pointer);
 
     // The other members' last known places, for the minimap.
     // The NPCs and players in view and the other party members, who are marked as members rather than as players; a

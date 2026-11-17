@@ -23,7 +23,11 @@ internal static class GameMasterCommandTests
     private static readonly (string Text, int Level)[] ExpectedLevels =
     [
         ("/localtime", 1), ("/get_bosstime", 1), ("/get_forceorb", 1), ("/get_primitem", 1), ("/get_currency", 1), ("/init_premiumitem", 4),
-        ("/specific", 1), ("/Performance", 1), ("/@rarity", 4), ("/@get_perf", 4), ("/@get", 4), ("/@put_rarity", 4), ("/@put_perf", 4), ("/@put", 4), ("/@coinshop_reload", 4), ("/@coins", 4), ("/market_listings", 1), ("/market_sales", 1), ("/market_remove", 2), ("/market_expire", 2), ("/@arena", 4), ("/@worldbuff", 4), ("/AgingSetting", 3), ("/get_potion", 1), ("/>", 2), ("/netlog", 1),
+        ("/specific", 1), ("/Performance", 1), ("/@rarity", 4), ("/@get_perf", 4), ("/@get", 4), ("/@put_rarity", 4), ("/@put_perf", 4), ("/@put", 4), ("/@coinshop_reload", 4),
+        ("/@courier_reload", 4), ("/courier_progress", 1), ("/@courier_reset", 4),
+        ("/@courier_new", 4), ("/@courier_set", 4), ("/@cabinet_reload", 4), ("/@cabinet_set", 4), ("/@cabinet_drop", 4), ("/@cabinet_unlock", 4),
+        ("/cabinet_owned", 1), ("/@cabinet_reset", 4), ("/@deal_new", 4), ("/@deal_end", 4), ("/deals", 1), ("/@coins", 4), ("/market_listings", 1), ("/market_sales", 1), ("/market_remove", 2),
+        ("/market_expire", 2), ("/@arena", 4), ("/@worldbuff", 4), ("/AgingSetting", 3), ("/get_potion", 1), ("/>", 2), ("/netlog", 1),
         ("//netlog", 1), ("/user_limit", 2), ("/kick", 2), ("/kill", 2), ("/open_warehouse", 2), ("/shutdown", 2), ("/weather", 2),
         ("/reload_settings", 4), ("/setting", 4), ("/insert", 2),
         ("/usercode", 1), ("/userid", 1), ("/username", 1), ("/near", 2), ("/call", 2), ("/where", 2), ("/field", 2),

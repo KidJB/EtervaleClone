@@ -10,7 +10,11 @@ public sealed record BossSpawn(
     int EscortCount,
     IReadOnlyList<int> SpawnHours);
 
-public sealed record FixedNpc(int NpcCode, int X, int Z, int Angle, int Y = 0);
+// Y = OnFloor stands the NPC on the field's highest floor at X, Z (an NPC Etervale adds, placed by its world position only).
+public sealed record FixedNpc(int NpcCode, int X, int Z, int Angle, int Y = 0)
+{
+    public const int OnFloor = int.MinValue;
+}
 
 public sealed record FieldSpawnData(
     IReadOnlyList<SpawnPoint> SpawnPoints,

@@ -5,10 +5,11 @@ namespace PristonTale.Protocol.Packets;
 
 public static class SkinWire
 {
-    public const ushort Version = 1;
+    public const ushort Version = 2;
     public const int MaxKeyBytes = 32;
     public const int MaxNameBytes = 64;
-    public const int MaxArticles = 64;
+    public const int MaxArticles = 32;
+    public const int MaxDescriptionBytes = 96;
 }
 
 // C->S {header, Guid OperationId}: asks for The Cabinet.
@@ -33,14 +34,15 @@ public sealed record SkinOpenPacket(Guid OperationId) : IFramePacket
 }
 
 // S->C {header, Guid OperationId, int64 Balance, uint8 Last, 3 zero bytes, weapon, armor, off-hand, hair and two-handed weapon skin keys, uint16 Count,
-// articles}: one part of the catalog; Last marks the final part.
+// articles}: one part of the catalog; Last marks the final part. An article is {text Key, text Name, uint8 Slot, int32 Level, int32 Price, uint8 Owned,
+// uint8 Category, uint8 Rarity, uint8 Sources, text Description (96 B)}.
 public sealed record SkinCatalogPacket(Guid OperationId, long Balance, bool Last, string Weapon, string Armor, string OffHand, string Hair,
     IReadOnlyList<SkinArticle> Articles) : IFramePacket
 {
     public string TwoHand { get; init; } = "";
 
     private const int MinimumSize = 8 + WireHeader.Size + 16 + 8 + 4 + 2 * 5 + 2;
-    private const int ArticleMaxSize = 2 + SkinWire.MaxKeyBytes + 2 + SkinWire.MaxNameBytes + 1 + 4 + 4 + 1;
+    private const int ArticleMaxSize = 2 + SkinWire.MaxKeyBytes + 2 + SkinWire.MaxNameBytes + 1 + 4 + 4 + 1 + 3 + 2 + SkinWire.MaxDescriptionBytes;
     public const int MaxSize = MinimumSize + 5 * SkinWire.MaxKeyBytes + SkinWire.MaxArticles * ArticleMaxSize;
 
     public int Write(Span<byte> destination)
@@ -65,6 +67,10 @@ public sealed record SkinCatalogPacket(Guid OperationId, long Balance, bool Last
             writer.Int32(article.Level);
             writer.Int32(article.Price);
             writer.Byte(article.Owned ? (byte)1 : (byte)0);
+            writer.Byte(article.Category);
+            writer.Byte(article.Rarity);
+            writer.Byte(article.Sources);
+            Utf8Text.Write(ref writer, article.Description ?? "", SkinWire.MaxDescriptionBytes);
         }
 
         return writer.Finish();
@@ -97,7 +103,17 @@ public sealed record SkinCatalogPacket(Guid OperationId, long Balance, bool Last
             var slot = reader.Byte();
             var level = reader.Int32();
             var price = reader.Int32();
-            articles[index] = new SkinArticle(key, name, slot, level, price, reader.Byte() != 0);
+            var owned = reader.Byte() != 0;
+            var category = reader.Byte();
+            var rarity = reader.Byte();
+            var sources = reader.Byte();
+            articles[index] = new SkinArticle(key, name, slot, level, price, owned)
+            {
+                Category = category,
+                Rarity = rarity,
+                Sources = sources,
+                Description = Utf8Text.Read(ref reader, SkinWire.MaxDescriptionBytes, "Skin catalog")
+            };
         }
 
         return new SkinCatalogPacket(operation, balance, last, weapon, armor, offHand, hair, articles) { TwoHand = twoHand };

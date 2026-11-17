@@ -169,6 +169,24 @@ internal sealed class OnlinePlayChannel : IPlayChannel
         return await _connection.ApplySkinsAsync(skins, ct);
     }
 
+    public async Task<(PristonTale.Simulation.Characters.SkinStatus Status, long Balance, string Key)> UnlockSkinAsync(Guid itemId, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.UnlockSkinAsync(itemId, ct);
+    }
+
+    public async Task<CabinetDealsPacket> CabinetDealsAsync(CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.CabinetDealsAsync(ct);
+    }
+
+    public async Task<(PristonTale.Simulation.Characters.CabinetBidStatus Status, long Balance)> CabinetBidAsync(long dealId, long amount, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.CabinetBidAsync(dealId, amount, ct);
+    }
+
     public async Task<ItemBoxListInfo> OpenItemBoxAsync(ulong npcId, CancellationToken ct = default)
     {
         await _start.WaitAsync(ct);
@@ -271,6 +289,18 @@ internal sealed class OnlinePlayChannel : IPlayChannel
     {
         await _start.WaitAsync(ct);
         _connection.SendSocial(new PartyFinderJoinPacket(leaderId, password));
+    }
+
+    public async Task SendCourierBoardRequestAsync(ulong npcId, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        _connection.SendSocial(new CourierBoardRequestPacket(npcId));
+    }
+
+    public async Task<(byte Status, long Experience)> CourierAsync(ulong npcId, int questId, byte action, CancellationToken ct = default)
+    {
+        await _start.WaitAsync(ct);
+        return await _connection.CourierAsync(npcId, questId, action, ct);
     }
 
     public async Task SendRankingsRequestAsync(RankingBoard board, byte job, CancellationToken ct = default)

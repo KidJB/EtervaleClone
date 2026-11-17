@@ -826,6 +826,7 @@
   },
   {
    "key": "DA130",
+   "kind": "armor",
    "name": "Quantum Armor",
    "bodies": {
     "Fighter": "b031.inx",
@@ -971,6 +972,7 @@
   },
   {
    "key": "DA230",
+   "kind": "robe",
    "name": "Warlock Robe",
    "bodies": {
     "Magician": "md031.inx",
@@ -980,6 +982,7 @@
   },
   {
    "key": "DA305",
+   "kind": "armor",
    "name": "Mythril Armor",
    "bodies": {
     "Fighter": "B115.inx",
@@ -993,6 +996,7 @@
   },
   {
    "key": "DA306",
+   "kind": "armor",
    "name": "Imperial Armor",
    "bodies": {
     "Fighter": "B116.inx",
@@ -1006,6 +1010,7 @@
   },
   {
    "key": "DA307",
+   "kind": "armor",
    "name": "Abyss Armor",
    "bodies": {
     "Fighter": "b032.inx",
@@ -1019,6 +1024,7 @@
   },
   {
    "key": "DA307",
+   "kind": "armor",
    "name": "KPT Armor 307",
    "bodies": {
     "Mechanician": "a035.inx",
@@ -1032,6 +1038,7 @@
   },
   {
    "key": "DA308",
+   "kind": "armor",
    "name": "KPT Armor 308",
    "bodies": {
     "Mechanician": "a036.inx",
@@ -1045,6 +1052,7 @@
   },
   {
    "key": "DA309",
+   "kind": "armor",
    "name": "KPT Armor 309",
    "bodies": {
     "Mechanician": "a037.inx",
@@ -1058,6 +1066,7 @@
   },
   {
    "key": "DA310",
+   "kind": "armor",
    "name": "KPT Armor 310",
    "bodies": {
     "Mechanician": "a038.inx",
@@ -1071,6 +1080,7 @@
   },
   {
    "key": "DA311",
+   "kind": "armor",
    "name": "KPT Armor 311",
    "bodies": {
     "Mechanician": "a039.inx",
@@ -1084,6 +1094,7 @@
   },
   {
    "key": "DA312",
+   "kind": "armor",
    "name": "KPT Armor 312",
    "bodies": {
     "Mechanician": "a040.inx",
@@ -1097,6 +1108,7 @@
   },
   {
    "key": "DA340",
+   "kind": "armor",
    "name": "Deius Armor",
    "bodies": {
     "Fighter": "DeiusFS.inx",
@@ -1110,6 +1122,7 @@
   },
   {
    "key": "DA405",
+   "kind": "robe",
    "name": "Lunar Robe",
    "bodies": {
     "Magician": "mD115.inx",
@@ -1119,6 +1132,7 @@
   },
   {
    "key": "DA406",
+   "kind": "robe",
    "name": "Cherub Robe",
    "bodies": {
     "Magician": "mD116.inx",
@@ -1128,6 +1142,7 @@
   },
   {
    "key": "DA407",
+   "kind": "robe",
    "name": "Abyss Robe",
    "bodies": {
     "Magician": "md032.inx",
@@ -1137,6 +1152,7 @@
   },
   {
    "key": "DA408",
+   "kind": "robe",
    "name": "KPT Robe 408",
    "bodies": {
     "Priestess": "mc036.inx",
@@ -1146,6 +1162,7 @@
   },
   {
    "key": "DA409",
+   "kind": "robe",
    "name": "KPT Robe 409",
    "bodies": {
     "Priestess": "mc037.inx",
@@ -1155,6 +1172,7 @@
   },
   {
    "key": "DA410",
+   "kind": "robe",
    "name": "KPT Robe 410",
    "bodies": {
     "Priestess": "mc038.inx",
@@ -1164,6 +1182,7 @@
   },
   {
    "key": "DA411",
+   "kind": "robe",
    "name": "KPT Robe 411",
    "bodies": {
     "Priestess": "mc039.inx",
@@ -1173,6 +1192,7 @@
   },
   {
    "key": "DA440",
+   "kind": "robe",
    "name": "Deius Robe",
    "bodies": {
     "Magician": "DeiusMGS.inx",
@@ -2745,7 +2765,8 @@
    "two": false
   }
  ],
- "hidden": ["WD134","WN135","WN136","WN137","OM101", "OM102", "OM103", "OM104", "OM105", "OM106", "OM107", "OM108", "OM109", "OM110", "OM111", "OM112", "OM113", "OM114", "OM115", "OM116", "OM117", "OM118", "OM119", "OM120", "OM121", "OM122", "OM123", "OM124", "OM125", "OM126", "OM127", "OM128", "OM129", "OM130", "OM131", "WV151", "WV152", "WV153", "WV155", "WV156", "WV157",
+ "costumeItems": ["DA131", "DA139", "DA148", "DA154"],
+  "hidden": ["WD134","WN135","WN136","WN137","OM101", "OM102", "OM103", "OM104", "OM105", "OM106", "OM107", "OM108", "OM109", "OM110", "OM111", "OM112", "OM113", "OM114", "OM115", "OM116", "OM117", "OM118", "OM119", "OM120", "OM121", "OM122", "OM123", "OM124", "OM125", "OM126", "OM127", "OM128", "OM129", "OM130", "OM131", "WV151", "WV152", "WV153", "WV155", "WV156", "WV157",
   "DA132",
   "DA133",
   "DA134",

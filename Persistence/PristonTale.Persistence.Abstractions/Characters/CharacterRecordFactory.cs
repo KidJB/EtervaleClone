@@ -93,6 +93,7 @@ public static class CharacterRecordFactory
             PetOut = (short)character.PetOut,
             PetName = character.PetName,
             DailyQuests = DailyQuestCodec.Capture(character.DailyQuests),
+            CourierQuests = CourierQuestCodec.Capture(character.Couriers),
             Skins = SkinCodec.Capture(character.Skins),
             Mounts = unchecked((long)character.Mounts),
             MountChosen = (short)character.MountChosen,

@@ -9,7 +9,8 @@ public sealed class StallRestoreService(StallAppService stalls, ILogger<StallRes
     {
         try
         {
-            await stalls.RestoreAsync(stoppingToken);
+            var restored = await stalls.RestoreAsync(stoppingToken);
+            logger.LogInformation("Restored {Count} offline stalls", restored);
         }
         catch (Exception exception) when (exception is InvalidDataException or System.Text.Json.JsonException or ArgumentException or InvalidOperationException
             or System.Data.Common.DbException)

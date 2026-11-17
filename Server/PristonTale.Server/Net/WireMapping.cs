@@ -47,6 +47,7 @@ internal static class WireMapping
                     PetName = appearance.PetName,
                     Mount = appearance.Mount,
                     Title = appearance.Title,
+                    RankAura = (byte)appearance.RankAura,
                     HeldWeapon = ItemCode(appearance.HeldWeaponKey),
                     ClanId = (ulong)Math.Max(0, appearance.ClanId),
                     ClanName = appearance.ClanName,

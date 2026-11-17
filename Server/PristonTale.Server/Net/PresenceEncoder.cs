@@ -106,6 +106,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
     private long _mounts = -1;
     private long _dailyRevision = -1;
     private int _dailyDay = -1;
+    private long _courierRevision = -1;
     private int _mountChosen = -1;
     private bool _riding;
 
@@ -118,6 +119,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
     private int _bossSpotsField = -1;
     private PartyRequest? _partyRequest;
     private BellatraView? _bellatra;
+    private ArenaStatusView? _arena;
     private TradeView? _trade;
     private TradeRequest? _tradeRequest;
     private PresenceFrame? _heldFrame;
@@ -375,6 +377,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         SendPremium(snapshot.Owner, connection);
         SendPetCollection(snapshot.Owner, connection);
         SendDailyQuests(snapshot.Owner, connection);
+        SendCouriers(snapshot.Owner, connection);
         SendCooldowns(snapshot, connection);
         SendRestartOffer(snapshot.Restart, connection);
         SendWeather(snapshot.Weather, connection);
@@ -385,6 +388,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         SendParty(snapshot, connection);
         SendTrade(snapshot, connection);
         SendBellatra(snapshot, connection);
+        SendArena(snapshot, connection);
         if (snapshot.Quest is not null)
         {
             SendQuest(snapshot.Quest, connection);
@@ -392,6 +396,21 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
     }
 
     // The receiver's Bellatra board whenever it changes, hidden once it leaves the arena.
+    // The boss arena's state while the receiver is in its field, sent when it changes; leaving the field hides it.
+    private void SendArena(in WorldSnapshot snapshot, IPacketSink connection)
+    {
+        if (ReferenceEquals(snapshot.Arena, _arena))
+        {
+            return;
+        }
+
+        _arena = snapshot.Arena;
+        var packet = _arena is { } arena
+            ? new ArenaStatusPacket(true, (byte)arena.EventId, arena.Running, arena.Seconds, arena.BossLife, arena.BossMaxLife)
+            : ArenaStatusPacket.Hidden;
+        connection.Send(_scratch.AsSpan(0, packet.Write(_scratch)));
+    }
+
     private void SendBellatra(in WorldSnapshot snapshot, IPacketSink connection)
     {
         if (ReferenceEquals(snapshot.Bellatra, _bellatra))
@@ -546,6 +565,33 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         }
 
         var packet = new DailyQuestStatePacket(owner.DailyDay, entries.Take(DailyQuestStatePacket.MaxEntries).ToArray());
+        connection.Send(_scratch.AsSpan(0, packet.Write(_scratch)));
+    }
+
+    // The Courier catalog in use (the session sets it; none: no hunts are described).
+    public Func<Simulation.Quests.CourierCatalog> Couriers { get; set; } = static () => Simulation.Quests.CourierCatalog.Empty;
+
+    // The owner's accepted Courier hunts whenever they change (an accept, a kill, an abandon, a turn-in).
+    private void SendCouriers(Simulation.Characters.OwnerState? owner, IPacketSink connection)
+    {
+        if (owner is null || owner.CourierRevision == _courierRevision)
+        {
+            return;
+        }
+
+        _courierRevision = owner.CourierRevision;
+        var catalog = Couriers();
+        var quests = new List<CourierWireQuest>(owner.CourierActive.Count);
+        foreach (var (id, kills) in owner.CourierActive)
+        {
+            if (catalog.Get(id) is { } quest)
+            {
+                var finished = quest.Objectives.Select((objective, index) => index < kills.Count && kills[index] >= objective.Count).All(static done => done);
+                quests.Add(CourierWireMapping.Quest(quest, finished ? Simulation.Quests.CourierStanding.Ready : Simulation.Quests.CourierStanding.Active, kills, 0, false));
+            }
+        }
+
+        var packet = new CourierStatePacket(quests);
         connection.Send(_scratch.AsSpan(0, packet.Write(_scratch)));
     }
 
@@ -1272,7 +1318,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         return HashCode.Combine(view.MaxLife, view.Level, view.TemplateId, view.MoveSpeed, view.AttackRate,
             HashCode.Combine(appearance.WeaponKey, appearance.ArmorKey, appearance.OffHandKey, appearance.InVillage, appearance.Tier, appearance.HairIndex,
                 HashCode.Combine(appearance.HelperPet, appearance.Phoenix, appearance.BigHead, appearance.WeaponGlow, appearance.OffHandGlow, appearance.ShopSign,
-                    appearance.ClanId, HashCode.Combine(appearance.ClanName, appearance.ClanMark, appearance.PetSkin, appearance.PetName, appearance.Mount, appearance.Title, appearance.HeldWeaponKey))),
+                    appearance.ClanId, HashCode.Combine(appearance.ClanName, appearance.ClanMark, appearance.PetSkin, appearance.PetName, appearance.Mount, appearance.Title, appearance.HeldWeaponKey, appearance.RankAura))),
             view.OwnerId,
             view.ModelScale);
     }

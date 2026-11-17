@@ -250,6 +250,16 @@ public sealed partial class GameplayHud
             return;
         }
 
+        if (_courierWindow.Contains(layout, pointer))
+        {
+            if (!_courierWindow.Dragging)
+            {
+                _courierWindow.Click(layout, pointer, _clock.Elapsed.TotalMilliseconds);
+            }
+
+            return;
+        }
+
         if (MinimapShown && HudAchievements.Button(_minimap.Area(layout)).Contains(pointer))
         {
             _achievements.Toggle();
@@ -329,7 +339,7 @@ public sealed partial class GameplayHud
             return;
         }
 
-        if (ClickClan(pointer) || ClickCastle(pointer) || ClickBellatra(pointer) || ClickQuests(layout, pointer) || ClickTrade(pointer) || ClickParty(layout, pointer))
+        if (ClickClan(layout, pointer) || ClickCastle(pointer) || ClickBellatra(pointer) || ClickQuests(layout, pointer) || ClickTrade(layout, pointer) || ClickParty(layout, pointer))
         {
             return;
         }
@@ -562,7 +572,7 @@ public sealed partial class GameplayHud
             return true;
         }
 
-        if (_helpPet.Captures(pointer) || CapturesHelp(pointer) || CapturesParty(layout, pointer) || CapturesClan(pointer) || CapturesCastle(pointer) || CapturesBellatra(pointer) || _tradeRequest.Captures(pointer) || _personalShop.Captures(pointer)
+        if (_helpPet.Captures(pointer) || CapturesHelp(pointer) || CapturesParty(layout, pointer) || CapturesClan(layout, pointer) || CapturesCastle(pointer) || CapturesBellatra(pointer) || _tradeRequest.Captures(layout, pointer) || _personalShop.Captures(pointer)
             || _itemUse.Captures(pointer) || _wingGate.Captures(pointer) || _puzzle.Captures(pointer) || _crystalDismiss.Captures(pointer) || _premium.Contains(pointer))
         {
             return true;
@@ -594,6 +604,7 @@ public sealed partial class GameplayHud
             || _achievements.Contains(layout, pointer)
             || _rankings.Contains(layout, pointer)
             || _partyFinder.Contains(layout, pointer)
+            || _courierWindow.Contains(layout, pointer)
             || MinimapShown && HudAchievements.Button(_minimap.Area(layout)).Contains(pointer)
             || _npcOpen && HudNpcPanel.Box.Contains(pointer)
             || _skills.TrainingPending && HudMessageBox.Bounds.Contains(pointer);

@@ -96,6 +96,7 @@ public sealed partial class GameplayHud : IDisposable
     private readonly HudCoinShop _coinShop = new();
     private readonly Npc.HudItemBox _itemBox = new();
     private readonly Npc.HudArenaEvent _arenaEvent = new();
+    private readonly Npc.HudArenaTimer _arenaTimer = new();
     private readonly Npc.HudCabinet _cabinet = new();
     private readonly Markets.HudMarketplace _marketplace = new();
     private readonly Markets.HudCharacterMarket _characterMarket = new();
@@ -170,7 +171,7 @@ public sealed partial class GameplayHud : IDisposable
         _settings = new HudSettingsPanel(context.Presentation);
         _sprites = new HudSprites(context.GraphicsDevice, context.AssetRoot, context.Log);
         _sprites.Request(HudArt.Static);
-        _sprites.Request([.. HudMinimap.Art, .. Npc.HudArenaEvent.Art, .. Npc.HudCabinet.Art, .. HudWorldBuffs.Art, .. HudCombat.TargetBarArt, AutoSkillArt, .. HudQuestBook.Art, .. HudQuestTracker.Art, .. HudPetWindow.Art, .. Inventory.HudItemFrame.Art, Widgets.HudGroundLabels.BeamArt, .. HudCoinShop.Art, .. Npc.HudItemBox.Art, .. Markets.HudMarketplace.Art, .. Markets.HudCharacterMarket.Art]);
+        _sprites.Request([.. HudMinimap.Art, .. Npc.HudArenaEvent.Art, .. Npc.HudArenaTimer.Art, .. Npc.HudCabinet.Art, .. HudWorldBuffs.Art, .. HudCombat.TargetBarArt, AutoSkillArt, .. HudQuestBook.Art, .. HudQuestTracker.Art, .. HudPetWindow.Art, .. Inventory.HudItemFrame.Art, Widgets.HudGroundLabels.BeamArt, .. HudCoinShop.Art, .. Npc.HudItemBox.Art, .. Markets.HudMarketplace.Art, .. Markets.HudCharacterMarket.Art, .. HudCourierWindow.Art]);
         _arenaEvent.Teleport = () => _ = _chat.Send?.Invoke("/arena enter", false, Guid.Empty);
         _sprites.Request(HudNpcArt.All);
         _sprites.Request(HudCraftArt.All);
@@ -235,6 +236,8 @@ public sealed partial class GameplayHud : IDisposable
         _sprites.Request(HudActionBar.Art);
         _sprites.Request(HudMessageBox.Art);
         _sprites.Request(HudSettingsPanel.Art);
+        _cabinet.Favorites = context.Presentation.Requested.CabinetFavorites;
+        _cabinet.FavoritesChanged = favorites => context.Presentation.Requested = context.Presentation.Requested with { CabinetFavorites = favorites };
         _sprites.Request(HudAchievements.Art);
         _sprites.Request(HudRankings.Art);
         _sprites.Request(HudPartyFinder.Art);
@@ -269,6 +272,12 @@ public sealed partial class GameplayHud : IDisposable
     public Func<PristonTale.Simulation.Items.Usable.ItemUseCommand, Task<PristonTale.Simulation.Items.Usable.ItemUseOutcome>> UseItem { get; set; }
 
     // The field's next boss pass as the server last sent it; the minimap counts down from when it arrived.
+    // The local player's ranking aura, shown with its bonus in the Active Buffs box.
+    public Contracts.Characters.RankAura RankAura
+    {
+        set => _worldBuffs.Rank(value, DataText.ClassTitle(_class, 0));
+    }
+
     public IReadOnlyList<(int Kind, int SecondsLeft)> WorldBuffs
     {
         set => _worldBuffs.Receive(value, _clock.Elapsed.TotalMilliseconds);
@@ -356,6 +365,9 @@ public sealed partial class GameplayHud : IDisposable
     public float MinimapViewSize => _minimap.CurrentViewSize;
     public bool PointerCaptured { get; private set; }
     public bool AssetsFailed => _sprites.Failed || _icons.Failed;
+    // While the world's entry waits for the HUD's art, its images upload with a larger budget per frame.
+    public bool EagerLoading { set => _sprites.Eager = value; }
+
     public bool IconsIdle => _icons.IsIdle && _sprites.IsIdle && !_questDocuments.IsLoading && !_helpTexts.IsLoading;
     public long TextureBytes => _sprites.TextureBytes;
     // While auto skill runs its ring circles the right skill socket.
@@ -571,6 +583,7 @@ public sealed partial class GameplayHud : IDisposable
         _achievements.Hide();
         _rankings.Hide();
         _partyFinder.Hide();
+        _courierWindow.Hide();
         _npcOpen = false;
         _settingsOpen = false;
         _systemMenu = false;
@@ -631,7 +644,7 @@ public sealed partial class GameplayHud : IDisposable
         _coinShop.Update(_icons, _sprites);
         _itemBox.Update();
         _cabinet.Jobs = (uint)JobBits.Of(_class);
-        _cabinet.Update(_state);
+        _cabinet.Update(_state, elapsedSeconds);
         _marketplace.Update(_state);
         _characterMarket.Update(_state);
         UpdateDailyQuests();
@@ -696,6 +709,10 @@ public sealed partial class GameplayHud : IDisposable
         else if (_partyFinder.Contains(layout, pointer))
         {
             _partyFinder.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
+        }
+        else if (_courierWindow.Contains(layout, pointer))
+        {
+            _courierWindow.Scroll(mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue);
         }
         else if (_npcOpen && HudNpcPanel.Box.Contains(pointer))
         {
@@ -769,6 +786,8 @@ public sealed partial class GameplayHud : IDisposable
         UpdateHelp(state);
         _chat.Window.Drag(layout, mouse, _previousMouse, pointer, ChatYields(layout));
         _partyFinder.Drag(layout, mouse, _previousMouse, pointer);
+        _courierWindow.Drag(layout, mouse, _previousMouse, pointer);
+        _courierWindow.Update(_clock.Elapsed.TotalMilliseconds);
         _chat.Macros = _context.Presentation.Requested.ChatMacros;
         var clicked = mouse.LeftButton == ButtonState.Pressed && _previousMouse.LeftButton == ButtonState.Released;
         // A click the HUD takes stays its own when it closes the window under it (a close button over the ground).
@@ -1009,10 +1028,16 @@ public sealed partial class GameplayHud : IDisposable
 
         var classicFrame = _context.Presentation.Requested.ClassicTargetFrame;
         Combat.DrawTarget(_painter, layout, TargetId, _context.Presentation.Requested.ClassicTargetHealthBar, _portrait.Texture(TargetId),
-            ShowsPlayerButtons, classicFrame);
-        if (ShowsPlayerButtons)
+            false, classicFrame);
+        var menuPlayer = MenuPlayerId;
+        if (menuPlayer != 0)
         {
-            HudPlayerButtons.Draw(_painter, HudCombat.TargetFrame(layout, classicFrame), pointer, ClanButton);
+            _targetMenu.Offer(menuPlayer, OffersRaid(menuPlayer), OffersClan(menuPlayer));
+            _targetMenu.Draw(_painter, HudCombat.TargetFrame(layout, classicFrame), classicFrame, pointer);
+        }
+        else
+        {
+            _targetMenu.Close();
         }
         _worldBuffs.Draw(_painter, layout, _clock.Elapsed.TotalMilliseconds, pointer, _premium);
         _siegeBoard.Draw(_painter, layout, InCastleField, _clock.Elapsed.TotalMilliseconds, Combat.OwnClan);
@@ -1062,6 +1087,7 @@ public sealed partial class GameplayHud : IDisposable
         _achievements.Draw(_painter, layout, pointer);
         _rankings.Draw(_painter, layout, pointer);
         _partyFinder.Draw(_painter, layout, pointer);
+        _courierWindow.Draw(_painter, layout, pointer, _clock.Elapsed.TotalMilliseconds);
 
         var incoming = OwnedItemView.Find(_state?.Items, _inventory.Dragging);
         var serviceFrame = new HudServiceFrame(_painter, layout, _icons, _state, pointer, incoming, _settingsOpen, _clock.Elapsed.TotalMilliseconds);
@@ -1235,9 +1261,9 @@ public sealed partial class GameplayHud : IDisposable
         _partyFrames.DrawConfirm(_painter, pointer);
         _premium.DrawHover(_painter, pointer, _clock.Elapsed.TotalMilliseconds);
         _painter.Flush();
-        _partyRequest.Draw(_painter, pointer, _clock.Elapsed.TotalMilliseconds);
-        _clanRequest.Draw(_painter, pointer, _clock.Elapsed.TotalMilliseconds);
-        _tradeRequest.Draw(_painter, pointer, _clock.Elapsed.TotalMilliseconds);
+        _partyRequest.Draw(_painter, layout, pointer, _clock.Elapsed.TotalMilliseconds);
+        _clanRequest.Draw(_painter, layout, pointer, _clock.Elapsed.TotalMilliseconds);
+        _tradeRequest.Draw(_painter, layout, pointer, _clock.Elapsed.TotalMilliseconds);
         _restart.Draw(_painter, layout, pointer, RestartOffer?.FieldOpen == true, InCastleField);
         _painter.Flush();
         _petWindow.Draw(_painter, layout, PetCollection, CharacterName, _icons, pointer);
@@ -1251,6 +1277,11 @@ public sealed partial class GameplayHud : IDisposable
         _coinShop.Draw(_painter, layout, _icons, pointer);
         _painter.Flush();
         _itemBox.Draw(_painter, layout, _icons, _state, pointer);
+        if (World is { } world)
+        {
+            _arenaTimer.Draw(_painter, layout, Combat.FieldCode, world.PlayerPosition);
+        }
+
         _arenaEvent.Draw(_painter, layout, pointer);
         _cabinet.Draw(_painter, layout, _icons, pointer);
         _characterMarket.Draw(_painter, layout, _icons, pointer);

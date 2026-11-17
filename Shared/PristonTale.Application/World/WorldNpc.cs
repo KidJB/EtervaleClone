@@ -1,5 +1,6 @@
 using System.Numerics;
 using PristonTale.Simulation.Characters;
+using PristonTale.Simulation.World;
 using PristonTale.Simulation.World.Fields;
 using PristonTale.Simulation.World.Motion;
 using PristonTale.Simulation.World.Npcs;
@@ -59,10 +60,13 @@ public sealed class WorldNpc
         ulong entityId,
         NpcDefinition definition,
         FixedNpc placement,
-        MotionTimingSet? motionTimings = null)
+        MotionTimingSet? motionTimings = null,
+        FieldTerrain? terrain = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
-        var position = new Vector3(GameUnits.FromFixed(placement.X), GameUnits.FromFixed(placement.Y), GameUnits.FromFixed(placement.Z));
+        var position = placement.Y == FixedNpc.OnFloor
+            ? (terrain ?? FieldTerrain.None).PlaceOnFloor(new Vector3(GameUnits.FromFixed(placement.X), 0f, GameUnits.FromFixed(placement.Z)))
+            : new Vector3(GameUnits.FromFixed(placement.X), GameUnits.FromFixed(placement.Y), GameUnits.FromFixed(placement.Z));
         var facing = GameUnits.FromAngle(placement.Angle);
         return new WorldNpc(entityId, definition, position, facing, motionTimings);
     }

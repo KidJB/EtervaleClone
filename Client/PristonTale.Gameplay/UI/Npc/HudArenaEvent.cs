@@ -10,9 +10,9 @@ namespace PristonTale.Gameplay.UI.Npc;
 // reads the schedule on this machine's clock. Escape closes it.
 public sealed class HudArenaEvent
 {
-    private const string Folder = "Hud/GrandFury/";
+    internal const string Folder = "Hud/GrandFury/";
     private const string BannerArt = Folder + "logoheader.png";
-    private const string CountdownArt = Folder + "bartime.png";
+    internal const string CountdownArt = Folder + "bartime.png";
     private const string BossBackArt = Folder + "monbg.png";
     private const string LineArt = Folder + "line.png";
     private const string ArrowArt = Folder + "arrow.png";

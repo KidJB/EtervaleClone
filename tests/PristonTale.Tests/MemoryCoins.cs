@@ -27,25 +27,66 @@ internal sealed class MemoryCoins(MemoryCharacterBook characters) : ICoinReposit
             ? null
             : await AddAsync(character.AccountId, -price, reason, ct);
 
-    public Dictionary<long, List<string>> Skins { get; } = new();
+    public Dictionary<long, List<OwnedSkinRecord>> Skins { get; } = new();
 
     public Task<IReadOnlyList<string>> OwnedSkinsAsync(long accountId, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<string>>(Skins.GetValueOrDefault(accountId) ?? []);
+        Task.FromResult<IReadOnlyList<string>>((Skins.GetValueOrDefault(accountId) ?? []).Select(static skin => skin.ItemKey).ToList());
 
-    public async Task<long?> BuySkinAsync(long accountId, string itemKey, long price, string reason, CancellationToken ct = default)
+    public Task<IReadOnlyList<OwnedSkinRecord>> SkinRecordsAsync(long accountId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<OwnedSkinRecord>>(Skins.GetValueOrDefault(accountId) ?? []);
+
+    public async Task<long?> BuySkinAsync(long accountId, string itemKey, long price, string reason, long unlockedAt = 0, CancellationToken ct = default)
     {
-        if (Balances.GetValueOrDefault(accountId) < price)
+        if (Balances.GetValueOrDefault(accountId) < price || Owns(accountId, itemKey))
         {
             return null;
         }
 
-        if (!Skins.TryGetValue(accountId, out var owned))
+        Insert(new OwnedSkinRecord(accountId, itemKey, unlockedAt, 1, 0));
+        return await AddAsync(accountId, -price, reason, ct);
+    }
+
+    public Task<bool> UnlockSkinAsync(OwnedSkinRecord skin, CancellationToken ct = default) => Task.FromResult(Insert(skin));
+
+    public async Task<SkinUnlockStore> UnlockSkinWithCharacterAsync(CharacterRecord character, OwnedSkinRecord skin, CancellationToken ct = default)
+    {
+        if (Owns(skin.AccountId, skin.ItemKey))
         {
-            Skins[accountId] = owned = [];
+            return SkinUnlockStore.Owned;
         }
 
-        owned.Add(itemKey);
-        return await AddAsync(accountId, -price, reason, ct);
+        if (!await characters.UpdateAllAsync([character], ct))
+        {
+            return SkinUnlockStore.Failed;
+        }
+
+        Insert(skin);
+        return SkinUnlockStore.Stored;
+    }
+
+    public Task<int> ResetSkinsAsync(long accountId, CancellationToken ct = default)
+    {
+        var count = Skins.Remove(accountId, out var owned) ? owned.Count : 0;
+        return Task.FromResult(count);
+    }
+
+    private bool Owns(long accountId, string key) =>
+        Skins.TryGetValue(accountId, out var owned) && owned.Exists(skin => string.Equals(skin.ItemKey, key, StringComparison.OrdinalIgnoreCase));
+
+    private bool Insert(OwnedSkinRecord skin)
+    {
+        if (Owns(skin.AccountId, skin.ItemKey))
+        {
+            return false;
+        }
+
+        if (!Skins.TryGetValue(skin.AccountId, out var owned))
+        {
+            Skins[skin.AccountId] = owned = [];
+        }
+
+        owned.Add(skin);
+        return true;
     }
 
     public async Task<CoinTradeStore> TradeWithCharactersAsync(IReadOnlyList<CharacterRecord> records, IReadOnlyList<CoinTransfer> transfers,

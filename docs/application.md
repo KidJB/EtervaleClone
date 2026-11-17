@@ -20,6 +20,7 @@ into it is described in [server.md](server.md); skill resolution details are in 
 | Path | Responsibility |
 | --- | --- |
 | `Services/AuthAppService.cs` | Login against `IAccountRepository` (or a "remember me" token through `IRememberTokenRepository`), creates a `PlayerSession` with the account's `GmLevel`; issues tokens |
+| `Rankings/RankAuras.cs` | The ranking auras (`RankAura`): the first of the level board of all classes wears Overall, the first three of each class First, Second and Third; `WorldServer.SetRankAurasAsync` applies them to players in game and to each one entering, on its premium timers (`PremiumTimers.RankAura`), which its looks show; the aura gives extra experience on kills (`RankAuraBonus`: +10 % for Overall and First, +7 % Second, +5 % Third, added in `PremiumRules.ExperiencePercent`) |
 | `Rankings/RankingAppService.cs` | The rankings window's boards: the level board (`IRankingRepository.TopLevelsAsync`, 100 lines, all classes or one, game masters and blocked accounts left out, each kept a minute) and Bellatra's best clans (`BellatraClanAppService`) |
 | `Services/CharacterAppService.cs` | List, name check, create, delete characters; builds `CharacterSummary` for the select screen |
 | [`Services/SessionAppService.cs`](../Shared/PristonTale.Application/Services/SessionAppService.cs) | World entry, saves, durable inventory and progression operations (`ApplyDurableAsync`) |
@@ -559,7 +560,8 @@ its carry limit (`GoldLimit` otherwise). A coin entry moves the price from the b
 that transaction instead (`StallSale.Coins`), and stored stall items keep their currency (`StallItem.Currency`). An
 account's own stall refuses its characters. `/stall close` works from anywhere:
 one transaction removes the stall and puts each unsold item in the account's Item Distributor (`IStallRepository.CloseAsync`),
-then the stall leaves its field. Stored stalls stand again when the server starts (`StallRestoreService`).
+then the stall leaves its field. Stored stalls stand again when the server starts (`StallRestoreService`, which logs how many), each opening its field if no
+player has yet.
 
 ## Item Distributor
 
@@ -629,6 +631,38 @@ command quota), leaving the world or changing place ends the trade for both; the
 delivered after the tick (`TakeTickNotices`). Every snapshot carries the receiver's `TradeView` (the partner items with
 their values for it) and pending `TradeRequest`. Meanwhile inventory commands and item uses on an offered item
 (`Offers`), NPC services and opening a personal shop are refused.
+
+## The Cabinet
+
+The Cabinet is the account's collection of looks: worn gear (armor, robes, weapons, shields), costumes, gear-only looks and hair
+(`CabinetLooks`, built from the world items, `Costumes.json` and the numbered heads). A look shows over the worn item of its kind and grip
+(`SkinRules`) and changes only the model drawn: the worn item's stats, aging, rarity and every derived value stay as they are. The account
+owns its looks (`account_skins`), so every character of it may show a look its class wears: the world refuses a look the class cannot wear
+(`WorldServer.ApplySkinsAsync`, `SkinRules.Wearable`), and `SkinAppService.ApplyAsync` one the account does not own or of another slot.
+
+Each look has a category (`CosmeticCategory`: an entry of `Costumes.json` is a costume unless its `kind` says armor or robe, and its `costumeItems` are world items filed as costumes), a rarity and its sources (`CosmeticSource` flags: Coins, MonsterDrop, BossDrop, Quest,
+Event, Brush, Deal) from `data/cabinet.json` (`CabinetConfigStore`, `CosmeticRule`), or its defaults (`CabinetRules`): a world item's look
+is sold for coins and brushable, a costume, hair or gear-only look is sold for coins, and rarity rises with the item's level (costumes and
+gear-only looks epic, hair uncommon). A look without Coins is exclusive: `SkinAppService.BuyAsync` answers `NotForSale`. A rule may
+disable a look (hidden unless owned), set its price and description, and name its token.
+
+Unlocking from a bag item (`SkinAppService.UnlockFromItemAsync`, `WorldServer.PrepareCabinetUnlockAsync`) is a durable operation: on the
+tick the item is checked and the candidate loses it, then the unlock and the character are stored in one transaction
+(`ICoinRepository.UnlockSkinWithCharacterAsync`), then the live character commits. A brush (`CB101` armor and robe, `CB102` weapon and
+shield; 500 coins each in `coinshop.json`'s Cabinet tab, and boss drops) turns gear of its kind into its look, using up the gear and one
+brush; a token (`CT1xx` trades, `CU1xx` is bound to the character, `BoundItems`) unlocks its rule's look. Nothing is used up when the
+item holds no brushable look, no brush of its kind is carried, or the account owns the look; a look owned by the time it is stored rolls
+the whole operation back. Brushes and tokens are Etervale's own items (`CabinetRules.ItemDefinitions`, made at world-data load, a token
+named after its look). A kill rolls `data/cabinet.json`'s drops (`CosmeticDrop`: one monster's or every boss's, per ten thousand) in
+`FieldCombat.RollCabinetDrops`. Quests and events give looks through their tokens (a Courier hunt's reward item may be one) or a game
+master's `/@cabinet_unlock`. Every unlock records when, how and by which character (`OwnedSkinRecord`), once per account.
+
+Bidding deals (`CabinetDealAppService`, `ICabinetDealRepository`) offer one look for a time: a game master opens one (`/@deal_new`) with a
+start bid, a step and a level. A bid must reach the least next bid (the start, then the leader's bid plus the step), the bidder must not
+lead already, own the look or be under the level, and the deal must be open. The repository holds the bid's coins and gives the beaten
+bid its coins back in one transaction, and the leading bid is a compare-and-set on the deal's row, so of two bids racing one leads and
+the other changes nothing. `CabinetDealService` closes ended deals every half minute (and `/@deal_end` at once): the leader receives the
+look (source Deal) for its held coins, or its coins back when its account owns the look by then.
 
 ## Pet skins
 

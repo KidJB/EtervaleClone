@@ -38,7 +38,11 @@ public sealed class HudWorldBuffs
     private static readonly Color Name = new(235, 225, 205);
     private static readonly Color Time = new(120, 220, 120);
 
+    private const string RankArt = Folder + "EXP.png";
+
     private readonly List<(string Name, string Effect, string Icon, double EndMs, string Time)> _rows = [];
+    private Contracts.Characters.RankAura _rank;
+    private string _rankLine = "";
     private IReadOnlyList<(int Kind, int SecondsLeft)> _from;
     private long _second = -1;
     private int _bodyHeight;
@@ -110,6 +114,24 @@ public sealed class HudWorldBuffs
         }
     }
 
+    // The ranking aura worn and its bonus (RankAuraBonus), in its own section; its text is made when it changes.
+    public void Rank(Contracts.Characters.RankAura aura, string className)
+    {
+        if (aura == _rank)
+        {
+            return;
+        }
+
+        _rank = aura;
+        var percent = Simulation.Progression.RankAuraBonus.ExperiencePercent(aura);
+        _rankLine = aura switch
+        {
+            Contracts.Characters.RankAura.None => "",
+            Contracts.Characters.RankAura.Overall => Localization.ClientText.Format("RankAura.Overall", percent),
+            _ => Localization.ClientText.Format("RankAura.Class", className, (int)aura, percent)
+        };
+    }
+
     public void Receive(IReadOnlyList<(int Kind, int SecondsLeft)> buffs, double nowMs)
     {
         if (ReferenceEquals(buffs, _from) || buffs is null)
@@ -150,13 +172,13 @@ public sealed class HudWorldBuffs
             }
         }
 
-        _shown = _rows.Count > 0 || personal.Count > 0;
+        _shown = _rows.Count > 0 || personal.Count > 0 || _rankLine.Length > 0;
         if (!_shown)
         {
             return;
         }
 
-        _bodyHeight = (personal.Count > 0 ? Step + 4 + personal.Count * PersonalRow + 6 : 0)
+        _bodyHeight = (_rankLine.Length > 0 ? Step + 4 + PersonalRow + 6 : 0) + (personal.Count > 0 ? Step + 4 + personal.Count * PersonalRow + 6 : 0)
             + (_rows.Count > 0 ? Step + 4 + (_rows.Count + TilesPerRow - 1) / TilesPerRow * (Tile + 2) : 0);
         var bounds = Bounds(layout);
         painter.Fill(bounds, BoxColor);
@@ -174,6 +196,16 @@ public sealed class HudWorldBuffs
 
         var x = bounds.X + Padding;
         var y = bounds.Y + StripHeight + Padding;
+        if (_rankLine.Length > 0)
+        {
+            painter.Text(Localization.ClientText.Get("RankAura.Section"), x, y, Section);
+            painter.Fill(new Rectangle(x, y + Step, InnerWidth, 1), RuleColor);
+            y += Step + 4;
+            painter.Stretch(RankArt, new Rectangle(x, y, Tile, Tile));
+            painter.Text(painter.Fit(_rankLine, InnerWidth - Tile - 4), x + Tile + 4, y + 2, Name);
+            y += PersonalRow + 6;
+        }
+
         if (personal.Count > 0)
         {
             painter.Text("Personal", x, y, Section);

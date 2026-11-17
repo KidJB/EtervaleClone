@@ -92,7 +92,7 @@ public sealed class PristonPhysicalSky : IDisposable
         _cloudShadow = new RenderTarget2D(device, CloudShadowSize, CloudShadowSize, false, SurfaceFormat.Color, DepthFormat.None, 0,
             RenderTargetUsage.PreserveContents);
         _noise = new Texture3D(device, PristonCloudNoise.Size, PristonCloudNoise.Size, PristonCloudNoise.Size, false, SurfaceFormat.HalfVector4);
-        _noise.SetData(PristonCloudNoise.Generate());
+        _noise.SetData(PristonCloudNoise.Shared);
     }
 
     // The clouds' transmittance toward the sun over CloudShadowExtent km around the camera, and how surfaces read it

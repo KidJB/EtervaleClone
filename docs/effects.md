@@ -192,7 +192,10 @@ and every particle script to `Effect/Vfx/Particles/<File>.vfx.json` (`particle.<
 prints every construct it kept with a caveat. Effect group scripts become components (Mesh -> `Model`, Billboard ->
 `Billboard`, CreateMesh -> `Ground`, BillboardAxial -> `Beam`, ParticleSystem -> `Particles`, Parent -> offset) with
 the original defaults (particles: loop 1, 50 per loop, 30 per second, life 1..2 s, size 5..10). Particle scripts keep
-the original tokenizer: a value glued to `=` reads as 0, a script the original rejects plays nothing. Axes: Z is
+the original tokenizer: a value glued to `=` reads as 0, a script the original rejects plays nothing. "Forever" written as a
+loop count past the bounds loops without end (`loops` 0), and a lifetime past them lasts `VfxDefinition.MaxParticleLife`.
+A `Trail` sequence keeps one position per game tick (70 a second, as the original), `sizeExt` of them up to 160, so its
+length does not depend on the frame rate. Axes: Z is
 negated and rotations about X and Y are mirrored. Remaining caveats of the shipped data (reported, not mapped): models
 and animated textures the game data lacks (those components are left out), a particle system's start delay, and
 values the original also fails to read.

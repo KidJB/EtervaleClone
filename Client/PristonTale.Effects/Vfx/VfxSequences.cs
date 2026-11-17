@@ -6,7 +6,8 @@ namespace PristonTale.Effects.Vfx;
 
 internal sealed class CompiledSequence
 {
-    public const int MaxTrailPoints = 32;
+    // A trail keeps one position per game tick, as the original did (sizeExt of them): 160 cover a script's two-second life.
+    public const int MaxTrailPoints = 160;
 
     public CompiledSequence(VfxSequenceDefinition source, Texture2D texture)
     {
@@ -59,6 +60,8 @@ public struct VfxSequenceParticle
     public Vector3 Orbit;
     public Vector3 OrbitStep;
     public int TrailCount;
+    // Game ticks not yet recorded on the trail.
+    public float TrailCarry;
     internal int NextEvent;
 }
 
@@ -185,7 +188,18 @@ internal sealed class SequenceState
 
                 if (trail)
                 {
-                    RecordTrail(index, ref particle);
+                    particle.TrailCarry += dt * Contracts.Units.GameUnits.TicksPerSecond;
+                    if (particle.Stretch <= 0f)
+                    {
+                        RecordTrail(index, ref particle);
+                    }
+
+                    // One position per tick passed (a slow frame spans several), at most a full trail.
+                    for (var tick = 0; particle.Stretch > 0f && particle.TrailCarry >= 1f && tick < CompiledSequence.MaxTrailPoints; tick++)
+                    {
+                        particle.TrailCarry -= 1f;
+                        RecordTrail(index, ref particle);
+                    }
                 }
 
                 particle.Local += particle.Velocity * dt;

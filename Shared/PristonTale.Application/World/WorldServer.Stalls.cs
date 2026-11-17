@@ -270,10 +270,8 @@ public sealed partial class WorldServer
     private void AddStall(Stall stall, PersonalShop shop, Inventory stock)
     {
         stall.SetStock(shop, stock);
-        if (_fields.TryGetValue(stall.FieldId, out var field))
-        {
-            field.AddStall(stall);
-        }
+        // A stall restored at start stands in a field no player has opened yet.
+        GetField(stall.FieldId).AddStall(stall);
     }
 
     // A stall in the viewer's field, viewed as a shop is.

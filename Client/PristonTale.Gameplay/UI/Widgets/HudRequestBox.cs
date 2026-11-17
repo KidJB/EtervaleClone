@@ -1,38 +1,51 @@
 using Microsoft.Xna.Framework;
+using PristonTale.Gameplay.Localization;
 using PristonTale.Gameplay.UI.Rendering;
-using PristonTale.Contracts.Units;
 
 namespace PristonTale.Gameplay.UI.Widgets;
 
-// A request box's art and places, relative to the box: OK and cancel draw their idle image (null: the box's own art shows
-// it) or, under the pointer, the hovered one; who asks and the request line. BlinkOver: the blinking square draws over the
-// art (the party's box) rather than under it (the trade's).
-public sealed record HudRequestBoxArt(string Box, string OkIdle, string OkHovered, Rectangle Ok, string CancelIdle, string CancelHovered, Rectangle Cancel,
-    Point Name, Point Line, bool BlinkOver)
+// A request another player sent (a party, a raid, a trade, a clan invitation) as the game's message box: its title, the
+// question in up to two lines, "Automatically closes in N sec..." and Yes and No. It sits centred just above where a
+// confirmation box shows, answers once and closes with its answer or after its time.
+public sealed class HudRequestBox(long lifeMs)
 {
-    public string[] All => new[] { Box, OkIdle, OkHovered, CancelIdle, CancelHovered }.Where(static path => path is not null).ToArray();
-}
+    private const int Width = HudMessageBox.VisibleWidth;
+    private const int Height = HudMessageBox.Height;
+    private const int Gap = 10;
+    private const int TextMargin = 22;
 
-// The original's request box at (513, 3) a party or trade request opens: its art, a blue square blinking with it (shown
-// frames 16..30 of every 31 at 70 per second), who asks and the request line. It answers once from OK or cancel and closes
-// with its answer or after its time.
-public sealed class HudRequestBox(HudRequestBoxArt art, long lifeMs)
-{
-    private const int FramesPerSecond = GameUnits.TicksPerSecond;
-    private static readonly Point Origin = new(513, 3);
-    private static readonly Color Blink = Color.FromNonPremultiplied(0, 200, 255, 80);
     private double _openedMs;
-    private string _line;
+    private string _title = "";
+    private string _question = "";
+    private string[] _lines;
+    private string _closes = "";
+    private int _shownSeconds = -1;
 
-    public Rectangle Ok => Offset(art.Ok);
-    public Rectangle Cancel => Offset(art.Cancel);
     public bool IsOpen => FromName is not null;
     public ulong FromId { get; private set; }
     public string FromName { get; private set; }
 
-    public void Show(ulong fromId, string fromName, string line, double nowMs)
+    // Centred, one box and a gap above the confirmation box's place.
+    public static Rectangle Box(HudLayout layout) =>
+        new((layout.Width - Width) / 2, Math.Max(0, (layout.Height - Height) / 2 - Height - Gap), Width, Height);
+
+    public static Rectangle Accept(HudLayout layout)
     {
-        (FromId, FromName, _line, _openedMs) = (fromId, fromName, line, nowMs);
+        var box = Box(layout);
+        return new Rectangle(box.X + 26, box.Y + 116, 88, 35);
+    }
+
+    public static Rectangle Reject(HudLayout layout)
+    {
+        var box = Box(layout);
+        return new Rectangle(box.X + 115, box.Y + 116, 88, 35);
+    }
+
+    public void Show(ulong fromId, string fromName, string title, string question, double nowMs)
+    {
+        (FromId, FromName, _title, _question, _openedMs) = (fromId, fromName, title.ToUpperInvariant(), question, nowMs);
+        _lines = null;
+        _shownSeconds = -1;
     }
 
     public void Close() => FromName = null;
@@ -45,17 +58,17 @@ public sealed class HudRequestBox(HudRequestBoxArt art, long lifeMs)
         }
     }
 
-    public bool Captures(Point pointer) => IsOpen && (Ok.Contains(pointer) || Cancel.Contains(pointer));
+    public bool Captures(HudLayout layout, Point pointer) => IsOpen && Box(layout).Contains(pointer);
 
     // The answer a click gives (true accept, false refuse), or null when it missed both buttons.
-    public bool? Click(Point pointer)
+    public bool? Click(HudLayout layout, Point pointer)
     {
         if (!IsOpen)
         {
             return null;
         }
 
-        var answer = Ok.Contains(pointer) ? true : Cancel.Contains(pointer) ? false : (bool?)null;
+        var answer = Accept(layout).Contains(pointer) ? true : Reject(layout).Contains(pointer) ? false : (bool?)null;
         if (answer is not null)
         {
             Close();
@@ -64,42 +77,34 @@ public sealed class HudRequestBox(HudRequestBoxArt art, long lifeMs)
         return answer;
     }
 
-    public void Draw(HudPainter painter, Point pointer, double nowMs)
+    public void Draw(HudPainter painter, HudLayout layout, Point pointer, double nowMs)
     {
         if (!IsOpen)
         {
             return;
         }
 
-        var blink = (long)((nowMs - _openedMs) * FramesPerSecond / 1000) % 31 > 15;
-        if (blink && !art.BlinkOver)
+        _lines ??= [.. HudTextLayout.Wrap(_question, Width - 2 * TextMargin, text => painter.Measure(text)).Take(2)];
+        var seconds = (int)Math.Ceiling(Math.Max(0, lifeMs - (nowMs - _openedMs)) / 1000);
+        if (seconds != _shownSeconds)
         {
-            painter.Fill(new Rectangle(Origin.X + 5, Origin.Y + 5, 160, 53), Blink);
+            _shownSeconds = seconds;
+            _closes = ClientText.Format("Request.Closes", seconds);
         }
 
-        painter.Sprite(art.Box, Origin.X, Origin.Y);
-        if (blink && art.BlinkOver)
+        var box = Box(layout);
+        painter.Flush();
+        painter.Sprite(HudMessageBox.Background, box.X, box.Y);
+        painter.TextCentered(_title, box.Left, box.Right, box.Y + HudMessageBox.TitleY, HudTextColors.BoxTitle);
+        for (var index = 0; index < _lines.Length; index++)
         {
-            painter.Fill(new Rectangle(Origin.X + 5, Origin.Y + 5, 160, 53), Blink);
+            painter.TextCentered(_lines[index], box.Left, box.Right, box.Y + 48 + index * 18, Color.White);
         }
 
-        painter.Text(FromName, Origin.X + art.Name.X, Origin.Y + art.Name.Y);
-        if (_line is not null)
-        {
-            painter.Text(_line, Origin.X + art.Line.X, Origin.Y + art.Line.Y);
-        }
-
-        DrawButton(painter, Ok, Ok.Contains(pointer) ? art.OkHovered : art.OkIdle);
-        DrawButton(painter, Cancel, Cancel.Contains(pointer) ? art.CancelHovered : art.CancelIdle);
+        painter.TextCentered(_closes, box.Left, box.Right, box.Y + 92, HudTextColors.Hint);
+        var accept = Accept(layout);
+        var reject = Reject(layout);
+        painter.Sprite(accept.Contains(pointer) ? HudMessageBox.YesLit : HudMessageBox.Yes, accept.X, accept.Y);
+        painter.Sprite(reject.Contains(pointer) ? HudMessageBox.NoLit : HudMessageBox.No, reject.X, reject.Y);
     }
-
-    private static void DrawButton(HudPainter painter, Rectangle bounds, string image)
-    {
-        if (image is not null)
-        {
-            painter.Sprite(image, bounds.X, bounds.Y);
-        }
-    }
-
-    private static Rectangle Offset(Rectangle bounds) => new(Origin.X + bounds.X, Origin.Y + bounds.Y, bounds.Width, bounds.Height);
 }

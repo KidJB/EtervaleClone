@@ -95,6 +95,15 @@
         { "Id": 19, "Name": "World EXP Buff (24h)", "Description": "+5% EXP for all players for 24 hours", "ItemKey": "WB209", "Price": 4000 },
         { "Id": 20, "Name": "World Drop Buff (24h)", "Description": "15% chance of an extra drop for all players for 24 hours", "ItemKey": "WB210", "Price": 4000 }
       ]
+    },
+    {
+      "Id": 31,
+      "Name": "Cabinet",
+      "Icon": "costumes",
+      "Items": [
+        { "Id": 1, "Name": "Armor & Robe Brush", "Description": "Turns an armor or robe in your bag into its look in The Cabinet, for every character of your account.", "ItemKey": "CB101", "Price": 500, "Quantity": true },
+        { "Id": 2, "Name": "Weapon & Shield Brush", "Description": "Turns a weapon or shield in your bag into its look in The Cabinet, for every character of your account.", "ItemKey": "CB102", "Price": 500, "Quantity": true }
+      ]
     }
   ]
 }

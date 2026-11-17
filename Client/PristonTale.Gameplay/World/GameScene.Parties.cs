@@ -4,8 +4,7 @@ using PristonTale.Gameplay.UI.Parties;
 
 namespace PristonTale.Gameplay.World;
 
-// Party requests through the world connection, and the other player a click approached: once reached, its portrait shows
-// the trade, party and friend buttons while it stays the target within TradeLimits.Reach, as the original keeps them.
+// Party requests through the world connection.
 public sealed partial class GameScene : IPartyClient
 {
     private enum ApproachKind
@@ -14,11 +13,6 @@ public sealed partial class GameScene : IPartyClient
         Seller,
         Player
     }
-
-    // The player whose portrait shows the buttons; 0 for none.
-    public ulong ReachedPlayerId { get; private set; }
-
-    public void DismissPlayerButtons() => ReachedPlayerId = 0;
 
     public Task InviteToPartyAsync(ulong targetId) => SendSocial(_playChannel?.InviteToPartyAsync(targetId, _presenceCts.Token), "party invite");
 
@@ -35,14 +29,5 @@ public sealed partial class GameScene : IPartyClient
         }
 
         return Task.CompletedTask;
-    }
-
-    private void UpdateReachedPlayer()
-    {
-        if (ReachedPlayerId != 0 && (SelectedTargetId != ReachedPlayerId || _remote is null || !_remote.TryGetTarget(ReachedPlayerId, out var position, out _)
-            || !TradeLimits.InReach(position.ToNumerics(), PlayerPosition.ToNumerics())))
-        {
-            ReachedPlayerId = 0;
-        }
     }
 }

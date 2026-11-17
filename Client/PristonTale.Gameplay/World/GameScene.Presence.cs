@@ -93,6 +93,13 @@ public sealed partial class GameScene
         }
     }
 
+    // Entry readiness (EntryReadiness): a presence update has applied, the actors it named are prepared, no field is in flight.
+    public bool PresenceSeen { get; private set; }
+
+    public bool ActorsPrepared => (_remote?.Preparing ?? 0) == 0;
+
+    public bool FieldsIdle => _fieldStreamer?.IsIdle ?? true;
+
     private void DrainPresence(float dt)
     {
         if (_remote == null)
@@ -161,6 +168,7 @@ public sealed partial class GameScene
             Owner = update.Owner;
         }
 
+        PresenceSeen = true;
         _remote.ApplyServer(update);
         if (update.Warp is { } warp)
         {
@@ -175,6 +183,7 @@ public sealed partial class GameScene
         ObserveProgression(update);
         ObserveRestart(update);
         ObserveWeather(update);
+        ObserveCouriers(update);
         PresenceObserved?.Invoke(update);
     }
 

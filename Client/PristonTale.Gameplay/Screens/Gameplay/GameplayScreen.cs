@@ -20,6 +20,8 @@ public sealed class GameplayScreen : GameScreen
     private readonly List<GroundBeam> _groundBeams = [];
     private KeyboardState _lastKeyboard;
     private bool _showRenderStats = true;
+    private readonly EntryReadiness _entry = new();
+    private readonly System.Diagnostics.Stopwatch _entryClock = new();
     private volatile PristonTale.Client.Net.WorldCatalog.WorldRenderCatalog _pendingHudCatalog;
 
     public GameplayScreen(ScreenContext context, EnteredCharacter entered) : base(context)
@@ -30,7 +32,9 @@ public sealed class GameplayScreen : GameScreen
     public override void Enter()
     {
         _scene = new GameScene(Context.GraphicsDevice, Context.Content, Context.Log, Context.Sky, Context.Effects, Context.Presentation, Context.Audio);
+        _entryClock.Restart();
         _scene.LoadEntered(Context.AssetRoot, _entered);
+        var fieldMs = _entryClock.Elapsed.TotalMilliseconds;
         _hud = new GameplayHud(
             Context,
             _scene.ApplyInventoryAsync,
@@ -42,6 +46,7 @@ public sealed class GameplayScreen : GameScreen
             _scene.PrepareField,
             _scene.RequestQuestAsync);
         _hud.Chat.Window.Reveal();
+        Context.Log.Info(FormattableString.Invariant($"[Entry] scene and HUD built in {_entryClock.Elapsed.TotalMilliseconds:0} ms: field {fieldMs:0} ms"));
         _hud.CharacterName = _scene.Player.Name;
         _hud.CharacterClass = _scene.Player.Class.Class;
         _hud.PortraitScene = _scene;
@@ -61,6 +66,9 @@ public sealed class GameplayScreen : GameScreen
         _scene.PresenceObserved += _hud.ObserveClan;
         _scene.PresenceObserved += _hud.ObserveCastle;
         _scene.PresenceObserved += _hud.ObserveBellatra;
+        _scene.PresenceObserved += _hud.ObserveCouriers;
+        _hud.CourierBoardRequest = _scene.SendCourierBoardRequest;
+        _hud.CourierRequest = _scene.CourierAsync;
         _hud.Parties = _scene;
         _hud.SendClan = _scene.SendClan;
         _hud.SendCastleOwner = _scene.SendCastleOwner;
@@ -78,7 +86,6 @@ public sealed class GameplayScreen : GameScreen
         _hud.Trades = _scene;
         _scene.PresenceObserved += _hud.ObserveContacts;
         _hud.Contacts = _scene;
-        _hud.PlayerButtonsUsed += _scene.DismissPlayerButtons;
         _scene.SkillNotice += _hud.Chat.System;
         _hud.SummonModeRequested += _scene.ToggleSummonMode;
         _hud.CrystalPetDismissRequested += _scene.DismissCrystalPets;
@@ -114,6 +121,9 @@ public sealed class GameplayScreen : GameScreen
         _hud.CharacterMarket.Portrait = _scene.MarketPortrait;
         _hud.Cabinet.BuyRequest = _scene.BuySkinAsync;
         _hud.Cabinet.ApplyRequest = _scene.ApplySkinsAsync;
+        _hud.Cabinet.UnlockRequest = _scene.UnlockSkinAsync;
+        _hud.Cabinet.DealsRequest = _scene.CabinetDealsAsync;
+        _hud.Cabinet.BidRequest = _scene.CabinetBidAsync;
         _hud.DailyQuestRequest = _scene.DailyQuestAsync;
         _hud.WingGate.RequiredLevel = _scene.FieldLimitLevel;
         _scene.WingGateEntered += _hud.WingGate.Open;
@@ -257,6 +267,7 @@ public sealed class GameplayScreen : GameScreen
         if (_hud.Cabinet.Open)
         {
             _scene.PreviewLook(_hud.Cabinet.Preview);
+            _scene.PreviewTurns = _hud.Cabinet.PreviewTurns;
         }
         else
         {
@@ -264,12 +275,18 @@ public sealed class GameplayScreen : GameScreen
             _scene.PreviewArmor(_hud.PreviewArmorKey);
         }
 
+        _hud.EagerLoading = _entry.ReadyMs < 0;
         _scene.Update(gameTime);
+        if (_entry.Observe(_entryClock.Elapsed.TotalMilliseconds, _scene.PresenceSeen, _scene.ActorsPrepared, _scene.FieldsIdle, _hud.IconsIdle))
+        {
+            Context.Log.Info(_entry.Report());
+        }
+
         _hud.TargetId = _scene.SelectedTargetId;
+        _hud.RankAura = _scene.SelfRankAura;
         _hud.HelperPet = _scene.SelfHelperPet();
         _hud.HoveredId = _scene.HoveredTargetId;
         _hud.TracedId = _scene.TracedTargetId;
-        _hud.ButtonsPlayerId = _scene.ReachedPlayerId;
         _lastKeyboard = Keyboard.GetState();
     }
 
@@ -382,9 +399,9 @@ public sealed class GameplayScreen : GameScreen
             _scene.PresenceObserved -= _hud.ObserveClan;
             _scene.PresenceObserved -= _hud.ObserveCastle;
             _scene.PresenceObserved -= _hud.ObserveBellatra;
+            _scene.PresenceObserved -= _hud.ObserveCouriers;
             _scene.PresenceObserved -= _hud.ObserveTrade;
             _scene.PresenceObserved -= _hud.ObserveContacts;
-            _hud.PlayerButtonsUsed -= _scene.DismissPlayerButtons;
             _scene.SkillNotice -= _hud.Chat.System;
             _hud.SummonModeRequested -= _scene.ToggleSummonMode;
             _hud.CrystalPetDismissRequested -= _scene.DismissCrystalPets;

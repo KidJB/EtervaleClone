@@ -36,6 +36,10 @@ public sealed partial class GameScene
     private Task _previewPreparation;
     private PlayerActorHandles _previewHandles = new(ActorHandle.None, ActorHandle.None);
     private BoundingBox? _previewFraming;
+    private int _previewTurned;
+
+    // The Cabinet preview's quarter turns about its feet.
+    public int PreviewTurns { get; set; }
 
     // The picture of the player in the previewed armour, or null while none is ready.
     public Texture2D ArmorPreview { get; private set; }
@@ -141,6 +145,12 @@ public sealed partial class GameScene
             _previewFraming = new BoundingBox(new Vector3(center.X - reach, bounds.Min.Y, center.Z - reach), new Vector3(center.X + reach, bounds.Max.Y, center.Z + reach));
         }
 
+        if (_previewTurned != PreviewTurns && _actorScene is not null)
+        {
+            _previewTurned = PreviewTurns;
+            _previewHandles.SetWorld(_actorScene, Matrix.CreateRotationY(MathHelper.PiOver2 * PreviewTurns));
+        }
+
         _previewPortrait ??= new CharacterSelectPortrait(_graphicsDevice);
         ArmorPreview = _previewLook is null
             ? _previewPortrait.Render(_renderer, _previewHandles, PreviewWidth, PreviewHeight, _previewFraming, PreviewVisible, PreviewFocus)
@@ -156,6 +166,7 @@ public sealed partial class GameScene
 
         _previewHandles = new PlayerActorHandles(ActorHandle.None, ActorHandle.None);
         _previewFraming = null;
+        _previewTurned = 0;
         ArmorPreview = null;
     }
 

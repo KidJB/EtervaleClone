@@ -1,0 +1,22 @@
+{
+  // The Cabinet's looks and drops. Edit and reload in game with /@cabinet_reload (a new token needs a server restart to
+  // exist as an item). A look not listed here keeps its defaults: worn-gear looks are sold for coins and brushable, costumes,
+  // hair and gear-only looks are sold for coins; rarity rises with the item's level.
+  // sources: Coins, MonsterDrop, BossDrop, Quest, Event, Brush, Deal (a look without Coins is exclusive: never sold).
+  // token: the item that unlocks the look when used in The Cabinet; CT1xx trades, CU1xx is bound to the character.
+  // drops: item (a token or a brush), monster (its code) or bosses (every boss), perTenThousand (chance per kill).
+  "cosmetics": [
+    { "key": "CA166", "rarity": "Legendary", "sources": "BossDrop, Deal", "description": "Worn by the swan knights of old. Dropped by bosses only.", "token": "CT101" },
+    { "key": "CA168", "rarity": "Legendary", "sources": "BossDrop, Deal", "description": "Worn by the swan knights of old. Dropped by bosses only.", "token": "CT102" },
+    { "key": "CA547", "rarity": "Epic", "sources": "MonsterDrop", "description": "Hopies drop it now and then, when they are in a giving mood.", "token": "CT103" },
+    { "key": "CA548", "rarity": "Epic", "sources": "Quest, Event", "description": "A reward of quests and server events.", "token": "CU101" },
+    { "key": "DS306", "rarity": "Legendary", "sources": "Deal", "description": "Offered only in bidding deals." }
+  ],
+  "drops": [
+    { "item": "CB101", "bosses": true, "perTenThousand": 500 },
+    { "item": "CB102", "bosses": true, "perTenThousand": 500 },
+    { "item": "CT101", "bosses": true, "perTenThousand": 40 },
+    { "item": "CT102", "bosses": true, "perTenThousand": 40 },
+    { "item": "CT103", "monster": 196, "perTenThousand": 15 }
+  ]
+}

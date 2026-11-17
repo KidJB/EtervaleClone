@@ -69,7 +69,17 @@ internal static class ShopCurrencyTests
 
         public Task<IReadOnlyList<string>> OwnedSkinsAsync(long accountId, CancellationToken ct = default) => throw new NotSupportedException();
 
-        public Task<long?> BuySkinAsync(long accountId, string itemKey, long price, string reason, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<long?> BuySkinAsync(long accountId, string itemKey, long price, string reason, long unlockedAt = 0, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<OwnedSkinRecord>> SkinRecordsAsync(long accountId, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<bool> UnlockSkinAsync(OwnedSkinRecord skin, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<SkinUnlockStore> UnlockSkinWithCharacterAsync(CharacterRecord character, OwnedSkinRecord skin, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<int> ResetSkinsAsync(long accountId, CancellationToken ct = default) => throw new NotSupportedException();
 
         public async Task<CoinTradeStore> TradeWithCharactersAsync(IReadOnlyList<CharacterRecord> records, IReadOnlyList<CoinTransfer> transfers, CancellationToken ct = default)
         {

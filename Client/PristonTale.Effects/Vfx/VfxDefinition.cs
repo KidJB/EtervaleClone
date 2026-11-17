@@ -157,6 +157,9 @@ public sealed record VfxDefinition
 {
     // Longest effect in seconds (long auras); effects normally end earlier, when their layers have played out.
     public const float MaxDuration = 600f;
+    // A particle sequence's bounds: the particles all its loops may emit (0 loops emits without end) and a particle's longest life.
+    public const long MaxSequenceParticles = 1 << 20;
+    public const float MaxParticleLife = 1e6f;
 
     public required string Name { get; init; }
     // Lifetime of the effect in seconds; layers stop emitting then and the effect ends when every particle has died.
@@ -287,8 +290,8 @@ public sealed record VfxDefinition
 
     private static bool SequenceOk(VfxSequenceDefinition sequence)
     {
-        return sequence.Texture.Length > 0 && sequence.Count is >= 1 and <= 4096 && sequence.Loops >= 0 && (long)sequence.Count * sequence.Loops <= 1 << 20
-            && RangeOk(sequence.Rate) && RangeOk(sequence.Lifetime) && sequence.Lifetime[1] <= 1e6f && Vec3Ok(sequence.RadiusMin)
+        return sequence.Texture.Length > 0 && sequence.Count is >= 1 and <= 4096 && sequence.Loops >= 0 && (long)sequence.Count * sequence.Loops <= MaxSequenceParticles
+            && RangeOk(sequence.Rate) && RangeOk(sequence.Lifetime) && sequence.Lifetime[1] <= MaxParticleLife && Vec3Ok(sequence.RadiusMin)
             && Vec3Ok(sequence.RadiusMax) && Vec3Ok(sequence.GravityMin) && Vec3Ok(sequence.GravityMax) && Vec3Ok(sequence.Offset)
             && float.IsFinite(sequence.Delay) && sequence.Delay is >= 0f and <= 60f
             && sequence.Events.All(static e => float.IsFinite(e.T) && e.Min.Length == e.Max.Length && e.Min.Length is >= 1 and <= 4

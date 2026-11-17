@@ -57,7 +57,9 @@ internal sealed record SessionServices(
     CoinShopAppService CoinShop,
     ItemBoxAppService ItemBox,
     DailyQuestAppService DailyQuests,
+    CourierAppService Couriers,
     SkinAppService Skins,
+    CabinetDealAppService Deals,
     Application.Markets.CharacterMarketAppService CharacterMarket,
     Application.Markets.MarketplaceAppService Marketplace,
     Application.Rankings.RankingAppService Rankings)
@@ -299,8 +301,23 @@ internal sealed partial class ClientSession : IMovementVerdictSink
                 case EtervaleOpcodes.SkinApply:
                     await ApplySkinsAsync(SkinApplyPacket.Read(memory.Span));
                     break;
+                case EtervaleOpcodes.SkinUnlock:
+                    await UnlockSkinAsync(SkinUnlockPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.CabinetDealsRequest:
+                    await SendDealsAsync(CabinetDealsRequestPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.CabinetBid:
+                    await BidAsync(CabinetBidPacket.Read(memory.Span));
+                    break;
                 case EtervaleOpcodes.DailyQuestRequest:
                     await DailyQuestAsync(DailyQuestRequestPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.CourierBoardRequest:
+                    await CourierBoardAsync(CourierBoardRequestPacket.Read(memory.Span));
+                    break;
+                case EtervaleOpcodes.CourierRequest:
+                    await CourierAsync(CourierRequestPacket.Read(memory.Span));
                     break;
                 case EtervaleOpcodes.WingGateRequest:
                     await TravelWingGateAsync(WingGateRequestPacket.Read(memory.Span));
@@ -463,6 +480,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
             return;
         }
 
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var outcome = request.Mode == LoginMode.Token
             ? await _services.Auth.LoginWithTokenAsync(request.Account, request.Password)
             : await _services.Auth.LoginAsync(request.Account, request.Password);
@@ -489,6 +507,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
 
         // The connection is logged in only once its list is read: a list storage refuses answers Busy and leaves the
         // connection free to log in again.
+        var authenticated = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             await SendCharacterListAsync(outcome.SessionToken);
@@ -500,10 +519,16 @@ internal sealed partial class ClientSession : IMovementVerdictSink
         }
 
         // A Remember login is given a new token; a token login keeps the one it used.
+        var listed = System.Diagnostics.Stopwatch.GetTimestamp();
         var remember = request.Mode == LoginMode.Remember ? await _services.Auth.RememberAsync(session.AccountId) : string.Empty;
         Volatile.Write(ref _token, outcome.SessionToken);
         _session = session;
         SendLoginResult(LoginFailure.None, remember);
+        _services.Logger.LogInformation("Login {Account} in {Total:0} ms: credentials {Auth:0} ms, character list {List:0} ms, remember {Remember:0} ms",
+            request.Account, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+            System.Diagnostics.Stopwatch.GetElapsedTime(started, authenticated).TotalMilliseconds,
+            System.Diagnostics.Stopwatch.GetElapsedTime(authenticated, listed).TotalMilliseconds,
+            System.Diagnostics.Stopwatch.GetElapsedTime(listed).TotalMilliseconds);
     }
 
     private void SendLoginResult(LoginFailure failure, string rememberToken = "") =>
@@ -596,7 +621,7 @@ internal sealed partial class ClientSession : IMovementVerdictSink
 
         _player = player;
         _outbox = outbox;
-        _encoder = new PresenceEncoder(session.EntityId, _services.WorldData, _services.LocalizedWorldData, session.Language);
+        _encoder = new PresenceEncoder(session.EntityId, _services.WorldData, _services.LocalizedWorldData, session.Language) { Couriers = () => _services.World.Couriers };
         SendLarge(new WorldJoinedPacket(session.EntityId, Environment.TickCount64, (byte)Math.Clamp(session.GmLevel, 0, 255),
             _services.World.GameClockMs).Write, WorldJoinedPacket.Size);
         _pump = PumpAsync(outbox, _encoder);

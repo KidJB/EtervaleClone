@@ -288,6 +288,47 @@ price) before the commit. The owner's state travels as `DailyQuestState` (protoc
 (`HudQuestBook.Daily`) lists the dailies of the player's level, and Messenger Ian's "Daily quests" button opens it with
 Accept and Claim.
 
+## Quest Couriers
+
+Hunting quests given by a Quest Courier in every hunting field (`CourierQuests.cs`, `CourierQuestState.cs`, Simulation;
+data in `data/couriers.json`, read at start by `CourierCatalogStore` and reloaded by `/@courier_reload`).
+
+- Catalog (`CourierCatalog`): the Couriers (`CourierPost`: NPC code from `CourierCatalog.FirstNpcCode`, field, world X and
+  Z, angle), the hunts (`CourierQuest`: id, name, description, `CourierCategory`, `CourierDifficulty`, field, giver and
+  turn-in NPC codes, level range, one to four objectives of a monster id and a count, experience, gold, item and count,
+  cooldown, party credit, enabled) and the `CourierSchedule` (daily reset hour, weekly reset day and hour, the midnight
+  window). A hunt `CourierCatalog.Problem` refuses (no objective, a bad range or reward, a repeated id) is skipped and
+  reported. A game master's edit (`/@courier_new`, `/@courier_set`) writes the file and applies at once; a moved Courier
+  needs a restart.
+- Couriers: `CourierNpcs.AddTo` adds one NPC per post with the `Courier` service, borrowing the daily quest giver's model;
+  `WorldDataAppService` places each in its field at its post, stood on the floor (`FixedNpc.OnFloor`).
+- Categories: Daily (once a day), Midnight (accepted only in the window, once a day, turned in at any time), OneTime (once
+  ever), Repeatable (again after `CooldownMinutes`), Weekly (once a week). `CourierQuestState.Repeat` decides from when the
+  quest was last turned in.
+- Accepting (`WorldServer.AcceptCourierQuestAsync`) needs the player at the quest's giver, its level in range, the quest
+  enabled and open, and fewer than `CourierCatalog.MaxActive` (8) running. A level that leaves the range later only stops
+  new accepts: an accepted hunt can still be finished and turned in. Abandoning works anywhere.
+- Kills (`FieldInstance.CreditCouriers`, after the daily credit): a kill counts once for every objective of that monster in
+  each of the killer's hunts of that field, never past its count; for hunts with `PartyCredit`, once more for each living
+  party member in share range in the field (`PartyRules.InShareRange`). Progress is part of the character
+  (`characters.courier_quests`, `CourierQuestCodec`) and stored with its saves, not on each kill.
+- Turn-in (`CourierAppService.TurnInAsync`): at the quest's turn-in Courier with every objective done; the experience, gold
+  (within the carry limit) and item are prepared on a copy with the quest marked turned in, the character is stored, then
+  it commits, so a reward is given once.
+- Wire: `CourierBoardRequest`/`CourierBoard` (a Courier's hunts at the player's level and the player's own from it, with
+  their standing), `CourierRequest`/`CourierResult` (accept, abandon, turn in) and `CourierState` (the accepted hunts, on
+  entry and every change). Client: `HudCourierWindow` (Available, Active and Completed tabs; details and Accept, Abandon,
+  Turn In), Courier blocks in `HudQuestTracker`, a chat notice when a hunt is ready, and the quest mark over the field's
+  Courier (ready, taken or a hunt to take).
+- Shipped data: `--generate-couriers` (testing.md) writes a Courier beside the arrival of each hunting field (not towns,
+  the castle, Bellatra, the boss field, the quest arena and room, the action field) and six hunts of its spawned monsters:
+  Patrol (Daily, Easy: 30 of the weakest), Clearing (Daily, Normal: 25 of each of the two weakest), Bounty (Repeatable every
+  hour, Normal: 20 of the middle one), Night Watch (Midnight, Hard: 40 of the strongest), Purge (Weekly, Hard: 60 of each
+  of the three strongest, gold 200 x the minimum level) and Master Hunter (OneTime, Elite: 100 of the strongest, gold 500 x
+  the minimum level). Levels run from 5 under the weakest objective (at least the field's entry level) to 10 over the
+  strongest. The experience is a share of what the hunt's kills give themselves: 30, 40, 50 or 60 % by difficulty, times
+  1, 1.2, 0.5, 1.5 or 2 for Daily, Midnight, Repeatable, Weekly or OneTime, so a hunt adds to grinding without replacing it.
+
 ## Markers over quest monsters
 
 `QuestTargets` (Simulation) answers which kills count for the running quest as a `QuestHunt`: quest monster codes or every monster,
@@ -316,4 +357,10 @@ clock); `/arena` tells the next event. The field stays a hunting field: the aren
 kill time and gold at once, and a random prize through the Item Distributor (`ArenaPrizes`, `BossArenaPrizeService`). The
 event also ends after two hours or once the arena is empty; everyone in it returns to Ricarten. `/@arena [king|hagios|end]`
 starts or ends it for a game master.
+
+Inside the arena, a timer shows under the top of the screen (`HudArenaTimer`, art `bartime.png` and `bar.png`): the
+event's name over "Time Left" until the next start, then the time it has run and the boss's life bar. The server sends
+its field's players the arena's state (`ArenaStatusView`, `ArenaStatus`: event, running, seconds, boss life) whenever it
+changes, at most once a second, and hides it when they leave the field; the client draws it only within
+`BossArena.Radius`.
 

@@ -144,6 +144,8 @@ internal sealed class FieldResourceStreamer : IDisposable
     }
 
     private PreparedField _uploadingField;
+
+    public bool IsIdle => _fieldLoads.Count == 0 && _uploadingField is null;
     private IEnumerator<RenderStageHandle> _stageUpload;
     private double _maximumFieldUploadMilliseconds;
     private int _fieldUploadFrames;

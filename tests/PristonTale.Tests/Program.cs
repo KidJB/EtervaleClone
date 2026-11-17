@@ -82,6 +82,12 @@ if (args.Length == 4 && args[0] == "--capture-ground-loot")
     return 0;
 }
 
+if (args.Length == 3 && args[0] == "--generate-couriers")
+{
+    await CourierCatalogProbe.RunAsync(args[1], args[2]);
+    return 0;
+}
+
 if (args.Length == 3 && args[0] == "--verify-world-rewards")
 {
     await WorldRewardsProbe.RunAsync(args[1], args[2]);

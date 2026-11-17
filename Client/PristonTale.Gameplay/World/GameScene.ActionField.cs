@@ -36,7 +36,6 @@ public sealed partial class GameScene
 
     // The player the walk last bumped into, and whether its buttons were shown for that bump.
     private ulong _bumpedPlayer;
-    private bool _bumpShown;
 
     private const int KeyUp = 1;
     private const int KeyDown = 2;
@@ -228,14 +227,8 @@ public sealed partial class GameScene
 
         if (player != _bumpedPlayer)
         {
-            (_bumpedPlayer, _bumpShown) = (player, false);
+            _bumpedPlayer = player;
             _targetSelection.Trace(player);
-        }
-
-        if (!_bumpShown && SelectedTargetId == player)
-        {
-            ReachedPlayerId = player;
-            _bumpShown = true;
         }
 
         return true;

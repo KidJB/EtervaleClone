@@ -18,7 +18,7 @@ public sealed class HudItemIcons : IDisposable
     public Texture2D Find(string key) => _cache.Find(SpriteKey(key));
 
     // Pet skin items have no sprite of their own and show the helper pet's.
-    private static string SpriteKey(string key) => PetSkins.IsItem(key) || Mounts.IsItem(key) || Simulation.World.WorldBuffs.IsItem(key) ? PetSkins.IconKey : key;
+    private static string SpriteKey(string key) => PetSkins.IsItem(key) || Mounts.IsItem(key) || Simulation.World.WorldBuffs.IsItem(key) || CabinetRules.IsItem(key) ? PetSkins.IconKey : key;
 
     // Item bitmaps are authored at their cell size: drawn unscaled and centred, as in the inventory; a grey cell while the
     // icon is not loaded.
@@ -35,6 +35,23 @@ public sealed class HudItemIcons : IDisposable
         var y = bounds.Y + (bounds.Height - texture.Height) / 2;
         painter.Image(texture, new Rectangle(x, y, texture.Width, texture.Height), tint ?? Color.White);
     }
+
+    // Like Draw, but an icon larger than the bounds is scaled down to fit them, keeping its proportions.
+    public void DrawFitted(HudPainter painter, string catalogKey, Rectangle bounds)
+    {
+        var texture = Find(catalogKey);
+        if (texture is null || texture.Width <= bounds.Width && texture.Height <= bounds.Height)
+        {
+            Draw(painter, catalogKey, bounds);
+            return;
+        }
+
+        var scale = Math.Min((float)bounds.Width / texture.Width, (float)bounds.Height / texture.Height);
+        var width = Math.Max(1, (int)(texture.Width * scale));
+        var height = Math.Max(1, (int)(texture.Height * scale));
+        painter.Image(texture, new Rectangle(bounds.X + (bounds.Width - width) / 2, bounds.Y + (bounds.Height - height) / 2, width, height), Color.White);
+    }
+
     public bool IsIdle => _cache.IsIdle;
     public bool Failed => _cache.Failed;
     public void Request(IReadOnlyList<OwnedItemView> items) => _cache.Request(items.Select(item => SpriteKey(item.CatalogKey)));

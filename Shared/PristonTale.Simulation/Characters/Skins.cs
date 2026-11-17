@@ -18,7 +18,11 @@ public enum SkinStatus : byte
     AlreadyOwned = 2,
     NotEnoughCoins = 3,
     NotOwned = 4,
-    Rejected = 5
+    Rejected = 5,
+    NotForSale = 6,
+    NoBrush = 7,
+    NotEligible = 8,
+    Busy = 9
 }
 
 // The looks a character chose in The Cabinet, one catalog key per slot ("" for the worn item's own look). Weapon is the look of a
@@ -101,6 +105,9 @@ public static class SkinRules
 
     // Armor bodies are 1 and 3, robes 2 and 4.
     private static int BodyType(string key) => key[BodyFamilyLetters - 1] % 2;
+
+    public static bool IsRobe(string key) =>
+        key.Length >= BodyFamilyLetters && key.StartsWith(BodyPrefix, StringComparison.OrdinalIgnoreCase) && BodyType(key) == 0;
 
     // Timed items share a body: the Cabinet sells the look once, without the term in its name.
     public static bool Listed(ItemDefinition item) => !item.Name.Contains(ShortTerm, StringComparison.OrdinalIgnoreCase);

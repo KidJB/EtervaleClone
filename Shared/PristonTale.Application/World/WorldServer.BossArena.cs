@@ -18,8 +18,25 @@ public sealed record ArenaPrize(long AccountId, string Item);
 // the boss and its minions in the middle of Cursed Temple 2F, minions that come back each minute, and the end: the boss's fall rewards
 // every player still in the arena (experience and gold at once, a prize through the Item Distributor), then everyone in
 // the arena returns to Ricarten.
+// The boss arena as its field's players see it: the event (BossArena.Events), whether it runs, the whole seconds until it
+// starts or since it began, and the boss's life (0 of 0 before it starts).
+public sealed record ArenaStatusView(int EventId, bool Running, int Seconds, int BossLife, int BossMaxLife)
+{
+    // Before an event: the next one's id and the whole seconds left (rounded up) until it starts.
+    public static ArenaStatusView Waiting(DateTimeOffset now)
+    {
+        var start = BossArena.NextStart(now);
+        return new ArenaStatusView(BossArena.EventAt(start.Hour).Id, false, (int)Math.Ceiling((start - now).TotalSeconds), 0, 0);
+    }
+
+    // While an event runs: its id, the whole seconds since it began, and its boss's life.
+    public static ArenaStatusView During(BossArenaEvent arena, DateTimeOffset startedAt, DateTimeOffset now, int bossLife, int bossMaxLife) =>
+        new(arena.Id, true, (int)(now - startedAt).TotalSeconds, Math.Max(0, bossLife), bossMaxLife);
+}
+
 public sealed partial class WorldServer
 {
+    private ArenaStatusView? _arenaView;
     private DateTimeOffset _arenaAnnouncedFor;
     private int _arenaAnnounced = int.MaxValue;
     private DateTimeOffset _arenaRanFor;
@@ -128,7 +145,23 @@ public sealed partial class WorldServer
         {
             StepArena(run, now);
         }
+
+        RefreshArenaView(now);
     }
+
+    // A new view only when what the players see changes, so the encoder sends it at most once a second.
+    private void RefreshArenaView(DateTimeOffset now)
+    {
+        var view = _arena is { } running
+            ? ArenaStatusView.During(running.Event, running.StartedAt, now, running.Boss.Life, running.Boss.Def.Combat.MaxLife)
+            : ArenaStatusView.Waiting(now);
+        if (view != _arenaView)
+        {
+            _arenaView = view;
+        }
+    }
+
+    private ArenaStatusView? ArenaViewOf(Connection connection) => connection.FieldId == BossArena.FieldCode ? _arenaView : null;
 
     private static DateTimeOffset PreviousStart(DateTimeOffset now)
     {

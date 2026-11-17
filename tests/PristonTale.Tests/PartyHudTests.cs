@@ -16,8 +16,8 @@ internal static class PartyHudTests
     {
         yield return ("party frames fold, offer only what the player may do and ask first; the social window lists, removes and whispers", FramesAndSocialAsync);
         yield return ("the party page lists members with levels in tens, gives the leader its buttons, picks a member and whispers on a double click", WindowAsync);
-        yield return ("the party request box answers once from its buttons and closes itself after twenty seconds, the trade's after ten", RequestAsync);
-        yield return ("the trade, party and friend buttons sit under the portrait from 36 px left of its centre", PlayerButtonsAsync);
+        yield return ("the request box, centred above the confirmation box, answers once from Yes or No and closes itself after its time", RequestAsync);
+        yield return ("the target menu opens from its button beside the frame and offers trade, friend, party, then raid and clan when allowed", TargetMenuAsync);
     }
 
     private static readonly PartyInfo Party = new(
@@ -107,34 +107,46 @@ internal static class PartyHudTests
 
     private static Task RequestAsync()
     {
-        var box = new HudRequestBox(HudPartyArt.Request, PartyRules.InviteMs);
-        box.Show(7, "Ann", ClientText.Format(PartyMessages.Request), 1000);
-        Assert.True(box.IsOpen && box.Click(new Point(0, 300)) is null && box.IsOpen, "a click elsewhere answered");
-        Assert.True(box.Click(box.Ok.Center) == true && !box.IsOpen, "OK accepts and closes");
-        box.Show(7, "Ann", ClientText.Format(PartyMessages.Request), 1000);
-        Assert.True(box.Click(box.Cancel.Center) == false && !box.IsOpen && box.FromId == 7, "cancel refuses and closes");
-        box.Show(7, "Ann", ClientText.Format(PartyMessages.Request), 1000);
+        var layout = HudLayout.Create(800, 600);
+        var box = new HudRequestBox(PartyRules.InviteMs);
+        box.Show(7, "Ann", "Party Request", "Do you want to accept Ann's Party Request?", 1000);
+        Assert.True(box.IsOpen && box.Click(layout, new Point(0, 300)) is null && box.IsOpen, "a click elsewhere answered");
+        Assert.True(box.Click(layout, HudRequestBox.Accept(layout).Center) == true && !box.IsOpen, "Yes accepts and closes");
+        box.Show(7, "Ann", "Party Request", "Do you want to accept Ann's Party Request?", 1000);
+        Assert.True(box.Click(layout, HudRequestBox.Reject(layout).Center) == false && !box.IsOpen && box.FromId == 7, "No refuses and closes");
+        box.Show(7, "Ann", "Party Request", "Do you want to accept Ann's Party Request?", 1000);
         box.Update(1000 + PartyRules.InviteMs - 1);
         Assert.True(box.IsOpen, "the box closed early");
         box.Update(1000 + PartyRules.InviteMs);
-        Assert.True(!box.IsOpen && box.Ok.Location == new Point(653, 14), "the box outlived its request or moved");
+        Assert.True(!box.IsOpen, "the box outlived its request");
 
-        var trade = new HudRequestBox(PristonTale.Gameplay.UI.Trades.HudTradeArt.Request, PristonTale.Contracts.Social.TradeLimits.RequestMs);
-        trade.Show(9, "Bob", null, 0);
-        trade.Update(PristonTale.Contracts.Social.TradeLimits.RequestMs);
-        Assert.True(!trade.IsOpen && trade.Cancel.Location == new Point(657, 40), "the trade box keeps the original's ten seconds and place");
+        var request = HudRequestBox.Box(layout);
+        Assert.True(request.Center.X == layout.Width / 2 && request.Bottom <= (layout.Height - HudMessageBox.Height) / 2
+            && request.Contains(HudRequestBox.Accept(layout)) && request.Contains(HudRequestBox.Reject(layout)), "the box is not centred above the confirmation box");
         return Task.CompletedTask;
     }
 
-    private static Task PlayerButtonsAsync()
+    private static Task TargetMenuAsync()
     {
-        var frame = HudCombat.TargetFrame(HudLayout.Create(800, 600));
-        var center = frame.Box.X + frame.Box.Width / 2;
-        var party = HudPlayerButtons.Button(frame, HudPlayerButton.Party);
-        Assert.True(HudPlayerButtons.Button(frame, HudPlayerButton.Trade) == new Rectangle(center - 36, frame.Box.Bottom, 20, 20)
-            && party.X == center - 11 && HudPlayerButtons.Menu(frame) == new Rectangle(center - 50, frame.Box.Bottom - 6, 100, 50), "button places");
-        Assert.True(HudPlayerButtons.At(frame, party.Center) == HudPlayerButton.Party && HudPlayerButtons.At(frame, new Point(center, frame.Box.Y)) is null,
-            "the pointer finds the party button only over it");
+        var frame = HudCombat.TargetFrame(HudLayout.Create(800, 600), classicFrame: false);
+        var menu = new HudTargetMenu();
+        menu.Offer(5, raid: false, clan: false);
+        Assert.True(menu.Count == 3 && menu[0] == HudTargetAction.Trade && menu[1] == HudTargetAction.Friend && menu[2] == HudTargetAction.Party,
+            "a player offers trade, friend and party");
+        var more = HudTargetMenu.More(frame, classic: false);
+        Assert.True(more.Location == new Point(frame.Box.X + 262, frame.Box.Y + 16) && HudTargetMenu.Row(frame, false, 0).X == more.Right + 2,
+            "the button or its list moved");
+
+        Assert.True(menu.Click(frame, false, HudTargetMenu.Row(frame, false, 2).Center) is null && !menu.Open, "a closed list answered");
+        Assert.True(menu.Click(frame, false, more.Center) is null && menu.Open, "the button did not open the list");
+        Assert.True(menu.Click(frame, false, HudTargetMenu.Row(frame, false, 2).Center) == HudTargetAction.Party && !menu.Open, "a row did not give its action");
+
+        menu.Offer(5, raid: true, clan: true);
+        Assert.True(menu.Count == 5 && menu[3] == HudTargetAction.Raid && menu[4] == HudTargetAction.Clan, "a leader and recruiter lacks raid or clan");
+        menu.Click(frame, false, more.Center);
+        menu.Offer(6, raid: false, clan: false);
+        Assert.True(!menu.Open, "another target kept the list open");
+        Assert.True(HudTargetMenu.More(frame with { Box = new Rectangle(300, 10, 200, 60) }, classic: true).Right == 496, "the classic frame's button moved");
         return Task.CompletedTask;
     }
 }

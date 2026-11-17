@@ -10,11 +10,11 @@ public static class HudMessageBox
     public const int VisibleWidth = 230;
     public const int Height = 161;
     private const string Folder = "Hud/MessageBox/";
-    private const string Background = Folder + "background_normal.png";
-    private const string Yes = Folder + "btnyes.png";
-    private const string YesLit = Folder + "btnyes_.png";
-    private const string No = Folder + "btnno.png";
-    private const string NoLit = Folder + "btnno_.png";
+    public const string Background = Folder + "background_normal.png";
+    public const string Yes = Folder + "btnyes.png";
+    public const string YesLit = Folder + "btnyes_.png";
+    public const string No = Folder + "btnno.png";
+    public const string NoLit = Folder + "btnno_.png";
     public const string OkArt = Folder + "btnok.png";
     public const string OkLit = Folder + "btnok_.png";
     public const string CancelArt = Folder + "btncancel.png";

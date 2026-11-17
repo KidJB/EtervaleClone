@@ -85,6 +85,11 @@ public sealed partial class GameplayHud
             _achievements.Observe(achievements);
         }
 
+        if (update.Arena is { } arena)
+        {
+            _arenaTimer.Observe(arena);
+        }
+
         if (update.PartyFinder is { } finder)
         {
             _partyFinder.Observe(finder);

@@ -509,7 +509,31 @@ internal sealed class FieldCombat
             drops.Add(RolledDrop.Item(skin.ItemCode));
         }
 
+        RollCabinetDrops(monster, drops);
         return drops;
+    }
+
+    // The Cabinet's settings, whose drops (look tokens, brushes) a kill may roll; none by default.
+    public Func<Simulation.Characters.CabinetConfig>? Cabinet { get; set; }
+
+    // Each Cabinet drop of this monster, or of every boss when it is one, rolls once per kill.
+    private void RollCabinetDrops(MonsterInstance monster, List<RolledDrop> drops)
+    {
+        if (Cabinet?.Invoke() is not { } config)
+        {
+            return;
+        }
+
+        var cabinetDrops = config.Drops;
+        for (var index = 0; index < cabinetDrops.Count; index++)
+        {
+            var drop = cabinetDrops[index];
+            if ((drop.Monster == monster.Def.Code || drop.Bosses && monster.Def.IsBoss) && _rng.NextExclusive(0, 10_000) < drop.PerTenThousand
+                && ItemCodes.TryParse(drop.Item, out var code))
+            {
+                drops.Add(RolledDrop.Item(code));
+            }
+        }
     }
 
     // A hammer-class monster's blow landed on a player (the hammer event).

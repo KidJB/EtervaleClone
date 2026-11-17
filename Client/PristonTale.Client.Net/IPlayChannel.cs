@@ -76,6 +76,9 @@ public interface IPlayChannel : IAsyncDisposable
     Task<SkinCatalogInfo> OpenSkinsAsync(CancellationToken ct = default);
     Task<(PristonTale.Simulation.Characters.SkinStatus Status, long Balance)> BuySkinAsync(string key, CancellationToken ct = default);
     Task<(PristonTale.Simulation.Characters.SkinStatus Status, long Balance)> ApplySkinsAsync(PristonTale.Simulation.Characters.SkinSet skins, CancellationToken ct = default);
+    Task<(PristonTale.Simulation.Characters.SkinStatus Status, long Balance, string Key)> UnlockSkinAsync(Guid itemId, CancellationToken ct = default);
+    Task<PristonTale.Protocol.Packets.CabinetDealsPacket> CabinetDealsAsync(CancellationToken ct = default);
+    Task<(PristonTale.Simulation.Characters.CabinetBidStatus Status, long Balance)> CabinetBidAsync(long dealId, long amount, CancellationToken ct = default);
 
     Task<byte> ActItemBoxAsync(ulong npcId, byte action, long id, Guid itemId, string recipient, CancellationToken ct = default);
 
@@ -135,6 +138,13 @@ public interface IPlayChannel : IAsyncDisposable
     Task SendPartyFinderSettingsAsync(Protocol.Packets.PartyFinderSettingsPacket settings, CancellationToken ct = default);
 
     Task SendPartyFinderJoinAsync(ulong leaderId, string password, CancellationToken ct = default);
+
+    // Asks a Courier in reach for its board, answered by a CourierBoard update.
+    Task SendCourierBoardRequestAsync(ulong npcId, CancellationToken ct = default);
+
+    // Accepts (1), abandons (2) or turns in (3) a Courier hunt; the answer is the server's CourierStatus and the experience a
+    // turn-in gave.
+    Task<(byte Status, long Experience)> CourierAsync(ulong npcId, int questId, byte action, CancellationToken ct = default);
 
     // Asks a rankings board (a PlayerClass for one class's level board, 0 all), answered by a Rankings update.
     Task SendRankingsRequestAsync(Protocol.Packets.RankingBoard board, byte job, CancellationToken ct = default);

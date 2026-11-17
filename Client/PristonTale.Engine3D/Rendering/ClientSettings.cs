@@ -79,6 +79,8 @@ public sealed record ClientSettings
     // Classic: the target frame is the original's portrait box at the top right; otherwise the bar at the top centre.
     public bool ClassicTargetFrame { get; init; }
     public bool CenteredInventory { get; init; } = true;
+    // The Cabinet looks marked as favourites, their keys comma-separated.
+    public string CabinetFavorites { get; init; } = "";
     // Classic: the name boxes over monsters and NPCs use the speech bubble frame and the HUD text size, and a monster's
     // life bar shows while the cursor is on it; otherwise a compact box, the bar once the monster was clicked or attacked.
     public bool ClassicNamePlates { get; init; }

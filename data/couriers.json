@@ -1,0 +1,6815 @@
+{
+  "couriers": [
+    {
+      "npcCode": 9100,
+      "name": "Quest Courier",
+      "fieldCode": 0,
+      "x": -10545,
+      "z": -11770,
+      "angle": 0
+    },
+    {
+      "npcCode": 9101,
+      "name": "Quest Courier",
+      "fieldCode": 1,
+      "x": -2232,
+      "z": -10274,
+      "angle": 0
+    },
+    {
+      "npcCode": 9102,
+      "name": "Quest Courier",
+      "fieldCode": 2,
+      "x": 1390,
+      "z": -13632,
+      "angle": 0
+    },
+    {
+      "npcCode": 9103,
+      "name": "Quest Courier",
+      "fieldCode": 4,
+      "x": 2618,
+      "z": -5084,
+      "angle": 0
+    },
+    {
+      "npcCode": 9104,
+      "name": "Quest Courier",
+      "fieldCode": 5,
+      "x": 915,
+      "z": 7950,
+      "angle": 0
+    },
+    {
+      "npcCode": 9105,
+      "name": "Quest Courier",
+      "fieldCode": 6,
+      "x": 4016,
+      "z": 19685,
+      "angle": 0
+    },
+    {
+      "npcCode": 9106,
+      "name": "Quest Courier",
+      "fieldCode": 7,
+      "x": 12282,
+      "z": 16074,
+      "angle": 0
+    },
+    {
+      "npcCode": 9107,
+      "name": "Quest Courier",
+      "fieldCode": 8,
+      "x": 13346,
+      "z": 2040,
+      "angle": 0
+    },
+    {
+      "npcCode": 9108,
+      "name": "Quest Courier",
+      "fieldCode": 10,
+      "x": 11899,
+      "z": -11217,
+      "angle": 0
+    },
+    {
+      "npcCode": 9109,
+      "name": "Quest Courier",
+      "fieldCode": 11,
+      "x": 34798,
+      "z": -1283,
+      "angle": 0
+    },
+    {
+      "npcCode": 9110,
+      "name": "Quest Courier",
+      "fieldCode": 12,
+      "x": 33780,
+      "z": 6531,
+      "angle": 0
+    },
+    {
+      "npcCode": 9111,
+      "name": "Quest Courier",
+      "fieldCode": 13,
+      "x": -15344,
+      "z": -24270,
+      "angle": 0
+    },
+    {
+      "npcCode": 9112,
+      "name": "Quest Courier",
+      "fieldCode": 14,
+      "x": -6068,
+      "z": -26840,
+      "angle": 0
+    },
+    {
+      "npcCode": 9113,
+      "name": "Quest Courier",
+      "fieldCode": 15,
+      "x": 1867,
+      "z": -28546,
+      "angle": 0
+    },
+    {
+      "npcCode": 9114,
+      "name": "Quest Courier",
+      "fieldCode": 17,
+      "x": -2095,
+      "z": 33708,
+      "angle": 0
+    },
+    {
+      "npcCode": 9115,
+      "name": "Quest Courier",
+      "fieldCode": 18,
+      "x": -1476,
+      "z": 45477,
+      "angle": 0
+    },
+    {
+      "npcCode": 9116,
+      "name": "Quest Courier",
+      "fieldCode": 19,
+      "x": -984,
+      "z": 45477,
+      "angle": 0
+    },
+    {
+      "npcCode": 9117,
+      "name": "Quest Courier",
+      "fieldCode": 20,
+      "x": 1915,
+      "z": 69911,
+      "angle": 0
+    },
+    {
+      "npcCode": 9118,
+      "name": "Quest Courier",
+      "fieldCode": 22,
+      "x": -11068,
+      "z": -41641,
+      "angle": 0
+    },
+    {
+      "npcCode": 9119,
+      "name": "Quest Courier",
+      "fieldCode": 23,
+      "x": -3635,
+      "z": -36557,
+      "angle": 0
+    },
+    {
+      "npcCode": 9120,
+      "name": "Quest Courier",
+      "fieldCode": 24,
+      "x": 119359,
+      "z": 26074,
+      "angle": 0
+    },
+    {
+      "npcCode": 9121,
+      "name": "Quest Courier",
+      "fieldCode": 25,
+      "x": 119360,
+      "z": 35720,
+      "angle": 0
+    },
+    {
+      "npcCode": 9122,
+      "name": "Quest Courier",
+      "fieldCode": 26,
+      "x": 158854,
+      "z": 20110,
+      "angle": 0
+    },
+    {
+      "npcCode": 9123,
+      "name": "Quest Courier",
+      "fieldCode": 27,
+      "x": 46945,
+      "z": 13518,
+      "angle": 0
+    },
+    {
+      "npcCode": 9124,
+      "name": "Quest Courier",
+      "fieldCode": 28,
+      "x": 35189,
+      "z": 24366,
+      "angle": 0
+    },
+    {
+      "npcCode": 9125,
+      "name": "Quest Courier",
+      "fieldCode": 31,
+      "x": 32353,
+      "z": 28569,
+      "angle": 0
+    },
+    {
+      "npcCode": 9126,
+      "name": "Quest Courier",
+      "fieldCode": 34,
+      "x": 13970,
+      "z": 23246,
+      "angle": 0
+    },
+    {
+      "npcCode": 9127,
+      "name": "Quest Courier",
+      "fieldCode": 35,
+      "x": 36304,
+      "z": 40222,
+      "angle": 0
+    },
+    {
+      "npcCode": 9128,
+      "name": "Quest Courier",
+      "fieldCode": 37,
+      "x": -12515,
+      "z": -1073,
+      "angle": 0
+    },
+    {
+      "npcCode": 9129,
+      "name": "Quest Courier",
+      "fieldCode": 38,
+      "x": -11678,
+      "z": 10834,
+      "angle": 0
+    },
+    {
+      "npcCode": 9130,
+      "name": "Quest Courier",
+      "fieldCode": 40,
+      "x": 14295,
+      "z": -39059,
+      "angle": 0
+    },
+    {
+      "npcCode": 9131,
+      "name": "Quest Courier",
+      "fieldCode": 41,
+      "x": 5295,
+      "z": -37857,
+      "angle": 0
+    },
+    {
+      "npcCode": 9132,
+      "name": "Quest Courier",
+      "fieldCode": 42,
+      "x": -3620,
+      "z": -45160,
+      "angle": 0
+    },
+    {
+      "npcCode": 9133,
+      "name": "Quest Courier",
+      "fieldCode": 43,
+      "x": 4936,
+      "z": -42290,
+      "angle": 0
+    },
+    {
+      "npcCode": 9134,
+      "name": "Quest Courier",
+      "fieldCode": 44,
+      "x": 18046,
+      "z": -34700,
+      "angle": 0
+    },
+    {
+      "npcCode": 9135,
+      "name": "Quest Courier",
+      "fieldCode": 46,
+      "x": -11935,
+      "z": -62417,
+      "angle": 0
+    },
+    {
+      "npcCode": 9136,
+      "name": "Quest Courier",
+      "fieldCode": 48,
+      "x": 12835,
+      "z": -73072,
+      "angle": 0
+    },
+    {
+      "npcCode": 9137,
+      "name": "Quest Courier",
+      "fieldCode": 49,
+      "x": -19885,
+      "z": -3818,
+      "angle": 0
+    }
+  ],
+  "quests": [
+    {
+      "id": 1,
+      "name": "Acacia Forest: Patrol",
+      "description": "The roads of Acacia Forest are thick with Mushroom Ghost. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 0,
+      "giver": 9100,
+      "turnIn": 9100,
+      "minLevel": 1,
+      "maxLevel": 15,
+      "objectives": [
+        {
+          "monsterId": 361,
+          "monster": "Mushroom Ghost",
+          "count": 30
+        }
+      ],
+      "experience": 1764,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2,
+      "name": "Acacia Forest: Clearing",
+      "description": "Clear Acacia Forest of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 0,
+      "giver": 9100,
+      "turnIn": 9100,
+      "minLevel": 1,
+      "maxLevel": 21,
+      "objectives": [
+        {
+          "monsterId": 361,
+          "monster": "Mushroom Ghost",
+          "count": 25
+        },
+        {
+          "monsterId": 246,
+          "monster": "ImP",
+          "count": 25
+        }
+      ],
+      "experience": 8350,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3,
+      "name": "Acacia Forest: Bounty",
+      "description": "A standing bounty on Hobgoblin, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 0,
+      "giver": 9100,
+      "turnIn": 9100,
+      "minLevel": 9,
+      "maxLevel": 24,
+      "objectives": [
+        {
+          "monsterId": 192,
+          "monster": "Hobgoblin",
+          "count": 20
+        }
+      ],
+      "experience": 4424,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4,
+      "name": "Acacia Forest: Night Watch",
+      "description": "At night Cyclops grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 0,
+      "giver": 9100,
+      "turnIn": 9100,
+      "minLevel": 28,
+      "maxLevel": 43,
+      "objectives": [
+        {
+          "monsterId": 96,
+          "monster": "Cyclops",
+          "count": 40
+        }
+      ],
+      "experience": 128976,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 5,
+      "name": "Acacia Forest: Purge",
+      "description": "A week-long purge of the strongest creatures of Acacia Forest.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 0,
+      "giver": 9100,
+      "turnIn": 9100,
+      "minLevel": 9,
+      "maxLevel": 43,
+      "objectives": [
+        {
+          "monsterId": 192,
+          "monster": "Hobgoblin",
+          "count": 60
+        },
+        {
+          "monsterId": 181,
+          "monster": "Haunting Plant",
+          "count": 60
+        },
+        {
+          "monsterId": 96,
+          "monster": "Cyclops",
+          "count": 60
+        }
+      ],
+      "experience": 347580,
+      "gold": 1800,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 6,
+      "name": "Acacia Forest: Master Hunter",
+      "description": "Prove yourself a master hunter of Acacia Forest: bring down a hundred Cyclops.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 0,
+      "giver": 9100,
+      "turnIn": 9100,
+      "minLevel": 28,
+      "maxLevel": 43,
+      "objectives": [
+        {
+          "monsterId": 96,
+          "monster": "Cyclops",
+          "count": 100
+        }
+      ],
+      "experience": 644880,
+      "gold": 14000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 101,
+      "name": "Forest 2: Patrol",
+      "description": "The roads of Forest 2 are thick with Arma. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 1,
+      "giver": 9101,
+      "turnIn": 9101,
+      "minLevel": 1,
+      "maxLevel": 16,
+      "objectives": [
+        {
+          "monsterId": 7,
+          "monster": "Arma",
+          "count": 30
+        }
+      ],
+      "experience": 1836,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 102,
+      "name": "Forest 2: Clearing",
+      "description": "Clear Forest 2 of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 1,
+      "giver": 9101,
+      "turnIn": 9101,
+      "minLevel": 1,
+      "maxLevel": 18,
+      "objectives": [
+        {
+          "monsterId": 7,
+          "monster": "Arma",
+          "count": 25
+        },
+        {
+          "monsterId": 156,
+          "monster": "Ghost",
+          "count": 25
+        }
+      ],
+      "experience": 6330,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 103,
+      "name": "Forest 2: Bounty",
+      "description": "A standing bounty on ImP, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 1,
+      "giver": 9101,
+      "turnIn": 9101,
+      "minLevel": 6,
+      "maxLevel": 21,
+      "objectives": [
+        {
+          "monsterId": 246,
+          "monster": "ImP",
+          "count": 20
+        }
+      ],
+      "experience": 2556,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 104,
+      "name": "Forest 2: Night Watch",
+      "description": "At night Haunting Plant grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 1,
+      "giver": 9101,
+      "turnIn": 9101,
+      "minLevel": 12,
+      "maxLevel": 27,
+      "objectives": [
+        {
+          "monsterId": 181,
+          "monster": "Haunting Plant",
+          "count": 40
+        }
+      ],
+      "experience": 29856,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 105,
+      "name": "Forest 2: Purge",
+      "description": "A week-long purge of the strongest creatures of Forest 2.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 1,
+      "giver": 9101,
+      "turnIn": 9101,
+      "minLevel": 6,
+      "maxLevel": 27,
+      "objectives": [
+        {
+          "monsterId": 246,
+          "monster": "ImP",
+          "count": 60
+        },
+        {
+          "monsterId": 127,
+          "monster": "Doral",
+          "count": 60
+        },
+        {
+          "monsterId": 181,
+          "monster": "Haunting Plant",
+          "count": 60
+        }
+      ],
+      "experience": 127620,
+      "gold": 1200,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 106,
+      "name": "Forest 2: Master Hunter",
+      "description": "Prove yourself a master hunter of Forest 2: bring down a hundred Haunting Plant.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 1,
+      "giver": 9101,
+      "turnIn": 9101,
+      "minLevel": 12,
+      "maxLevel": 27,
+      "objectives": [
+        {
+          "monsterId": 181,
+          "monster": "Haunting Plant",
+          "count": 100
+        }
+      ],
+      "experience": 149280,
+      "gold": 6000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 201,
+      "name": "Garden of Freedom: Patrol",
+      "description": "The roads of Garden of Freedom are thick with HOPY. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 2,
+      "giver": 9102,
+      "turnIn": 9102,
+      "minLevel": 1,
+      "maxLevel": 14,
+      "objectives": [
+        {
+          "monsterId": 196,
+          "monster": "HOPY",
+          "count": 30
+        }
+      ],
+      "experience": 1764,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 202,
+      "name": "Garden of Freedom: Clearing",
+      "description": "Clear Garden of Freedom of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 2,
+      "giver": 9102,
+      "turnIn": 9102,
+      "minLevel": 1,
+      "maxLevel": 15,
+      "objectives": [
+        {
+          "monsterId": 196,
+          "monster": "HOPY",
+          "count": 25
+        },
+        {
+          "monsterId": 361,
+          "monster": "Mushroom Ghost",
+          "count": 25
+        }
+      ],
+      "experience": 3920,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 203,
+      "name": "Garden of Freedom: Bounty",
+      "description": "A standing bounty on Cuepy, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 2,
+      "giver": 9102,
+      "turnIn": 9102,
+      "minLevel": 1,
+      "maxLevel": 15,
+      "objectives": [
+        {
+          "monsterId": 82,
+          "monster": "Cuepy",
+          "count": 20
+        }
+      ],
+      "experience": 848,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 204,
+      "name": "Garden of Freedom: Night Watch",
+      "description": "At night Hobgoblin grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 2,
+      "giver": 9102,
+      "turnIn": 9102,
+      "minLevel": 9,
+      "maxLevel": 24,
+      "objectives": [
+        {
+          "monsterId": 192,
+          "monster": "Hobgoblin",
+          "count": 40
+        }
+      ],
+      "experience": 26544,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 205,
+      "name": "Garden of Freedom: Purge",
+      "description": "A week-long purge of the strongest creatures of Garden of Freedom.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 2,
+      "giver": 9102,
+      "turnIn": 9102,
+      "minLevel": 1,
+      "maxLevel": 24,
+      "objectives": [
+        {
+          "monsterId": 82,
+          "monster": "Cuepy",
+          "count": 60
+        },
+        {
+          "monsterId": 7,
+          "monster": "Arma",
+          "count": 60
+        },
+        {
+          "monsterId": 192,
+          "monster": "Hobgoblin",
+          "count": 60
+        }
+      ],
+      "experience": 68490,
+      "gold": 200,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 206,
+      "name": "Garden of Freedom: Master Hunter",
+      "description": "Prove yourself a master hunter of Garden of Freedom: bring down a hundred Hobgoblin.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 2,
+      "giver": 9102,
+      "turnIn": 9102,
+      "minLevel": 9,
+      "maxLevel": 24,
+      "objectives": [
+        {
+          "monsterId": 192,
+          "monster": "Hobgoblin",
+          "count": 100
+        }
+      ],
+      "experience": 132720,
+      "gold": 4500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 401,
+      "name": "Refuge of the Ancients: Patrol",
+      "description": "The roads of Refuge of the Ancients are thick with Ghost. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 4,
+      "giver": 9103,
+      "turnIn": 9103,
+      "minLevel": 3,
+      "maxLevel": 18,
+      "objectives": [
+        {
+          "monsterId": 156,
+          "monster": "Ghost",
+          "count": 30
+        }
+      ],
+      "experience": 3861,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 402,
+      "name": "Refuge of the Ancients: Clearing",
+      "description": "Clear Refuge of the Ancients of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 4,
+      "giver": 9103,
+      "turnIn": 9103,
+      "minLevel": 3,
+      "maxLevel": 20,
+      "objectives": [
+        {
+          "monsterId": 156,
+          "monster": "Ghost",
+          "count": 25
+        },
+        {
+          "monsterId": 347,
+          "monster": "MiniG",
+          "count": 25
+        }
+      ],
+      "experience": 9700,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 403,
+      "name": "Refuge of the Ancients: Bounty",
+      "description": "A standing bounty on Skeleton, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 4,
+      "giver": 9103,
+      "turnIn": 9103,
+      "minLevel": 13,
+      "maxLevel": 28,
+      "objectives": [
+        {
+          "monsterId": 455,
+          "monster": "Skeleton",
+          "count": 20
+        }
+      ],
+      "experience": 7068,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 404,
+      "name": "Refuge of the Ancients: Night Watch",
+      "description": "At night PlantLord grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 4,
+      "giver": 9103,
+      "turnIn": 9103,
+      "minLevel": 23,
+      "maxLevel": 38,
+      "objectives": [
+        {
+          "monsterId": 412,
+          "monster": "PlantLord",
+          "count": 40
+        }
+      ],
+      "experience": 93360,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 405,
+      "name": "Refuge of the Ancients: Purge",
+      "description": "A week-long purge of the strongest creatures of Refuge of the Ancients.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 4,
+      "giver": 9103,
+      "turnIn": 9103,
+      "minLevel": 14,
+      "maxLevel": 38,
+      "objectives": [
+        {
+          "monsterId": 600,
+          "monster": "Zombi",
+          "count": 60
+        },
+        {
+          "monsterId": 447,
+          "monster": "Scorpion",
+          "count": 60
+        },
+        {
+          "monsterId": 412,
+          "monster": "PlantLord",
+          "count": 60
+        }
+      ],
+      "experience": 414945,
+      "gold": 2800,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 406,
+      "name": "Refuge of the Ancients: Master Hunter",
+      "description": "Prove yourself a master hunter of Refuge of the Ancients: bring down a hundred PlantLord.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 4,
+      "giver": 9103,
+      "turnIn": 9103,
+      "minLevel": 23,
+      "maxLevel": 38,
+      "objectives": [
+        {
+          "monsterId": 412,
+          "monster": "PlantLord",
+          "count": 100
+        }
+      ],
+      "experience": 466800,
+      "gold": 11500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 501,
+      "name": "Castle of the Lost: Patrol",
+      "description": "The roads of Castle of the Lost are thick with Mutant Tree. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 5,
+      "giver": 9104,
+      "turnIn": 9104,
+      "minLevel": 11,
+      "maxLevel": 26,
+      "objectives": [
+        {
+          "monsterId": 365,
+          "monster": "Mutant Tree",
+          "count": 30
+        }
+      ],
+      "experience": 10395,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 502,
+      "name": "Castle of the Lost: Clearing",
+      "description": "Clear Castle of the Lost of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 5,
+      "giver": 9104,
+      "turnIn": 9104,
+      "minLevel": 11,
+      "maxLevel": 28,
+      "objectives": [
+        {
+          "monsterId": 365,
+          "monster": "Mutant Tree",
+          "count": 25
+        },
+        {
+          "monsterId": 455,
+          "monster": "Skeleton",
+          "count": 25
+        }
+      ],
+      "experience": 29220,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 503,
+      "name": "Castle of the Lost: Bounty",
+      "description": "A standing bounty on Cokris, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 5,
+      "giver": 9104,
+      "turnIn": 9104,
+      "minLevel": 16,
+      "maxLevel": 31,
+      "objectives": [
+        {
+          "monsterId": 72,
+          "monster": "Cokris",
+          "count": 20
+        }
+      ],
+      "experience": 8180,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 504,
+      "name": "Castle of the Lost: Night Watch",
+      "description": "At night PlantLord grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 5,
+      "giver": 9104,
+      "turnIn": 9104,
+      "minLevel": 23,
+      "maxLevel": 38,
+      "objectives": [
+        {
+          "monsterId": 412,
+          "monster": "PlantLord",
+          "count": 40
+        }
+      ],
+      "experience": 93360,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 505,
+      "name": "Castle of the Lost: Purge",
+      "description": "A week-long purge of the strongest creatures of Castle of the Lost.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 5,
+      "giver": 9104,
+      "turnIn": 9104,
+      "minLevel": 16,
+      "maxLevel": 38,
+      "objectives": [
+        {
+          "monsterId": 72,
+          "monster": "Cokris",
+          "count": 60
+        },
+        {
+          "monsterId": 325,
+          "monster": "Mephit",
+          "count": 60
+        },
+        {
+          "monsterId": 412,
+          "monster": "PlantLord",
+          "count": 60
+        }
+      ],
+      "experience": 371025,
+      "gold": 3200,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 506,
+      "name": "Castle of the Lost: Master Hunter",
+      "description": "Prove yourself a master hunter of Castle of the Lost: bring down a hundred PlantLord.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 5,
+      "giver": 9104,
+      "turnIn": 9104,
+      "minLevel": 23,
+      "maxLevel": 38,
+      "objectives": [
+        {
+          "monsterId": 412,
+          "monster": "PlantLord",
+          "count": 100
+        }
+      ],
+      "experience": 466800,
+      "gold": 11500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 601,
+      "name": "Ruin 2: Patrol",
+      "description": "The roads of Ruin 2 are thick with Zombi. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 6,
+      "giver": 9105,
+      "turnIn": 9105,
+      "minLevel": 14,
+      "maxLevel": 29,
+      "objectives": [
+        {
+          "monsterId": 600,
+          "monster": "Zombi",
+          "count": 30
+        }
+      ],
+      "experience": 17325,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 602,
+      "name": "Ruin 2: Clearing",
+      "description": "Clear Ruin 2 of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 6,
+      "giver": 9105,
+      "turnIn": 9105,
+      "minLevel": 14,
+      "maxLevel": 31,
+      "objectives": [
+        {
+          "monsterId": 600,
+          "monster": "Zombi",
+          "count": 25
+        },
+        {
+          "monsterId": 72,
+          "monster": "Cokris",
+          "count": 25
+        }
+      ],
+      "experience": 39700,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 603,
+      "name": "Ruin 2: Bounty",
+      "description": "A standing bounty on PlantLord, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 6,
+      "giver": 9105,
+      "turnIn": 9105,
+      "minLevel": 23,
+      "maxLevel": 38,
+      "objectives": [
+        {
+          "monsterId": 412,
+          "monster": "PlantLord",
+          "count": 20
+        }
+      ],
+      "experience": 15560,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 604,
+      "name": "Ruin 2: Night Watch",
+      "description": "At night Cyclops grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 6,
+      "giver": 9105,
+      "turnIn": 9105,
+      "minLevel": 28,
+      "maxLevel": 43,
+      "objectives": [
+        {
+          "monsterId": 96,
+          "monster": "Cyclops",
+          "count": 40
+        }
+      ],
+      "experience": 128976,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 605,
+      "name": "Ruin 2: Purge",
+      "description": "A week-long purge of the strongest creatures of Ruin 2.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 6,
+      "giver": 9105,
+      "turnIn": 9105,
+      "minLevel": 23,
+      "maxLevel": 43,
+      "objectives": [
+        {
+          "monsterId": 412,
+          "monster": "PlantLord",
+          "count": 60
+        },
+        {
+          "monsterId": 115,
+          "monster": "Decoy",
+          "count": 60
+        },
+        {
+          "monsterId": 96,
+          "monster": "Cyclops",
+          "count": 60
+        }
+      ],
+      "experience": 627570,
+      "gold": 4600,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 606,
+      "name": "Ruin 2: Master Hunter",
+      "description": "Prove yourself a master hunter of Ruin 2: bring down a hundred Cyclops.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 6,
+      "giver": 9105,
+      "turnIn": 9105,
+      "minLevel": 28,
+      "maxLevel": 43,
+      "objectives": [
+        {
+          "monsterId": 96,
+          "monster": "Cyclops",
+          "count": 100
+        }
+      ],
+      "experience": 644880,
+      "gold": 14000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 701,
+      "name": "Cursed Land: Patrol",
+      "description": "The roads of Cursed Land are thick with Scorpion. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 7,
+      "giver": 9106,
+      "turnIn": 9106,
+      "minLevel": 22,
+      "maxLevel": 37,
+      "objectives": [
+        {
+          "monsterId": 447,
+          "monster": "Scorpion",
+          "count": 30
+        }
+      ],
+      "experience": 30654,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 702,
+      "name": "Cursed Land: Clearing",
+      "description": "Clear Cursed Land of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 7,
+      "giver": 9106,
+      "turnIn": 9106,
+      "minLevel": 22,
+      "maxLevel": 40,
+      "objectives": [
+        {
+          "monsterId": 447,
+          "monster": "Scorpion",
+          "count": 25
+        },
+        {
+          "monsterId": 290,
+          "monster": "Leech",
+          "count": 25
+        }
+      ],
+      "experience": 78280,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 703,
+      "name": "Cursed Land: Bounty",
+      "description": "A standing bounty on Cyclops, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 7,
+      "giver": 9106,
+      "turnIn": 9106,
+      "minLevel": 28,
+      "maxLevel": 43,
+      "objectives": [
+        {
+          "monsterId": 96,
+          "monster": "Cyclops",
+          "count": 20
+        }
+      ],
+      "experience": 21496,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 704,
+      "name": "Cursed Land: Night Watch",
+      "description": "At night Bagon grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 7,
+      "giver": 9106,
+      "turnIn": 9106,
+      "minLevel": 35,
+      "maxLevel": 50,
+      "objectives": [
+        {
+          "monsterId": 20,
+          "monster": "Bagon",
+          "count": 40
+        }
+      ],
+      "experience": 166800,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 705,
+      "name": "Cursed Land: Purge",
+      "description": "A week-long purge of the strongest creatures of Cursed Land.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 7,
+      "giver": 9106,
+      "turnIn": 9106,
+      "minLevel": 28,
+      "maxLevel": 50,
+      "objectives": [
+        {
+          "monsterId": 96,
+          "monster": "Cyclops",
+          "count": 60
+        },
+        {
+          "monsterId": 456,
+          "monster": "Skeleton Archer",
+          "count": 60
+        },
+        {
+          "monsterId": 20,
+          "monster": "Bagon",
+          "count": 60
+        }
+      ],
+      "experience": 831195,
+      "gold": 5600,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 706,
+      "name": "Cursed Land: Master Hunter",
+      "description": "Prove yourself a master hunter of Cursed Land: bring down a hundred Bagon.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 7,
+      "giver": 9106,
+      "turnIn": 9106,
+      "minLevel": 35,
+      "maxLevel": 50,
+      "objectives": [
+        {
+          "monsterId": 20,
+          "monster": "Bagon",
+          "count": 100
+        }
+      ],
+      "experience": 834000,
+      "gold": 17500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 801,
+      "name": "Forgotten Land: Patrol",
+      "description": "The roads of Forgotten Land are thick with Ghoul. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 8,
+      "giver": 9107,
+      "turnIn": 9107,
+      "minLevel": 27,
+      "maxLevel": 42,
+      "objectives": [
+        {
+          "monsterId": 157,
+          "monster": "Ghoul",
+          "count": 30
+        }
+      ],
+      "experience": 50967,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 802,
+      "name": "Forgotten Land: Clearing",
+      "description": "Clear Forgotten Land of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 8,
+      "giver": 9107,
+      "turnIn": 9107,
+      "minLevel": 27,
+      "maxLevel": 43,
+      "objectives": [
+        {
+          "monsterId": 157,
+          "monster": "Ghoul",
+          "count": 25
+        },
+        {
+          "monsterId": 96,
+          "monster": "Cyclops",
+          "count": 25
+        }
+      ],
+      "experience": 110370,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 803,
+      "name": "Forgotten Land: Bounty",
+      "description": "A standing bounty on Buma, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 8,
+      "giver": 9107,
+      "turnIn": 9107,
+      "minLevel": 31,
+      "maxLevel": 46,
+      "objectives": [
+        {
+          "monsterId": 41,
+          "monster": "Buma",
+          "count": 20
+        }
+      ],
+      "experience": 25344,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 804,
+      "name": "Forgotten Land: Night Watch",
+      "description": "At night Bagon grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 8,
+      "giver": 9107,
+      "turnIn": 9107,
+      "minLevel": 35,
+      "maxLevel": 50,
+      "objectives": [
+        {
+          "monsterId": 20,
+          "monster": "Bagon",
+          "count": 40
+        }
+      ],
+      "experience": 166800,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 805,
+      "name": "Forgotten Land: Purge",
+      "description": "A week-long purge of the strongest creatures of Forgotten Land.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 8,
+      "giver": 9107,
+      "turnIn": 9107,
+      "minLevel": 32,
+      "maxLevel": 50,
+      "objectives": [
+        {
+          "monsterId": 456,
+          "monster": "Skeleton Archer",
+          "count": 60
+        },
+        {
+          "monsterId": 81,
+          "monster": "Crypt",
+          "count": 60
+        },
+        {
+          "monsterId": 20,
+          "monster": "Bagon",
+          "count": 60
+        }
+      ],
+      "experience": 880425,
+      "gold": 6400,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 806,
+      "name": "Forgotten Land: Master Hunter",
+      "description": "Prove yourself a master hunter of Forgotten Land: bring down a hundred Bagon.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 8,
+      "giver": 9107,
+      "turnIn": 9107,
+      "minLevel": 35,
+      "maxLevel": 50,
+      "objectives": [
+        {
+          "monsterId": 20,
+          "monster": "Bagon",
+          "count": 100
+        }
+      ],
+      "experience": 834000,
+      "gold": 17500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1001,
+      "name": "Oasis: Patrol",
+      "description": "The roads of Oasis are thick with Bagon. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 10,
+      "giver": 9108,
+      "turnIn": 9108,
+      "minLevel": 35,
+      "maxLevel": 50,
+      "objectives": [
+        {
+          "monsterId": 20,
+          "monster": "Bagon",
+          "count": 30
+        }
+      ],
+      "experience": 62550,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1002,
+      "name": "Oasis: Clearing",
+      "description": "Clear Oasis of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 10,
+      "giver": 9108,
+      "turnIn": 9108,
+      "minLevel": 35,
+      "maxLevel": 53,
+      "objectives": [
+        {
+          "monsterId": 20,
+          "monster": "Bagon",
+          "count": 25
+        },
+        {
+          "monsterId": 329,
+          "monster": "Mighty Goblin",
+          "count": 25
+        }
+      ],
+      "experience": 144140,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1003,
+      "name": "Oasis: Bounty",
+      "description": "A standing bounty on Cyclops Knight, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 10,
+      "giver": 9108,
+      "turnIn": 9108,
+      "minLevel": 42,
+      "maxLevel": 57,
+      "objectives": [
+        {
+          "monsterId": 97,
+          "monster": "Cyclops Knight",
+          "count": 20
+        }
+      ],
+      "experience": 31100,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1004,
+      "name": "Oasis: Night Watch",
+      "description": "At night Head Cutter grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 10,
+      "giver": 9108,
+      "turnIn": 9108,
+      "minLevel": 54,
+      "maxLevel": 69,
+      "objectives": [
+        {
+          "monsterId": 182,
+          "monster": "Head Cutter",
+          "count": 40
+        }
+      ],
+      "experience": 359040,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1005,
+      "name": "Oasis: Purge",
+      "description": "A week-long purge of the strongest creatures of Oasis.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 10,
+      "giver": 9108,
+      "turnIn": 9108,
+      "minLevel": 42,
+      "maxLevel": 69,
+      "objectives": [
+        {
+          "monsterId": 97,
+          "monster": "Cyclops Knight",
+          "count": 60
+        },
+        {
+          "monsterId": 533,
+          "monster": "Titan",
+          "count": 60
+        },
+        {
+          "monsterId": 182,
+          "monster": "Head Cutter",
+          "count": 60
+        }
+      ],
+      "experience": 1468125,
+      "gold": 8400,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1006,
+      "name": "Oasis: Master Hunter",
+      "description": "Prove yourself a master hunter of Oasis: bring down a hundred Head Cutter.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 10,
+      "giver": 9108,
+      "turnIn": 9108,
+      "minLevel": 54,
+      "maxLevel": 69,
+      "objectives": [
+        {
+          "monsterId": 182,
+          "monster": "Head Cutter",
+          "count": 100
+        }
+      ],
+      "experience": 1795200,
+      "gold": 27000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1101,
+      "name": "Ancient Battlefield: Patrol",
+      "description": "The roads of Ancient Battlefield are thick with Skeleton Ranger. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 11,
+      "giver": 9109,
+      "turnIn": 9109,
+      "minLevel": 55,
+      "maxLevel": 55,
+      "objectives": [
+        {
+          "monsterId": 460,
+          "monster": "Skeleton Ranger",
+          "count": 30
+        }
+      ],
+      "experience": 67590,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1102,
+      "name": "Ancient Battlefield: Clearing",
+      "description": "Clear Ancient Battlefield of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 11,
+      "giver": 9109,
+      "turnIn": 9109,
+      "minLevel": 55,
+      "maxLevel": 57,
+      "objectives": [
+        {
+          "monsterId": 460,
+          "monster": "Skeleton Ranger",
+          "count": 25
+        },
+        {
+          "monsterId": 97,
+          "monster": "Cyclops Knight",
+          "count": 25
+        }
+      ],
+      "experience": 152850,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1103,
+      "name": "Ancient Battlefield: Bounty",
+      "description": "A standing bounty on Titan, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 11,
+      "giver": 9109,
+      "turnIn": 9109,
+      "minLevel": 55,
+      "maxLevel": 63,
+      "objectives": [
+        {
+          "monsterId": 533,
+          "monster": "Titan",
+          "count": 20
+        }
+      ],
+      "experience": 39560,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1104,
+      "name": "Ancient Battlefield: Night Watch",
+      "description": "At night Head Cutter grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 11,
+      "giver": 9109,
+      "turnIn": 9109,
+      "minLevel": 55,
+      "maxLevel": 69,
+      "objectives": [
+        {
+          "monsterId": 182,
+          "monster": "Head Cutter",
+          "count": 40
+        }
+      ],
+      "experience": 359040,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1105,
+      "name": "Ancient Battlefield: Purge",
+      "description": "A week-long purge of the strongest creatures of Ancient Battlefield.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 11,
+      "giver": 9109,
+      "turnIn": 9109,
+      "minLevel": 55,
+      "maxLevel": 69,
+      "objectives": [
+        {
+          "monsterId": 533,
+          "monster": "Titan",
+          "count": 60
+        },
+        {
+          "monsterId": 15,
+          "monster": "Avelisk-S",
+          "count": 60
+        },
+        {
+          "monsterId": 182,
+          "monster": "Head Cutter",
+          "count": 60
+        }
+      ],
+      "experience": 1684935,
+      "gold": 11000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1106,
+      "name": "Ancient Battlefield: Master Hunter",
+      "description": "Prove yourself a master hunter of Ancient Battlefield: bring down a hundred Head Cutter.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 11,
+      "giver": 9109,
+      "turnIn": 9109,
+      "minLevel": 55,
+      "maxLevel": 69,
+      "objectives": [
+        {
+          "monsterId": 182,
+          "monster": "Head Cutter",
+          "count": 100
+        }
+      ],
+      "experience": 1795200,
+      "gold": 27500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1201,
+      "name": "Forbidden Land: Patrol",
+      "description": "The roads of Forbidden Land are thick with Crypt. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 12,
+      "giver": 9110,
+      "turnIn": 9110,
+      "minLevel": 55,
+      "maxLevel": 55,
+      "objectives": [
+        {
+          "monsterId": 81,
+          "monster": "Crypt",
+          "count": 30
+        }
+      ],
+      "experience": 58212,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1202,
+      "name": "Forbidden Land: Clearing",
+      "description": "Clear Forbidden Land of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 12,
+      "giver": 9110,
+      "turnIn": 9110,
+      "minLevel": 55,
+      "maxLevel": 65,
+      "objectives": [
+        {
+          "monsterId": 81,
+          "monster": "Crypt",
+          "count": 25
+        },
+        {
+          "monsterId": 443,
+          "monster": "SandLem",
+          "count": 25
+        }
+      ],
+      "experience": 182180,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1203,
+      "name": "Forbidden Land: Bounty",
+      "description": "A standing bounty on Slaughter, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 12,
+      "giver": 9110,
+      "turnIn": 9110,
+      "minLevel": 61,
+      "maxLevel": 76,
+      "objectives": [
+        {
+          "monsterId": 464,
+          "monster": "Slaughter",
+          "count": 20
+        }
+      ],
+      "experience": 77000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1204,
+      "name": "Forbidden Land: Night Watch",
+      "description": "At night Stone Giant grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 12,
+      "giver": 9110,
+      "turnIn": 9110,
+      "minLevel": 68,
+      "maxLevel": 83,
+      "objectives": [
+        {
+          "monsterId": 515,
+          "monster": "Stone Giant",
+          "count": 40
+        }
+      ],
+      "experience": 564960,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1205,
+      "name": "Forbidden Land: Purge",
+      "description": "A week-long purge of the strongest creatures of Forbidden Land.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 12,
+      "giver": 9110,
+      "turnIn": 9110,
+      "minLevel": 61,
+      "maxLevel": 83,
+      "objectives": [
+        {
+          "monsterId": 464,
+          "monster": "Slaughter",
+          "count": 60
+        },
+        {
+          "monsterId": 141,
+          "monster": "Figon",
+          "count": 60
+        },
+        {
+          "monsterId": 515,
+          "monster": "Stone Giant",
+          "count": 60
+        }
+      ],
+      "experience": 2846250,
+      "gold": 12200,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1206,
+      "name": "Forbidden Land: Master Hunter",
+      "description": "Prove yourself a master hunter of Forbidden Land: bring down a hundred Stone Giant.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 12,
+      "giver": 9110,
+      "turnIn": 9110,
+      "minLevel": 68,
+      "maxLevel": 83,
+      "objectives": [
+        {
+          "monsterId": 515,
+          "monster": "Stone Giant",
+          "count": 100
+        }
+      ],
+      "experience": 2824800,
+      "gold": 34000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1301,
+      "name": "Ancient Prison 1F: Patrol",
+      "description": "The roads of Ancient Prison 1F are thick with Ghoul. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 13,
+      "giver": 9111,
+      "turnIn": 9111,
+      "minLevel": 40,
+      "maxLevel": 42,
+      "objectives": [
+        {
+          "monsterId": 157,
+          "monster": "Ghoul",
+          "count": 30
+        }
+      ],
+      "experience": 50967,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1302,
+      "name": "Ancient Prison 1F: Clearing",
+      "description": "Clear Ancient Prison 1F of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 13,
+      "giver": 9111,
+      "turnIn": 9111,
+      "minLevel": 40,
+      "maxLevel": 44,
+      "objectives": [
+        {
+          "monsterId": 157,
+          "monster": "Ghoul",
+          "count": 25
+        },
+        {
+          "monsterId": 589,
+          "monster": "web",
+          "count": 25
+        }
+      ],
+      "experience": 113080,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1303,
+      "name": "Ancient Prison 1F: Bounty",
+      "description": "A standing bounty on Skeleton Archer, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 13,
+      "giver": 9111,
+      "turnIn": 9111,
+      "minLevel": 40,
+      "maxLevel": 47,
+      "objectives": [
+        {
+          "monsterId": 456,
+          "monster": "Skeleton Archer",
+          "count": 20
+        }
+      ],
+      "experience": 24588,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1304,
+      "name": "Ancient Prison 1F: Night Watch",
+      "description": "At night Head Cutter grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 13,
+      "giver": 9111,
+      "turnIn": 9111,
+      "minLevel": 54,
+      "maxLevel": 69,
+      "objectives": [
+        {
+          "monsterId": 182,
+          "monster": "Head Cutter",
+          "count": 40
+        }
+      ],
+      "experience": 359040,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1305,
+      "name": "Ancient Prison 1F: Purge",
+      "description": "A week-long purge of the strongest creatures of Ancient Prison 1F.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 13,
+      "giver": 9111,
+      "turnIn": 9111,
+      "minLevel": 40,
+      "maxLevel": 69,
+      "objectives": [
+        {
+          "monsterId": 456,
+          "monster": "Skeleton Archer",
+          "count": 60
+        },
+        {
+          "monsterId": 462,
+          "monster": "Skeleton Warrior",
+          "count": 60
+        },
+        {
+          "monsterId": 182,
+          "monster": "Head Cutter",
+          "count": 60
+        }
+      ],
+      "experience": 1307835,
+      "gold": 8000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1306,
+      "name": "Ancient Prison 1F: Master Hunter",
+      "description": "Prove yourself a master hunter of Ancient Prison 1F: bring down a hundred Head Cutter.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 13,
+      "giver": 9111,
+      "turnIn": 9111,
+      "minLevel": 54,
+      "maxLevel": 69,
+      "objectives": [
+        {
+          "monsterId": 182,
+          "monster": "Head Cutter",
+          "count": 100
+        }
+      ],
+      "experience": 1795200,
+      "gold": 27000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1401,
+      "name": "Ancient Prison 2F: Patrol",
+      "description": "The roads of Ancient Prison 2F are thick with web. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 14,
+      "giver": 9112,
+      "turnIn": 9112,
+      "minLevel": 50,
+      "maxLevel": 50,
+      "objectives": [
+        {
+          "monsterId": 589,
+          "monster": "web",
+          "count": 30
+        }
+      ],
+      "experience": 50805,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1402,
+      "name": "Ancient Prison 2F: Clearing",
+      "description": "Clear Ancient Prison 2F of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 14,
+      "giver": 9112,
+      "turnIn": 9112,
+      "minLevel": 50,
+      "maxLevel": 54,
+      "objectives": [
+        {
+          "monsterId": 589,
+          "monster": "web",
+          "count": 25
+        },
+        {
+          "monsterId": 460,
+          "monster": "Skeleton Ranger",
+          "count": 25
+        }
+      ],
+      "experience": 131550,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1403,
+      "name": "Ancient Prison 2F: Bounty",
+      "description": "A standing bounty on Head Cutter, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 14,
+      "giver": 9112,
+      "turnIn": 9112,
+      "minLevel": 54,
+      "maxLevel": 69,
+      "objectives": [
+        {
+          "monsterId": 182,
+          "monster": "Head Cutter",
+          "count": 20
+        }
+      ],
+      "experience": 59840,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1404,
+      "name": "Ancient Prison 2F: Night Watch",
+      "description": "At night Slaughter grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 14,
+      "giver": 9112,
+      "turnIn": 9112,
+      "minLevel": 61,
+      "maxLevel": 76,
+      "objectives": [
+        {
+          "monsterId": 464,
+          "monster": "Slaughter",
+          "count": 40
+        }
+      ],
+      "experience": 462000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1405,
+      "name": "Ancient Prison 2F: Purge",
+      "description": "A week-long purge of the strongest creatures of Ancient Prison 2F.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 14,
+      "giver": 9112,
+      "turnIn": 9112,
+      "minLevel": 54,
+      "maxLevel": 76,
+      "objectives": [
+        {
+          "monsterId": 182,
+          "monster": "Head Cutter",
+          "count": 60
+        },
+        {
+          "monsterId": 359,
+          "monster": "Mummy",
+          "count": 60
+        },
+        {
+          "monsterId": 464,
+          "monster": "Slaughter",
+          "count": 60
+        }
+      ],
+      "experience": 2390850,
+      "gold": 10800,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1406,
+      "name": "Ancient Prison 2F: Master Hunter",
+      "description": "Prove yourself a master hunter of Ancient Prison 2F: bring down a hundred Slaughter.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 14,
+      "giver": 9112,
+      "turnIn": 9112,
+      "minLevel": 61,
+      "maxLevel": 76,
+      "objectives": [
+        {
+          "monsterId": 464,
+          "monster": "Slaughter",
+          "count": 100
+        }
+      ],
+      "experience": 2310000,
+      "gold": 30500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1501,
+      "name": "Ancient Prison 3F: Patrol",
+      "description": "The roads of Ancient Prison 3F are thick with web. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 15,
+      "giver": 9113,
+      "turnIn": 9113,
+      "minLevel": 60,
+      "maxLevel": 60,
+      "objectives": [
+        {
+          "monsterId": 589,
+          "monster": "web",
+          "count": 30
+        }
+      ],
+      "experience": 50805,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1502,
+      "name": "Ancient Prison 3F: Clearing",
+      "description": "Clear Ancient Prison 3F of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 15,
+      "giver": 9113,
+      "turnIn": 9113,
+      "minLevel": 60,
+      "maxLevel": 64,
+      "objectives": [
+        {
+          "monsterId": 589,
+          "monster": "web",
+          "count": 25
+        },
+        {
+          "monsterId": 458,
+          "monster": "Skeleton Knight",
+          "count": 25
+        }
+      ],
+      "experience": 159300,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1503,
+      "name": "Ancient Prison 3F: Bounty",
+      "description": "A standing bounty on Slaughter, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 15,
+      "giver": 9113,
+      "turnIn": 9113,
+      "minLevel": 61,
+      "maxLevel": 76,
+      "objectives": [
+        {
+          "monsterId": 464,
+          "monster": "Slaughter",
+          "count": 20
+        }
+      ],
+      "experience": 77000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1504,
+      "name": "Ancient Prison 3F: Night Watch",
+      "description": "At night Hopy King grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 15,
+      "giver": 9113,
+      "turnIn": 9113,
+      "minLevel": 81,
+      "maxLevel": 96,
+      "objectives": [
+        {
+          "monsterId": 199,
+          "monster": "Hopy King",
+          "count": 40
+        }
+      ],
+      "experience": 744480,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1505,
+      "name": "Ancient Prison 3F: Purge",
+      "description": "A week-long purge of the strongest creatures of Ancient Prison 3F.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 15,
+      "giver": 9113,
+      "turnIn": 9113,
+      "minLevel": 62,
+      "maxLevel": 96,
+      "objectives": [
+        {
+          "monsterId": 244,
+          "monster": "Illusion Knight",
+          "count": 60
+        },
+        {
+          "monsterId": 141,
+          "monster": "Figon",
+          "count": 60
+        },
+        {
+          "monsterId": 199,
+          "monster": "Hopy King",
+          "count": 60
+        }
+      ],
+      "experience": 3212550,
+      "gold": 12400,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1506,
+      "name": "Ancient Prison 3F: Master Hunter",
+      "description": "Prove yourself a master hunter of Ancient Prison 3F: bring down a hundred Hopy King.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 15,
+      "giver": 9113,
+      "turnIn": 9113,
+      "minLevel": 81,
+      "maxLevel": 96,
+      "objectives": [
+        {
+          "monsterId": 199,
+          "monster": "Hopy King",
+          "count": 100
+        }
+      ],
+      "experience": 3722400,
+      "gold": 40500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1701,
+      "name": "Forest of Spirits: Patrol",
+      "description": "The roads of Forest of Spirits are thick with NorthGoblin. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 17,
+      "giver": 9114,
+      "turnIn": 9114,
+      "minLevel": 9,
+      "maxLevel": 24,
+      "objectives": [
+        {
+          "monsterId": 400,
+          "monster": "NorthGoblin",
+          "count": 30
+        }
+      ],
+      "experience": 9954,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1702,
+      "name": "Forest of Spirits: Clearing",
+      "description": "Clear Forest of Spirits of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 17,
+      "giver": 9114,
+      "turnIn": 9114,
+      "minLevel": 9,
+      "maxLevel": 25,
+      "objectives": [
+        {
+          "monsterId": 400,
+          "monster": "NorthGoblin",
+          "count": 25
+        },
+        {
+          "monsterId": 364,
+          "monster": "Mutant Rabie",
+          "count": 25
+        }
+      ],
+      "experience": 22370,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1703,
+      "name": "Forest of Spirits: Bounty",
+      "description": "A standing bounty on Corrupt, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 17,
+      "giver": 9114,
+      "turnIn": 9114,
+      "minLevel": 13,
+      "maxLevel": 28,
+      "objectives": [
+        {
+          "monsterId": 75,
+          "monster": "Corrupt",
+          "count": 20
+        }
+      ],
+      "experience": 7068,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1704,
+      "name": "Forest of Spirits: Night Watch",
+      "description": "At night Devilish Tree grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 17,
+      "giver": 9114,
+      "turnIn": 9114,
+      "minLevel": 23,
+      "maxLevel": 38,
+      "objectives": [
+        {
+          "monsterId": 122,
+          "monster": "Devilish Tree",
+          "count": 40
+        }
+      ],
+      "experience": 93360,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1705,
+      "name": "Forest of Spirits: Purge",
+      "description": "A week-long purge of the strongest creatures of Forest of Spirits.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 17,
+      "giver": 9114,
+      "turnIn": 9114,
+      "minLevel": 13,
+      "maxLevel": 38,
+      "objectives": [
+        {
+          "monsterId": 75,
+          "monster": "Corrupt",
+          "count": 60
+        },
+        {
+          "monsterId": 24,
+          "monster": "Bee Dog",
+          "count": 60
+        },
+        {
+          "monsterId": 122,
+          "monster": "Devilish Tree",
+          "count": 60
+        }
+      ],
+      "experience": 369585,
+      "gold": 2600,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1706,
+      "name": "Forest of Spirits: Master Hunter",
+      "description": "Prove yourself a master hunter of Forest of Spirits: bring down a hundred Devilish Tree.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 17,
+      "giver": 9114,
+      "turnIn": 9114,
+      "minLevel": 23,
+      "maxLevel": 38,
+      "objectives": [
+        {
+          "monsterId": 122,
+          "monster": "Devilish Tree",
+          "count": 100
+        }
+      ],
+      "experience": 466800,
+      "gold": 11500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1801,
+      "name": "Forever Fall 3: Patrol",
+      "description": "The roads of Forever Fall 3 are thick with Mush. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 18,
+      "giver": 9115,
+      "turnIn": 9115,
+      "minLevel": 1,
+      "maxLevel": 15,
+      "objectives": [
+        {
+          "monsterId": 360,
+          "monster": "Mush",
+          "count": 30
+        }
+      ],
+      "experience": 1701,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1802,
+      "name": "Forever Fall 3: Clearing",
+      "description": "Clear Forever Fall 3 of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 18,
+      "giver": 9115,
+      "turnIn": 9115,
+      "minLevel": 1,
+      "maxLevel": 17,
+      "objectives": [
+        {
+          "monsterId": 360,
+          "monster": "Mush",
+          "count": 25
+        },
+        {
+          "monsterId": 449,
+          "monster": "Sen",
+          "count": 25
+        }
+      ],
+      "experience": 4820,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1803,
+      "name": "Forever Fall 3: Bounty",
+      "description": "A standing bounty on Doral, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 18,
+      "giver": 9115,
+      "turnIn": 9115,
+      "minLevel": 7,
+      "maxLevel": 22,
+      "objectives": [
+        {
+          "monsterId": 127,
+          "monster": "Doral",
+          "count": 20
+        }
+      ],
+      "experience": 3812,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1804,
+      "name": "Forever Fall 3: Night Watch",
+      "description": "At night Haunting Maple grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 18,
+      "giver": 9115,
+      "turnIn": 9115,
+      "minLevel": 12,
+      "maxLevel": 27,
+      "objectives": [
+        {
+          "monsterId": 180,
+          "monster": "Haunting Maple",
+          "count": 40
+        }
+      ],
+      "experience": 29856,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1805,
+      "name": "Forever Fall 3: Purge",
+      "description": "A week-long purge of the strongest creatures of Forever Fall 3.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 18,
+      "giver": 9115,
+      "turnIn": 9115,
+      "minLevel": 9,
+      "maxLevel": 27,
+      "objectives": [
+        {
+          "monsterId": 400,
+          "monster": "NorthGoblin",
+          "count": 60
+        },
+        {
+          "monsterId": 364,
+          "monster": "Mutant Rabie",
+          "count": 60
+        },
+        {
+          "monsterId": 180,
+          "monster": "Haunting Maple",
+          "count": 60
+        }
+      ],
+      "experience": 156645,
+      "gold": 1800,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1806,
+      "name": "Forever Fall 3: Master Hunter",
+      "description": "Prove yourself a master hunter of Forever Fall 3: bring down a hundred Haunting Maple.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 18,
+      "giver": 9115,
+      "turnIn": 9115,
+      "minLevel": 12,
+      "maxLevel": 27,
+      "objectives": [
+        {
+          "monsterId": 180,
+          "monster": "Haunting Maple",
+          "count": 100
+        }
+      ],
+      "experience": 149280,
+      "gold": 6000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1901,
+      "name": "Valley of Tranquility: Patrol",
+      "description": "The roads of Valley of Tranquility are thick with Sen. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 19,
+      "giver": 9116,
+      "turnIn": 9116,
+      "minLevel": 2,
+      "maxLevel": 17,
+      "objectives": [
+        {
+          "monsterId": 449,
+          "monster": "Sen",
+          "count": 30
+        }
+      ],
+      "experience": 2637,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1902,
+      "name": "Valley of Tranquility: Clearing",
+      "description": "Clear Valley of Tranquility of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 19,
+      "giver": 9116,
+      "turnIn": 9116,
+      "minLevel": 2,
+      "maxLevel": 18,
+      "objectives": [
+        {
+          "monsterId": 449,
+          "monster": "Sen",
+          "count": 25
+        },
+        {
+          "monsterId": 133,
+          "monster": "Egan",
+          "count": 25
+        }
+      ],
+      "experience": 7390,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1903,
+      "name": "Valley of Tranquility: Bounty",
+      "description": "A standing bounty on Doral, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 19,
+      "giver": 9116,
+      "turnIn": 9116,
+      "minLevel": 7,
+      "maxLevel": 22,
+      "objectives": [
+        {
+          "monsterId": 127,
+          "monster": "Doral",
+          "count": 20
+        }
+      ],
+      "experience": 3812,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1904,
+      "name": "Valley of Tranquility: Night Watch",
+      "description": "At night Haunting Maple grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 19,
+      "giver": 9116,
+      "turnIn": 9116,
+      "minLevel": 12,
+      "maxLevel": 27,
+      "objectives": [
+        {
+          "monsterId": 180,
+          "monster": "Haunting Maple",
+          "count": 40
+        }
+      ],
+      "experience": 29856,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1905,
+      "name": "Valley of Tranquility: Purge",
+      "description": "A week-long purge of the strongest creatures of Valley of Tranquility.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 19,
+      "giver": 9116,
+      "turnIn": 9116,
+      "minLevel": 7,
+      "maxLevel": 27,
+      "objectives": [
+        {
+          "monsterId": 127,
+          "monster": "Doral",
+          "count": 60
+        },
+        {
+          "monsterId": 365,
+          "monster": "Mutant Tree",
+          "count": 60
+        },
+        {
+          "monsterId": 180,
+          "monster": "Haunting Maple",
+          "count": 60
+        }
+      ],
+      "experience": 150840,
+      "gold": 1400,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 1906,
+      "name": "Valley of Tranquility: Master Hunter",
+      "description": "Prove yourself a master hunter of Valley of Tranquility: bring down a hundred Haunting Maple.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 19,
+      "giver": 9116,
+      "turnIn": 9116,
+      "minLevel": 12,
+      "maxLevel": 27,
+      "objectives": [
+        {
+          "monsterId": 180,
+          "monster": "Haunting Maple",
+          "count": 100
+        }
+      ],
+      "experience": 149280,
+      "gold": 6000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2001,
+      "name": "Path of the Wind: Patrol",
+      "description": "The roads of Path of the Wind are thick with Rabie. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 20,
+      "giver": 9117,
+      "turnIn": 9117,
+      "minLevel": 1,
+      "maxLevel": 14,
+      "objectives": [
+        {
+          "monsterId": 418,
+          "monster": "Rabie",
+          "count": 30
+        }
+      ],
+      "experience": 1764,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2002,
+      "name": "Path of the Wind: Clearing",
+      "description": "Clear Path of the Wind of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 20,
+      "giver": 9117,
+      "turnIn": 9117,
+      "minLevel": 1,
+      "maxLevel": 14,
+      "objectives": [
+        {
+          "monsterId": 418,
+          "monster": "Rabie",
+          "count": 25
+        },
+        {
+          "monsterId": 534,
+          "monster": "Tobie",
+          "count": 25
+        }
+      ],
+      "experience": 4290,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2003,
+      "name": "Path of the Wind: Bounty",
+      "description": "A standing bounty on Zeldy, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 20,
+      "giver": 9117,
+      "turnIn": 9117,
+      "minLevel": 1,
+      "maxLevel": 15,
+      "objectives": [
+        {
+          "monsterId": 599,
+          "monster": "Zeldy",
+          "count": 20
+        }
+      ],
+      "experience": 748,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2004,
+      "name": "Path of the Wind: Night Watch",
+      "description": "At night NorthGoblin grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 20,
+      "giver": 9117,
+      "turnIn": 9117,
+      "minLevel": 9,
+      "maxLevel": 24,
+      "objectives": [
+        {
+          "monsterId": 400,
+          "monster": "NorthGoblin",
+          "count": 40
+        }
+      ],
+      "experience": 26544,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2005,
+      "name": "Path of the Wind: Purge",
+      "description": "A week-long purge of the strongest creatures of Path of the Wind.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 20,
+      "giver": 9117,
+      "turnIn": 9117,
+      "minLevel": 1,
+      "maxLevel": 24,
+      "objectives": [
+        {
+          "monsterId": 599,
+          "monster": "Zeldy",
+          "count": 60
+        },
+        {
+          "monsterId": 360,
+          "monster": "Mush",
+          "count": 60
+        },
+        {
+          "monsterId": 400,
+          "monster": "NorthGoblin",
+          "count": 60
+        }
+      ],
+      "experience": 66690,
+      "gold": 200,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2006,
+      "name": "Path of the Wind: Master Hunter",
+      "description": "Prove yourself a master hunter of Path of the Wind: bring down a hundred NorthGoblin.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 20,
+      "giver": 9117,
+      "turnIn": 9117,
+      "minLevel": 9,
+      "maxLevel": 24,
+      "objectives": [
+        {
+          "monsterId": 400,
+          "monster": "NorthGoblin",
+          "count": 100
+        }
+      ],
+      "experience": 132720,
+      "gold": 4500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2201,
+      "name": "Cursed Temple 1F: Patrol",
+      "description": "The roads of Cursed Temple 1F are thick with Hulk. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 22,
+      "giver": 9118,
+      "turnIn": 9118,
+      "minLevel": 70,
+      "maxLevel": 70,
+      "objectives": [
+        {
+          "monsterId": 205,
+          "monster": "Hulk",
+          "count": 30
+        }
+      ],
+      "experience": 67320,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2202,
+      "name": "Cursed Temple 1F: Clearing",
+      "description": "Clear Cursed Temple 1F of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 22,
+      "giver": 9118,
+      "turnIn": 9118,
+      "minLevel": 70,
+      "maxLevel": 76,
+      "objectives": [
+        {
+          "monsterId": 205,
+          "monster": "Hulk",
+          "count": 25
+        },
+        {
+          "monsterId": 464,
+          "monster": "Slaughter",
+          "count": 25
+        }
+      ],
+      "experience": 267300,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2203,
+      "name": "Cursed Temple 1F: Bounty",
+      "description": "A standing bounty on Sliver, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 22,
+      "giver": 9118,
+      "turnIn": 9118,
+      "minLevel": 70,
+      "maxLevel": 82,
+      "objectives": [
+        {
+          "monsterId": 468,
+          "monster": "Sliver",
+          "count": 20
+        }
+      ],
+      "experience": 96800,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2204,
+      "name": "Cursed Temple 1F: Night Watch",
+      "description": "At night Stygian grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 22,
+      "giver": 9118,
+      "turnIn": 9118,
+      "minLevel": 74,
+      "maxLevel": 89,
+      "objectives": [
+        {
+          "monsterId": 519,
+          "monster": "Stygian",
+          "count": 40
+        }
+      ],
+      "experience": 871200,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2205,
+      "name": "Cursed Temple 1F: Purge",
+      "description": "A week-long purge of the strongest creatures of Cursed Temple 1F.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 22,
+      "giver": 9118,
+      "turnIn": 9118,
+      "minLevel": 72,
+      "maxLevel": 89,
+      "objectives": [
+        {
+          "monsterId": 110,
+          "monster": "Dawlin",
+          "count": 60
+        },
+        {
+          "monsterId": 452,
+          "monster": "Shadow",
+          "count": 60
+        },
+        {
+          "monsterId": 519,
+          "monster": "Stygian",
+          "count": 60
+        }
+      ],
+      "experience": 4578750,
+      "gold": 14400,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2206,
+      "name": "Cursed Temple 1F: Master Hunter",
+      "description": "Prove yourself a master hunter of Cursed Temple 1F: bring down a hundred Stygian.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 22,
+      "giver": 9118,
+      "turnIn": 9118,
+      "minLevel": 74,
+      "maxLevel": 89,
+      "objectives": [
+        {
+          "monsterId": 519,
+          "monster": "Stygian",
+          "count": 100
+        }
+      ],
+      "experience": 4356000,
+      "gold": 37000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2301,
+      "name": "Cursed Temple 2F: Patrol",
+      "description": "The roads of Cursed Temple 2F are thick with Sliver. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 23,
+      "giver": 9119,
+      "turnIn": 9119,
+      "minLevel": 75,
+      "maxLevel": 82,
+      "objectives": [
+        {
+          "monsterId": 468,
+          "monster": "Sliver",
+          "count": 30
+        }
+      ],
+      "experience": 217800,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2302,
+      "name": "Cursed Temple 2F: Clearing",
+      "description": "Clear Cursed Temple 2F of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 23,
+      "giver": 9119,
+      "turnIn": 9119,
+      "minLevel": 75,
+      "maxLevel": 85,
+      "objectives": [
+        {
+          "monsterId": 468,
+          "monster": "Sliver",
+          "count": 25
+        },
+        {
+          "monsterId": 129,
+          "monster": "Dusk",
+          "count": 25
+        }
+      ],
+      "experience": 506000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2303,
+      "name": "Cursed Temple 2F: Bounty",
+      "description": "A standing bounty on Shadow, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 23,
+      "giver": 9119,
+      "turnIn": 9119,
+      "minLevel": 75,
+      "maxLevel": 89,
+      "objectives": [
+        {
+          "monsterId": 452,
+          "monster": "Shadow",
+          "count": 20
+        }
+      ],
+      "experience": 134200,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2304,
+      "name": "Cursed Temple 2F: Night Watch",
+      "description": "At night Ratoo grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 23,
+      "giver": 9119,
+      "turnIn": 9119,
+      "minLevel": 95,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 421,
+          "monster": "Ratoo",
+          "count": 40
+        }
+      ],
+      "experience": 1610400,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2305,
+      "name": "Cursed Temple 2F: Purge",
+      "description": "A week-long purge of the strongest creatures of Cursed Temple 2F.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 23,
+      "giver": 9119,
+      "turnIn": 9119,
+      "minLevel": 77,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 247,
+          "monster": "Incubus",
+          "count": 60
+        },
+        {
+          "monsterId": 107,
+          "monster": "Dark Specter",
+          "count": 60
+        },
+        {
+          "monsterId": 421,
+          "monster": "Ratoo",
+          "count": 60
+        }
+      ],
+      "experience": 7078500,
+      "gold": 15400,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2306,
+      "name": "Cursed Temple 2F: Master Hunter",
+      "description": "Prove yourself a master hunter of Cursed Temple 2F: bring down a hundred Ratoo.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 23,
+      "giver": 9119,
+      "turnIn": 9119,
+      "minLevel": 95,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 421,
+          "monster": "Ratoo",
+          "count": 100
+        }
+      ],
+      "experience": 8052000,
+      "gold": 47500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2401,
+      "name": "Mushroom Cave: Patrol",
+      "description": "The roads of Mushroom Cave are thick with Skeleton Ranger. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 24,
+      "giver": 9120,
+      "turnIn": 9120,
+      "minLevel": 55,
+      "maxLevel": 55,
+      "objectives": [
+        {
+          "monsterId": 460,
+          "monster": "Skeleton Ranger",
+          "count": 30
+        }
+      ],
+      "experience": 67590,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2402,
+      "name": "Mushroom Cave: Clearing",
+      "description": "Clear Mushroom Cave of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 24,
+      "giver": 9120,
+      "turnIn": 9120,
+      "minLevel": 55,
+      "maxLevel": 59,
+      "objectives": [
+        {
+          "monsterId": 460,
+          "monster": "Skeleton Ranger",
+          "count": 25
+        },
+        {
+          "monsterId": 577,
+          "monster": "Vampiric Bat",
+          "count": 25
+        }
+      ],
+      "experience": 154660,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2403,
+      "name": "Mushroom Cave: Bounty",
+      "description": "A standing bounty on Dark Knight, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 24,
+      "giver": 9120,
+      "turnIn": 9120,
+      "minLevel": 55,
+      "maxLevel": 65,
+      "objectives": [
+        {
+          "monsterId": 102,
+          "monster": "Dark Knight",
+          "count": 20
+        }
+      ],
+      "experience": 70400,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2404,
+      "name": "Mushroom Cave: Night Watch",
+      "description": "At night Thorn Crawler grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 24,
+      "giver": 9120,
+      "turnIn": 9120,
+      "minLevel": 57,
+      "maxLevel": 72,
+      "objectives": [
+        {
+          "monsterId": 532,
+          "monster": "Thorn Crawler",
+          "count": 40
+        }
+      ],
+      "experience": 435600,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2405,
+      "name": "Mushroom Cave: Purge",
+      "description": "A week-long purge of the strongest creatures of Mushroom Cave.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 24,
+      "giver": 9120,
+      "turnIn": 9120,
+      "minLevel": 55,
+      "maxLevel": 72,
+      "objectives": [
+        {
+          "monsterId": 349,
+          "monster": "Mire Keeper",
+          "count": 60
+        },
+        {
+          "monsterId": 137,
+          "monster": "Evil Plant",
+          "count": 60
+        },
+        {
+          "monsterId": 532,
+          "monster": "Thorn Crawler",
+          "count": 60
+        }
+      ],
+      "experience": 2147310,
+      "gold": 11000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2406,
+      "name": "Mushroom Cave: Master Hunter",
+      "description": "Prove yourself a master hunter of Mushroom Cave: bring down a hundred Thorn Crawler.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 24,
+      "giver": 9120,
+      "turnIn": 9120,
+      "minLevel": 57,
+      "maxLevel": 72,
+      "objectives": [
+        {
+          "monsterId": 532,
+          "monster": "Thorn Crawler",
+          "count": 100
+        }
+      ],
+      "experience": 2178000,
+      "gold": 28500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2501,
+      "name": "Beehive Cave: Patrol",
+      "description": "The roads of Beehive Cave are thick with Skeleton Ranger. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 25,
+      "giver": 9121,
+      "turnIn": 9121,
+      "minLevel": 55,
+      "maxLevel": 55,
+      "objectives": [
+        {
+          "monsterId": 460,
+          "monster": "Skeleton Ranger",
+          "count": 30
+        }
+      ],
+      "experience": 67590,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2502,
+      "name": "Beehive Cave: Clearing",
+      "description": "Clear Beehive Cave of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 25,
+      "giver": 9121,
+      "turnIn": 9121,
+      "minLevel": 55,
+      "maxLevel": 62,
+      "objectives": [
+        {
+          "monsterId": 460,
+          "monster": "Skeleton Ranger",
+          "count": 25
+        },
+        {
+          "monsterId": 124,
+          "monster": "Dire Bee",
+          "count": 25
+        }
+      ],
+      "experience": 164640,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2503,
+      "name": "Beehive Cave: Bounty",
+      "description": "A standing bounty on Mire Keeper, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 25,
+      "giver": 9121,
+      "turnIn": 9121,
+      "minLevel": 55,
+      "maxLevel": 67,
+      "objectives": [
+        {
+          "monsterId": 349,
+          "monster": "Mire Keeper",
+          "count": 20
+        }
+      ],
+      "experience": 56496,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2504,
+      "name": "Beehive Cave: Night Watch",
+      "description": "At night BeEvil grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 25,
+      "giver": 9121,
+      "turnIn": 9121,
+      "minLevel": 57,
+      "maxLevel": 72,
+      "objectives": [
+        {
+          "monsterId": 26,
+          "monster": "BeEvil",
+          "count": 40
+        }
+      ],
+      "experience": 396000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2505,
+      "name": "Beehive Cave: Purge",
+      "description": "A week-long purge of the strongest creatures of Beehive Cave.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 25,
+      "giver": 9121,
+      "turnIn": 9121,
+      "minLevel": 55,
+      "maxLevel": 72,
+      "objectives": [
+        {
+          "monsterId": 137,
+          "monster": "Evil Plant",
+          "count": 60
+        },
+        {
+          "monsterId": 507,
+          "monster": "Solid Snail",
+          "count": 60
+        },
+        {
+          "monsterId": 26,
+          "monster": "BeEvil",
+          "count": 60
+        }
+      ],
+      "experience": 2187900,
+      "gold": 11000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2506,
+      "name": "Beehive Cave: Master Hunter",
+      "description": "Prove yourself a master hunter of Beehive Cave: bring down a hundred BeEvil.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 25,
+      "giver": 9121,
+      "turnIn": 9121,
+      "minLevel": 57,
+      "maxLevel": 72,
+      "objectives": [
+        {
+          "monsterId": 26,
+          "monster": "BeEvil",
+          "count": 100
+        }
+      ],
+      "experience": 1980000,
+      "gold": 28500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2601,
+      "name": "Dark Sanctuary: Patrol",
+      "description": "The roads of Dark Sanctuary are thick with Dark Knight. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 26,
+      "giver": 9122,
+      "turnIn": 9122,
+      "minLevel": 65,
+      "maxLevel": 65,
+      "objectives": [
+        {
+          "monsterId": 102,
+          "monster": "Dark Knight",
+          "count": 30
+        }
+      ],
+      "experience": 158400,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2602,
+      "name": "Dark Sanctuary: Clearing",
+      "description": "Clear Dark Sanctuary of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 26,
+      "giver": 9122,
+      "turnIn": 9122,
+      "minLevel": 65,
+      "maxLevel": 67,
+      "objectives": [
+        {
+          "monsterId": 102,
+          "monster": "Dark Knight",
+          "count": 25
+        },
+        {
+          "monsterId": 349,
+          "monster": "Mire Keeper",
+          "count": 25
+        }
+      ],
+      "experience": 317240,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2603,
+      "name": "Dark Sanctuary: Bounty",
+      "description": "A standing bounty on Doom Guard, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 26,
+      "giver": 9122,
+      "turnIn": 9122,
+      "minLevel": 65,
+      "maxLevel": 79,
+      "objectives": [
+        {
+          "monsterId": 125,
+          "monster": "Doom Guard",
+          "count": 20
+        }
+      ],
+      "experience": 85360,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2604,
+      "name": "Dark Sanctuary: Night Watch",
+      "description": "At night Stone Golem grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 26,
+      "giver": 9122,
+      "turnIn": 9122,
+      "minLevel": 69,
+      "maxLevel": 84,
+      "objectives": [
+        {
+          "monsterId": 516,
+          "monster": "Stone Golem",
+          "count": 40
+        }
+      ],
+      "experience": 976800,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2605,
+      "name": "Dark Sanctuary: Purge",
+      "description": "A week-long purge of the strongest creatures of Dark Sanctuary.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 26,
+      "giver": 9122,
+      "turnIn": 9122,
+      "minLevel": 66,
+      "maxLevel": 84,
+      "objectives": [
+        {
+          "monsterId": 593,
+          "monster": "Witch",
+          "count": 60
+        },
+        {
+          "monsterId": 184,
+          "monster": "Heavy Goblin",
+          "count": 60
+        },
+        {
+          "monsterId": 516,
+          "monster": "Stone Golem",
+          "count": 60
+        }
+      ],
+      "experience": 3905550,
+      "gold": 13200,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2606,
+      "name": "Dark Sanctuary: Master Hunter",
+      "description": "Prove yourself a master hunter of Dark Sanctuary: bring down a hundred Stone Golem.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 26,
+      "giver": 9122,
+      "turnIn": 9122,
+      "minLevel": 69,
+      "maxLevel": 84,
+      "objectives": [
+        {
+          "monsterId": 516,
+          "monster": "Stone Golem",
+          "count": 100
+        }
+      ],
+      "experience": 4884000,
+      "gold": 34500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2701,
+      "name": "Railway of Chaos: Patrol",
+      "description": "The roads of Railway of Chaos are thick with Iron Guard. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 27,
+      "giver": 9123,
+      "turnIn": 9123,
+      "minLevel": 80,
+      "maxLevel": 91,
+      "objectives": [
+        {
+          "monsterId": 252,
+          "monster": "Iron Guard",
+          "count": 30
+        }
+      ],
+      "experience": 381150,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2702,
+      "name": "Railway of Chaos: Clearing",
+      "description": "Clear Railway of Chaos of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 27,
+      "giver": 9123,
+      "turnIn": 9123,
+      "minLevel": 80,
+      "maxLevel": 92,
+      "objectives": [
+        {
+          "monsterId": 252,
+          "monster": "Iron Guard",
+          "count": 25
+        },
+        {
+          "monsterId": 9,
+          "monster": "Avelin",
+          "count": 25
+        }
+      ],
+      "experience": 775500,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2703,
+      "name": "Railway of Chaos: Bounty",
+      "description": "A standing bounty on Hyper Machine, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 27,
+      "giver": 9123,
+      "turnIn": 9123,
+      "minLevel": 80,
+      "maxLevel": 94,
+      "objectives": [
+        {
+          "monsterId": 206,
+          "monster": "Hyper Machine",
+          "count": 20
+        }
+      ],
+      "experience": 180400,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2704,
+      "name": "Railway of Chaos: Night Watch",
+      "description": "At night Grotesque grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 27,
+      "giver": 9123,
+      "turnIn": 9123,
+      "minLevel": 95,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 168,
+          "monster": "Grotesque",
+          "count": 40
+        }
+      ],
+      "experience": 1848000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2705,
+      "name": "Railway of Chaos: Purge",
+      "description": "A week-long purge of the strongest creatures of Railway of Chaos.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 27,
+      "giver": 9123,
+      "turnIn": 9123,
+      "minLevel": 80,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 114,
+          "monster": "DeadZone",
+          "count": 60
+        },
+        {
+          "monsterId": 579,
+          "monster": "Vampiric Machine",
+          "count": 60
+        },
+        {
+          "monsterId": 168,
+          "monster": "Grotesque",
+          "count": 60
+        }
+      ],
+      "experience": 7647750,
+      "gold": 16000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2706,
+      "name": "Railway of Chaos: Master Hunter",
+      "description": "Prove yourself a master hunter of Railway of Chaos: bring down a hundred Grotesque.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 27,
+      "giver": 9123,
+      "turnIn": 9123,
+      "minLevel": 95,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 168,
+          "monster": "Grotesque",
+          "count": 100
+        }
+      ],
+      "experience": 9240000,
+      "gold": 47500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2801,
+      "name": "Heart of Perum: Patrol",
+      "description": "The roads of Heart of Perum are thick with Morgon. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 28,
+      "giver": 9124,
+      "turnIn": 9124,
+      "minLevel": 85,
+      "maxLevel": 97,
+      "objectives": [
+        {
+          "monsterId": 352,
+          "monster": "Morgon",
+          "count": 30
+        }
+      ],
+      "experience": 430650,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2802,
+      "name": "Heart of Perum: Clearing",
+      "description": "Clear Heart of Perum of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 28,
+      "giver": 9124,
+      "turnIn": 9124,
+      "minLevel": 85,
+      "maxLevel": 97,
+      "objectives": [
+        {
+          "monsterId": 352,
+          "monster": "Morgon",
+          "count": 25
+        },
+        {
+          "monsterId": 439,
+          "monster": "Runic Guardian",
+          "count": 25
+        }
+      ],
+      "experience": 1001000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2803,
+      "name": "Heart of Perum: Bounty",
+      "description": "A standing bounty on Metron, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 28,
+      "giver": 9124,
+      "turnIn": 9124,
+      "minLevel": 85,
+      "maxLevel": 98,
+      "objectives": [
+        {
+          "monsterId": 327,
+          "monster": "Metron",
+          "count": 20
+        }
+      ],
+      "experience": 220000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2804,
+      "name": "Heart of Perum: Night Watch",
+      "description": "At night Iron Fist grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 28,
+      "giver": 9124,
+      "turnIn": 9124,
+      "minLevel": 95,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 250,
+          "monster": "Iron Fist",
+          "count": 40
+        }
+      ],
+      "experience": 2376000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2805,
+      "name": "Heart of Perum: Purge",
+      "description": "A week-long purge of the strongest creatures of Heart of Perum.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 28,
+      "giver": 9124,
+      "turnIn": 9124,
+      "minLevel": 85,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 354,
+          "monster": "Mountain",
+          "count": 60
+        },
+        {
+          "monsterId": 99,
+          "monster": "D-Machine",
+          "count": 60
+        },
+        {
+          "monsterId": 250,
+          "monster": "Iron Fist",
+          "count": 60
+        }
+      ],
+      "experience": 10098000,
+      "gold": 17000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 2806,
+      "name": "Heart of Perum: Master Hunter",
+      "description": "Prove yourself a master hunter of Heart of Perum: bring down a hundred Iron Fist.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 28,
+      "giver": 9124,
+      "turnIn": 9124,
+      "minLevel": 95,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 250,
+          "monster": "Iron Fist",
+          "count": 100
+        }
+      ],
+      "experience": 11880000,
+      "gold": 47500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3101,
+      "name": "Gallubia Valley: Patrol",
+      "description": "The roads of Gallubia Valley are thick with Mystic. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 31,
+      "giver": 9125,
+      "turnIn": 9125,
+      "minLevel": 90,
+      "maxLevel": 102,
+      "objectives": [
+        {
+          "monsterId": 366,
+          "monster": "Mystic",
+          "count": 30
+        }
+      ],
+      "experience": 564300,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3102,
+      "name": "Gallubia Valley: Clearing",
+      "description": "Clear Gallubia Valley of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 31,
+      "giver": 9125,
+      "turnIn": 9125,
+      "minLevel": 90,
+      "maxLevel": 103,
+      "objectives": [
+        {
+          "monsterId": 366,
+          "monster": "Mystic",
+          "count": 25
+        },
+        {
+          "monsterId": 234,
+          "monster": "icegoblin",
+          "count": 25
+        }
+      ],
+      "experience": 1353000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3103,
+      "name": "Gallubia Valley: Bounty",
+      "description": "A standing bounty on frozen, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 31,
+      "giver": 9125,
+      "turnIn": 9125,
+      "minLevel": 90,
+      "maxLevel": 105,
+      "objectives": [
+        {
+          "monsterId": 151,
+          "monster": "frozen",
+          "count": 20
+        }
+      ],
+      "experience": 316800,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3104,
+      "name": "Gallubia Valley: Night Watch",
+      "description": "At night chaoscara grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 31,
+      "giver": 9125,
+      "turnIn": 9125,
+      "minLevel": 95,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 69,
+          "monster": "chaoscara",
+          "count": 40
+        }
+      ],
+      "experience": 15840000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3105,
+      "name": "Gallubia Valley: Purge",
+      "description": "A week-long purge of the strongest creatures of Gallubia Valley.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 31,
+      "giver": 9125,
+      "turnIn": 9125,
+      "minLevel": 91,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 236,
+          "monster": "icegolem",
+          "count": 60
+        },
+        {
+          "monsterId": 149,
+          "monster": "frost",
+          "count": 60
+        },
+        {
+          "monsterId": 69,
+          "monster": "chaoscara",
+          "count": 60
+        }
+      ],
+      "experience": 38115000,
+      "gold": 18200,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3106,
+      "name": "Gallubia Valley: Master Hunter",
+      "description": "Prove yourself a master hunter of Gallubia Valley: bring down a hundred chaoscara.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 31,
+      "giver": 9125,
+      "turnIn": 9125,
+      "minLevel": 95,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 69,
+          "monster": "chaoscara",
+          "count": 100
+        }
+      ],
+      "experience": 79200000,
+      "gold": 47500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3401,
+      "name": "Lake of Greed: Patrol",
+      "description": "The roads of Lake of Greed are thick with Great_Greven. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 34,
+      "giver": 9126,
+      "turnIn": 9126,
+      "minLevel": 70,
+      "maxLevel": 82,
+      "objectives": [
+        {
+          "monsterId": 165,
+          "monster": "Great_Greven",
+          "count": 30
+        }
+      ],
+      "experience": 217800,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3402,
+      "name": "Lake of Greed: Clearing",
+      "description": "Clear Lake of Greed of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 34,
+      "giver": 9126,
+      "turnIn": 9126,
+      "minLevel": 70,
+      "maxLevel": 83,
+      "objectives": [
+        {
+          "monsterId": 165,
+          "monster": "Great_Greven",
+          "count": 25
+        },
+        {
+          "monsterId": 408,
+          "monster": "Omu",
+          "count": 25
+        }
+      ],
+      "experience": 495000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3403,
+      "name": "Lake of Greed: Bounty",
+      "description": "A standing bounty on m_lord, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 34,
+      "giver": 9126,
+      "turnIn": 9126,
+      "minLevel": 74,
+      "maxLevel": 89,
+      "objectives": [
+        {
+          "monsterId": 317,
+          "monster": "m_lord",
+          "count": 20
+        }
+      ],
+      "experience": 132000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3404,
+      "name": "Lake of Greed: Night Watch",
+      "description": "At night spidertrooper grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 34,
+      "giver": 9126,
+      "turnIn": 9126,
+      "minLevel": 80,
+      "maxLevel": 95,
+      "objectives": [
+        {
+          "monsterId": 508,
+          "monster": "spidertrooper",
+          "count": 40
+        }
+      ],
+      "experience": 1056000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3405,
+      "name": "Lake of Greed: Purge",
+      "description": "A week-long purge of the strongest creatures of Lake of Greed.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 34,
+      "giver": 9126,
+      "turnIn": 9126,
+      "minLevel": 75,
+      "maxLevel": 95,
+      "objectives": [
+        {
+          "monsterId": 314,
+          "monster": "lizardfolk",
+          "count": 60
+        },
+        {
+          "monsterId": 517,
+          "monster": "strider",
+          "count": 60
+        },
+        {
+          "monsterId": 508,
+          "monster": "spidertrooper",
+          "count": 60
+        }
+      ],
+      "experience": 5197500,
+      "gold": 15000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3406,
+      "name": "Lake of Greed: Master Hunter",
+      "description": "Prove yourself a master hunter of Lake of Greed: bring down a hundred spidertrooper.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 34,
+      "giver": 9126,
+      "turnIn": 9126,
+      "minLevel": 80,
+      "maxLevel": 95,
+      "objectives": [
+        {
+          "monsterId": 508,
+          "monster": "spidertrooper",
+          "count": 100
+        }
+      ],
+      "experience": 5280000,
+      "gold": 40000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3501,
+      "name": "Frozen Sanctuary: Patrol",
+      "description": "The roads of Frozen Sanctuary are thick with Incubus Summoner. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 35,
+      "giver": 9127,
+      "turnIn": 9127,
+      "minLevel": 91,
+      "maxLevel": 106,
+      "objectives": [
+        {
+          "monsterId": 248,
+          "monster": "Incubus Summoner",
+          "count": 30
+        }
+      ],
+      "experience": 752400,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3502,
+      "name": "Frozen Sanctuary: Clearing",
+      "description": "Clear Frozen Sanctuary of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 35,
+      "giver": 9127,
+      "turnIn": 9127,
+      "minLevel": 91,
+      "maxLevel": 106,
+      "objectives": [
+        {
+          "monsterId": 248,
+          "monster": "Incubus Summoner",
+          "count": 25
+        },
+        {
+          "monsterId": 236,
+          "monster": "icegolem",
+          "count": 25
+        }
+      ],
+      "experience": 1738000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3503,
+      "name": "Frozen Sanctuary: Bounty",
+      "description": "A standing bounty on frost, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 35,
+      "giver": 9127,
+      "turnIn": 9127,
+      "minLevel": 92,
+      "maxLevel": 107,
+      "objectives": [
+        {
+          "monsterId": 149,
+          "monster": "frost",
+          "count": 20
+        }
+      ],
+      "experience": 387200,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3504,
+      "name": "Frozen Sanctuary: Night Watch",
+      "description": "At night devil bird grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 35,
+      "giver": 9127,
+      "turnIn": 9127,
+      "minLevel": 99,
+      "maxLevel": 114,
+      "objectives": [
+        {
+          "monsterId": 118,
+          "monster": "devil bird",
+          "count": 40
+        }
+      ],
+      "experience": 4752000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3505,
+      "name": "Frozen Sanctuary: Purge",
+      "description": "A week-long purge of the strongest creatures of Frozen Sanctuary.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 35,
+      "giver": 9127,
+      "turnIn": 9127,
+      "minLevel": 93,
+      "maxLevel": 114,
+      "objectives": [
+        {
+          "monsterId": 542,
+          "monster": "Turtle Cannon",
+          "count": 60
+        },
+        {
+          "monsterId": 31,
+          "monster": "Blizzard Giant",
+          "count": 60
+        },
+        {
+          "monsterId": 118,
+          "monster": "devil bird",
+          "count": 60
+        }
+      ],
+      "experience": 21928500,
+      "gold": 18600,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3506,
+      "name": "Frozen Sanctuary: Master Hunter",
+      "description": "Prove yourself a master hunter of Frozen Sanctuary: bring down a hundred devil bird.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 35,
+      "giver": 9127,
+      "turnIn": 9127,
+      "minLevel": 99,
+      "maxLevel": 114,
+      "objectives": [
+        {
+          "monsterId": 118,
+          "monster": "devil bird",
+          "count": 100
+        }
+      ],
+      "experience": 23760000,
+      "gold": 49500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3701,
+      "name": "Lost Island: Patrol",
+      "description": "The roads of Lost Island are thick with Fire Worm. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 37,
+      "giver": 9128,
+      "turnIn": 9128,
+      "minLevel": 96,
+      "maxLevel": 111,
+      "objectives": [
+        {
+          "monsterId": 145,
+          "monster": "Fire Worm",
+          "count": 30
+        }
+      ],
+      "experience": 2079000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3702,
+      "name": "Lost Island: Clearing",
+      "description": "Clear Lost Island of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 37,
+      "giver": 9128,
+      "turnIn": 9128,
+      "minLevel": 96,
+      "maxLevel": 112,
+      "objectives": [
+        {
+          "monsterId": 145,
+          "monster": "Fire Worm",
+          "count": 25
+        },
+        {
+          "monsterId": 185,
+          "monster": "Hell Hound",
+          "count": 25
+        }
+      ],
+      "experience": 4661800,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3703,
+      "name": "Lost Island: Bounty",
+      "description": "A standing bounty on Dark Guard, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 37,
+      "giver": 9128,
+      "turnIn": 9128,
+      "minLevel": 98,
+      "maxLevel": 113,
+      "objectives": [
+        {
+          "monsterId": 101,
+          "monster": "Dark Guard",
+          "count": 20
+        }
+      ],
+      "experience": 946000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3704,
+      "name": "Lost Island: Night Watch",
+      "description": "At night Bloody Knight grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 37,
+      "giver": 9128,
+      "turnIn": 9128,
+      "minLevel": 101,
+      "maxLevel": 116,
+      "objectives": [
+        {
+          "monsterId": 32,
+          "monster": "Bloody Knight",
+          "count": 40
+        }
+      ],
+      "experience": 6072000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3705,
+      "name": "Lost Island: Purge",
+      "description": "A week-long purge of the strongest creatures of Lost Island.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 37,
+      "giver": 9128,
+      "turnIn": 9128,
+      "minLevel": 99,
+      "maxLevel": 116,
+      "objectives": [
+        {
+          "monsterId": 103,
+          "monster": "Dark Mage",
+          "count": 60
+        },
+        {
+          "monsterId": 105,
+          "monster": "Dark Phalanx",
+          "count": 60
+        },
+        {
+          "monsterId": 32,
+          "monster": "Bloody Knight",
+          "count": 60
+        }
+      ],
+      "experience": 33387750,
+      "gold": 19800,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3706,
+      "name": "Lost Island: Master Hunter",
+      "description": "Prove yourself a master hunter of Lost Island: bring down a hundred Bloody Knight.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 37,
+      "giver": 9128,
+      "turnIn": 9128,
+      "minLevel": 101,
+      "maxLevel": 116,
+      "objectives": [
+        {
+          "monsterId": 32,
+          "monster": "Bloody Knight",
+          "count": 100
+        }
+      ],
+      "experience": 30360000,
+      "gold": 50500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3801,
+      "name": "Lost Temple: Patrol",
+      "description": "The roads of Lost Temple are thick with Chimera. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 38,
+      "giver": 9129,
+      "turnIn": 9129,
+      "minLevel": 100,
+      "maxLevel": 112,
+      "objectives": [
+        {
+          "monsterId": 70,
+          "monster": "Chimera",
+          "count": 30
+        }
+      ],
+      "experience": 2114640,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3802,
+      "name": "Lost Temple: Clearing",
+      "description": "Clear Lost Temple of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 38,
+      "giver": 9129,
+      "turnIn": 9129,
+      "minLevel": 100,
+      "maxLevel": 113,
+      "objectives": [
+        {
+          "monsterId": 70,
+          "monster": "Chimera",
+          "count": 25
+        },
+        {
+          "monsterId": 101,
+          "monster": "Dark Guard",
+          "count": 25
+        }
+      ],
+      "experience": 4714600,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3803,
+      "name": "Lost Temple: Bounty",
+      "description": "A standing bounty on Bloody Knight, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 38,
+      "giver": 9129,
+      "turnIn": 9129,
+      "minLevel": 101,
+      "maxLevel": 116,
+      "objectives": [
+        {
+          "monsterId": 32,
+          "monster": "Bloody Knight",
+          "count": 20
+        }
+      ],
+      "experience": 1012000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3804,
+      "name": "Lost Temple: Night Watch",
+      "description": "At night Temple Guard grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 38,
+      "giver": 9129,
+      "turnIn": 9129,
+      "minLevel": 105,
+      "maxLevel": 120,
+      "objectives": [
+        {
+          "monsterId": 528,
+          "monster": "Temple Guard",
+          "count": 40
+        }
+      ],
+      "experience": 8976000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3805,
+      "name": "Lost Temple: Purge",
+      "description": "A week-long purge of the strongest creatures of Lost Temple.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 38,
+      "giver": 9129,
+      "turnIn": 9129,
+      "minLevel": 101,
+      "maxLevel": 120,
+      "objectives": [
+        {
+          "monsterId": 32,
+          "monster": "Bloody Knight",
+          "count": 60
+        },
+        {
+          "monsterId": 450,
+          "monster": "Seto",
+          "count": 60
+        },
+        {
+          "monsterId": 528,
+          "monster": "Temple Guard",
+          "count": 60
+        }
+      ],
+      "experience": 44055000,
+      "gold": 20200,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 3806,
+      "name": "Lost Temple: Master Hunter",
+      "description": "Prove yourself a master hunter of Lost Temple: bring down a hundred Temple Guard.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 38,
+      "giver": 9129,
+      "turnIn": 9129,
+      "minLevel": 105,
+      "maxLevel": 120,
+      "objectives": [
+        {
+          "monsterId": 528,
+          "monster": "Temple Guard",
+          "count": 100
+        }
+      ],
+      "experience": 44880000,
+      "gold": 52500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4001,
+      "name": "Endless Tower 1F: Patrol",
+      "description": "The roads of Endless Tower 1F are thick with Deadhopy. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 40,
+      "giver": 9130,
+      "turnIn": 9130,
+      "minLevel": 100,
+      "maxLevel": 100,
+      "objectives": [
+        {
+          "monsterId": 111,
+          "monster": "Deadhopy",
+          "count": 30
+        }
+      ],
+      "experience": 316800,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4002,
+      "name": "Endless Tower 1F: Clearing",
+      "description": "Clear Endless Tower 1F of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 40,
+      "giver": 9130,
+      "turnIn": 9130,
+      "minLevel": 100,
+      "maxLevel": 117,
+      "objectives": [
+        {
+          "monsterId": 111,
+          "monster": "Deadhopy",
+          "count": 25
+        },
+        {
+          "monsterId": 428,
+          "monster": "Revived Fighter",
+          "count": 25
+        }
+      ],
+      "experience": 3542000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4003,
+      "name": "Endless Tower 1F: Bounty",
+      "description": "A standing bounty on Revived Archer, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 40,
+      "giver": 9130,
+      "turnIn": 9130,
+      "minLevel": 102,
+      "maxLevel": 117,
+      "objectives": [
+        {
+          "monsterId": 425,
+          "monster": "Revived Archer",
+          "count": 20
+        }
+      ],
+      "experience": 1276000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4004,
+      "name": "Endless Tower 1F: Night Watch",
+      "description": "At night Hobogolem grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 40,
+      "giver": 9130,
+      "turnIn": 9130,
+      "minLevel": 105,
+      "maxLevel": 120,
+      "objectives": [
+        {
+          "monsterId": 195,
+          "monster": "Hobogolem",
+          "count": 40
+        }
+      ],
+      "experience": 9504000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4005,
+      "name": "Endless Tower 1F: Purge",
+      "description": "A week-long purge of the strongest creatures of Endless Tower 1F.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 40,
+      "giver": 9130,
+      "turnIn": 9130,
+      "minLevel": 102,
+      "maxLevel": 120,
+      "objectives": [
+        {
+          "monsterId": 425,
+          "monster": "Revived Archer",
+          "count": 60
+        },
+        {
+          "monsterId": 431,
+          "monster": "Revived Mecanician",
+          "count": 60
+        },
+        {
+          "monsterId": 195,
+          "monster": "Hobogolem",
+          "count": 60
+        }
+      ],
+      "experience": 47025000,
+      "gold": 20400,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4006,
+      "name": "Endless Tower 1F: Master Hunter",
+      "description": "Prove yourself a master hunter of Endless Tower 1F: bring down a hundred Hobogolem.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 40,
+      "giver": 9130,
+      "turnIn": 9130,
+      "minLevel": 105,
+      "maxLevel": 120,
+      "objectives": [
+        {
+          "monsterId": 195,
+          "monster": "Hobogolem",
+          "count": 100
+        }
+      ],
+      "experience": 47520000,
+      "gold": 52500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4101,
+      "name": "Endless Tower 2F: Patrol",
+      "description": "The roads of Endless Tower 2F are thick with Deadhopy. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 41,
+      "giver": 9131,
+      "turnIn": 9131,
+      "minLevel": 100,
+      "maxLevel": 100,
+      "objectives": [
+        {
+          "monsterId": 111,
+          "monster": "Deadhopy",
+          "count": 30
+        }
+      ],
+      "experience": 316800,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4102,
+      "name": "Endless Tower 2F: Clearing",
+      "description": "Clear Endless Tower 2F of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 41,
+      "giver": 9131,
+      "turnIn": 9131,
+      "minLevel": 100,
+      "maxLevel": 117,
+      "objectives": [
+        {
+          "monsterId": 111,
+          "monster": "Deadhopy",
+          "count": 25
+        },
+        {
+          "monsterId": 429,
+          "monster": "Revived Knight",
+          "count": 25
+        }
+      ],
+      "experience": 3652000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4103,
+      "name": "Endless Tower 2F: Bounty",
+      "description": "A standing bounty on Revived Magician, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 41,
+      "giver": 9131,
+      "turnIn": 9131,
+      "minLevel": 102,
+      "maxLevel": 117,
+      "objectives": [
+        {
+          "monsterId": 430,
+          "monster": "Revived Magician",
+          "count": 20
+        }
+      ],
+      "experience": 1276000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4104,
+      "name": "Endless Tower 2F: Night Watch",
+      "description": "At night Gorgon grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 41,
+      "giver": 9131,
+      "turnIn": 9131,
+      "minLevel": 107,
+      "maxLevel": 122,
+      "objectives": [
+        {
+          "monsterId": 161,
+          "monster": "Gorgon",
+          "count": 40
+        }
+      ],
+      "experience": 10032000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4105,
+      "name": "Endless Tower 2F: Purge",
+      "description": "A week-long purge of the strongest creatures of Endless Tower 2F.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 41,
+      "giver": 9131,
+      "turnIn": 9131,
+      "minLevel": 102,
+      "maxLevel": 122,
+      "objectives": [
+        {
+          "monsterId": 430,
+          "monster": "Revived Magician",
+          "count": 60
+        },
+        {
+          "monsterId": 427,
+          "monster": "Revived Atalanta",
+          "count": 60
+        },
+        {
+          "monsterId": 161,
+          "monster": "Gorgon",
+          "count": 60
+        }
+      ],
+      "experience": 47520000,
+      "gold": 20400,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4106,
+      "name": "Endless Tower 2F: Master Hunter",
+      "description": "Prove yourself a master hunter of Endless Tower 2F: bring down a hundred Gorgon.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 41,
+      "giver": 9131,
+      "turnIn": 9131,
+      "minLevel": 107,
+      "maxLevel": 122,
+      "objectives": [
+        {
+          "monsterId": 161,
+          "monster": "Gorgon",
+          "count": 100
+        }
+      ],
+      "experience": 50160000,
+      "gold": 53500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4201,
+      "name": "Cursed Temple 3F: Patrol",
+      "description": "The roads of Cursed Temple 3F are thick with Sliver. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 42,
+      "giver": 9132,
+      "turnIn": 9132,
+      "minLevel": 80,
+      "maxLevel": 82,
+      "objectives": [
+        {
+          "monsterId": 468,
+          "monster": "Sliver",
+          "count": 30
+        }
+      ],
+      "experience": 217800,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4202,
+      "name": "Cursed Temple 3F: Clearing",
+      "description": "Clear Cursed Temple 3F of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 42,
+      "giver": 9132,
+      "turnIn": 9132,
+      "minLevel": 80,
+      "maxLevel": 92,
+      "objectives": [
+        {
+          "monsterId": 468,
+          "monster": "Sliver",
+          "count": 25
+        },
+        {
+          "monsterId": 399,
+          "monster": "Niken",
+          "count": 25
+        }
+      ],
+      "experience": 626000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4203,
+      "name": "Cursed Temple 3F: Bounty",
+      "description": "A standing bounty on King Bat, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 42,
+      "giver": 9132,
+      "turnIn": 9132,
+      "minLevel": 80,
+      "maxLevel": 95,
+      "objectives": [
+        {
+          "monsterId": 263,
+          "monster": "King Bat",
+          "count": 20
+        }
+      ],
+      "experience": 184480,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4204,
+      "name": "Cursed Temple 3F: Night Watch",
+      "description": "At night Hest grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 42,
+      "giver": 9132,
+      "turnIn": 9132,
+      "minLevel": 95,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 190,
+          "monster": "Hest",
+          "count": 40
+        }
+      ],
+      "experience": 1992000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4205,
+      "name": "Cursed Temple 3F: Purge",
+      "description": "A week-long purge of the strongest creatures of Cursed Temple 3F.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 42,
+      "giver": 9132,
+      "turnIn": 9132,
+      "minLevel": 82,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 107,
+          "monster": "Dark Specter",
+          "count": 60
+        },
+        {
+          "monsterId": 421,
+          "monster": "Ratoo",
+          "count": 60
+        },
+        {
+          "monsterId": 190,
+          "monster": "Hest",
+          "count": 60
+        }
+      ],
+      "experience": 8932500,
+      "gold": 16400,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4206,
+      "name": "Cursed Temple 3F: Master Hunter",
+      "description": "Prove yourself a master hunter of Cursed Temple 3F: bring down a hundred Hest.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 42,
+      "giver": 9132,
+      "turnIn": 9132,
+      "minLevel": 95,
+      "maxLevel": 110,
+      "objectives": [
+        {
+          "monsterId": 190,
+          "monster": "Hest",
+          "count": 100
+        }
+      ],
+      "experience": 9960000,
+      "gold": 47500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4301,
+      "name": "Endless Tower 3F: Patrol",
+      "description": "The roads of Endless Tower 3F are thick with Ruca. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 43,
+      "giver": 9133,
+      "turnIn": 9133,
+      "minLevel": 104,
+      "maxLevel": 119,
+      "objectives": [
+        {
+          "monsterId": 438,
+          "monster": "Ruca",
+          "count": 30
+        }
+      ],
+      "experience": 3627000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4302,
+      "name": "Endless Tower 3F: Clearing",
+      "description": "Clear Endless Tower 3F of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 43,
+      "giver": 9133,
+      "turnIn": 9133,
+      "minLevel": 104,
+      "maxLevel": 120,
+      "objectives": [
+        {
+          "monsterId": 438,
+          "monster": "Ruca",
+          "count": 25
+        },
+        {
+          "monsterId": 392,
+          "monster": "Naz Senior",
+          "count": 25
+        }
+      ],
+      "experience": 8110000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4303,
+      "name": "Endless Tower 3F: Bounty",
+      "description": "A standing bounty on Kakoa, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 43,
+      "giver": 9133,
+      "turnIn": 9133,
+      "minLevel": 106,
+      "maxLevel": 121,
+      "objectives": [
+        {
+          "monsterId": 256,
+          "monster": "Kakoa",
+          "count": 20
+        }
+      ],
+      "experience": 1660000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4304,
+      "name": "Endless Tower 3F: Night Watch",
+      "description": "At night Xetan grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 43,
+      "giver": 9133,
+      "turnIn": 9133,
+      "minLevel": 112,
+      "maxLevel": 127,
+      "objectives": [
+        {
+          "monsterId": 596,
+          "monster": "Xetan",
+          "count": 40
+        }
+      ],
+      "experience": 12096000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4305,
+      "name": "Endless Tower 3F: Purge",
+      "description": "A week-long purge of the strongest creatures of Endless Tower 3F.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 43,
+      "giver": 9133,
+      "turnIn": 9133,
+      "minLevel": 107,
+      "maxLevel": 127,
+      "objectives": [
+        {
+          "monsterId": 512,
+          "monster": "Sprin",
+          "count": 60
+        },
+        {
+          "monsterId": 548,
+          "monster": "Undead Maple",
+          "count": 60
+        },
+        {
+          "monsterId": 596,
+          "monster": "Xetan",
+          "count": 60
+        }
+      ],
+      "experience": 86175000,
+      "gold": 21400,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4306,
+      "name": "Endless Tower 3F: Master Hunter",
+      "description": "Prove yourself a master hunter of Endless Tower 3F: bring down a hundred Xetan.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 43,
+      "giver": 9133,
+      "turnIn": 9133,
+      "minLevel": 112,
+      "maxLevel": 127,
+      "objectives": [
+        {
+          "monsterId": 596,
+          "monster": "Xetan",
+          "count": 100
+        }
+      ],
+      "experience": 60480000,
+      "gold": 56000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4401,
+      "name": "Ice Mine 1F: Patrol",
+      "description": "The roads of Ice Mine 1F are thick with Undead Miner. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 44,
+      "giver": 9134,
+      "turnIn": 9134,
+      "minLevel": 106,
+      "maxLevel": 121,
+      "objectives": [
+        {
+          "monsterId": 549,
+          "monster": "Undead Miner",
+          "count": 30
+        }
+      ],
+      "experience": 3852000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4402,
+      "name": "Ice Mine 1F: Clearing",
+      "description": "Clear Ice Mine 1F of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 44,
+      "giver": 9134,
+      "turnIn": 9134,
+      "minLevel": 106,
+      "maxLevel": 122,
+      "objectives": [
+        {
+          "monsterId": 549,
+          "monster": "Undead Miner",
+          "count": 25
+        },
+        {
+          "monsterId": 547,
+          "monster": "Undead Manager",
+          "count": 25
+        }
+      ],
+      "experience": 8630000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4403,
+      "name": "Ice Mine 1F: Bounty",
+      "description": "A standing bounty on Minebat, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 44,
+      "giver": 9134,
+      "turnIn": 9134,
+      "minLevel": 110,
+      "maxLevel": 125,
+      "objectives": [
+        {
+          "monsterId": 331,
+          "monster": "Minebat",
+          "count": 20
+        }
+      ],
+      "experience": 1840000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4404,
+      "name": "Ice Mine 1F: Night Watch",
+      "description": "At night Ice Serpent grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 44,
+      "giver": 9134,
+      "turnIn": 9134,
+      "minLevel": 115,
+      "maxLevel": 130,
+      "objectives": [
+        {
+          "monsterId": 231,
+          "monster": "Ice Serpent",
+          "count": 40
+        }
+      ],
+      "experience": 12480000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4405,
+      "name": "Ice Mine 1F: Purge",
+      "description": "A week-long purge of the strongest creatures of Ice Mine 1F.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 44,
+      "giver": 9134,
+      "turnIn": 9134,
+      "minLevel": 112,
+      "maxLevel": 130,
+      "objectives": [
+        {
+          "monsterId": 333,
+          "monster": "MineGolem",
+          "count": 60
+        },
+        {
+          "monsterId": 525,
+          "monster": "Tarantulika",
+          "count": 60
+        },
+        {
+          "monsterId": 231,
+          "monster": "Ice Serpent",
+          "count": 60
+        }
+      ],
+      "experience": 66600000,
+      "gold": 22400,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4406,
+      "name": "Ice Mine 1F: Master Hunter",
+      "description": "Prove yourself a master hunter of Ice Mine 1F: bring down a hundred Ice Serpent.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 44,
+      "giver": 9134,
+      "turnIn": 9134,
+      "minLevel": 115,
+      "maxLevel": 130,
+      "objectives": [
+        {
+          "monsterId": 231,
+          "monster": "Ice Serpent",
+          "count": 100
+        }
+      ],
+      "experience": 62400000,
+      "gold": 57500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4601,
+      "name": "Secret Laboratory: Patrol",
+      "description": "The roads of Secret Laboratory are thick with LTechnician. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 46,
+      "giver": 9135,
+      "turnIn": 9135,
+      "minLevel": 108,
+      "maxLevel": 123,
+      "objectives": [
+        {
+          "monsterId": 315,
+          "monster": "LTechnician",
+          "count": 30
+        }
+      ],
+      "experience": 4050000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4602,
+      "name": "Secret Laboratory: Clearing",
+      "description": "Clear Secret Laboratory of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 46,
+      "giver": 9135,
+      "turnIn": 9135,
+      "minLevel": 108,
+      "maxLevel": 123,
+      "objectives": [
+        {
+          "monsterId": 315,
+          "monster": "LTechnician",
+          "count": 25
+        },
+        {
+          "monsterId": 255,
+          "monster": "ITechnician",
+          "count": 25
+        }
+      ],
+      "experience": 9000000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4603,
+      "name": "Secret Laboratory: Bounty",
+      "description": "A standing bounty on ISoldier, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 46,
+      "giver": 9135,
+      "turnIn": 9135,
+      "minLevel": 110,
+      "maxLevel": 125,
+      "objectives": [
+        {
+          "monsterId": 254,
+          "monster": "ISoldier",
+          "count": 20
+        }
+      ],
+      "experience": 1960000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4604,
+      "name": "Secret Laboratory: Night Watch",
+      "description": "At night IElite grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 46,
+      "giver": 9135,
+      "turnIn": 9135,
+      "minLevel": 115,
+      "maxLevel": 130,
+      "objectives": [
+        {
+          "monsterId": 238,
+          "monster": "IElite",
+          "count": 40
+        }
+      ],
+      "experience": 13920000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4605,
+      "name": "Secret Laboratory: Purge",
+      "description": "A week-long purge of the strongest creatures of Secret Laboratory.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 46,
+      "giver": 9135,
+      "turnIn": 9135,
+      "minLevel": 112,
+      "maxLevel": 130,
+      "objectives": [
+        {
+          "monsterId": 229,
+          "monster": "IBomber",
+          "count": 60
+        },
+        {
+          "monsterId": 292,
+          "monster": "LGuardian",
+          "count": 60
+        },
+        {
+          "monsterId": 238,
+          "monster": "IElite",
+          "count": 60
+        }
+      ],
+      "experience": 73350000,
+      "gold": 22400,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4606,
+      "name": "Secret Laboratory: Master Hunter",
+      "description": "Prove yourself a master hunter of Secret Laboratory: bring down a hundred IElite.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 46,
+      "giver": 9135,
+      "turnIn": 9135,
+      "minLevel": 115,
+      "maxLevel": 130,
+      "objectives": [
+        {
+          "monsterId": 238,
+          "monster": "IElite",
+          "count": 100
+        }
+      ],
+      "experience": 69600000,
+      "gold": 57500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4801,
+      "name": "Ancient Weapons: Patrol",
+      "description": "The roads of Ancient Weapons are thick with TTechnician. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 48,
+      "giver": 9136,
+      "turnIn": 9136,
+      "minLevel": 110,
+      "maxLevel": 125,
+      "objectives": [
+        {
+          "monsterId": 539,
+          "monster": "TTechnician",
+          "count": 30
+        }
+      ],
+      "experience": 7020000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4802,
+      "name": "Ancient Weapons: Clearing",
+      "description": "Clear Ancient Weapons of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 48,
+      "giver": 9136,
+      "turnIn": 9136,
+      "minLevel": 110,
+      "maxLevel": 125,
+      "objectives": [
+        {
+          "monsterId": 539,
+          "monster": "TTechnician",
+          "count": 25
+        },
+        {
+          "monsterId": 538,
+          "monster": "TSoldier",
+          "count": 25
+        }
+      ],
+      "experience": 15600000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4803,
+      "name": "Ancient Weapons: Bounty",
+      "description": "A standing bounty on TElite, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 48,
+      "giver": 9136,
+      "turnIn": 9136,
+      "minLevel": 112,
+      "maxLevel": 127,
+      "objectives": [
+        {
+          "monsterId": 527,
+          "monster": "TElite",
+          "count": 20
+        }
+      ],
+      "experience": 3640000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4804,
+      "name": "Ancient Weapons: Night Watch",
+      "description": "At night Chalybs grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 48,
+      "giver": 9136,
+      "turnIn": 9136,
+      "minLevel": 116,
+      "maxLevel": 131,
+      "objectives": [
+        {
+          "monsterId": 68,
+          "monster": "Chalybs",
+          "count": 40
+        }
+      ],
+      "experience": 28080000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4805,
+      "name": "Ancient Weapons: Purge",
+      "description": "A week-long purge of the strongest creatures of Ancient Weapons.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 48,
+      "giver": 9136,
+      "turnIn": 9136,
+      "minLevel": 113,
+      "maxLevel": 131,
+      "objectives": [
+        {
+          "monsterId": 397,
+          "monster": "Nihil",
+          "count": 60
+        },
+        {
+          "monsterId": 1,
+          "monster": "Acero",
+          "count": 60
+        },
+        {
+          "monsterId": 68,
+          "monster": "Chalybs",
+          "count": 60
+        }
+      ],
+      "experience": 143325000,
+      "gold": 22600,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4806,
+      "name": "Ancient Weapons: Master Hunter",
+      "description": "Prove yourself a master hunter of Ancient Weapons: bring down a hundred Chalybs.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 48,
+      "giver": 9136,
+      "turnIn": 9136,
+      "minLevel": 116,
+      "maxLevel": 131,
+      "objectives": [
+        {
+          "monsterId": 68,
+          "monster": "Chalybs",
+          "count": 100
+        }
+      ],
+      "experience": 140400000,
+      "gold": 58000,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4901,
+      "name": "Sea of Abyss: Patrol",
+      "description": "The roads of Sea of Abyss are thick with Gurkob. Thin them out.",
+      "category": "Daily",
+      "difficulty": "Easy",
+      "fieldCode": 49,
+      "giver": 9137,
+      "turnIn": 9137,
+      "minLevel": 115,
+      "maxLevel": 129,
+      "objectives": [
+        {
+          "monsterId": 176,
+          "monster": "Gurkob",
+          "count": 30
+        }
+      ],
+      "experience": 26550000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4902,
+      "name": "Sea of Abyss: Clearing",
+      "description": "Clear Sea of Abyss of the creatures that crowd its paths.",
+      "category": "Daily",
+      "difficulty": "Normal",
+      "fieldCode": 49,
+      "giver": 9137,
+      "turnIn": 9137,
+      "minLevel": 115,
+      "maxLevel": 129,
+      "objectives": [
+        {
+          "monsterId": 176,
+          "monster": "Gurkob",
+          "count": 25
+        },
+        {
+          "monsterId": 123,
+          "monster": "Dey",
+          "count": 25
+        }
+      ],
+      "experience": 59000000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4903,
+      "name": "Sea of Abyss: Bounty",
+      "description": "A standing bounty on Faugn, paid every hour to whoever brings proof.",
+      "category": "Repeatable",
+      "difficulty": "Normal",
+      "fieldCode": 49,
+      "giver": 9137,
+      "turnIn": 9137,
+      "minLevel": 116,
+      "maxLevel": 131,
+      "objectives": [
+        {
+          "monsterId": 140,
+          "monster": "Faugn",
+          "count": 20
+        }
+      ],
+      "experience": 11680000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 60,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4904,
+      "name": "Sea of Abyss: Night Watch",
+      "description": "At night Sathla grow bold. Hunt them while the moon is high.",
+      "category": "Midnight",
+      "difficulty": "Hard",
+      "fieldCode": 49,
+      "giver": 9137,
+      "turnIn": 9137,
+      "minLevel": 119,
+      "maxLevel": 134,
+      "objectives": [
+        {
+          "monsterId": 446,
+          "monster": "Sathla",
+          "count": 40
+        }
+      ],
+      "experience": 76800000,
+      "gold": 0,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4905,
+      "name": "Sea of Abyss: Purge",
+      "description": "A week-long purge of the strongest creatures of Sea of Abyss.",
+      "category": "Weekly",
+      "difficulty": "Hard",
+      "fieldCode": 49,
+      "giver": 9137,
+      "turnIn": 9137,
+      "minLevel": 117,
+      "maxLevel": 134,
+      "objectives": [
+        {
+          "monsterId": 453,
+          "monster": "Shogoth",
+          "count": 60
+        },
+        {
+          "monsterId": 6,
+          "monster": "Arhdyra",
+          "count": 60
+        },
+        {
+          "monsterId": 446,
+          "monster": "Sathla",
+          "count": 60
+        }
+      ],
+      "experience": 450000000,
+      "gold": 23400,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    },
+    {
+      "id": 4906,
+      "name": "Sea of Abyss: Master Hunter",
+      "description": "Prove yourself a master hunter of Sea of Abyss: bring down a hundred Sathla.",
+      "category": "OneTime",
+      "difficulty": "Elite",
+      "fieldCode": 49,
+      "giver": 9137,
+      "turnIn": 9137,
+      "minLevel": 119,
+      "maxLevel": 134,
+      "objectives": [
+        {
+          "monsterId": 446,
+          "monster": "Sathla",
+          "count": 100
+        }
+      ],
+      "experience": 384000000,
+      "gold": 59500,
+      "itemKey": "",
+      "itemCount": 0,
+      "cooldownMinutes": 0,
+      "partyCredit": true,
+      "enabled": true
+    }
+  ],
+  "schedule": {
+    "dailyResetHour": 0,
+    "weeklyResetDay": "Monday",
+    "weeklyResetHour": 0,
+    "midnightStartHour": 0,
+    "midnightEndHour": 2
+  }
+}

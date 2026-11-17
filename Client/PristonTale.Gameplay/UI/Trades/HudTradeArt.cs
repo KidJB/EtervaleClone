@@ -18,10 +18,5 @@ public static class HudTradeArt
     public const string Close = Shop + "Trade_Cancel.bmp";
     public const string CloseInfo = Shop + "Trade_CancelInfo.bmp";
 
-    // The request box: who asks at (38, 17); its art carries the line and the idle buttons.
-    public static readonly HudRequestBoxArt Request = new(Shop + "TradeButton/TradeButtonMain.tga", null, Shop + "TradeButton/ButtonOk.bmp",
-        new Rectangle(140, 11, 23, 23), null, Shop + "TradeButton/ButtonCancel.tga", new Rectangle(144, 37, 16, 16), new Point(38, 17), Point.Zero,
-        BlinkOver: false);
-
-    public static readonly string[] All = [Title, Strip, Locked, LockInfo, LockWaiting, Close, CloseInfo, .. Request.All];
+    public static readonly string[] All = [Title, Strip, Locked, LockInfo, LockWaiting, Close, CloseInfo];
 }

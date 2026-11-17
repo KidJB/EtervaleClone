@@ -8,18 +8,22 @@ namespace PristonTale.Simulation.Characters;
 // Like: the item it stands for when its key names no item family (held and fitted as that item, on either grip). Two: held in both hands.
 public sealed record SkinGear(string Key, string Name, int Slot, string Like = "", bool Two = false);
 
-public sealed record Costume(string Key, string Name, IReadOnlyDictionary<PlayerClass, string> Bodies);
+// Kind: "armor" or "robe" for an armor set listed here for its bodies, empty for a costume.
+public sealed record Costume(string Key, string Name, IReadOnlyDictionary<PlayerClass, string> Bodies, string Kind = "");
 
 // The costumes of The Cabinet (Data/Costumes.json), with the armor table row of each class.
 public static class Costumes
 {
-    private sealed record Entry(string Key, string Name, Dictionary<string, string> Bodies);
+    private sealed record Entry(string Key, string Name, Dictionary<string, string> Bodies, string Kind = "");
 
-    private sealed record Document(Dictionary<string, int> Rows, Entry[] Costumes, SkinGear[] Gear, string[] Hidden, int[] Hair);
+    private sealed record Document(Dictionary<string, int> Rows, Entry[] Costumes, SkinGear[] Gear, string[] Hidden, int[] Hair, string[] CostumeItems);
 
     private static readonly Dictionary<int, PlayerClass> ClassOfRow = new();
     // Items The Cabinet does not sell: their model is a duplicate of another skin, a placeholder, or does not load.
     public static HashSet<string> Hidden { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    // World items that are costumes though they take the armor slot (party, beach, wedding and festive wear).
+    public static HashSet<string> CostumeItems { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     // The numbered heads sold as hair (CharacterHead.CustomHair), every class having a model of each.
     public static HashSet<int> Hair { get; } = [];
@@ -51,6 +55,7 @@ public static class Costumes
 
         Hidden.UnionWith(document.Hidden ?? []);
         Hair.UnionWith(document.Hair ?? []);
+        CostumeItems.UnionWith(document.CostumeItems ?? []);
         foreach (var gear in document.Gear ?? [])
         {
             GearByKey[gear.Key] = gear;
@@ -65,7 +70,7 @@ public static class Costumes
                 bodies[Enum.Parse<PlayerClass>(name)] = file;
             }
 
-            result[entry.Key] = new Costume(entry.Key, entry.Name, bodies);
+            result[entry.Key] = new Costume(entry.Key, entry.Name, bodies, entry.Kind ?? "");
         }
 
         return result;

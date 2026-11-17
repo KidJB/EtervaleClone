@@ -48,9 +48,9 @@ public sealed partial class GameplayHud
     }
 
     // The friend button: the player goes on the friends list and the friends page opens on it, as the original's does.
-    private void BefriendReached()
+    private void Befriend(ulong player)
     {
-        if (Combat.PlayerName(ButtonsPlayerId) is not { } name)
+        if (Combat.PlayerName(player) is not { } name)
         {
             return;
         }

@@ -20,7 +20,17 @@ internal static class StallTests
     public static IEnumerable<(string, Func<Task>)> Cases()
     {
         yield return ("stall: the listing leaves the bag for the stock, and a sale moves units and gold at the price shown", RulesAsync);
+        yield return ("stall: a stall restored at start stands in its field before any player has opened it", RestoreAsync);
         yield return ("stall: storage keeps one stall per account, pays an offline owner within its limit, and a close fills the Item Distributor", StorageAsync);
+    }
+
+    private static async Task RestoreAsync()
+    {
+        var world = new PristonTale.Application.World.WorldServer(new PristonTale.Application.World.WorldDataHolder());
+        var look = new PristonTale.Application.World.PlayerAppearanceView("Seller", PlayerClass.Fighter, 0, 0, 0, "", "");
+        var stall = new PristonTale.Application.World.Stalls.Stall(7, 2, 11, 3, System.Numerics.Vector3.Zero, 0, look, 10, 0);
+        await WorldPump.RunAsync(world, world.RestoreStallAsync(stall, StallRules.Listing("Sign", []), StoreGrid.Create()));
+        Assert.True(await WorldPump.RunAsync(world, world.RemoveStallAsync(2)), "the restored stall was not standing in its unopened field");
     }
 
     private static Task RulesAsync()

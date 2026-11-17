@@ -86,11 +86,18 @@ public sealed record PresenceUpdate(
     public BellatraClanResultInfo? BellatraClanResult { get; init; }
     public Protocol.Packets.AchievementsPacket? Achievements { get; init; }
 
+    // The boss arena's state while the player is in its field (Shown false once it leaves).
+    public Protocol.Packets.ArenaStatusPacket? Arena { get; init; }
+
     // A part of the party finder's list the player asked for.
     public Protocol.Packets.PartyFinderPacket? PartyFinder { get; init; }
 
     // A rankings board the player asked for.
     public Protocol.Packets.RankingsPacket? Rankings { get; init; }
+
+    // A Courier's board, and the local player's accepted Courier hunts.
+    public Protocol.Packets.CourierBoardPacket? CourierBoard { get; init; }
+    public Protocol.Packets.CourierStatePacket? Couriers { get; init; }
 
     // The local player's trade window when it changed (TradeInfo.None once it ended), and a player's request to trade.
     public TradeInfo? Trade { get; init; }

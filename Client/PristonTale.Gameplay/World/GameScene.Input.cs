@@ -120,7 +120,6 @@ public sealed partial class GameScene
         UpdateSkillTrace(mouse);
         UpdatePendingCast();
         UpdateNpcApproach();
-        UpdateReachedPlayer();
         _lootInteraction?.Update(_groundLoot, _playerBody.Position, _serverPlanarPosition, Owner, PetOut, _presentation?.Requested.PetPicksUpPotions ?? true,
             gameTime.TotalGameTime.TotalMilliseconds);
         UpdateAttackPresentation(gameTime);
@@ -436,7 +435,7 @@ public sealed partial class GameScene
                     ShopSellerSelected?.Invoke(entityId);
                     break;
                 case ApproachKind.Player:
-                    ReachedPlayerId = entityId;
+                    // A player reached needs nothing more: its target frame carries the menu.
                     break;
             }
 

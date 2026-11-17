@@ -168,11 +168,13 @@ Commands match by exact, case-sensitive prefix in table order. Levels:
 | Guide | `/show_blackuser`, `/reset_blackuser`, `/free_blackuser`, `/hide`, `/show`, `/grant` |
 | Guide | `/start_castle`, `/end_castle`, `/set_castle_time`, `/set_castle_master`, `/get_castle_info` |
 | Guide | `/get_fountain_info`, `/reset_fountain_time`, `/set_castle_tax` |
+| Guide | `/courier_progress <character>` (a player's Courier hunts and kills) |
+| Guide | `/cabinet_owned <online name>` (the looks the player's account owns, with how and when each was unlocked), `/deals` (The Cabinet's open bidding deals) |
 | Moderator | `/>`, `/>>`, `/user_limit`, `/kick`, `/kill`, `/open_warehouse`, `/shutdown`, `/weather`, `/insert`, `/near`, `/call`, `/where` |
 | Moderator | `/field`, `/player_location` |
 | Operator | `/get_money`, `/AgingSetting` |
 | Administrator | `/easy_castle` |
-| Administrator | `/achievement`, `/init_premiumitem`, `/@rarity`, `/@get_perf`, `/@get`, `/@put_rarity`, `/@put_perf`, `/@put`, `/@coins`, `/@coinshop_reload`, `/GiveMeExp!`, `/expup`, `/GiveMeMoney!`, `/reload_settings`, `/setting`, `/set_absorb` |
+| Administrator | `/achievement`, `/init_premiumitem`, `/@rarity`, `/@get_perf`, `/@get`, `/@put_rarity`, `/@put_perf`, `/@put`, `/@coins`, `/@coinshop_reload`, `/@courier_reload`, `/@courier_reset <character> [all|daily|midnight|onetime|repeatable|weekly]`, `/@courier_new <id> <courier code> <monster id> <count> <experience> <min level> <max level> <name>`, `/@courier_set <id> <exp|gold|level|category|difficulty|enabled|count|cooldown|name> <value>`, `/@cabinet_reload`, `/@cabinet_set <look> <price|rarity|sources|enabled|description|token> <value>`, `/@cabinet_drop <token or brush> <monster code|boss> <chance per 10000, 0 removes>`, `/@cabinet_unlock <online name> <look> [source]`, `/@cabinet_reset <online name>`, `/@deal_new <look> <start bid> <bid step> <hours> [min level]`, `/@deal_end <id>`, `/GiveMeExp!`, `/expup`, `/GiveMeMoney!`, `/reload_settings`, `/setting`, `/set_absorb` |
 
 - Information: local time, boss minute, the issuer's force orb and premium timers, gold spent per sink, carried potions,
   connection packet counts, players and monsters, a player by entity id, account or name, damage range, session.

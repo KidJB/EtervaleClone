@@ -108,9 +108,10 @@ internal sealed class ChatFixture
     public ChatAppService Chat { get; }
     public long NowMs { get; set; } = 1_000_000;
 
-    public async Task<Player> JoinAsync(string name, float x, float z, int gmLevel = 0, PlayerClass playerClass = PlayerClass.Fighter, int level = 1)
+    // An account above 0 joins the character to that account (several characters of one account); 0 gives it its own.
+    public async Task<Player> JoinAsync(string name, float x, float z, int gmLevel = 0, PlayerClass playerClass = PlayerClass.Fighter, int level = 1, long account = 0)
     {
-        var session = _sessions.Create(++_accounts, name.ToLowerInvariant() + "-account");
+        var session = _sessions.Create(account > 0 ? account : ++_accounts, name.ToLowerInvariant() + "-account");
         session.GmLevel = gmLevel;
         Assert.True(session.TryBeginEntry(), "fixture entry");
         var record = CharacterRecordFactory.NewStarter(_classes, session.AccountId, name, 0, playerClass, Field) with { Id = (long)session.EntityId };

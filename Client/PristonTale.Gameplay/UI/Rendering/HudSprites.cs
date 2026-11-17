@@ -7,11 +7,13 @@ using PristonTale.Assets;
 
 namespace PristonTale.Gameplay.UI.Rendering;
 
-// Original interface images by asset-relative path. Files are read and decoded on the thread pool;
-// Update uploads finished images on the game thread within a fixed byte budget.
+// Original interface images by asset-relative path. A batch's files are read and decoded in parallel on the thread pool;
+// Update uploads finished images on the game thread within a byte budget per frame, a larger one while Eager (the
+// world's entry, which waits for them).
 public sealed class HudSprites : IDisposable
 {
     private const int UploadBudgetBytes = 512 * 1024;
+    private const int EagerUploadBudgetBytes = 8 * 1024 * 1024;
     private const int MaximumDimension = 2048;
 
     private sealed record Prepared(string Path, DecodedPristonImage Image, bool Missing);
@@ -43,6 +45,7 @@ public sealed class HudSprites : IDisposable
     }
 
     public bool Failed { get; private set; }
+    public bool Eager { get; set; }
     public bool IsIdle => _queued.Count == 0 && _decode is null && _uploads.Count == 0;
     public long TextureBytes { get; private set; }
 
@@ -140,7 +143,7 @@ public sealed class HudSprites : IDisposable
 
     private void UploadWithinBudget()
     {
-        var budget = UploadBudgetBytes;
+        var budget = Eager ? EagerUploadBudgetBytes : UploadBudgetBytes;
         while (budget > 0 && _uploads.TryPeek(out var upload))
         {
             if (!_known.Contains(upload.Path))
@@ -187,38 +190,36 @@ public sealed class HudSprites : IDisposable
     private static Prepared[] Decode(string assetRoot, string[] paths)
     {
         var result = new Prepared[paths.Length];
-        for (var index = 0; index < paths.Length; index++)
+        Parallel.For(0, paths.Length, index => result[index] = Decode(assetRoot, paths[index]));
+        return result;
+    }
+
+    private static Prepared Decode(string assetRoot, string path)
+    {
+        var file = AssetFiles.Combine(assetRoot, path);
+        if (!AssetFiles.Exists(file))
         {
-            var path = paths[index];
-            var file = AssetFiles.Combine(assetRoot, path);
-            if (!AssetFiles.Exists(file))
-            {
-                result[index] = new Prepared(path, DecodedPristonImage.Empty, true);
-                continue;
-            }
-
-            var extension = Path.GetExtension(file);
-            DecodedPristonImage image;
-            try
-            {
-                image = PristonImageDecoder.Decode(AssetFiles.ReadAllBytes(file), extension, bmpCoverage: true);
-            }
-            catch (Exception exception) when (exception is IOException or ArgumentException or IndexOutOfRangeException or InvalidDataException)
-            {
-                image = DecodedPristonImage.Empty;
-            }
-
-            if (!image.IsValid || image.Width > MaximumDimension || image.Height > MaximumDimension)
-            {
-                result[index] = new Prepared(path, DecodedPristonImage.Empty, true);
-                continue;
-            }
-
-            PristonUiPixels.Prepare(image, ColorKeyFor(extension));
-            result[index] = new Prepared(path, image, false);
+            return new Prepared(path, DecodedPristonImage.Empty, true);
         }
 
-        return result;
+        var extension = Path.GetExtension(file);
+        DecodedPristonImage image;
+        try
+        {
+            image = PristonImageDecoder.Decode(AssetFiles.ReadAllBytes(file), extension, bmpCoverage: true);
+        }
+        catch (Exception exception) when (exception is IOException or ArgumentException or IndexOutOfRangeException or InvalidDataException)
+        {
+            image = DecodedPristonImage.Empty;
+        }
+
+        if (!image.IsValid || image.Width > MaximumDimension || image.Height > MaximumDimension)
+        {
+            return new Prepared(path, DecodedPristonImage.Empty, true);
+        }
+
+        PristonUiPixels.Prepare(image, ColorKeyFor(extension));
+        return new Prepared(path, image, false);
     }
 
     // The original renderer enables an exact black color key for every authored UI bitmap; TGA files carry alpha.

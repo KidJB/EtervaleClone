@@ -161,6 +161,7 @@ internal sealed class HudCaptureProbe : Game
         new("low-resources-800", 800, 600, LowHealth: true),
         new("block-800", 800, 600, Block: true),
         new("achievements-800", 800, 600, Keys.Y),
+        new("cabinet-800", 800, 600, Keys.U),
         new("inventory-800", 800, 600, Keys.I),
         new("inventory-item-hover-800", 800, 600, Keys.I, Hover.Item),
         new("inventory-1600x1200-scale2", 1600, 1200, Keys.I),
@@ -313,6 +314,17 @@ internal sealed class HudCaptureProbe : Game
             interactNpc: id => Task.FromResult(Interaction(id)),
             requestNpcService: command => Task.FromResult(Reply(command)),
             requestQuest: command => Task.FromResult(QuestReply(command)));
+        // A Cabinet catalog of axe looks (the probe wears a one-handed axe): applied, owned, for sale, exclusive and a favourite.
+        PristonTale.Contracts.Characters.SkinArticle Look(string key, string name, int price, bool owned, byte rarity, byte sources) =>
+            new(key, name, 0, 1, price, owned) { Category = 3, Rarity = rarity, Sources = sources };
+        _hud.Cabinet.ListRequest = () => Task.FromResult(new SkinCatalogInfo(20750, new SkinSet("WA102"),
+        [
+            Look("WA102", "Battle Axe", 550, true, 1, 33), Look("WA103", "Cleaver of the Tide", 1200, false, 3, 33),
+            Look("WA104", "Dragon Axe", 2600, false, 4, 1), Look("WA106", "Hellfire Axe", 0, false, 5, 4),
+            Look("WA107", "Gilded Axe", 900, true, 3, 33), Look("WA111", "Titan Axe", 750, false, 2, 1),
+            Look("WA114", "Storm Axe", 3200, false, 5, 1), Look("WA118", "Ember Axe", 1800, false, 4, 1)
+        ]));
+        _hud.Cabinet.Favorites = "WA104";
         _hud.CharacterName = "Panzer";
         _hud.CharacterClass = PlayerClass.Mechanician;
         var player = new CharacterClassRegistry().CreatePlayer(PlayerClass.Mechanician, "Panzer");

@@ -65,6 +65,15 @@ public sealed partial class GameScene
         return result;
     }
 
+    public Task<(Simulation.Characters.SkinStatus Status, long Balance, string Key)> UnlockSkinAsync(Guid itemId) =>
+        _playChannel is { } channel ? channel.UnlockSkinAsync(itemId, _presenceCts.Token) : Task.FromResult((Simulation.Characters.SkinStatus.Rejected, 0L, ""));
+
+    public Task<Protocol.Packets.CabinetDealsPacket> CabinetDealsAsync() =>
+        _playChannel is { } channel ? channel.CabinetDealsAsync(_presenceCts.Token) : Task.FromResult(new Protocol.Packets.CabinetDealsPacket(Guid.Empty, 0, 0, []));
+
+    public Task<(Simulation.Characters.CabinetBidStatus Status, long Balance)> CabinetBidAsync(long dealId, long amount) =>
+        _playChannel is { } channel ? channel.CabinetBidAsync(dealId, amount, _presenceCts.Token) : Task.FromResult((Simulation.Characters.CabinetBidStatus.Rejected, 0L));
+
     // The looks the character came in with, read once it stands in the world.
     private async Task LoadSkinsAsync(Remote.PlayerEquipmentPresentation presentation)
     {

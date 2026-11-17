@@ -48,6 +48,9 @@ public readonly struct PlayerAppearanceView
     // The achievement title over the name (AchievementRules.TitleOf), 0 for none.
     public int Title { get; init; }
 
+    // The ranking aura it wears (RankAuras).
+    public Contracts.Characters.RankAura RankAura { get; init; }
+
     // The weapon really worn, under the skin of WeaponKey.
     public string HeldWeaponKey { get; init; } = "";
 
@@ -292,6 +295,9 @@ public readonly struct WorldSnapshot
     // The receiver's Bellatra board while it is in the arena (null elsewhere); a new one each time it changes.
     public BellatraView? Bellatra { get; init; }
 
+    // The boss arena's state while the receiver is in its field (null elsewhere); a new one each time it changes.
+    public ArenaStatusView? Arena { get; init; }
+
     // The receiver's trade window (null when it trades with nobody) and the request to trade it has not answered.
     public TradeView? Trade { get; init; }
     public TradeRequest? TradeRequest { get; init; }
@@ -341,6 +347,7 @@ public readonly struct WorldSnapshot
         Trade = Trade,
         TradeRequest = TradeRequest,
         Bellatra = Bellatra,
+        Arena = Arena,
         Pinned = Pinned,
         PinKey = PinKey
     };
@@ -359,6 +366,7 @@ public readonly struct WorldSnapshot
         PartyRequest = PartyRequest,
         Trade = Trade,
         TradeRequest = TradeRequest,
-        Bellatra = Bellatra
+        Bellatra = Bellatra,
+        Arena = Arena
     };
 }

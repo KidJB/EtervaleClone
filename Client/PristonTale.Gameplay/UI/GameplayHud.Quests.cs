@@ -83,6 +83,8 @@ public sealed partial class GameplayHud
                 _marksHuntComplete = huntComplete;
                 _questBook.FillMarks(_npcQuestMarks, huntComplete);
             }
+
+            MarkCourier();
         }
     }
 

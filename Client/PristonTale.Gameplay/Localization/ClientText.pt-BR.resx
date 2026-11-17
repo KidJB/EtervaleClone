@@ -1063,4 +1063,75 @@ seguem para a torre alta.</value></data>
   <data name="PartyFinder.Leader" xml:space="preserve"><value>Líder</value></data>
   <data name="PartyFinder.MembersColumn" xml:space="preserve"><value>Membros</value></data>
   <data name="PartyFinder.JoinButton" xml:space="preserve"><value>ENTRAR</value></data>
+  <data name="Arena.TimeLeft" xml:space="preserve"><value>Tempo restante: {0}</value></data>
+  <data name="Arena.Time" xml:space="preserve"><value>Tempo: {0}</value></data>
+  <data name="Courier.Title" xml:space="preserve"><value>MENSAGEIRO DE MISSÕES</value></data>
+  <data name="Courier.TabAvailable" xml:space="preserve"><value>Disponíveis</value></data>
+  <data name="Courier.TabActive" xml:space="preserve"><value>Ativas</value></data>
+  <data name="Courier.TabCompleted" xml:space="preserve"><value>Concluídas</value></data>
+  <data name="Courier.Loading" xml:space="preserve"><value>Lendo o quadro do Mensageiro…</value></data>
+  <data name="Courier.Empty" xml:space="preserve"><value>Nenhuma caçada aqui.</value></data>
+  <data name="Courier.Accept" xml:space="preserve"><value>Aceitar</value></data>
+  <data name="Courier.Abandon" xml:space="preserve"><value>Abandonar</value></data>
+  <data name="Courier.TurnIn" xml:space="preserve"><value>Entregar</value></data>
+  <data name="Courier.Levels" xml:space="preserve"><value>Nv {0}-{1}</value></data>
+  <data name="Courier.Level" xml:space="preserve"><value>Nível: {0}-{1}</value></data>
+  <data name="Courier.Location" xml:space="preserve"><value>Local: {0}</value></data>
+  <data name="Courier.Kind" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="Courier.Objectives" xml:space="preserve"><value>Objetivos:</value></data>
+  <data name="Courier.Reward" xml:space="preserve"><value>Recompensa EXP: {0}</value></data>
+  <data name="Courier.Gold" xml:space="preserve"><value>Ouro: {0}</value></data>
+  <data name="Courier.Item" xml:space="preserve"><value>Item: {0} x{1}</value></data>
+  <data name="Courier.ProgressValue" xml:space="preserve"><value>Progresso: {0}%</value></data>
+  <data name="Courier.Progress" xml:space="preserve"><value>Progresso</value></data>
+  <data name="Courier.TurnInHint" xml:space="preserve"><value>Caçada concluída. Entregue ao Mensageiro de Missões.</value></data>
+  <data name="Courier.TurnedIn" xml:space="preserve"><value>Missão concluída! +{0} EXP</value></data>
+  <data name="Courier.ReadyNotice" xml:space="preserve"><value>Caçada concluída: {0}. Volte ao Mensageiro de Missões.</value></data>
+  <data name="Courier.Standing.Completed" xml:space="preserve"><value>Feita</value></data>
+  <data name="Courier.Standing.Cooldown" xml:space="preserve"><value>De novo em {0} min</value></data>
+  <data name="Courier.Standing.Closed" xml:space="preserve"><value>Só à noite</value></data>
+  <data name="Courier.Standing.Ready" xml:space="preserve"><value>Pronta</value></data>
+  <data name="Courier.Category.Daily" xml:space="preserve"><value>Diária</value></data>
+  <data name="Courier.Category.Midnight" xml:space="preserve"><value>Meia-noite</value></data>
+  <data name="Courier.Category.OneTime" xml:space="preserve"><value>Única</value></data>
+  <data name="Courier.Category.Repeatable" xml:space="preserve"><value>Repetível</value></data>
+  <data name="Courier.Category.Weekly" xml:space="preserve"><value>Semanal</value></data>
+  <data name="Courier.Difficulty.Easy" xml:space="preserve"><value>Fácil</value></data>
+  <data name="Courier.Difficulty.Normal" xml:space="preserve"><value>Normal</value></data>
+  <data name="Courier.Difficulty.Hard" xml:space="preserve"><value>Difícil</value></data>
+  <data name="Courier.Difficulty.Elite" xml:space="preserve"><value>Elite</value></data>
+  <data name="Courier.Status.0" xml:space="preserve"><value>Feito.</value></data>
+  <data name="Courier.Status.1" xml:space="preserve"><value>Esta caçada não é para o seu nível.</value></data>
+  <data name="Courier.Status.2" xml:space="preserve"><value>Você já tem esta caçada.</value></data>
+  <data name="Courier.Status.3" xml:space="preserve"><value>Já concluída neste período.</value></data>
+  <data name="Courier.Status.4" xml:space="preserve"><value>Esta caçada ainda não pode ser repetida.</value></data>
+  <data name="Courier.Status.5" xml:space="preserve"><value>Esta caçada só é oferecida à noite.</value></data>
+  <data name="Courier.Status.6" xml:space="preserve"><value>Você já carrega caçadas demais.</value></data>
+  <data name="Courier.Status.7" xml:space="preserve"><value>Você não tem esta caçada.</value></data>
+  <data name="Courier.Status.8" xml:space="preserve"><value>A caçada ainda não terminou.</value></data>
+  <data name="Courier.Status.9" xml:space="preserve"><value>Abra espaço na bolsa primeiro.</value></data>
+  <data name="Courier.Status.10" xml:space="preserve"><value>Fale com o Mensageiro de Missões certo para esta caçada.</value></data>
+  <data name="Courier.Status.11" xml:space="preserve"><value>O Mensageiro não pode responder agora.</value></data>
+  <data name="RankAura.Section" xml:space="preserve"><value>Ranking</value></data>
+  <data name="RankAura.Class" xml:space="preserve"><value>Melhor {0} #{1}: +{2}% EXP</value></data>
+  <data name="RankAura.Overall" xml:space="preserve"><value>Melhor Jogador: +{0}% EXP</value></data>
+  <data name="TargetMenu.Trade" xml:space="preserve"><value>Trocar</value></data>
+  <data name="TargetMenu.Friend" xml:space="preserve"><value>Adicionar amigo</value></data>
+  <data name="TargetMenu.Party" xml:space="preserve"><value>Grupo</value></data>
+  <data name="TargetMenu.Raid" xml:space="preserve"><value>Raide</value></data>
+  <data name="TargetMenu.Clan" xml:space="preserve"><value>Clã</value></data>
+  <data name="Request.PartyTitle" xml:space="preserve"><value>Pedido de grupo</value></data>
+  <data name="Request.RaidTitle" xml:space="preserve"><value>Pedido de raide</value></data>
+  <data name="Request.TradeTitle" xml:space="preserve"><value>Pedido de troca</value></data>
+  <data name="Request.ClanTitle" xml:space="preserve"><value>Convite de clã</value></data>
+  <data name="Request.Party" xml:space="preserve"><value>Deseja aceitar o pedido de grupo de {0}?</value></data>
+  <data name="Request.Raid" xml:space="preserve"><value>Deseja aceitar o pedido de raide de {0}?</value></data>
+  <data name="Request.Trade" xml:space="preserve"><value>Deseja aceitar o pedido de troca de {0}?</value></data>
+  <data name="Request.Recommended" xml:space="preserve"><value>{0} recomenda {1} para o grupo. Aceitar?</value></data>
+  <data name="Request.Clan" xml:space="preserve"><value>{0} convida você para o clã {1}. Aceita?</value></data>
+  <data name="Request.Closes" xml:space="preserve"><value>Fecha automaticamente em {0} s...</value></data>
+  <data name="PersonalShop.SellFor" xml:space="preserve"><value>Vender por:</value></data>
+  <data name="PersonalShop.Gold" xml:space="preserve"><value>Ouro</value></data>
+  <data name="PersonalShop.Coins" xml:space="preserve"><value>Moedas</value></data>
+  <data name="PersonalShop.ViewOnly" xml:space="preserve"><value>Só exibir</value></data>
 </root>

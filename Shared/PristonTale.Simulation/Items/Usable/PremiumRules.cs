@@ -18,8 +18,9 @@ public static class PremiumRules
     public static int SkillCooldownMs(int cooldownMs, PremiumTimers timers) =>
         timers.IsActive(PremiumEffectKind.SkillDelay) ? Math.Min(cooldownMs, SkillDelayCooldownMs) : cooldownMs;
 
-    // Percent of extra experience on a kill: the EXP potion (or package) plus the Phoenix.
+    // Percent of extra experience on a kill: the world's EXP buff, the EXP potion (or package), the Phoenix and the ranking aura.
     public static int ExperiencePercent(PremiumTimers timers) =>
+        Progression.RankAuraBonus.ExperiencePercent(timers.RankAura) +
         (World.WorldBuffs.Has(timers.WorldBuffMask, World.WorldBuffKind.Experience) ? World.WorldBuffs.ExperiencePercent : 0) +
         timers.ValueOf(PremiumEffectKind.ExperienceUp) + (timers.IsActive(PremiumEffectKind.PhoenixPet) ? PhoenixExperiencePercent : 0);
 

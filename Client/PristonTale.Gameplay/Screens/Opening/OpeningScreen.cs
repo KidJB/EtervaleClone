@@ -18,6 +18,7 @@ public sealed class OpeningScreen : GameScreen
     private string _status;
 
     private bool _loginRevealed;
+    private PristonTale.Engine3D.Rendering.ShaderPreload _shaders;
 
     public OpeningScreen(ScreenContext context) : base(context)
     {
@@ -32,6 +33,8 @@ public sealed class OpeningScreen : GameScreen
     {
         _audio = LoginAudio.Opening(Context.Audio);
         _loginController = new OpeningLoginController(Context, _audio);
+        _shaders = new PristonTale.Engine3D.Rendering.ShaderPreload(Context.Content, Context.Log);
+        PristonTale.Engine3D.Rendering.Atmosphere.PristonCloudNoise.Prepare();
         _video = LoginVideo.Open(Context.GraphicsDevice, Context.AssetRoot, Context.Log);
         if (_video is not null)
         {
@@ -57,6 +60,7 @@ public sealed class OpeningScreen : GameScreen
     {
         var dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
         _audio.Update(dt);
+        _shaders.Step();
 
         _cinematic?.Update(gameTime);
         _video?.Update(gameTime.ElapsedGameTime.TotalSeconds);

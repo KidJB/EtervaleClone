@@ -118,6 +118,10 @@ public sealed record OwnerState(
     public IReadOnlyList<int> DailyDone { get; init; } = [];
     public long DailyRevision { get; init; }
 
+    // The accepted Courier hunts with their kills by objective (Quests.CourierQuestState).
+    public long CourierRevision { get; init; } = -1;
+    public IReadOnlyDictionary<int, IReadOnlyList<int>> CourierActive { get; init; } = new Dictionary<int, IReadOnlyList<int>>();
+
     // The account's mounts (Mounts bits), the one picked and whether the character rides it.
     public ulong Mounts { get; init; }
     public int MountChosen { get; init; }
@@ -144,7 +148,7 @@ public sealed record OwnerState(
             character.StatPoints, character.SkillPoints, character.EliteSkillPoints, character.Tier, character.BagPage, character.WeaponSet, attributes,
             character.InventoryRevision, character.ProgressionRevision, character.Skills.Revision, character.Premium.Revision, character.AgingRevision,
             character.Effects.Revision, character.PetSkins, character.PetOut, character.PetName, character.Mounts, character.MountChosen, character.Riding,
-            character.DailyQuests.Revision);
+            character.DailyQuests.Revision, character.Couriers.Revision);
         if (previous is not null && previous.Stamp == stamp)
         {
             return previous;
@@ -193,6 +197,9 @@ public sealed record OwnerState(
             DailyAccepted = new Dictionary<int, int>(character.DailyQuests.Accepted),
             DailyDone = [.. character.DailyQuests.Done],
             DailyRevision = character.DailyQuests.Revision,
+            CourierRevision = character.Couriers.Revision,
+            CourierActive = previous is not null && previous.CourierRevision == character.Couriers.Revision ? previous.CourierActive
+                : character.Couriers.Active.ToDictionary(static pair => pair.Key, static pair => (IReadOnlyList<int>)[.. pair.Value.Kills]),
             Mounts = character.Mounts,
             MountChosen = character.MountChosen,
             Riding = character.Riding,
@@ -243,4 +250,4 @@ public sealed record OwnerState(
 internal readonly record struct OwnerStamp(int Level, ulong Experience, long Money, int Life, int Mana, int Stamina, int StatPoints, int SkillPoints,
     int EliteSkillPoints, short Tier, int BagPage, int WeaponSet, CharacterAttributes Attributes, long InventoryRevision, long ProgressionRevision,
     long SkillsRevision, long PremiumRevision, long AgingRevision, long EffectsRevision, ulong PetSkins, int PetOut, string PetName, ulong Mounts,
-    int MountChosen, bool Riding, long DailyRevision);
+    int MountChosen, bool Riding, long DailyRevision, long CourierRevision);

@@ -290,10 +290,12 @@ internal static class ParticleScriptConverter
                 Blend = Blend(blend),
                 Shape = shape,
                 Count = Math.Clamp(count, 1, 4096),
-                Loops = Math.Max(0, loops),
+                // Scripts write "forever" as a loop count or a lifetime far past any bound: more loops than a sequence may
+                // emit loops without end (0), and a longer life lasts the longest one.
+                Loops = (long)Math.Clamp(count, 1, 4096) * Math.Max(0, loops) > VfxDefinition.MaxSequenceParticles ? 0 : Math.Max(0, loops),
                 Rate = rate[1] >= rate[0] ? rate : [rate[1], rate[0]],
                 Delay = Math.Clamp(delay, 0f, 60f),
-                Lifetime = lifetime[1] >= lifetime[0] ? lifetime : [lifetime[1], lifetime[0]],
+                Lifetime = [.. (lifetime[1] >= lifetime[0] ? lifetime : [lifetime[1], lifetime[0]]).Select(static life => Math.Min(life, VfxDefinition.MaxParticleLife))],
                 RadiusMin = radiusMin,
                 RadiusMax = radiusMax,
                 GravityMin = gravityMin,

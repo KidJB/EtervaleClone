@@ -55,9 +55,13 @@ public sealed class GameServerConnection : IGameBackend
     private readonly PendingReplies<Guid, ItemBoxListInfo> _itemBoxLists = new();
     private readonly PendingReplies<Guid, byte> _itemBoxActions = new();
     private readonly PendingReplies<Guid, byte> _dailyQuests = new();
+    private readonly PendingReplies<Guid, (byte, long)> _couriers = new();
     private readonly PendingReplies<Guid, SkinCatalogInfo> _skinCatalogs = new();
     private readonly PendingReplies<Guid, (PristonTale.Simulation.Characters.SkinStatus, long)> _skinResults = new();
     private readonly Dictionary<Guid, List<PristonTale.Contracts.Characters.SkinArticle>> _skinParts = new();
+    private readonly PendingReplies<Guid, (PristonTale.Simulation.Characters.SkinStatus, long, string)> _skinUnlocks = new();
+    private readonly PendingReplies<Guid, CabinetDealsPacket> _cabinetDeals = new();
+    private readonly PendingReplies<Guid, (PristonTale.Simulation.Characters.CabinetBidStatus, long)> _cabinetBids = new();
     // The entries of an Item Distributor open, collected until its list end, which follows them on the same connection.
     private readonly ConcurrentDictionary<Guid, List<ItemBoxEntryInfo>> _itemBoxEntries = new();
     // The tabs of a coin shop open, collected until its catalog message, which follows them on the same connection.
@@ -390,6 +394,34 @@ public sealed class GameServerConnection : IGameBackend
         return _skinResults.RequestAsync(packet.OperationId, () => Send(packet), ct);
     }
 
+    internal Task<(PristonTale.Simulation.Characters.SkinStatus, long, string)> UnlockSkinAsync(Guid itemId, CancellationToken ct)
+    {
+        ThrowIfDisconnected();
+        var packet = new SkinUnlockPacket(Guid.NewGuid(), itemId);
+        return _skinUnlocks.RequestAsync(packet.OperationId, () => Send(packet), ct);
+    }
+
+    internal Task<CabinetDealsPacket> CabinetDealsAsync(CancellationToken ct)
+    {
+        ThrowIfDisconnected();
+        var packet = new CabinetDealsRequestPacket(Guid.NewGuid());
+        return _cabinetDeals.RequestAsync(packet.OperationId, () => Send(packet), ct);
+    }
+
+    internal Task<(PristonTale.Simulation.Characters.CabinetBidStatus, long)> CabinetBidAsync(long dealId, long amount, CancellationToken ct)
+    {
+        ThrowIfDisconnected();
+        var packet = new CabinetBidPacket(Guid.NewGuid(), dealId, amount);
+        return _cabinetBids.RequestAsync(packet.OperationId, () => Send(packet), ct);
+    }
+
+    internal Task<(byte Status, long Experience)> CourierAsync(ulong npcId, int questId, byte action, CancellationToken ct)
+    {
+        ThrowIfDisconnected();
+        var packet = new CourierRequestPacket(Guid.NewGuid(), npcId, questId, action);
+        return _couriers.RequestAsync(packet.OperationId, () => Send(packet), ct);
+    }
+
     internal Task<byte> DailyQuestAsync(ulong npcId, int questId, byte action, CancellationToken ct)
     {
         ThrowIfDisconnected();
@@ -562,6 +594,7 @@ public sealed class GameServerConnection : IGameBackend
             _itemBoxLists.FailAll(error);
             _itemBoxActions.FailAll(error);
             _dailyQuests.FailAll(error);
+            _couriers.FailAll(error);
             _skinCatalogs.FailAll(error);
             _skinResults.FailAll(error);
             _npcDialogs.FailAll(error);
@@ -733,6 +766,30 @@ public sealed class GameServerConnection : IGameBackend
             {
                 var result = SkinResultPacket.Read(packet);
                 _skinResults.Complete(result.OperationId, ((PristonTale.Simulation.Characters.SkinStatus)result.Status, result.Balance));
+                break;
+            }
+            case EtervaleOpcodes.SkinUnlockResult:
+            {
+                var result = SkinUnlockResultPacket.Read(packet);
+                _skinUnlocks.Complete(result.OperationId, ((PristonTale.Simulation.Characters.SkinStatus)result.Status, result.Balance, result.Key));
+                break;
+            }
+            case EtervaleOpcodes.CabinetDeals:
+            {
+                var deals = CabinetDealsPacket.Read(packet);
+                _cabinetDeals.Complete(deals.OperationId, deals);
+                break;
+            }
+            case EtervaleOpcodes.CabinetBidResult:
+            {
+                var result = CabinetBidResultPacket.Read(packet);
+                _cabinetBids.Complete(result.OperationId, ((PristonTale.Simulation.Characters.CabinetBidStatus)result.Status, result.Balance));
+                break;
+            }
+            case EtervaleOpcodes.CourierResult:
+            {
+                var result = CourierResultPacket.Read(packet);
+                _couriers.Complete(result.OperationId, (result.Status, result.Experience));
                 break;
             }
             case EtervaleOpcodes.DailyQuestResult:

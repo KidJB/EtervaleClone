@@ -31,22 +31,10 @@ public static class HudPartyArt
     public const string MemberHovered = Effect + "Man2.bmp";
     public const string Leader = Effect + "Man3.bmp";
 
-    // The request box: who asks at (36, 16), the request line at (28, 38), OK at (140, 11), cancel at (144, 37).
-    public static readonly HudRequestBoxArt Request = new(Effect + "MessageBackGround.tga", Effect + "Ok1.bmp", Effect + "Ok2.bmp", new Rectangle(140, 11, 23, 23),
-        Effect + "Cancel1.bmp", Effect + "Cancel2.bmp", new Rectangle(144, 37, 15, 15), new Point(36, 16), new Point(28, 38), BlinkOver: true);
-
     public const string MapMark = "image/party.tga";
-
-    // The trade, party and friend buttons under another player's portrait.
-    public const string PlayerMenu = "image/cw-1.tga";
-    public static readonly string[] PlayerButtons = [Party + "icon-c5.bmp", Party + "icon-c1.bmp", Party + "icon-c2.bmp", Party + "icon_clan.bmp"];
-    public static readonly string[] PlayerButtonsIdle = [Party + "icon-c5_.bmp", Party + "icon-c1_.bmp", Party + "icon-c2_.bmp", Party + "icon_clan_.bmp"];
-    public static readonly string[] PlayerTips =
-        [Party + "ButtonInfo-c5.bmp", Party + "ButtonInfo-c1.bmp", Party + "ButtonInfo-c0.bmp", Party + "ButtonInfo-c10.bmp"];
 
     public static readonly string[] All =
     [
-        Window, Title, .. Buttons, .. ButtonsIdle, .. Tips, LifeRed, LifeBlue, Member, MemberHovered, Leader, .. Request.All, MapMark, PlayerMenu,
-        .. PlayerButtons, .. PlayerButtonsIdle, .. PlayerTips
+        Window, Title, .. Buttons, .. ButtonsIdle, .. Tips, LifeRed, LifeBlue, Member, MemberHovered, Leader, MapMark
     ];
 }

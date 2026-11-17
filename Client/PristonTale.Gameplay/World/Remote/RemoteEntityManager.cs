@@ -63,6 +63,8 @@ public sealed partial class RemoteEntityManager
 
     public int Count => _entities.Count;
 
+    public int Preparing => _preparingActors.Count;
+
     public ulong SelfEntityId => _selfEntityId;
 
     public event Action<int, MotionCode, XnaVector3> NpcMotionStarted;

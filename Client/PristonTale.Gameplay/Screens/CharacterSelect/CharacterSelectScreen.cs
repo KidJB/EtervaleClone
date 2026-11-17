@@ -78,6 +78,7 @@ public sealed class CharacterSelectScreen : GameScreen
     private CancellationTokenSource _backendCts;
     private Task<IReadOnlyList<CharacterSummary>> _rosterTask;
     private Task _rosterPreparationTask;
+    private long _enteredAt;
     private IReadOnlyList<CharacterSummary> _pendingRoster;
     private Task _jobPreparationTask;
     private Task<EnterWorldOutcome> _enterTask;
@@ -96,15 +97,23 @@ public sealed class CharacterSelectScreen : GameScreen
 
     public override void Enter()
     {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        _enteredAt = started;
         _renderer = new PristonRenderer(Context.GraphicsDevice, Context.Content, Context.Log, Context.Presentation);
+        var rendered = System.Diagnostics.Stopwatch.GetTimestamp();
 
         ConfigureLighting(_renderer);
 
         var stage = _reader.ReadStage(AssetPath(LoginStagePath));
-        _renderer.AddStage(stage, Array.Empty<PristonModel>());
-
+        var read = System.Diagnostics.Stopwatch.GetTimestamp();
         _cameraCtl = new CharacterSelectCamera(Context.GraphicsDevice, (int)State.CharacterSelect);
         _scene = new CharacterSelectScene(_renderer, _actorLoader, Context.AssetRoot, _cameraCtl, stage, Context.Log);
+        // The roster's models prepare on workers while the stage uploads and the screen's art loads below.
+        BeginLoadRoster();
+        PollRoster();
+
+        _renderer.AddStage(stage, Array.Empty<PristonModel>());
+        var staged = System.Diagnostics.Stopwatch.GetTimestamp();
 
         _nameField = new TextInputField { MaxLength = MaxNameLength };
 
@@ -113,7 +122,8 @@ public sealed class CharacterSelectScreen : GameScreen
         _view = new CharacterSelectView(Context.SpriteBatch, Context.Font, _assets, _cameraCtl);
         InitEffects();
         _audio = LoginAudio.CharacterSelect(Context.Audio);
-        BeginLoadRoster();
+        Context.Log.Info(FormattableString.Invariant(
+            $"[CharacterSelect] entered in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms: renderer {System.Diagnostics.Stopwatch.GetElapsedTime(started, rendered).TotalMilliseconds:0} ms, stage read {System.Diagnostics.Stopwatch.GetElapsedTime(rendered, read).TotalMilliseconds:0} ms, scene and stage upload {System.Diagnostics.Stopwatch.GetElapsedTime(read, staged).TotalMilliseconds:0} ms, rest {System.Diagnostics.Stopwatch.GetElapsedTime(staged).TotalMilliseconds:0} ms"));
     }
 
     private void InitEffects()
@@ -255,8 +265,15 @@ public sealed class CharacterSelectScreen : GameScreen
 
         if (_rosterPreparationTask.IsCompletedSuccessfully)
         {
+            var prepared = System.Diagnostics.Stopwatch.GetTimestamp();
             BuildCharacters(_pendingRoster);
             _errorMessage = string.Empty;
+            if (_enteredAt != 0)
+            {
+                Context.Log.Info(FormattableString.Invariant(
+                    $"[CharacterSelect] characters shown {System.Diagnostics.Stopwatch.GetElapsedTime(_enteredAt).TotalMilliseconds:0} ms after entering: prepared {System.Diagnostics.Stopwatch.GetElapsedTime(_enteredAt, prepared).TotalMilliseconds:0} ms, built {System.Diagnostics.Stopwatch.GetElapsedTime(prepared).TotalMilliseconds:0} ms"));
+                _enteredAt = 0;
+            }
         }
         else
         {

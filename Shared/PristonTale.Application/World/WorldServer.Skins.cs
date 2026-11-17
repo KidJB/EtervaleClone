@@ -14,10 +14,19 @@ public sealed partial class WorldServer
                 return false;
             }
 
+            // A class wears only looks its class may wear (an axe look never reaches a class without axes).
+            var jobs = (uint)connection.Player.Character.Definition.JobBitCode;
+            if (!Wearable(skins.Weapon, jobs) || !Wearable(skins.TwoHand, jobs) || !Wearable(skins.Armor, jobs) || !Wearable(skins.OffHand, jobs))
+            {
+                return false;
+            }
+
             connection.Player.Character.Skins = skins;
             return true;
         });
 
     public Task<SkinSet> SkinsOfAsync(PlayerSession session) =>
         EnqueueAsync(session.EntityId, () => TryGetPlaying(session, out var connection) ? connection.Player.Character.Skins : SkinSet.None);
+
+    private static bool Wearable(string key, uint jobs) => key.Length == 0 || SkinRules.Wearable(key, jobs);
 }

@@ -73,7 +73,7 @@ Default case files by area (all `tests/PristonTale.Tests/<Name>.cs`):
 | Markets | `MarketTests` (with `ChatFixture`) | The Character Market on real SQLite: listing rules, browse, sale, tax, rollback, a race, refusals, the claim; the Marketplace over live shops: filters, purchase from afar, closed shops, removed items, full bag, no duplication; wire and settings |
 | Trades | `TradeTests` (with `ChatFixture`), `TradeHudTests` | Requests, offers, locks and their delay, the stored exchange, refusals, how a trade ends (also while it is stored), offered items changed elsewhere, both sides locking at once, rules, wire; the trade window |
 | Contacts | `ContactTests` (with `ChatFixture` and SQLite) | The lists' rules, the server's answers with presence, ignored whispers, storage, wire; the friends page |
-| Parties | `PartyTests` (with `ChatFixture`), `PartyHudTests` | Requests, answers and recommendations, the leader's commands, leaving the world, shared experience and gold, rules, wire; the party window, request box and player buttons |
+| Parties | `PartyTests` (with `ChatFixture`), `PartyHudTests` | Requests, answers and recommendations, the leader's commands, leaving the world, shared experience and gold, rules, wire; the party window, request box and target menu |
 | Chat, game masters | `ChatRoutingTests`, `GameMasterCommandTests` (with `ChatFixture`), `ChatClientTests`, `GameMasterStorageTests` | Spoken range, whispers, channels, notices, shutdown; every command and the level table; window, input, flood and bubbles; `gm_level`, audit and character moves on SQLite |
 | Client | `RemotePlaybackTests`, `AttackInputTests`, `FrameTimingTests`, `ClientSettingsTests`, `FieldAudioTests`, `ClientLogTests` | Playback, input, settings, the client log |
 | HUD and screens | `HudInteractionTests`, `CharacterHeadTests`, `CharacterSelectTests` | 800x600 layout, hit tests |
@@ -225,6 +225,7 @@ when reading those assets is authorized. GPU probes:
 | `--verify-player-timing <assets>` | no | Per-class attack, damage and EAT timing against actor files |
 | `--verify-equipment <assets>` | no | Equipped attack clips against `PlayerEquipmentTiming` |
 | `--export-equipment-timings <assets> <output.json>` | no | Writes the generated `World/Motion/Data/PlayerEquipmentTiming.json` (see Pitfalls) |
+| `--generate-couriers <world.db> <couriers.json>` | no | Writes the Quest Courier catalog from a copy of an imported database and the world catalog (quests.md "Quest Couriers") |
 | `--verify-world-rewards <assets> <disposable.db>` | no | Real catalog checks on a copy of an imported database (see below) |
 | `--validate-binary-assets <assets>` | no | Parses every `.inx`, `.smd`, `.smb` and `.cam` under the root and lists failures, and every texture a drawn material names that the renderer would not find (only listed, not a failure) |
 | `--inspect-actor <assets> <actor-path>` | no | Prints mesh, skeleton, material and bone details of one actor |

@@ -43,6 +43,12 @@ public sealed partial class FieldInstance
 
     internal Simulation.Items.Mixing.MixingSettings Mixing { get; set; } = Simulation.Items.Mixing.MixingSettings.Default;
 
+    internal Func<Simulation.Characters.CabinetConfig>? Cabinet
+    {
+        get => _combat.Cabinet;
+        set => _combat.Cabinet = value;
+    }
+
     internal DailyDropLedger? DropLedger
     {
         get => _combat.DropLedger;

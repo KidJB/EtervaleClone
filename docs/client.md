@@ -153,6 +153,18 @@ selection, warps, streaming scan, camera, renderer, movement report.
 the back buffer), clear, `GameScene.Draw` (renderer, effects, `ComposeScene`), ground loot labels, floating combat text,
 `GameplayHud.Draw`.
 
+### World entry
+
+`GameplayScreen` draws the world from the first frame; images and actors appear as they load. `EntryReadiness`
+marks entry complete once the server's first presence has applied, no remote actor is preparing
+(`RemoteEntityManager.Preparing`), no field is in flight (`FieldResourceStreamer.IsIdle`) and the HUD's art is decoded
+(`GameplayHud.IconsIdle`), or after 10 s, and logs once `[Entry] complete after N ms: presence, actors, fields, hud`,
+each the time it first became ready, `(timed out)` when the wait ran out; `[Entry] scene and HUD built in N ms` reports the
+synchronous part of `Enter`. Until then the HUD's images upload with `HudSprites.Eager`. The login screen
+loads every shader of `Content/Effects` into the content cache, one per frame (`ShaderPreload`), so the character
+select's renderer, and the game's after it, clone cached shaders; `[CharacterSelect] entered in N ms` reports that
+screen's synchronous setup. The server logs each login's credentials, character list and remember times.
+
 ### What stays off the frame
 
 `Update` and `Draw` never wait on network, disk, tasks or long locks (AGENTS.md). The patterns in use:
@@ -165,7 +177,7 @@ the back buffer), clear, `GameScene.Draw` (renderer, effects, `ComposeScene`), g
 | Field streaming | `FieldResourceStreamer.Request`: stage and model parse, collision build, `PrepareStageTexturesAsync` on `Task.Run` | `Update` publishes through `AddStageIncrementally`: up to 32 steps and a 2 ms soft budget per frame |
 | Remote actors | Composer `PrepareAsync` (`PristonActorLoader.Load` + `PrepareActorResourcesAsync`); a player's look prepares each part (body, head, weapon, shield) once for every look that wears it (`PlayerActorComposer`) | `RemoteEntityManager.Update` publishes one completed preparation per frame |
 | Ground loot models | `GroundLootPresentation` preparation tasks | `GroundLootPresentation.Update` |
-| HUD images and item icons | `HudSprites`/`HudIconCache` decode on the thread pool | Upload within a byte budget per `Update` (`HudSprites`: 512 KiB). The icon cache keeps only the last requested set (at most 512), so `GameplayHud.RequestIcons` always names the pack, the open shop and the open warehouse together |
+| HUD images and item icons | `HudSprites`/`HudIconCache` decode on the thread pool (`HudSprites` decodes a batch's files in parallel) | Upload within a byte budget per `Update` (`HudSprites`: 512 KiB, 8 MiB while `Eager`, which world entry sets until it completes). The icon cache keeps only the last requested set (at most 512), so `GameplayHud.RequestIcons` always names the pack, the open shop and the open warehouse together |
 | UI bitmap transparency | `PristonImageDecoder.Decode(..., bmpCoverage: true)`, `PristonUiPixels.Prepare` | A 32-bit BMP whose fourth byte varies (not all 0, not all 255) carries its coverage, which replaces the black key (such as item `DA304`, drawn over a near-black background); other BMPs take exact black as transparent; world textures stay opaque |
 | Skill sounds | `SkillSoundBank` reads and decodes on a worker | Creates `SoundEffect`s in `Update`; a sound not ready is skipped |
 | Display settings file | `ClientSettingsStore` writer task | `QueueSave` only |
@@ -414,8 +426,26 @@ destination. Renderer side of stage publication: [rendering.md](rendering.md).
 | `G` | `GameplayHud.UpdateKeys` | Get on or off the picked mount (sends `/mount`) |
 
 The Cabinet (`HudCabinet`, the U key or the `Cabinet` service of Knight Commander Derik; drawn in `HudPteuWindow`'s style with its
-title plate and CLOSE button) sells every worn-gear look for coins to the
-account (`SkinRules`, `SkinAppService`); the preview is `GameScene.PreviewLook`, and weapons have a slot per grip (`SkinSet.Weapon` and `TwoHand`, `SkinRules.WeaponLook`): a chosen look goes to the grip worn then and shows only on that grip, and a skin supplies only the model: the worn weapon (`CharacterVisualSet.HeldKey`, `HeldWeapon` in the description from version 8) decides the motions and the hand or bone; orbs (they are not drawn in the hand), models repeated under another key and models that do not load are not sold (`Costumes.json` hidden); it lists and shows only looks of the worn item family and grip that the class can wear, plus the costumes of `Characters/Data/Costumes.json` (body files by class) , hair tints and numbered class heads (the `Hair` slot, `CharacterHead.CustomHair`; shown over the character's own hair while chosen) and its `gear` looks (weapons and off-hand items with a model but no world item; `like` names the item a CW look stands for).
+a forged-iron window with its plaque, coin purse and red close button, art `assets/Hud/Cabinet/`: gradients, glows, round buttons and icons; Collection, Brush and Deals tabs; search and Slot, Ownership and Rarity menus; rarity cards with corners, glow, a favourite star kept in the client settings as `CabinetFavorites`, and a dot on looks applied now; slots that glow when changed, with undo and remove buttons, a click showing their category; Turn and No looks tools on the preview; Apply Changes shows what it buys and asks first with the total; closing throws away changes not applied) is the account's collection of looks ([application.md](application.md#the-cabinet)). The left page shows the
+character in the chosen looks (`GameScene.PreviewLook`) with one box per slot (a click clears it), the last chosen look's rarity, sources
+and description, Apply Changes (it buys the chosen looks that are for sale and not owned, then shows them; an exclusive look is never
+bought) and the collection's progress (owned / total, for the category and in all). Weapons have a slot per grip (`SkinSet.Weapon` and
+`TwoHand`, `SkinRules.WeaponLook`): a chosen look goes to the grip worn then and shows only on that grip, and a skin supplies only the
+model: the worn weapon (`CharacterVisualSet.HeldKey`, `HeldWeapon` in the description from version 8) decides the motions and the hand or
+bone. The right page has three modes. Collection lists the looks of the equipped items' types that the class wears (`SkinRules.Fits` against the worn
+weapon, armor and off-hand, so a worn armor shows armor looks and costumes but no robes, a worn bow only bow looks; `SkinRules.Wearable`;
+costumes with a body for it; all hair) by category tab (All, Armor, Robes, Costume, Weapon, Shield, Hair) with a search box and a filter button cycling All, Unlocked,
+Locked, For sale, Exclusive, Rare, Epic and Legendary; a card's name and border take its rarity colour (`HudRarityColors`) and its band
+shows the price, Owned or Exclusive; the progress counts the same looks. Brush lists the
+bag's gear whose look a brush unlocks and the look tokens, with the brushes carried; a click on gear names the brush and that the item and
+one brush are used up, a click on a token says it is used up, and both wait for Confirm (an owned look sends nothing). Deals lists the open
+bidding deals (icon, name in its rarity colour, leading bid and bidder, the latest bids, time left counted locally from the server's
+clock, the level needed) with Bid, which offers the least next bid after a confirmation saying the coins are held and given back when
+outbid. Orbs (they are not drawn in the hand), models repeated under another key and models that do not load are not listed
+(`Costumes.json` hidden); the costumes of `Characters/Data/Costumes.json` (body files by class), hair tints and numbered class heads (the
+`Hair` slot, `CharacterHead.CustomHair`; shown over the character's own hair while chosen) and its `gear` looks (weapons and off-hand
+items with a model but no world item; `like` names the item a CW look stands for) are looks too. Brushes and tokens use the helper pet
+item's icon (`HudItemIcons`).
 
 The Item Distributor (`HudItemBox`) opens instead of a server request when an NPC's `GiftExpress` service is chosen
 (`GameplayHud.OpenNpcService`), with the bag, on a dark frame with the art of `assets/Hud/Distributor/`: Retrieve Items
@@ -509,6 +539,13 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
 - Bless Castle's crown (`CrownPresentation`): every player of the clan holding the castle within 12 x 64 units of the
   player, the player included, wears `weapons/Crown.smd` floating 20 units over its head bone (the top of the head and
   10 more; 36 units over the feet without one), bobbing half a unit once a second and turning once every 16.4 s.
+- Ranking auras (`RankAuraPresentation`, `GameScene.RankAuras.cs`): a player whose looks carry a `RankAura` (the local
+  player from its own description) wears the converted particle script `particle.PlayerRank1` to `3` or
+  `particle.PlayerRankOverall`, moved to its feet each frame, asked again each frame until the effect library has it
+  (it registers over the first frames in the world), started again when the effect's longest run ends and
+  stopped when the aura changes or the player leaves view. The scripts and their `Player_*.bmp` textures are art from
+  another server, kept in the git-ignored `assets/Effect/Particle`. The local player's aura and its bonus show in the
+  Active Buffs box (`HudWorldBuffs`) under Ranking (`RankAura.Class`, `RankAura.Overall`).
 - Held items (`GameScene.HeldItems.cs`): the weapon and off-hand glow and the class-up lights of every drawn player
   ([effects.md](effects.md#held-item-glow)).
 - Wing warp map (`HudWingGate`): `WG_map.tga` (256 x 256) at (472, 120) with the icon of each stone the carried wing
@@ -904,15 +941,19 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
     is listed beside the column, with a raid crown on the raid leader. The arrow
     over them folds them. A right click on a frame opens its menu (Delegate and Kick on a member, Disband and Leave on the leader's own
     for the leader; Leave on your own for a member), and each choice asks yes or no first.
-  - The request box (`HudRequestBox` with `HudPartyArt.Request`, the trade's too) at (513, 3) blinks, answers once from
-    OK or cancel and closes after 20 s; a request is not shown while the warehouse is open.
-  - A click on another player (not selling) approaches it as an NPC; once reached, its portrait shows the trade, party
-    and friend buttons (`HudPlayerButtons`, on `cw-1.tga`) instead of the life bar while it stays the target within
-    `TradeLimits.Reach`; the hovered button's tip shows 60 px to its left and 18 px below it, clear of the cursor. Trade asks it to trade, party to group; friend puts it on the friends list and opens the
-    Social window on that list. A clan chief or vice chief beside a player without a clan also gets the clan invitation
-    (`icon_clan.bmp`, tip `ButtonInfo-c10.bmp`): the box widens to 120 px and the four buttons start 10 px further left.
-  - Clans (`GameplayHud.Clans.cs`, `GameScene.Clans.cs`): an invitation opens the party's request box (30 s) with the
-    chief's name and "invites you to the clan ..."; OK accepts, cancel refuses. The Clan Master's "Clan" service opens
+  - A request another player sends (party, raid, trade, clan invitation) shows as the game's message box
+    (`HudRequestBox`, `assets/Hud/MessageBox`), centred just above where a confirmation box shows: its title in capitals
+    ("PARTY REQUEST"), the question ("Do you want to accept Ann's Party Request?", a member's recommendation names the
+    player it recommends), "Automatically closes in N sec..." counting down the request's time (party 20 s, trade
+    `TradeLimits.RequestMs`, clan 30 s) and YES / NO; it answers once and closes. A party request is not shown while the
+    warehouse is open.
+  - Another player's target frame carries a small "more" button (`HudTargetMenu`, art `assets/Hud/Menu`:
+    at (262, 16) on the new frame's bar, in from the classic frame's top right) whose list opens beside
+    it: Trade, Add Friend and Party, Raid for a party leader (sent as `//raid name`) and Clan for a recruiter beside a
+    player without a clan. A choice, a click elsewhere or another target closes it; Add Friend puts the player on the
+    friends list and opens the Social window on that list.
+  - Clans (`GameplayHud.Clans.cs`, `GameScene.Clans.cs`): an invitation opens the request box (30 s, "CLAN INVITATION": the
+    chief's name and the clan's); YES accepts, NO refuses. The Clan Master's "Clan" service opens
     `HudClanWindow` in the NPC dialog's help box: without a clan the founding text (cost, level, the six members in ten
     days) and "Form a clan", then the name typed (Enter or Confirm sends `Found`); with one the state (registered, or
     days and hours left to reach six members), members of capacity and the members (chief and vice first, green online,
@@ -958,8 +999,10 @@ with medals for the first three, class icons, level, experience share and clan (
 wheel and highlights the player's own line. Close or H shuts it.
 The Settings window (`HudSettingsPanel`, art `assets/Hud/Settings/`) has four tabs (Video, Audio, General, UI) and one dropdown per option; a choice applies at once, Shift+click steps an option back, and Reset returns to the values at opening.
 The windows drawn with `HudPainter.HelpBox` (NPC dialogs, quests, help, settings, clans, castle and Bellatra pages, the wing gate) use the RPT frame, title plate and OK button (`assets/Hud/Window/`), and text fields `HudPainter.InputBox` (same folder).
-Every confirmation and count box uses `HudMessageBox` (art `assets/Hud/MessageBox/`), every tooltip `HudPainter.InfoBox` (art `assets/Hud/Tooltip/`), and the party frames' menu the art of `assets/Hud/Menu/`.
-
+Every confirmation and count box uses `HudMessageBox` (art `assets/Hud/MessageBox/`), every tooltip `HudPainter.InfoBox` (art `assets/Hud/Tooltip/`), and the party frames' menu the art of `assets/Hud/Menu/`.
+
+Quest Courier (`HudCourierWindow`, opened by a Courier NPC, in the party finder's art): Available, Active and Completed tabs and the chosen hunt's details with Accept, Abandon or Turn In; Courier hunts also show in `HudQuestTracker` ([quests.md](quests.md#quest-couriers)).
+
 Party finder (`HudPartyFinder`, key F, its own art `assets/Hud/PartyFinder/pt_*.png` drawn by `tools/ui/build_party_finder.py`, the titles and labels written over it): two tabs over the list. All Group asks for the
 parties with room that are not closed (`PartyFinderRequest`, answered by `PartyFinder`): each leader's class icon and
 name and the other members' icons; a click opens the party's information beside it (the field and its level from

@@ -157,7 +157,7 @@ public sealed partial class FieldInstance : ISpawnSink, IPlayerProximity, IField
             }
 
             _motions.TryGet(definition.ModelInxPath, out var motionTimings);
-            var npc = WorldNpc.Place(_ids.NextMonsterId(), definition, placement, motionTimings);
+            var npc = WorldNpc.Place(_ids.NextMonsterId(), definition, placement, motionTimings, Terrain);
             _npcs.Add(npc.EntityId, npc);
         }
     }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Threading.Channels;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
@@ -53,8 +54,10 @@ public sealed partial class GameScene
 
     public void LoadField(string assetRoot, FieldDef field, EnteredCharacter entered = null)
     {
+        var started = Stopwatch.GetTimestamp();
         _assetRoot = assetRoot;
         EnsureRenderer();
+        var rendered = Stopwatch.GetTimestamp();
 
         _fieldStreamer?.Dispose();
         _fieldStreamer = new FieldResourceStreamer(assetRoot, _reader, _renderer, _log, ConfigureFieldLighting);
@@ -62,6 +65,7 @@ public sealed partial class GameScene
 
         var loaded = AddFieldToWorld(assetRoot, field);
         SetActiveField(loaded);
+        var staged = Stopwatch.GetTimestamp();
 
         _player = entered != null
             ? _classRegistry.CreatePlayer(entered.Class, entered.Name, entered.Level)
@@ -83,12 +87,16 @@ public sealed partial class GameScene
         _playerForward = Vector3.Forward;
 
         _renderer.ClearActors();
+        var placed = Stopwatch.GetTimestamp();
         AddPlayerActors(assetRoot, entered?.FaceIndex ?? 0, entered?.Tier ?? 0, entered?.HairIndex ?? 0);
+        var actors = Stopwatch.GetTimestamp();
 
         _camera = new PristonCamera(_playerBody.Position, _playerForward, ToCameraSettings(field.Camera));
         Status = $"Loaded {field.Name}: {loaded.Stage.Vertices.Count} vertices, {loaded.Stage.Faces.Count} faces, " +
                  $"{field.StageObjectSmds.Count} animation SMDs + {_player.Name}";
         ScanStreaming();
+        _log.Info(FormattableString.Invariant(
+            $"[Field] {field.Id} loaded in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms: renderer {Stopwatch.GetElapsedTime(started, rendered).TotalMilliseconds:0} ms, field {Stopwatch.GetElapsedTime(rendered, staged).TotalMilliseconds:0} ms, player {Stopwatch.GetElapsedTime(staged, placed).TotalMilliseconds:0} ms, player actors {Stopwatch.GetElapsedTime(placed, actors).TotalMilliseconds:0} ms"));
     }
 
     private void EnsureRenderer()

@@ -61,6 +61,11 @@ internal static class PersonalShopHudTests
         shop.OpenOwn(inTown: true);
         shop.Window.Advance(1);
         Assert.True(shop.InterceptBagClick(Potions) && asked is null && shop.ModalOpen, "pricing asks for gold, coins or view only first");
+        var pricingBox = HudMessageBox.Bounds;
+        Assert.True(Enumerable.Range(0, 3).All(index => pricingBox.Contains(HudPersonalShopController.Choice(index)))
+            && !HudPersonalShopController.Choice(0).Intersects(HudPersonalShopController.Choice(1)) && !HudPersonalShopController.Choice(1).Intersects(HudPersonalShopController.Choice(2))
+            && HudPersonalShopController.Choice(0).Top > pricingBox.Y + 66 && pricingBox.Contains(HudPersonalShopController.PricingCancel)
+            && HudPersonalShopController.Choice(0).Bottom < HudPersonalShopController.PricingCancel.Top, "the pricing box's buttons overlap its item line or each other");
         Assert.True(shop.Click(HudPersonalShopController.Choice(0).Center) && asked is { First: "Selling price per unit", Highest: 19_900 },
             "a stack asks its price per unit within the gold the player may carry");
         asked!.Value.Accept(50);

@@ -154,6 +154,13 @@ internal static class VfxImportTests
         var rejected = ParticleScriptConverter.Convert("Bad", script.Replace("fade so final color", "fade so color", StringComparison.Ordinal), assets, report);
         Assert.True(rejected.Sequences.Length == 0 && report.Any(line => line.Contains("plays nothing", StringComparison.Ordinal)),
             "a script the original rejects must play nothing");
+
+        // "Forever" written as a loop count or a lifetime far past the bounds: loops without end, the longest life.
+        var forever = ParticleScriptConverter.Convert("Forever", script.Replace("loops = 1", "loops = 99999999999", StringComparison.Ordinal)
+            .Replace("lifetime = 0.5", "lifetime = 99999999999", StringComparison.Ordinal), assets, report);
+        forever.Validate();
+        var endless = forever.Sequences.Single();
+        Assert.True(endless.Loops == 0 && endless.Lifetime[1] == VfxDefinition.MaxParticleLife, "forever must loop without end and live the longest life");
         return Task.CompletedTask;
     }
 }

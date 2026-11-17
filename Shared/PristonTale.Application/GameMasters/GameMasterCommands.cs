@@ -118,6 +118,9 @@ public sealed class GameMasterCommands
     public IWarehouseRepository? Warehouses { get; init; }
     public Persistence.Abstractions.Coins.ICoinRepository? Coins { get; init; }
     public Services.CoinShopCatalogStore? CoinShop { get; init; }
+    public CourierCatalogStore? Couriers { get; init; }
+    public CabinetConfigStore? Cabinet { get; init; }
+    public Services.CabinetDealAppService? Deals { get; init; }
     public Persistence.Abstractions.Markets.ICharacterMarketRepository? CharacterMarket { get; init; }
     public ItemCreationOverrides ItemOverrides { get; } = new();
 
@@ -141,6 +144,20 @@ public sealed class GameMasterCommands
         new("/@put_perf", GameMasterLevel.Administrator, GmItemCommands.GiftPerfect),
         new("/@put", GameMasterLevel.Administrator, GmItemCommands.Gift),
         new("/@coinshop_reload", GameMasterLevel.Administrator, GmCoinCommands.Reload),
+        new("/@courier_reload", GameMasterLevel.Administrator, GmCourierCommands.Reload),
+        new("/courier_progress", GameMasterLevel.Guide, GmCourierCommands.Progress),
+        new("/@courier_reset", GameMasterLevel.Administrator, GmCourierCommands.Reset),
+        new("/@courier_new", GameMasterLevel.Administrator, GmCourierCommands.New),
+        new("/@courier_set", GameMasterLevel.Administrator, GmCourierCommands.Set),
+        new("/@cabinet_reload", GameMasterLevel.Administrator, GmCabinetCommands.Reload),
+        new("/@cabinet_set", GameMasterLevel.Administrator, GmCabinetCommands.Set),
+        new("/@cabinet_drop", GameMasterLevel.Administrator, GmCabinetCommands.Drop),
+        new("/@cabinet_unlock", GameMasterLevel.Administrator, GmCabinetCommands.Unlock),
+        new("/cabinet_owned", GameMasterLevel.Guide, GmCabinetCommands.Owned),
+        new("/@cabinet_reset", GameMasterLevel.Administrator, GmCabinetCommands.Reset),
+        new("/@deal_new", GameMasterLevel.Administrator, GmCabinetCommands.NewDeal),
+        new("/@deal_end", GameMasterLevel.Administrator, GmCabinetCommands.EndDeal),
+        new("/deals", GameMasterLevel.Guide, GmCabinetCommands.ListDeals),
         new("/@coins", GameMasterLevel.Administrator, GmCoinCommands.Grant),
         new("/market_listings", GameMasterLevel.Guide, GmMarketCommands.Listings),
         new("/market_sales", GameMasterLevel.Guide, GmMarketCommands.Sales),

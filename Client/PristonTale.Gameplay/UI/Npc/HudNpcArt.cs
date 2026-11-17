@@ -68,6 +68,7 @@ public static class HudNpcArt
         NpcServiceKind.Cabinet => "The Cabinet",
         NpcServiceKind.CharacterMarket => "Character Market",
         NpcServiceKind.Marketplace => "Marketplace",
+        NpcServiceKind.Courier => "Hunts",
         NpcServiceKind.StarPoint => ClientText.Get("NpcService.StarPoints"),
         NpcServiceKind.CollectMoney => ClientText.Get("NpcService.Donations"),
         NpcServiceKind.GiveMoney => ClientText.Get("NpcService.DonationBox"),

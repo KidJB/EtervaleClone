@@ -62,7 +62,8 @@ public static class NpcServiceAvailability
         NpcServiceKind.Shop or NpcServiceKind.Warehouse or NpcServiceKind.SkillMaster or NpcServiceKind.QuestGiver or NpcServiceKind.QuestScript
             or NpcServiceKind.ItemAging or NpcServiceKind.ItemMix or NpcServiceKind.Smelting or NpcServiceKind.Manufacture
             or NpcServiceKind.MixtureReset or NpcServiceKind.Clan or NpcServiceKind.BlessCastle
-            or NpcServiceKind.GiftExpress or NpcServiceKind.DailyQuest or NpcServiceKind.BossArena or NpcServiceKind.CharacterMarket or NpcServiceKind.Marketplace => true,
+            or NpcServiceKind.GiftExpress or NpcServiceKind.DailyQuest or NpcServiceKind.BossArena or NpcServiceKind.CharacterMarket or NpcServiceKind.Marketplace
+            or NpcServiceKind.Courier => true,
         // The wing exchange (value 0 or 1) runs as a quest.
         NpcServiceKind.WarpGate => service.Value <= 1,
         NpcServiceKind.Teleporter => TeleportRoutes.IsAvailable(service.Value),

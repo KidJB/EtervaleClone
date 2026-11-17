@@ -149,8 +149,11 @@ internal sealed class PresenceDecoder : IEventHandleReader
             EtervaleOpcodes.BellatraBoard => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Bellatra = Bellatra(BellatraBoardPacket.Read(packet)) },
             EtervaleOpcodes.BellatraResult => new PresenceUpdate(_tick, [], [], [], [], FieldId) { BellatraResult = BellatraResult(BellatraResultPacket.Read(packet)) },
             EtervaleOpcodes.BellatraClanState => new PresenceUpdate(_tick, [], [], [], [], FieldId) { BellatraClan = BellatraClan(BellatraClanStatePacket.Read(packet)) },
+            EtervaleOpcodes.ArenaStatus => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Arena = ArenaStatusPacket.Read(packet) },
             EtervaleOpcodes.PartyFinder => new PresenceUpdate(_tick, [], [], [], [], FieldId) { PartyFinder = PartyFinderPacket.Read(packet) },
             EtervaleOpcodes.Rankings => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Rankings = RankingsPacket.Read(packet) },
+            EtervaleOpcodes.CourierBoard => new PresenceUpdate(_tick, [], [], [], [], FieldId) { CourierBoard = CourierBoardPacket.Read(packet) },
+            EtervaleOpcodes.CourierState => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Couriers = CourierStatePacket.Read(packet) },
             EtervaleOpcodes.Achievements => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Achievements = AchievementsPacket.Read(packet) },
             EtervaleOpcodes.BellatraClanResult => new PresenceUpdate(_tick, [], [], [], [], FieldId)
             {
@@ -852,6 +855,7 @@ internal sealed class PresenceDecoder : IEventHandleReader
                 PetName = looks.PetName,
                 Mount = looks.Mount,
                 Title = looks.Title,
+                RankAura = looks.RankAura <= (byte)Contracts.Characters.RankAura.Overall ? (Contracts.Characters.RankAura)looks.RankAura : Contracts.Characters.RankAura.None,
                 HeldWeaponKey = ItemCodes.KeyOf(looks.HeldWeapon),
                 Phoenix = looks.Phoenix,
                 BigHead = looks.BigHead,

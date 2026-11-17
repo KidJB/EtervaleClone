@@ -396,6 +396,7 @@ public sealed class WorldPlayer
         ClanName = Clan?.Name ?? "",
         ClanMark = Clan?.MarkVersion ?? 0,
         Title = AchievementTitle,
+        RankAura = _character.Premium.RankAura,
         HeldWeaponKey = _character.GetEquipped(EquipmentSlot.Weapon)?.Definition.CatalogKey ?? ""
     };
 

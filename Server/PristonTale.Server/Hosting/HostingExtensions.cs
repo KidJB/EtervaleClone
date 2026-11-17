@@ -65,7 +65,21 @@ public static class HostingExtensions
         builder.Services.AddSingleton<PristonTale.Application.Markets.MarketplaceAppService>();
         builder.Services.AddSingleton<StallAppService>();
         builder.Services.AddSingleton<DailyQuestAppService>();
+        builder.Services.AddSingleton<CourierAppService>();
+        builder.Services.AddSingleton(_ =>
+        {
+            var store = new CourierCatalogStore(DataPath.Resolve(Path.Combine("data", "couriers.json")));
+            store.Reload();
+            return store;
+        });
         builder.Services.AddSingleton<SkinAppService>();
+        builder.Services.AddSingleton<CabinetDealAppService>();
+        builder.Services.AddSingleton(_ =>
+        {
+            var store = new CabinetConfigStore(DataPath.Resolve(Path.Combine("data", "cabinet.json")));
+            store.Reload();
+            return store;
+        });
         builder.Services.AddSingleton<PristonTale.Application.Bellatra.BellatraClanAppService>();
         builder.Services.AddSingleton<BellatraAppService>();
         builder.Services.AddSingleton<PristonTale.Application.Achievements.AchievementAppService>();
@@ -113,10 +127,15 @@ public static class HostingExtensions
             options: worldOptions,
             saves: services.GetRequiredService<ICharacterSaves>(),
             log: services.GetRequiredService<IGameLog>(),
-            localizedData: services.GetRequiredService<WorldDataLanguagesHolder>()));
+            localizedData: services.GetRequiredService<WorldDataLanguagesHolder>())
+        {
+            CourierStore = services.GetRequiredService<CourierCatalogStore>(),
+            CabinetStore = services.GetRequiredService<CabinetConfigStore>()
+        });
         builder.Services.AddHostedService<WorldTickService>();
         builder.Services.AddHostedService<PristonTale.Server.World.StallRestoreService>();
         builder.Services.AddHostedService<PristonTale.Server.World.CharacterMarketExpiryService>();
+        builder.Services.AddHostedService<PristonTale.Server.World.CabinetDealService>();
         builder.Services.AddHostedService(services => new PristonTale.Server.World.WorldBuffService(services.GetRequiredService<WorldServer>(),
             DataPath.Resolve(Path.Combine("data", "worldbuffs.json")), services.GetRequiredService<ILogger<PristonTale.Server.World.WorldBuffService>>()));
         builder.Services.AddHostedService<PristonTale.Server.World.BossArenaPrizeService>();
@@ -142,6 +161,7 @@ public static class HostingExtensions
         builder.Services.AddHostedService<PristonTale.Server.World.StarterGiftService>();
         builder.Services.AddHostedService<PristonTale.Server.World.BellatraService>();
         builder.Services.AddHostedService<PristonTale.Server.World.AchievementService>();
+        builder.Services.AddHostedService<PristonTale.Server.World.RankAuraService>();
 
         return builder;
     }
@@ -207,6 +227,9 @@ public static class HostingExtensions
                 Warehouses = services.GetRequiredService<IWarehouseRepository>(),
                 Coins = services.GetRequiredService<PristonTale.Persistence.Abstractions.Coins.ICoinRepository>(),
                 CoinShop = services.GetRequiredService<CoinShopCatalogStore>(),
+                Couriers = services.GetRequiredService<CourierCatalogStore>(),
+                Cabinet = services.GetRequiredService<CabinetConfigStore>(),
+                Deals = services.GetRequiredService<CabinetDealAppService>(),
                 CharacterMarket = services.GetRequiredService<PristonTale.Persistence.Abstractions.Markets.ICharacterMarketRepository>()
             };
         });

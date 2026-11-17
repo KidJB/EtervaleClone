@@ -441,6 +441,7 @@ public sealed partial class GameScene : IDisposable, IHudPortraitScene
         // The monsters in view, collected once for their effects and their sounds.
         _remote?.CollectMonsters(_monsterViews);
         UpdateMonsterEffects((float)gameTime.ElapsedGameTime.TotalSeconds);
+        ShowRankAuras();
         UpdateCombatSounds();
         var frameDt = (float)gameTime.ElapsedGameTime.TotalSeconds;
         UpdateWeather(frameDt);

@@ -43,11 +43,14 @@ public sealed class HudQuestTracker
     private static readonly Color BarBack = new(40, 34, 26);
     private static readonly Color QuestTagColor = new(120, 180, 255);
     private static readonly Color DailyTagColor = new(255, 170, 80);
+    private static readonly Color CourierTagColor = new(150, 220, 150);
     private static readonly Color RuleColor = new(90, 70, 44, 160);
 
     private readonly List<Block> _blocks = [];
     private Block _quest;
     private readonly List<Block> _dailies = [];
+    private readonly List<Block> _couriers = [];
+    private Protocol.Packets.CourierStatePacket _couriersFor;
     private QuestView _shownFor;
     private DailyQuestsInfo _dailiesFor;
     private string _heading = "Active Quests";
@@ -143,6 +146,42 @@ public sealed class HudQuestTracker
         Rebuild();
     }
 
+    // The accepted Courier hunts: each objective's kills as a line, the overall share as the bar, or that it is ready to turn in.
+    public void RefreshCouriers(Protocol.Packets.CourierStatePacket couriers)
+    {
+        if (ReferenceEquals(couriers, _couriersFor))
+        {
+            return;
+        }
+
+        _couriersFor = couriers;
+        _couriers.Clear();
+        foreach (var quest in couriers?.Quests ?? [])
+        {
+            var need = 0;
+            var done = 0;
+            var lines = new List<string>(quest.Objectives.Count);
+            foreach (var objective in quest.Objectives)
+            {
+                var kills = Math.Min(objective.Kills, objective.Count);
+                need += objective.Count;
+                done += kills;
+                lines.Add(objective.Monster + ": " + Count(kills, objective.Count));
+            }
+
+            var ready = quest.Standing == (byte)Simulation.Quests.CourierStanding.Ready;
+            if (ready)
+            {
+                lines.Add(Localization.ClientText.Get("Courier.TurnInHint"));
+            }
+
+            _couriers.Add(new Block(quest.Name, "COURIER", CourierTagColor, lines, Localization.ClientText.Get("Courier.Progress"),
+                string.Create(CultureInfo.InvariantCulture, $"{(need == 0 ? 0 : done * 100 / need)}%"), done, need, ready));
+        }
+
+        Rebuild();
+    }
+
     private const int TextWidth = Width - Padding * 2 - 6;
 
     private static string Count(int done, int need) => string.Create(CultureInfo.InvariantCulture, $"{done}/{need}");
@@ -156,6 +195,7 @@ public sealed class HudQuestTracker
         }
 
         _blocks.AddRange(_dailies);
+        _blocks.AddRange(_couriers);
         _bodyHeight = 0;
         foreach (var block in _blocks)
         {

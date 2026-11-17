@@ -4,10 +4,11 @@ using PristonTale.Simulation.Quests;
 namespace PristonTale.Simulation.Items;
 
 // The items the original never lets leave the character, neither on the ground nor in the warehouse: quest items, the
-// weapon and ring a running rank-up holds, the quest ingredients (QuestItems.IsIngredient), the QW1 family and GF101.
+// weapon and ring a running rank-up holds, the quest ingredients (QuestItems.IsIngredient), the QW1 family, GF101 and The
+// Cabinet's bound look tokens (CabinetRules.BoundTokenFamily).
 public static class BoundItems
 {
-    private static readonly string[] Families = ["QW1"];
+    private static readonly string[] Families = ["QW1", Characters.CabinetRules.BoundTokenFamily];
 
     // What the original keeps out of the warehouse and a trade besides the bound items: the event (SP1) and CH1 families.
     private static readonly string[] KeptFamilies = ["SP1", "CH1"];
