@@ -55,12 +55,12 @@ public sealed class HudNpcPanel(
         || offer.Kind == NpcServiceKind.WarpGate && offer.Value <= 1;
 
     // As in the original, an NPC whose only working service is a shop, a warehouse, the aging, the mixing or the Item
-    // Distributor opens that window at once, and a skill master opens the skill window in training mode (its class change is a button there).
+    // Distributor opens that window at once (the Clan Warehouse keeper its clan warehouse too), and a skill master opens the skill window in training mode (its class change is a button there).
     public NpcServiceOffer DirectService =>
         Current is not { Ok: true } ? null
         : CanTrain ? _services.Length == 0 ? Current.Services.First(static offer => offer.Kind == NpcServiceKind.SkillMaster) : null
         : _services.Length == 1 && _services[0].Kind is NpcServiceKind.Shop or NpcServiceKind.Warehouse or NpcServiceKind.ItemAging or NpcServiceKind.ItemMix
-            or NpcServiceKind.GiftExpress
+            or NpcServiceKind.GiftExpress or NpcServiceKind.ClanWarehouse
             ? _services[0]
             : null;
     public IReadOnlyList<TeleportOffer> Destinations { get; private set; } = [];

@@ -73,6 +73,25 @@ public sealed class PremiumTimers
 
     private int _worldBuffMask;
 
+    // The running buffs of the player's clan (Social.Clans.ClanBuffs), which the world sets from its clan.
+    public int ClanBuffMask
+    {
+        get => _clanBuffMask;
+        set
+        {
+            if (value != _clanBuffMask)
+            {
+                _clanBuffMask = value;
+                Changed?.Invoke();
+            }
+        }
+    }
+
+    private int _clanBuffMask;
+
+    // The world buffs in force for the player, from the world or its clan: one running both ways counts once.
+    public int BuffMask => _worldBuffMask | _clanBuffMask;
+
     // The ranking aura the player wears (Progression.RankAuraBonus), which the world sets from the level boards.
     public Contracts.Characters.RankAura RankAura
     {

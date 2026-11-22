@@ -425,6 +425,19 @@ destination. Renderer side of stage publication: [rendering.md](rendering.md).
 | `J` | `GameplayHud.UpdateKeys` | Open or close the stable (`HudPetWindow`: pets and mounts) |
 | `G` | `GameplayHud.UpdateKeys` | Get on or off the picked mount (sends `/mount`) |
 
+A caravan out walks beside its owner like a pet (`SkinPetPresentation` with the caravan models, `GameScene.Items`), for
+every viewer from the description's caravan and for the owner from `PetCollection`. The owner's caravan shows its name
+in gold over it (`GameScene.CollectCaravanLabels`); a click on that name (`GameplayHud.OwnCaravanArea`) or on its model opens its storage in
+the warehouse window (`OpenCaravan`, service `Caravan` with entity 0). The model under the cursor, when no entity is, is
+outlined in the NPC green with the talk pointer (`GameScene.UpdateCaravanHover`, `SkinPetPresentation.Pick`: a sphere
+around its body, scaled with the model), and a left click on it opens the storage instead of walking. There the window shows the caravan's controls in
+place of the gold and weight (`HudWarehouseWindow.Caravan`, art `game/images/caravan` and `game/images/UI`): the caravan's
+title, its name field, a "Follow me!" box and Close; closing the window sends what changed as `/caravan name`,
+`/caravan follow` or `/caravan stay`. A caravan that stays stands where it is for every viewer (`SkinPetPresentation`
+stays flag). The caravan out is also the last row of the Active Buffs box (`HudPremiumTimers.SetCaravan`, its icon from
+`game/images/items/premium`, counted on real time); a right click on that row asks whether to send it away
+(`HudCaravanDismiss`, `/caravan dismiss`).
+
 The Cabinet (`HudCabinet`, the U key or the `Cabinet` service of Knight Commander Derik; drawn in `HudPteuWindow`'s style with its
 a forged-iron window with its plaque, coin purse and red close button, art `assets/Hud/Cabinet/`: gradients, glows, round buttons and icons; Collection, Brush and Deals tabs; search and Slot, Ownership and Rarity menus; rarity cards with corners, glow, a favourite star kept in the client settings as `CabinetFavorites`, and a dot on looks applied now; slots that glow when changed, with undo and remove buttons, a click showing their category; Turn and No looks tools on the preview; Apply Changes shows what it buys and asks first with the total; closing throws away changes not applied) is the account's collection of looks ([application.md](application.md#the-cabinet)). The left page shows the
 character in the chosen looks (`GameScene.PreviewLook`) with one box per slot (a click clears it), the last chosen look's rarity, sources
@@ -545,7 +558,8 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   (it registers over the first frames in the world), started again when the effect's longest run ends and
   stopped when the aura changes or the player leaves view. The scripts and their `Player_*.bmp` textures are art from
   another server, kept in the git-ignored `assets/Effect/Particle`. The local player's aura and its bonus show in the
-  Active Buffs box (`HudWorldBuffs`) under Ranking (`RankAura.Class`, `RankAura.Overall`).
+  Active Buffs box (`HudWorldBuffs`) under Ranking (`RankAura.Class`, `RankAura.Overall`). The world's buffs show under
+  World and the player's clan's (`ClanBuffState`, `HudWorldBuffs.ReceiveClan`) under Clan, each named as the clan's.
 - Held items (`GameScene.HeldItems.cs`): the weapon and off-hand glow and the class-up lights of every drawn player
   ([effects.md](effects.md#held-item-glow)).
 - Wing warp map (`HudWingGate`): `WG_map.tga` (256 x 256) at (472, 120) with the icon of each stone the carried wing
@@ -978,6 +992,23 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
     clan's for the chief, the vice's own, a figure for a member) and the name 35 px on, grey while offline. A click picks
     a member (green), a double click whispers to an online one (red, with the whisper mark); the chat button at (86, 220)
     opens the chat on its clan tab (`HudChatWindow.TalkOn`), close at (201, 220). Leaving the clan leaves the page.
+  - The Clan Warehouse window's Buffs tab (`HudClanBuffs`, in the Active Buffs box's colours): under Clan coins, each buff's
+    hour (200) and day (4,000) paid from the coin treasury, lit for a rank with `ClanPermission.SpendCoins` while the
+    treasury holds the price (`ClanAction.SpendCoins`); under Items, each clan buff with the time the clan has left of it and its 1-hour and 24-hour buttons, lit when
+    the player carries that clan item (`CL1xx`, `CL2xx`) and its rank may start clan buffs; a click uses the item
+    (`HudItemUseController.Request`), as using it from the bag does.
+  - The clan warehouse opens from the Clan Warehouse keeper's dialog in the market town (service `ClanWarehouse`) in its own window
+    (`HudClanWarehouseWindow`, 720x440 on its own art `assets/Hud/ClanWarehouse/cw_*.png` from `tools/ui/build_clan_warehouse.py`, centred on the screen until its header is dragged, kept whole on the screen): a header with the clan's name and Close; the free slots and weight with their gauges under the page bar; a log of time, member, action (its icon and name), amount and item with column titles; the page's
+    grid (`HudStorageGrid`, shared with the warehouse window: carry, exchange and drag to and from the bag as there) with
+    Prev, "Page X of Y" and Next under it (they also turn the page while an item is carried, so it is set down on the
+    other one); and a side panel of tabs: Items (free slots and weight with bars, the player's rights), Log for a rank
+    that may read it (newest first, Newer and Older, hovering a line names its item) and Permissions for the chief (the
+    vice's and members' rights as boxes, saved with `ClanAction.SetPermissions`), Upgrades (the treasury with Donate gold,
+    which asks the amount in the count box and sends `ClanAction.Donate` at the keeper, the coin treasury with Donate
+    coins, `ClanAction.DonateCoins`, and each upgrade's level, next
+    level and cost with the chief's Upgrade button, lit when the treasury pays for it) and Buffs (above). Hovering a stored item shows its full values as the bag does (`HudItemDetailTooltip`; the warehouse messages carry each item's `ItemDetailEntry`). The HUD drives whichever storage window
+    is open through `IHudStorageWindow`. Another member's change arrives as `ClanWarehouseState` and refreshes the open
+    window (`HudNpcServiceController.Push`).
   - The Social window (`HudSocialWindow`, O, art `assets/Hud/Social/`) shows the same contact lists as the friends page. Its Friends tab
     has recent, blocked and friend lists (11 rows, wheel), each row with block and remove buttons, and the add button makes the picked
     recent player a friend; its Clan tab lists the members. A click picks a name, a double click whispers to it.
@@ -993,7 +1024,7 @@ The action bar is 424x96 with nine by two 41-pixel slots, three page tabs, lock,
 Achievements (`HudAchievements`, key Y or the button left of the minimap, art `assets/Hud/Achievements/`) ask the server for the player's badges and show one a page. The first player of each class to reach level 115, 125, 130 or 145 holds its top badge, announced to everyone (`WorldServer.StepAchievements`, `AchievementAppService`); game masters do not claim them, and an administrator grants the staff badges with `/achievement <player> <id>`. Each badge page has an Activate or Hide title button (saved per character); without a choice the player's best badge (`AchievementRules.TitleOf`) shows to everyone as the top `< title >` line of its name box, beside the clan emblem at its full 32 pixels, also when it earns one in play (`EntityDescriptionPacket` from version 7), and a titled player always has its name box shown.
 
 Rankings (`HudRankings`, key H, art `assets/Hud/Rankings/`, the rank-list window): tabs down the left choose the level
-board of all classes, of each class (Martial Artist on the plain tab with its name) or Bellatra's best clans of the day
+board of all classes, of each class (Martial Artist and Rogue on plain tabs with their names) or Bellatra's best clans of the day
 before (`RankingsRequest`, answered by `Rankings`); the top bar titles the columns and the list shows up to 100 lines
 with medals for the first three, class icons, level, experience share and clan (or a clan's points), scrolls by the
 wheel and highlights the player's own line. Close or H shuts it.
@@ -1063,10 +1094,12 @@ dragged. Revert returns to the values at opening. Any change marks the quality p
   abort character entry or remote-player preparation. An
   armour or robe wears the body of its catalog ordinal (`ArmorSlots`: ordinals from 26 sit sixteen slots further, so
   DA126-129 wear the 25th-28th bodies, DA301/401 the 29th, DA302-304/402-404 the 30th-32nd and DA131+ the costume
-  bodies) from its class row (A, B, C, D, mA, mB, mC, mD, E, mE, f; 75 slots each); premium costumes (`CA`) keep the
+  bodies) from its class row (A, B, C, D, mA, mB, mC, mD, E, mE, f, and the Rogue's, whose entries are paths into `char/vampira`:
+  robes 2-25 wear `robe02`-`robe25`, the higher ones `robe25`; `ArmorBodyPath`; 75 slots each); premium costumes (`CA`) keep the
   class body and wear wings, and an armour missing from `ArmorSlots` keeps the class body. The phantoms, daggers and
   vambraces use the Shaman's, the Assassin's and the Martial Artist's motion indices (phantoms 101-129 and 151-153 from
-  261, daggers from 293, vambraces 101-137 from 325). The Assassin holds a dagger in each hand (`Bip weapon01` and
+  261, daggers from 293, vambraces 101-137 from 325, grimoires 101-127 from 332, the indices the Rogue's motion table
+  lists for her grimoire attacks and skills). The Assassin holds a dagger in each hand (`Bip weapon01` and
   `Bip weapon05`) and hangs the two on `Bip in07` and `Bip in08` in a village; the Martial Artist wears a vambrace on
   each forearm (`Bip01 R Forearm` and `Bip01 L Forearm`), in a village too, the left one its own model
   (`Lit<model>.smd`); the left copy is the off-hand actor and carries the weapon's glow

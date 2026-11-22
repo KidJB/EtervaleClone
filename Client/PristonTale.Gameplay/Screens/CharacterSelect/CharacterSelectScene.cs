@@ -46,7 +46,7 @@ internal sealed class CharacterSelectScene
     private static readonly PlayerClass[] TempscronJobs =
         [PlayerClass.Mechanician, PlayerClass.Fighter, PlayerClass.Pikeman, PlayerClass.Archer, PlayerClass.Assassin, PlayerClass.MartialArtist];
     private static readonly PlayerClass[] MorionJobs =
-        [PlayerClass.Knight, PlayerClass.Atalanta, PlayerClass.Priestess, PlayerClass.Magician, PlayerClass.Shaman];
+        [.. new[] { PlayerClass.Knight, PlayerClass.Atalanta, PlayerClass.Priestess, PlayerClass.Magician, PlayerClass.Shaman, PlayerClass.Rogue }.Where(ClassProfiles.Creatable)];
 
     private const float HitHeadHeight = 45f;
     private const float HitHalfWidthPixels = 26f;

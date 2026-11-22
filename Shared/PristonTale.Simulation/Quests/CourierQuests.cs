@@ -103,7 +103,23 @@ public sealed record CourierCatalog(IReadOnlyList<CourierPost> Couriers, IReadOn
 {
     public const int FirstNpcCode = 9100;
     public const int MaxActive = 8;
+    public const int BookFields = 3;
+
+    // The NpcId of a board request and its answer for the Quest Book (BookQuests) instead of a Courier's.
+    public const ulong BookNpc = ulong.MaxValue;
     public static readonly CourierCatalog Empty = new([], [], new CourierSchedule());
+
+    // The Quest Book's hunts for a player of the level: those offered at that level in the BookFields fields whose offers
+    // start at the highest levels (the best fields to hunt in), then every hunt the player accepted elsewhere (a board holds
+    // as many as fit one frame, so those come last).
+    public List<CourierQuest> BookQuests(int level, Func<int, bool> accepted)
+    {
+        var fields = Quests.Where(quest => quest.Offered(level)).GroupBy(static quest => quest.FieldCode)
+            .OrderByDescending(static group => group.Max(static quest => quest.MinLevel)).ThenBy(static group => group.Key)
+            .Take(BookFields).Select(static group => group.Key).ToHashSet();
+        return [.. Quests.Where(quest => quest.Offered(level) && fields.Contains(quest.FieldCode)),
+            .. Quests.Where(quest => accepted(quest.Id) && !(quest.Offered(level) && fields.Contains(quest.FieldCode)))];
+    }
 
     private Dictionary<int, CourierQuest> _byId;
 

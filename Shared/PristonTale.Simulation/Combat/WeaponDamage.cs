@@ -25,7 +25,7 @@ public static class WeaponDamage
         int primary;
         int divisor;
         int secondary;
-        if (weapon.Definition.Kind is ItemKind.Staff or ItemKind.Phantom && function.MagicDamageFunction > 0)
+        if (weapon.Definition.Kind is ItemKind.Staff or ItemKind.Phantom or ItemKind.Grimoire && function.MagicDamageFunction > 0)
         {
             primary = attributes.Spirit;
             divisor = function.MagicDamageFunction == 1 ? 150 : 170;

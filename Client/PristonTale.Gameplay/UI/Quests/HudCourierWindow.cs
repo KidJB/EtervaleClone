@@ -65,6 +65,9 @@ public sealed class HudCourierWindow
     private static readonly Color Muted = new(130, 120, 105);
     private static readonly Color ReadyColor = new(255, 214, 90);
 
+    // A field's name as the Couriers and the Quest Book show it: its Teleport Core destination's, else the field's own.
+    public static string PlaceName(int fieldCode) => Places.TryGetValue(fieldCode, out var place) ? place : "?";
+
     private static readonly Dictionary<int, string> Places = new WorldCatalog().AllFields.GroupBy(static field => field.FieldCode)
         .ToDictionary(static group => group.Key,
             static group => TeleportCoreDestinations.All.FirstOrDefault(destination => destination.FieldCode == group.Key)?.Name ?? group.First().Name);

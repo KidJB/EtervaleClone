@@ -62,6 +62,9 @@ public static class WorldBuffs
 
     public static WorldBuff Get(int kind) => kind >= 1 && kind <= All.Count ? All[kind - 1] : null;
 
+    // A buff's new end when an item adds its time: after what is left of it, or from now.
+    public static long Extend(long endSeconds, long nowSeconds, int seconds) => Math.Max(endSeconds, nowSeconds) + seconds;
+
     public static bool Has(int mask, WorldBuffKind kind) => (mask & (1 << (int)kind)) != 0;
 
     public static bool IsItem(string catalogKey)

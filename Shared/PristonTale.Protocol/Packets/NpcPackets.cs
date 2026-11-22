@@ -425,12 +425,21 @@ public readonly record struct StoreItemEntry(Guid InstanceId, uint Code, byte Ki
     }
 }
 
-// The account warehouse after an open or a change: {header, Guid OperationId, uint64 NpcId, int64 Revision, int64 Money,
-// int32 Weight, int32 MaxWeight, int16 Columns, int16 Rows, int32 Count, StoreItemEntry items}.
+// A warehouse after an open or a change: {header, Guid OperationId, uint64 NpcId, int64 Revision, int64 Money,
+// int32 Weight, int32 MaxWeight, int16 Columns, int16 Rows, int32 Count, StoreItemEntry items, then Count ItemDetailEntry
+// (each item's values for the receiver, in the same order)}. Rows over StoreGrid's are
+// further pages. A warehouse of more than MaxItems items comes in several messages of the same revision, each with a part
+// of the items, which the receiver joins. The same layout as ClanWarehouseState (Opcode) is the clan warehouse another
+// member changed, sent to every member with it open (operation id empty).
 public sealed record WarehousePacket(Guid OperationId, ulong NpcId, long Revision, long Money, int Weight, int MaxWeight, short Columns,
     short Rows, IReadOnlyList<StoreItemEntry> Items)
 {
-    public const int MaxItems = 100;
+    public const int MaxItems = 24;
+
+    // Each item's values, in the order of Items (empty values for an item without them).
+    public IReadOnlyList<ItemDetailEntry> Details { get; init; } = [];
+
+    public uint Opcode { get; init; } = EtervaleOpcodes.Warehouse;
     private const int HeaderSize = 8 + 4 + 16 + 8 + 8 + 8 + 4 + 4 + 2 + 2 + 4;
 
     public int Write(Span<byte> destination)
@@ -440,7 +449,7 @@ public sealed record WarehousePacket(Guid OperationId, ulong NpcId, long Revisio
             throw new ArgumentOutOfRangeException(nameof(destination), "Too many warehouse items.");
         }
 
-        var writer = new PacketWriter(destination, EtervaleOpcodes.Warehouse);
+        var writer = new PacketWriter(destination, Opcode);
         NpcWire.Header(ref writer);
         writer.Guid(OperationId);
         writer.UInt64(NpcId);
@@ -454,6 +463,11 @@ public sealed record WarehousePacket(Guid OperationId, ulong NpcId, long Revisio
         foreach (var item in Items)
         {
             item.Write(ref writer);
+        }
+
+        for (var index = 0; index < Items.Count; index++)
+        {
+            (index < Details.Count ? Details[index] : new ItemDetailEntry { InstanceId = Items[index].InstanceId }).Write(ref writer);
         }
 
         return writer.Finish();
@@ -483,7 +497,13 @@ public sealed record WarehousePacket(Guid OperationId, ulong NpcId, long Revisio
             items[index] = StoreItemEntry.Read(ref r);
         }
 
-        return new WarehousePacket(operation, entityId, revision, money, weight, maxWeight, columns, rows, items);
+        var details = new ItemDetailEntry[count];
+        for (var index = 0; index < count; index++)
+        {
+            details[index] = ItemDetailEntry.Read(ref r);
+        }
+
+        return new WarehousePacket(operation, entityId, revision, money, weight, maxWeight, columns, rows, items) { Details = details };
     }
 }
 

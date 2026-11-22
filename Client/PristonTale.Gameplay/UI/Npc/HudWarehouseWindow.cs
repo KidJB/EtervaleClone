@@ -22,7 +22,41 @@ public enum HudWarehouseActionKind
     Move,
     Withdraw,
     WithdrawGold,
-    Refused
+    Refused,
+
+    // The clan warehouse's log asked for; the chief's rank rights saved (Anchor: ClanRankPermissions packed).
+    ClanLog,
+    ClanPermissions,
+
+    // A donation to the clan treasury asked for (the amount is asked next); the chief's upgrade (Anchor: ClanUpgradeKind).
+    ClanDonate,
+    ClanUpgrade,
+
+    // A clan buff item used from the Buffs tab (ItemId); a buff the coin treasury pays for (Anchor: WorldBuffs.Argument); a
+    // donation of coins asked for (the amount is asked next).
+    ClanBuff,
+    ClanCoinBuff,
+    ClanDonateCoins
+}
+
+// A window showing a warehouse's grid, which the HUD drives the same way whichever it is (HudWarehouseWindow,
+// HudClanWarehouseWindow).
+public interface IHudStorageWindow : IHudServiceWindow
+{
+    WarehouseView View { get; }
+    Guid Dragging { get; }
+    OwnedItemView Carried { get; }
+
+    void Refresh(WarehouseView view);
+
+    void CarryAfter(Guid itemId);
+
+    HudPlacement Placement(OwnedItemView carried, Point pointer);
+
+    HudWarehouseAction SetDownOnGrid(OwnedItemView carried, Point pointer);
+
+    HudWarehouseAction Update(MouseState mouse, MouseState previous, Point pointer, Func<OwnedItemView, Point, HudPlacement> bagPlacement, bool blocked,
+        bool incoming);
 }
 
 // ItemId at Anchor, exchanged with Covered when there is one. Message: why a set-down was refused.
@@ -30,59 +64,43 @@ public readonly record struct HudWarehouseAction(HudWarehouseActionKind Kind, Gu
     string Message = null);
 
 // The account warehouse in the original window: stored gold in the upper bar (its coin takes gold out), weight in the lower
-// one and the 9x9 grid. Items are carried as in the bag: a click picks one up and the next sets it down on the grid or in
-// the bag (exchanged with the one item it covers there).
-public sealed class HudWarehouseWindow : IHudServiceWindow
+// one and the 9x9 grid (HudStorageGrid). The caravan's storage shows in it with its own controls (HudWarehouseWindow.Caravan).
+public sealed partial class HudWarehouseWindow : IHudStorageWindow
 {
-    private static readonly Func<OwnedItemView, bool> OnGrid = static _ => true;
     private readonly HudSlide _slide = new();
-    private readonly HudItemCounts _counts = new();
-    private OwnedItemView _hovered;
-    private OwnedItemView _carried;
-    // The item an exchange leaves on the grid, carried once the reply's view shows it.
-    private Guid _carryAfter;
+    private readonly HudStorageGrid _grid = new();
     private string _money = "";
     private string _weight = "";
 
-    public WarehouseView View { get; private set; }
+    public WarehouseView View => _grid.View;
     public bool IsOpen => _slide.Open;
     public bool Visible => _slide.Visible;
     public bool FullyOpen => _slide.FullyOpen;
     public Point Origin => HudStoreLayout.Origin(_slide.Offset);
-    public Guid Dragging => _carried?.InstanceId ?? Guid.Empty;
-    public OwnedItemView Carried => _carried;
+    public Guid Dragging => _grid.Dragging;
+    public OwnedItemView Carried => _grid.Carried;
 
     public void Show(WarehouseView view)
     {
-        _carried = null;
-        _carryAfter = Guid.Empty;
-        Refresh(view);
+        CaravanMode = false;
+        _grid.Show(view);
+        Texts();
         _slide.Open = true;
     }
 
     public void Refresh(WarehouseView view)
     {
-        View = view ?? View;
-        if (View is null)
-        {
-            return;
-        }
-
-        _carried = OwnedItemView.Find(View.Items, _carryAfter != Guid.Empty ? _carryAfter : Dragging);
-        _carryAfter = Guid.Empty;
-        _counts.Refresh(View.Revision, View.Items);
-        _money = View.Money.ToString("N0");
-        _weight = $"{View.Weight}/{View.MaxWeight}";
+        _grid.Refresh(view);
+        Texts();
     }
 
-    public void CarryAfter(Guid itemId) => _carryAfter = itemId;
+    public void CarryAfter(Guid itemId) => _grid.CarryAfter(itemId);
 
     public void Hide()
     {
+        _caravanName.Focused = false;
         _slide.Open = false;
-        _carried = null;
-        _carryAfter = Guid.Empty;
-        _hovered = null;
+        _grid.Clear();
     }
 
     public void Advance(double seconds) => _slide.Advance(seconds);
@@ -91,87 +109,39 @@ public sealed class HudWarehouseWindow : IHudServiceWindow
 
     void IHudServiceWindow.Draw(in HudServiceFrame frame) => Draw(frame.Painter, frame.Icons, frame.Pointer, frame.Incoming, FullyOpen && !frame.SettingsOpen);
 
-    void IHudServiceWindow.DrawOverlay(in HudServiceFrame frame) => DrawOverlay(frame.Painter, frame.Layout, frame.Icons, frame.Pointer);
+    void IHudServiceWindow.DrawOverlay(in HudServiceFrame frame) => DrawOverlay(frame.Painter, frame.Layout, frame.Icons, frame.Pointer, frame.State);
 
     public bool Contains(Point pointer) => _slide.Visible && HudStoreLayout.Window(Origin).Contains(pointer);
 
-    public HudPlacement Placement(OwnedItemView carried, Point pointer) =>
-        FullyOpen && View is not null ? Placement(Origin, View.Items, carried, pointer) : default;
+    public HudPlacement Placement(OwnedItemView carried, Point pointer) => FullyOpen ? _grid.Placement(HudStoreLayout.Grid(Origin), carried, pointer) : default;
 
-    // Where an item carried over the grid lands; what the warehouse keeps out is refused on the cells it would take,
-    // except what it refuses only when set down (WarehouseStorage.RefusedOnSetDown).
-    public static HudPlacement Placement(Point origin, IReadOnlyList<OwnedItemView> stored, OwnedItemView carried, Point pointer)
-    {
-        var grid = HudStoreLayout.Grid(origin);
-        if (HudGridPlacement.Of(grid, HudStoreLayout.Columns, HudStoreLayout.Rows, stored, OnGrid, carried, pointer) is not { } placement)
-        {
-            return default;
-        }
+    public static HudPlacement Placement(Point origin, IReadOnlyList<OwnedItemView> stored, OwnedItemView carried, Point pointer) =>
+        HudStorageGrid.Placement(HudStoreLayout.Grid(origin), stored, carried, pointer);
 
-        return WarehouseStorage.RefusedOnSetDown(carried.Kind) || WarehouseStorage.CanStore(carried.Kind, carried.CatalogKey)
-            ? placement
-            : new HudPlacement(HudPlacementKind.Blocked, HudGridPlacement.Cell(grid, HudStoreLayout.Columns, placement.Anchor, carried.Width, carried.Height),
-                placement.Anchor);
-    }
-
-    // A click setting an item down over the grid, the stored item carried or a bag item: Move or Deposit at its cell
-    // (Lifted when a stored item goes back where it was), Refused with the original's message, Consumed when it stays
-    // carried; None off the grid.
-    public HudWarehouseAction SetDownOnGrid(OwnedItemView carried, Point pointer)
-    {
-        var placement = Placement(carried, pointer);
-        if (placement.Kind == HudPlacementKind.None)
-        {
-            return default;
-        }
-
-        if (WarehouseStorage.RefusedOnSetDown(carried.Kind))
-        {
-            return new HudWarehouseAction(HudWarehouseActionKind.Refused, Message: ClientText.Get(GameTextId.PotionNotStored));
-        }
-
-        if (!placement.SetsDown)
-        {
-            return new HudWarehouseAction(HudWarehouseActionKind.Consumed);
-        }
-
-        var stored = carried == _carried;
-        if (stored)
-        {
-            _carried = null;
-        }
-
-        return stored && placement.Kind == HudPlacementKind.Fits && placement.Anchor == carried.Anchor
-            ? new HudWarehouseAction(HudWarehouseActionKind.Lifted, carried.InstanceId)
-            : new HudWarehouseAction(stored ? HudWarehouseActionKind.Move : HudWarehouseActionKind.Deposit, carried.InstanceId, placement.Anchor,
-                placement.Covered?.InstanceId ?? Guid.Empty);
-    }
+    public HudWarehouseAction SetDownOnGrid(OwnedItemView carried, Point pointer) =>
+        FullyOpen ? _grid.SetDownOnGrid(HudStoreLayout.Grid(Origin), carried, pointer) : default;
 
     // bagPlacement: where the carried item would land in the bag (None while the inventory is closed). incoming: the bag
     // carries an item, which the inventory sets down.
     public HudWarehouseAction Update(MouseState mouse, MouseState previous, Point pointer, Func<OwnedItemView, Point, HudPlacement> bagPlacement,
         bool blocked, bool incoming)
     {
-        _hovered = null;
         if (!FullyOpen || View is null)
         {
-            _carried = null;
+            _grid.Clear();
             return default;
         }
 
-        if (_carried is null && !incoming && !blocked)
-        {
-            _hovered = ItemAt(pointer);
-        }
-
-        if (blocked || mouse.LeftButton != ButtonState.Pressed || previous.LeftButton != ButtonState.Released)
+        var grid = HudStoreLayout.Grid(Origin);
+        _grid.Hover(grid, pointer, !incoming && !blocked);
+        if (blocked || !HudStorageGrid.Pressed(mouse, previous))
         {
             return default;
         }
 
-        if (_carried is { } carried)
+        if (_grid.Carried is not null)
         {
-            return SetDownOnGrid(carried, pointer) is { Kind: not HudWarehouseActionKind.None } action ? action : SetDownInBag(carried, bagPlacement(carried, pointer));
+            return _grid.SetDown(grid, pointer, bagPlacement);
         }
 
         if (incoming)
@@ -184,58 +154,44 @@ public sealed class HudWarehouseWindow : IHudServiceWindow
             return new HudWarehouseAction(HudWarehouseActionKind.Exit);
         }
 
-        if (HudStoreLayout.WarehouseGold(Origin).Contains(pointer))
+        if (CaravanMode && CaravanClick(pointer) is { } caravanAction)
+        {
+            return caravanAction;
+        }
+
+        if (!CaravanMode && HudStoreLayout.WarehouseGold(Origin).Contains(pointer))
         {
             return new HudWarehouseAction(HudWarehouseActionKind.WithdrawGold);
         }
 
-        if (_hovered is { } item)
+        if (_grid.Lift() is { } lifted)
         {
-            _carried = item;
-            _hovered = null;
-            return new HudWarehouseAction(HudWarehouseActionKind.Lifted, item.InstanceId);
+            return lifted;
         }
 
         return Contains(pointer) ? new HudWarehouseAction(HudWarehouseActionKind.Consumed) : default;
-    }
-
-    private HudWarehouseAction SetDownInBag(OwnedItemView carried, HudPlacement placement)
-    {
-        if (!placement.SetsDown)
-        {
-            return new HudWarehouseAction(HudWarehouseActionKind.Consumed);
-        }
-
-        _carried = null;
-        return new HudWarehouseAction(HudWarehouseActionKind.Withdraw, carried.InstanceId, placement.Anchor, placement.Covered?.InstanceId ?? Guid.Empty);
     }
 
     public void Draw(HudPainter painter, HudItemIcons icons, Point pointer, OwnedItemView incoming, bool interactive)
     {
         var origin = Origin;
         painter.Sprite(HudNpcArt.Window, origin.X, origin.Y + 40);
-        var title = HudStoreLayout.WarehouseTitle(origin);
-        painter.Sprite(HudNpcArt.WarehouseTitle, title.X, title.Y);
+        if (!CaravanMode)
+        {
+            var title = HudStoreLayout.WarehouseTitle(origin);
+            painter.Sprite(HudNpcArt.WarehouseTitle, title.X, title.Y);
+        }
+
         if (View is null)
         {
             return;
         }
 
-        if (interactive && _hovered is not null)
+        _grid.Draw(painter, icons, HudStoreLayout.Grid(origin), pointer, incoming, interactive);
+        if (CaravanMode)
         {
-            painter.Fill(Bounds(_hovered), HudPlacementColors.Selection);
-        }
-
-        if ((_carried ?? incoming) is { } moving && interactive)
-        {
-            HudPlacementColors.Draw(painter, Placement(moving, pointer));
-        }
-
-        var items = View.Items;
-        for (var index = 0; index < items.Count; index++)
-        {
-            var item = items[index];
-            _counts.Draw(painter, icons, item, Bounds(item), item == _carried ? HudPlacementColors.Carried : Color.White);
+            DrawCaravan(painter, origin, pointer);
+            return;
         }
 
         var plate = HudStoreLayout.GoldPlate(origin);
@@ -248,20 +204,20 @@ public sealed class HudWarehouseWindow : IHudServiceWindow
         painter.TextCentered(_weight, lower.Left + 18, lower.Right, lower.Y + 3);
     }
 
-    public void DrawOverlay(HudPainter painter, HudLayout layout, HudItemIcons icons, Point pointer)
+    public void DrawOverlay(HudPainter painter, HudLayout layout, HudItemIcons icons, Point pointer, OwnerState state)
     {
-        if (_carried is not null)
+        if (!_grid.DrawOverlay(painter, layout, icons, pointer, state) && CaravanMode && FullyOpen)
         {
-            _counts.Draw(painter, icons, _carried, HudGridPlacement.Frame(_carried, pointer), Color.White);
-        }
-        else if (_hovered is not null)
-        {
-            HudItemTooltip.Draw(painter, layout, pointer, _counts.Named(_hovered).Name, ClientText.Get("Inventory.HintCarry"));
+            DrawCaravanHint(painter, layout, pointer);
         }
     }
 
-    private Rectangle Bounds(OwnedItemView item) => HudStoreLayout.Cell(Origin, item.Anchor, item.Width, item.Height);
-
-    private OwnedItemView ItemAt(Point pointer) =>
-        HudGridPlacement.ItemAt(HudStoreLayout.Grid(Origin), HudStoreLayout.Columns, View.Items, OnGrid, pointer);
+    private void Texts()
+    {
+        if (View is not null)
+        {
+            _money = View.Money.ToString("N0");
+            _weight = $"{View.Weight}/{View.MaxWeight}";
+        }
+    }
 }

@@ -21,6 +21,7 @@ public static class ItemEquipmentMetadata
         ["WD1"] = (ItemKind.Dagger, EquipmentSlot.Weapon),
         ["WN1"] = (ItemKind.Phantom, EquipmentSlot.Weapon),
         ["WV1"] = (ItemKind.Vambrace, EquipmentSlot.Weapon),
+        ["WX1"] = (ItemKind.Grimoire, EquipmentSlot.Weapon),
         ["DA"] = (ItemKind.Armor, EquipmentSlot.Armor),
         ["DB"] = (ItemKind.Boots, EquipmentSlot.Boots),
         ["DG"] = (ItemKind.Gloves, EquipmentSlot.Gloves),
@@ -114,7 +115,7 @@ public static class ItemEquipmentMetadata
     public static EquipmentSlot? SlotOf(ItemKind kind) => kind switch
     {
         ItemKind.Sword or ItemKind.Axe or ItemKind.Hammer or ItemKind.Claw or ItemKind.Pole or ItemKind.Bow or ItemKind.ThrowingWeapon
-            or ItemKind.Staff or ItemKind.Dagger or ItemKind.Phantom or ItemKind.Vambrace => EquipmentSlot.Weapon,
+            or ItemKind.Staff or ItemKind.Dagger or ItemKind.Phantom or ItemKind.Vambrace or ItemKind.Grimoire => EquipmentSlot.Weapon,
         ItemKind.Armor => EquipmentSlot.Armor,
         ItemKind.Shield or ItemKind.Orb => EquipmentSlot.OffHand,
         ItemKind.Gloves => EquipmentSlot.Gloves,

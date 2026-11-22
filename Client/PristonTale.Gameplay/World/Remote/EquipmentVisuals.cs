@@ -91,7 +91,7 @@ public static class EquipmentVisuals
                 throw new InvalidDataException($"Invalid armor table index {defaults.ArmorTableIndex}.");
             }
 
-            body = "char/tmABCD/" + EquipmentVisualTables.Armors[defaults.ArmorTableIndex][index];
+            body = EquipmentVisualTables.ArmorBodyPath(EquipmentVisualTables.Armors[defaults.ArmorTableIndex][index]);
         }
 
         string visualWeapon = !string.IsNullOrEmpty(weapon) && HasModel(weapon) ? weapon : "";

@@ -437,6 +437,95 @@ seguem para a torre alta.</value></data>
   <data name="Game.TradeOutOfReach" xml:space="preserve"><value>O jogador está longe demais</value></data>
   <data name="Game.TradeRefused" xml:space="preserve"><value>A troca foi recusada</value></data>
   <data name="Game.TradeNotEnoughCoins" xml:space="preserve"><value>Moedas insuficientes</value></data>
+  <data name="Game.CaravanJoined" xml:space="preserve"><value>{0} chamado; sua caravana anda com você</value></data>
+  <data name="Game.CaravanAway" xml:space="preserve"><value>Sua caravana não está com você</value></data>
+  <data name="Game.CaravanOtherOut" xml:space="preserve"><value>Outra caravana anda com você</value></data>
+  <data name="Game.CaravanNamed" xml:space="preserve"><value>Sua caravana recebeu um nome</value></data>
+  <data name="Game.ClanRankTooLow" xml:space="preserve"><value>Seu cargo no clã não permite isso.</value></data>
+  <data name="Game.ClanBuffActivated" xml:space="preserve"><value>{0} ativou {1} para o clã!</value></data>
+  <data name="Game.ClanWarehouseNotPermitted" xml:space="preserve"><value>Seu cargo no clã não permite isso no armazém do clã.</value></data>
+  <data name="Game.ClanWarehouseNotInTown" xml:space="preserve"><value>O armazém do clã só abre em uma cidade.</value></data>
+  <data name="Game.ClanPermissionsChanged" xml:space="preserve"><value>O líder do clã mudou as permissões dos cargos.</value></data>
+  <data name="ClanBuffs.Owner" xml:space="preserve"><value>Clã</value></data>
+  <data name="ClanBuffs.Section" xml:space="preserve"><value>Clã</value></data>
+  <data name="ClanBuffs.Title" xml:space="preserve"><value>Buffs Mundiais do Clã</value></data>
+  <data name="ClanWarehouse.Title" xml:space="preserve"><value>Armazém do Clã</value></data>
+  <data name="ClanWarehouse.Page" xml:space="preserve"><value>Página {0} de {1}</value></data>
+  <data name="ClanWarehouse.Free" xml:space="preserve"><value>Livre {0}/{1}</value></data>
+  <data name="ClanWarehouse.Previous" xml:space="preserve"><value>Ant.</value></data>
+  <data name="ClanWarehouse.Next" xml:space="preserve"><value>Próx.</value></data>
+  <data name="ClanWarehouse.Log" xml:space="preserve"><value>Registro</value></data>
+  <data name="ClanWarehouse.Items" xml:space="preserve"><value>Itens</value></data>
+  <data name="ClanWarehouse.Permissions" xml:space="preserve"><value>Permissões</value></data>
+  <data name="ClanWarehouse.LogTitle" xml:space="preserve"><value>Registro do armazém</value></data>
+  <data name="ClanWarehouse.LogEmpty" xml:space="preserve"><value>Nada foi guardado ou retirado ainda.</value></data>
+  <data name="ClanWarehouse.PermissionsTitle" xml:space="preserve"><value>Permissões dos cargos</value></data>
+  <data name="ClanWarehouse.Deposit" xml:space="preserve"><value>Pôr</value></data>
+  <data name="ClanWarehouse.Withdraw" xml:space="preserve"><value>Tirar</value></data>
+  <data name="ClanWarehouse.Logs" xml:space="preserve"><value>Reg.</value></data>
+  <data name="ClanWarehouse.Buffs" xml:space="preserve"><value>Buffs</value></data>
+  <data name="ClanWarehouse.Chief" xml:space="preserve"><value>Líder</value></data>
+  <data name="ClanWarehouse.Vice" xml:space="preserve"><value>Vice</value></data>
+  <data name="ClanWarehouse.Member" xml:space="preserve"><value>Membro</value></data>
+  <data name="ClanWarehouse.Save" xml:space="preserve"><value>Salvar</value></data>
+  <data name="Game.ClanDonatedCoins" xml:space="preserve"><value>{0} doou {1} moedas ao tesouro de moedas do clã.</value></data>
+  <data name="Game.NotEnoughCoinsClan" xml:space="preserve"><value>Você não tem tantas moedas.</value></data>
+  <data name="ClanWarehouse.CoinTreasury" xml:space="preserve"><value>Tesouro de moedas</value></data>
+  <data name="ClanWarehouse.DonateCoins" xml:space="preserve"><value>Doar moedas</value></data>
+  <data name="ClanWarehouse.DonateCoinsTitle" xml:space="preserve"><value>Quantas moedas?</value></data>
+  <data name="ClanWarehouse.DonateCoinsPrompt" xml:space="preserve"><value>para o tesouro de moedas do clã</value></data>
+  <data name="ClanWarehouse.CoinsRule" xml:space="preserve"><value>Moedas pagam buffs do clã (aba Buffs); nunca são devolvidas.</value></data>
+  <data name="ClanWarehouse.Coins" xml:space="preserve"><value>Moedas</value></data>
+  <data name="ClanBuffs.CoinsColumn" xml:space="preserve"><value>Moedas do clã</value></data>
+  <data name="ClanBuffs.ItemsColumn" xml:space="preserve"><value>Itens</value></data>
+  <data name="ClanWarehouse.ColTime" xml:space="preserve"><value>Hora</value></data>
+  <data name="ClanWarehouse.ColMember" xml:space="preserve"><value>Membro</value></data>
+  <data name="ClanWarehouse.ColAction" xml:space="preserve"><value>Ação</value></data>
+  <data name="ClanWarehouse.ColAmount" xml:space="preserve"><value>Qtd.</value></data>
+  <data name="ClanWarehouse.ColItem" xml:space="preserve"><value>Item</value></data>
+  <data name="ClanWarehouse.ActionDeposit" xml:space="preserve"><value>Guardou</value></data>
+  <data name="ClanWarehouse.ActionWithdraw" xml:space="preserve"><value>Retirou</value></data>
+  <data name="ClanWarehouse.ActionDonate" xml:space="preserve"><value>Doou</value></data>
+  <data name="ClanWarehouse.ActionUpgrade" xml:space="preserve"><value>Melhorou</value></data>
+  <data name="ClanWarehouse.LevelShort" xml:space="preserve"><value>Nv {0}</value></data>
+  <data name="Game.ClanDonated" xml:space="preserve"><value>{0} doou {1} de ouro ao tesouro do clã.</value></data>
+  <data name="Game.ClanUpgradeSlots" xml:space="preserve"><value>O armazém do clã agora guarda {0} itens.</value></data>
+  <data name="Game.ClanUpgradeWeight" xml:space="preserve"><value>O armazém do clã agora suporta {0} de peso.</value></data>
+  <data name="Game.ClanTreasuryFull" xml:space="preserve"><value>O tesouro do clã não comporta tanto ouro.</value></data>
+  <data name="Game.ClanDonationRange" xml:space="preserve"><value>Uma doação ao tesouro do clã deve ser entre {0} e {1} de ouro.</value></data>
+  <data name="Game.ClanNotEnoughTreasury" xml:space="preserve"><value>O tesouro do clã não tem ouro suficiente.</value></data>
+  <data name="Game.ClanUpgradeMaxed" xml:space="preserve"><value>Essa melhoria já está no último nível.</value></data>
+  <data name="ClanWarehouse.Upgrades" xml:space="preserve"><value>Melhorias</value></data>
+  <data name="ClanWarehouse.Treasury" xml:space="preserve"><value>Tesouro do clã</value></data>
+  <data name="ClanWarehouse.Donate" xml:space="preserve"><value>Doar ouro</value></data>
+  <data name="ClanWarehouse.DonateTitle" xml:space="preserve"><value>Quanto ouro?</value></data>
+  <data name="ClanWarehouse.DonatePrompt" xml:space="preserve"><value>para o tesouro do clã</value></data>
+  <data name="ClanWarehouse.SlotsUpgrade" xml:space="preserve"><value>Espaços do armazém</value></data>
+  <data name="ClanWarehouse.WeightUpgrade" xml:space="preserve"><value>Capacidade de peso</value></data>
+  <data name="ClanWarehouse.Level" xml:space="preserve"><value>Nível {0}/{1}: {2}</value></data>
+  <data name="ClanWarehouse.SlotsValue" xml:space="preserve"><value>{0} itens, {1} páginas</value></data>
+  <data name="ClanWarehouse.WeightValue" xml:space="preserve"><value>{0} de peso</value></data>
+  <data name="ClanWarehouse.NextLevel" xml:space="preserve"><value>Próximo: {0} por {1} de ouro</value></data>
+  <data name="ClanWarehouse.MaxedOut" xml:space="preserve"><value>Último nível alcançado</value></data>
+  <data name="ClanWarehouse.Buy" xml:space="preserve"><value>Melhorar</value></data>
+  <data name="ClanWarehouse.ChiefSpends" xml:space="preserve"><value>Todo membro pode doar; só o líder gasta o tesouro.</value></data>
+  <data name="ClanWarehouse.Hint2" xml:space="preserve"><value>Ant. e Próx. viram a página, mesmo levando um item. Arraste o título para mover a janela.</value></data>
+  <data name="ClanWarehouse.ChiefAlways" xml:space="preserve"><value>O líder sempre tem todas as permissões.</value></data>
+  <data name="ClanWarehouse.Older" xml:space="preserve"><value>Antigos</value></data>
+  <data name="ClanWarehouse.Newer" xml:space="preserve"><value>Recentes</value></data>
+  <data name="ClanWarehouse.Hint" xml:space="preserve"><value>Leve itens entre a grade e a bolsa.</value></data>
+  <data name="ClanWarehouse.YourRights" xml:space="preserve"><value>Suas permissões</value></data>
+  <data name="ClanWarehouse.Weight" xml:space="preserve"><value>Peso</value></data>
+  <data name="ClanWarehouse.FreeSlots" xml:space="preserve"><value>Espaços livres</value></data>
+  <data name="NpcService.ClanWarehouse" xml:space="preserve"><value>Armazém do Clã</value></data>
+  <data name="Caravan.Title" xml:space="preserve"><value>Caravana</value></data>
+  <data name="Caravan.Name" xml:space="preserve"><value>Nome:</value></data>
+  <data name="Caravan.MaxName" xml:space="preserve"><value>(Máx. {0} caracteres)</value></data>
+  <data name="Caravan.Follow" xml:space="preserve"><value>Siga-me!</value></data>
+  <data name="Caravan.FollowHint" xml:space="preserve"><value>Escolha se a caravana deve seguir você</value></data>
+  <data name="Caravan.Dismiss" xml:space="preserve"><value>Dispensar caravana</value></data>
+  <data name="Caravan.DismissAsk" xml:space="preserve"><value>Mandar {0} embora agora? O depósito guarda os seus itens.</value></data>
+  <data name="Caravan.DismissHint" xml:space="preserve"><value>Clique com o botão direito para mandá-la embora</value></data>
   <data name="Game.MountJoined" xml:space="preserve"><value>{0} entrou no seu estábulo</value></data>
   <data name="Game.PetJoined" xml:space="preserve"><value>{0} entrou na sua coleção de mascotes</value></data>
   <data name="Game.PlainText" xml:space="preserve"><value>{0}</value></data>
@@ -568,6 +657,7 @@ seguem para a torre alta.</value></data>
   <data name="ItemKind.Sword" xml:space="preserve"><value>Espada</value></data>
   <data name="ItemKind.ThrowingWeapon" xml:space="preserve"><value>Arma de arremesso</value></data>
   <data name="ItemKind.Vambrace" xml:space="preserve"><value>Vambrace</value></data>
+  <data name="ItemKind.Grimoire" xml:space="preserve"><value>Grimório</value></data>
   <data name="ItemUse.BindUnionCore" xml:space="preserve"><value>Registrar o Union Core em você?</value></data>
   <data name="ItemUse.Confirm" xml:space="preserve"><value>Você quer</value></data>
   <data name="ItemUse.Confirm2" xml:space="preserve"><value>usar este item?</value></data>
@@ -1075,6 +1165,7 @@ seguem para a torre alta.</value></data>
   <data name="Courier.Abandon" xml:space="preserve"><value>Abandonar</value></data>
   <data name="Courier.TurnIn" xml:space="preserve"><value>Entregar</value></data>
   <data name="Courier.Levels" xml:space="preserve"><value>Nv {0}-{1}</value></data>
+  <data name="QuestBook.HuntGiver" xml:space="preserve"><value>Fale com {0} em {1}</value></data>
   <data name="Courier.Level" xml:space="preserve"><value>Nível: {0}-{1}</value></data>
   <data name="Courier.Location" xml:space="preserve"><value>Local: {0}</value></data>
   <data name="Courier.Kind" xml:space="preserve"><value>{0} · {1}</value></data>

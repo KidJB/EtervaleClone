@@ -53,6 +53,51 @@
   <data name="Class.MartialArtist.2" xml:space="preserve"><value>Artista de Truques</value></data>
   <data name="Class.MartialArtist.3" xml:space="preserve"><value>Mestra</value></data>
   <data name="Class.MartialArtist.4" xml:space="preserve"><value>Grã-Mestra</value></data>
+  <data name="Class.Rogue.0" xml:space="preserve"><value>Ladina</value></data>
+  <data name="Class.Rogue.1" xml:space="preserve"><value>Ladina das Sombras</value></data>
+  <data name="Class.Rogue.2" xml:space="preserve"><value>Ladina de Sangue</value></data>
+  <data name="Class.Rogue.3" xml:space="preserve"><value>Ceifadora da Noite</value></data>
+  <data name="Class.Rogue.4" xml:space="preserve"><value>Rainha Vampira</value></data>
+  <data name="Skill.60010001.Description" xml:space="preserve"><value>Arremessa um projétil de sangue amaldiçoado no inimigo.</value></data>
+  <data name="Skill.60010001.Name" xml:space="preserve"><value>Projétil de Sangue</value></data>
+  <data name="Skill.60010002.Description" xml:space="preserve"><value>A maestria do grimório aumenta o seu poder de ataque permanentemente.</value></data>
+  <data name="Skill.60010002.Name" xml:space="preserve"><value>Maestria do Grimório</value></data>
+  <data name="Skill.60010003.Description" xml:space="preserve"><value>Rasga o chão sob o inimigo, atingindo os que estão ao redor.</value></data>
+  <data name="Skill.60010003.Name" xml:space="preserve"><value>Ruptura</value></data>
+  <data name="Skill.60010004.Description" xml:space="preserve"><value>Envolve a Ladina em sombras, aumentando a sua evasão.</value></data>
+  <data name="Skill.60010004.Name" xml:space="preserve"><value>Véu das Sombras</value></data>
+  <data name="Skill.60020001.Description" xml:space="preserve"><value>Invoca uma tempestade de sangue sobre o inimigo e os que estão perto.</value></data>
+  <data name="Skill.60020001.Name" xml:space="preserve"><value>Tempestade Rubra</value></data>
+  <data name="Skill.60020002.Description" xml:space="preserve"><value>Uma fúria sombria aumenta o dano da Ladina.</value></data>
+  <data name="Skill.60020002.Name" xml:space="preserve"><value>Fúria</value></data>
+  <data name="Skill.60020003.Description" xml:space="preserve"><value>Drena o sangue do inimigo com um toque amaldiçoado.</value></data>
+  <data name="Skill.60020003.Name" xml:space="preserve"><value>Drenagem</value></data>
+  <data name="Skill.60020004.Description" xml:space="preserve"><value>Marca o inimigo com uma maldição que reduz a sua defesa.</value></data>
+  <data name="Skill.60020004.Name" xml:space="preserve"><value>Maldição</value></data>
+  <data name="Skill.60040001.Description" xml:space="preserve"><value>Atravessa as sombras e golpeia o inimigo.</value></data>
+  <data name="Skill.60040001.Name" xml:space="preserve"><value>Passagem Sombria</value></data>
+  <data name="Skill.60040002.Description" xml:space="preserve"><value>O instinto de predadora aumenta a chance de crítico permanentemente.</value></data>
+  <data name="Skill.60040002.Name" xml:space="preserve"><value>Instinto do Caçador</value></data>
+  <data name="Skill.60040003.Description" xml:space="preserve"><value>Lança um julgamento de sangue pesado sobre um inimigo.</value></data>
+  <data name="Skill.60040003.Name" xml:space="preserve"><value>Veredito</value></data>
+  <data name="Skill.60040004.Description" xml:space="preserve"><value>Um ritual de sangue aumenta a taxa de ataque da Ladina e do seu grupo.</value></data>
+  <data name="Skill.60040004.Name" xml:space="preserve"><value>Ritual de Sangue</value></data>
+  <data name="Skill.60080001.Description" xml:space="preserve"><value>Sob a lua de sangue, os ataques da Ladina roubam vida.</value></data>
+  <data name="Skill.60080001.Name" xml:space="preserve"><value>Lua de Sangue</value></data>
+  <data name="Skill.60080002.Description" xml:space="preserve"><value>Sentencia o inimigo com uma marca de sangue que explode nele.</value></data>
+  <data name="Skill.60080002.Name" xml:space="preserve"><value>Sentença</value></data>
+  <data name="Skill.60080003.Description" xml:space="preserve"><value>Prende o inimigo numa prisão de sangue.</value></data>
+  <data name="Skill.60080003.Name" xml:space="preserve"><value>Prisão</value></data>
+  <data name="Skill.60080004.Description" xml:space="preserve"><value>Invoca o fim dos tempos sobre o inimigo e tudo ao seu redor.</value></data>
+  <data name="Skill.60080004.Name" xml:space="preserve"><value>Apocalipse</value></data>
+  <data name="Skill.60100001.Description" xml:space="preserve"><value>Uma lua carmesim aumenta o dano e o roubo de vida da Ladina.</value></data>
+  <data name="Skill.60100001.Name" xml:space="preserve"><value>Lua Rubra</value></data>
+  <data name="Skill.60100002.Description" xml:space="preserve"><value>Dispara um tiro rápido de sangue que perfura o inimigo.</value></data>
+  <data name="Skill.60100002.Name" xml:space="preserve"><value>Açoite de Sangue</value></data>
+  <data name="Skill.60100003.Description" xml:space="preserve"><value>Conjura um enxame de lâminas sombrias sobre o inimigo e os que estão perto.</value></data>
+  <data name="Skill.60100003.Name" xml:space="preserve"><value>Enxame</value></data>
+  <data name="Skill.60100004.Description" xml:space="preserve"><value>Desenha um selo da morte que atinge todos os inimigos ao redor da Ladina.</value></data>
+  <data name="Skill.60100004.Name" xml:space="preserve"><value>Crepúsculo</value></data>
   <data name="Class.Mechanician.0" xml:space="preserve"><value>Mecânico</value></data>
   <data name="Class.Mechanician.1" xml:space="preserve"><value>Mestre Mecânico</value></data>
   <data name="Class.Mechanician.2" xml:space="preserve"><value>Líder do Metal</value></data>

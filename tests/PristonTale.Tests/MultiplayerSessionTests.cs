@@ -20,6 +20,7 @@ internal static class MultiplayerSessionTests
         yield return ("multiplayer: a login whose character list storage refuses answers busy, and the connection logs in again", ListRefusedAsync);
         yield return ("multiplayer: a client speaking an older protocol is refused as outdated before it plays", OutdatedAsync);
         yield return ("multiplayer: a new character starts in its class's town, Ricarten for Tempskron, Pillai for Morion", NewCharacterTownAsync);
+        yield return ("multiplayer: a closed class (the Rogue) cannot be created", ClosedClassAsync);
     }
 
     private static async Task LeaveAsync()
@@ -143,5 +144,15 @@ internal static class MultiplayerSessionTests
             var entered = await connection.EnterWorldAsync(name);
             Assert.True(entered is { Ok: true } && entered.FieldId == town, $"a new {playerClass} started in field {entered.FieldId}, not {town}");
         }
+    }
+
+    private static async Task ClosedClassAsync()
+    {
+        await using var server = await MultiplayerServer.StartAsync(MultiplayerServer.WorldWith());
+        var account = await server.CreateAccountAsync("NoRogue");
+        await using var connection = new Client.Net.GameServerConnection(server.Address);
+        Assert.True((await connection.LoginAsync(account, MultiplayerServer.Password, "en")).Ok, "the player could not log in");
+        Assert.True(!(await connection.CreateCharacterAsync("NoRogue", PlayerClass.Rogue, 0)).Ok && !Simulation.Characters.ClassProfiles.Creatable(PlayerClass.Rogue),
+            "a Rogue was created while the class is closed");
     }
 }

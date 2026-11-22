@@ -120,7 +120,8 @@ public interface IPlayChannel : IAsyncDisposable
 
     // A clan request (ClanAction): Id names the Clan Master (found, entrust) or the player (invite), Name the new clan or the
     // member. Answered by a ClanResult; the clan's state comes as PresenceUpdate.Clan.
-    Task SendClanAsync(Protocol.Packets.ClanAction action, ulong id, string name, CancellationToken ct = default);
+    // amount: the gold of a donation (ClanAction.Donate).
+    Task SendClanAsync(Protocol.Packets.ClanAction action, ulong id, string name, CancellationToken ct = default, ulong amount = 0);
 
     // The chief's new clan mark (ClanWire.MarkSize square RGBA pixels), answered by a ClanResult for ClanAction.Mark.
     Task SendClanMarkAsync(byte[] pixels, CancellationToken ct = default);

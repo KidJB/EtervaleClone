@@ -65,11 +65,12 @@ registration order. An exception from any `StartAsync` stops the host before the
 | 6 | `WorldTickService` | Starts the 20 Hz tick loop. | Never; a throwing tick is logged and the loop continues. |
 | 7 | `ServerSettingsService` | Adds the missing `server_settings` rows with their defaults, reads the table and applies it on the tick, then reads it again every `server.settings_reload_minutes`. | The table cannot be read at start; later failures keep the settings in force. |
 | 8 | `ClanService` | Loads the clans before the game server opens, then dissolves the clans past their deadline and forgets unanswered invitations once a minute ([application.md](application.md#clans)). | Never; a failed load leaves the clans unavailable. |
-| 9 | `CastleService` | Loads Bless Castle, then ticks its schedule, siege clock and fountain every second with the settings in force ([application.md](application.md#bless-castle)). | Never; a failed load leaves the castle unavailable. |
-| 10 | `GameTcpServer` | Loads the TLS certificate, binds `[::]:<Network:Port>` (10009) dual-stack, backlog 512, and accepts. | The port is in use (the host stops). |
-| 11 | `QuestUpkeepService` | Applies the quest work the tick queues (quest drops, quest weapon growth and expiry) and queues the character for storage. | Never; a failed upkeep is logged and retried on the field's next check. |
-| 12 | `StarterGiftService` | Gives the starter gifts the tick finds due ([application.md](application.md#starter-gifts)). | Never; a failed gift is logged and offered again after the interval. |
-| 13 | `BellatraService` | Pays the Bellatra prizes the tick owes ([application.md](application.md#bellatra)). | Never; a failed prize is logged and the player told. |
+| 9 | `ClanBuffService` | Restores the clans' running world buffs from `clan_buffs`, then stores them whenever they change, checked every two seconds ([application.md](application.md#clan-world-buffs)). | Never; a failed read is tried again every check and nothing is stored before it succeeds; a failed write is logged and tried again. |
+| 10 | `CastleService` | Loads Bless Castle, then ticks its schedule, siege clock and fountain every second with the settings in force ([application.md](application.md#bless-castle)). | Never; a failed load leaves the castle unavailable. |
+| 11 | `GameTcpServer` | Loads the TLS certificate, binds `[::]:<Network:Port>` (10009) dual-stack, backlog 512, and accepts. | The port is in use (the host stops). |
+| 12 | `QuestUpkeepService` | Applies the quest work the tick queues (quest drops, quest weapon growth and expiry) and queues the character for storage. | Never; a failed upkeep is logged and retried on the field's next check. |
+| 13 | `StarterGiftService` | Gives the starter gifts the tick finds due ([application.md](application.md#starter-gifts)). | Never; a failed gift is logged and offered again after the interval. |
+| 14 | `BellatraService` | Pays the Bellatra prizes the tick owes ([application.md](application.md#bellatra)). | Never; a failed prize is logged and the player told. |
 
 Shutdown runs the services in reverse: the game server closes every connection and awaits their leave saves while the
 tick still runs, and the character store stops last. Once the host is stopping, the first write storage refuses sends

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- The browser admin panel: a localhost web app that edits the game's database tables and data/*.json files through
+       the persistence layer (IAdminDataRepository). See docs/tools.md. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>ptadmin</AssemblyName>
+    <RootNamespace>PristonTale.AdminPanel</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Page\admin.html" LogicalName="PristonTale.AdminPanel.admin.html" />
+    <None Include="adminpanel.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Persistence\PristonTale.Persistence.Postgres\PristonTale.Persistence.Postgres.csproj" />
+    <ProjectReference Include="..\..\Persistence\PristonTale.Persistence.Sqlite\PristonTale.Persistence.Sqlite.csproj" />
+    <ProjectReference Include="..\..\Persistence\PristonTale.Persistence.Abstractions\PristonTale.Persistence.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Shared\PristonTale.Assets\PristonTale.Assets.csproj" />
+  </ItemGroup>
+
+</Project>

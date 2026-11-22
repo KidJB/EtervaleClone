@@ -101,8 +101,54 @@
       "Name": "Cabinet",
       "Icon": "costumes",
       "Items": [
-        { "Id": 1, "Name": "Armor & Robe Brush", "Description": "Turns an armor or robe in your bag into its look in The Cabinet, for every character of your account.", "ItemKey": "CB101", "Price": 500, "Quantity": true },
-        { "Id": 2, "Name": "Weapon & Shield Brush", "Description": "Turns a weapon or shield in your bag into its look in The Cabinet, for every character of your account.", "ItemKey": "CB102", "Price": 500, "Quantity": true }
+        { "Id": 1, "Name": "Armor & Robe Brush", "Description": "Turns an armor or robe in your bag into its look in The Cabinet, for every character of your account.", "ItemKey": "CL101", "Price": 500, "Quantity": true },
+        { "Id": 2, "Name": "Weapon & Shield Brush", "Description": "Turns a weapon or shield in your bag into its look in The Cabinet, for every character of your account.", "ItemKey": "CL102", "Price": 500, "Quantity": true }
+      ]
+    },
+    {
+      "Id": 32,
+      "Name": "Caravans",
+      "Icon": "caravan",
+      "Items": [
+        { "Id": 1, "Name": "Caravan Hopy Crystal", "Description": "Calls Caravan Hopy for 7 days: it walks beside you and carries your caravan storage. Click its name to open it.", "ItemKey": "CV101", "Price": 120 },
+        { "Id": 2, "Name": "Caravan Cuepy Crystal", "Description": "Calls Caravan Cuepy for 7 days: it walks beside you and carries your caravan storage. Click its name to open it.", "ItemKey": "CV102", "Price": 120 },
+        { "Id": 3, "Name": "Caravan Rabie Crystal", "Description": "Calls Caravan Rabie for 7 days: it walks beside you and carries your caravan storage. Click its name to open it.", "ItemKey": "CV103", "Price": 120 },
+        { "Id": 4, "Name": "Caravan Tobie Crystal", "Description": "Calls Caravan Tobie for 7 days: it walks beside you and carries your caravan storage. Click its name to open it.", "ItemKey": "CV104", "Price": 120 },
+        { "Id": 5, "Name": "Caravan Arma Crystal", "Description": "Calls Caravan Arma for 7 days: it walks beside you and carries your caravan storage. Click its name to open it.", "ItemKey": "CV105", "Price": 120 },
+        { "Id": 6, "Name": "Caravan Buma Crystal", "Description": "Calls Caravan Buma for 7 days: it walks beside you and carries your caravan storage. Click its name to open it.", "ItemKey": "CV106", "Price": 120 },
+        { "Id": 7, "Name": "Caravan Rudolph Crystal", "Description": "Calls Caravan Rudolph for 7 days: it walks beside you and carries your caravan storage. Click its name to open it.", "ItemKey": "CV107", "Price": 120 },
+        { "Id": 8, "Name": "Caravan Hungky Crystal", "Description": "Calls Caravan Hungky for 7 days: it walks beside you and carries your caravan storage. Click its name to open it.", "ItemKey": "CV108", "Price": 120 },
+        { "Id": 9, "Name": "Caravan Pingu Crystal", "Description": "Calls Caravan Pingu for 7 days: it walks beside you and carries your caravan storage. Click its name to open it.", "ItemKey": "CV109", "Price": 120 },
+        { "Id": 10, "Name": "Caravan Yeti Crystal", "Description": "Calls Caravan Yeti for 7 days: it walks beside you and carries your caravan storage. Click its name to open it.", "ItemKey": "CV110", "Price": 120 },
+        { "Id": 11, "Name": "Caravan Golden Hopy Crystal", "Description": "Calls Caravan Golden Hopy for 7 days: it walks beside you and carries your caravan storage. Click its name to open it.", "ItemKey": "CV111", "Price": 150 },
+        { "Id": 12, "Name": "Caravan Sir Knight Crystal", "Description": "Calls Caravan Sir Knight for 7 days: it walks beside you and carries your caravan storage. Click its name to open it.", "ItemKey": "CV112", "Price": 150 }
+      ]
+    },
+    {
+      "Id": 33,
+      "Name": "Clan Buffs",
+      "Icon": "misc",
+      "Items": [
+        { "Id": 1, "Name": "Clan HP Regen", "Description": "+3 HP regen for your clan's members for 1 hour", "ItemKey": "CL101", "Price": 100 },
+        { "Id": 2, "Name": "Clan SP Regen", "Description": "+3 SP regen for your clan's members for 1 hour", "ItemKey": "CL102", "Price": 100 },
+        { "Id": 3, "Name": "Clan MP Regen", "Description": "+3 MP regen for your clan's members for 1 hour", "ItemKey": "CL103", "Price": 100 },
+        { "Id": 4, "Name": "Clan MP Down", "Description": "10% less MP cost for your clan's members for 1 hour", "ItemKey": "CL104", "Price": 100 },
+        { "Id": 5, "Name": "Clan SP Down", "Description": "10% less SP cost for your clan's members for 1 hour", "ItemKey": "CL105", "Price": 100 },
+        { "Id": 6, "Name": "Clan Bonus Damage", "Description": "+5% damage for your clan's members for 1 hour", "ItemKey": "CL106", "Price": 100 },
+        { "Id": 7, "Name": "Clan Bonus Absorb", "Description": "5% less damage taken for your clan's members for 1 hour", "ItemKey": "CL107", "Price": 100 },
+        { "Id": 8, "Name": "Clan Move Speed", "Description": "+3 move speed for your clan's members for 1 hour", "ItemKey": "CL108", "Price": 100 },
+        { "Id": 9, "Name": "Clan EXP Buff", "Description": "+5% EXP for your clan's members for 1 hour", "ItemKey": "CL109", "Price": 100 },
+        { "Id": 10, "Name": "Clan Drop Buff", "Description": "15% chance of an extra drop for your clan's members for 1 hour", "ItemKey": "CL110", "Price": 100 },
+        { "Id": 11, "Name": "Clan HP Regen (24h)", "Description": "+3 HP regen for your clan's members for 24 hours", "ItemKey": "CL201", "Price": 2000 },
+        { "Id": 12, "Name": "Clan SP Regen (24h)", "Description": "+3 SP regen for your clan's members for 24 hours", "ItemKey": "CL202", "Price": 2000 },
+        { "Id": 13, "Name": "Clan MP Regen (24h)", "Description": "+3 MP regen for your clan's members for 24 hours", "ItemKey": "CL203", "Price": 2000 },
+        { "Id": 14, "Name": "Clan MP Down (24h)", "Description": "10% less MP cost for your clan's members for 24 hours", "ItemKey": "CL204", "Price": 2000 },
+        { "Id": 15, "Name": "Clan SP Down (24h)", "Description": "10% less SP cost for your clan's members for 24 hours", "ItemKey": "CL205", "Price": 2000 },
+        { "Id": 16, "Name": "Clan Bonus Damage (24h)", "Description": "+5% damage for your clan's members for 24 hours", "ItemKey": "CL206", "Price": 2000 },
+        { "Id": 17, "Name": "Clan Bonus Absorb (24h)", "Description": "5% less damage taken for your clan's members for 24 hours", "ItemKey": "CL207", "Price": 2000 },
+        { "Id": 18, "Name": "Clan Move Speed (24h)", "Description": "+3 move speed for your clan's members for 24 hours", "ItemKey": "CL208", "Price": 2000 },
+        { "Id": 19, "Name": "Clan EXP Buff (24h)", "Description": "+5% EXP for your clan's members for 24 hours", "ItemKey": "CL209", "Price": 2000 },
+        { "Id": 20, "Name": "Clan Drop Buff (24h)", "Description": "15% chance of an extra drop for your clan's members for 24 hours", "ItemKey": "CL210", "Price": 2000 }
       ]
     }
   ]

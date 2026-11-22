@@ -56,4 +56,7 @@ public sealed class PlayerSession
 
     // The account warehouse as last loaded or committed, while this session has it open; changed only under SaveGate.
     internal WarehouseStorage? Warehouse { get; set; }
+
+    // The character's caravan storage while open.
+    internal WarehouseStorage? Caravan { get; set; }
 }

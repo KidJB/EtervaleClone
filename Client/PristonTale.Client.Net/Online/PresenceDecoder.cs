@@ -180,6 +180,9 @@ internal sealed class PresenceDecoder : IEventHandleReader
             EtervaleOpcodes.Weather => new PresenceUpdate(_tick, [], [], [], [], FieldId) { Weather = WeatherPacket.Read(packet).Weather },
             EtervaleOpcodes.BossTime => OnBossTime(BossTimePacket.Read(packet)),
             EtervaleOpcodes.WorldBuffState => Update([], []) with { WorldBuffs = WorldBuffPacket.Read(packet).Buffs },
+            EtervaleOpcodes.ClanBuffState => Update([], []) with { ClanBuffs = WorldBuffPacket.Read(packet, clan: true).Buffs },
+            EtervaleOpcodes.ClanWarehouseState => Update([], []) with { ClanWarehouse = StoreItems.View(WarehousePacket.Read(packet)) },
+            EtervaleOpcodes.ClanWarehouseLog => Update([], []) with { ClanWarehouseLog = ClanWarehouseLog(ClanWarehouseLogPacket.Read(packet)) },
             EtervaleOpcodes.BossSpots => OnBossSpots(BossSpotsPacket.Read(packet)),
             EtervaleOpcodes.SpawnSpots => OnSpawnSpots(SpawnSpotsPacket.Read(packet)),
             EtervaleOpcodes.BossList => OnBossList(BossListPacket.Read(packet)),
@@ -259,7 +262,11 @@ internal sealed class PresenceDecoder : IEventHandleReader
                 Name = packet.Name,
                 Mounts = packet.Mounts,
                 MountChosen = packet.MountChosen,
-                Riding = packet.Riding
+                Riding = packet.Riding,
+                Caravan = packet.Caravan,
+                CaravanEnds = packet.CaravanEnds,
+                CaravanName = packet.CaravanName,
+                CaravanStays = packet.CaravanStays
             }
         };
 
@@ -340,7 +347,14 @@ internal sealed class PresenceDecoder : IEventHandleReader
     private static ClanInfo Clan(ClanStatePacket packet) => !packet.HasClan ? ClanInfo.None
         : new ClanInfo((long)packet.ClanId, packet.Name, (Simulation.Social.Clans.ClanState)packet.State, packet.Deadline, (Simulation.Social.Clans.ClanRank)packet.Rank,
             packet.Capacity, packet.Intro, packet.MarkVersion, packet.Members.Select(static member => new ClanMemberInfo(member.Name, member.Class, member.Level,
-                (Simulation.Social.Clans.ClanRank)member.Rank, member.Online)).ToArray());
+                (Simulation.Social.Clans.ClanRank)member.Rank, member.Online)).ToArray(), Simulation.Social.Clans.ClanRankPermissions.Unpack(packet.Permissions),
+            (Simulation.Social.Clans.ClanPermission)packet.Rights & Simulation.Social.Clans.ClanPermission.All, packet.Treasury,
+            Math.Min((int)packet.SlotLevel, Simulation.Social.Clans.ClanUpgrades.MaxLevel), Math.Min((int)packet.WeightLevel, Simulation.Social.Clans.ClanUpgrades.MaxLevel),
+            packet.CoinTreasury);
+
+    private static ClanWarehouseLogLine[] ClanWarehouseLog(ClanWarehouseLogPacket packet) =>
+        packet.Lines.Select(static line => new ClanWarehouseLogLine(line.At, line.Character, (Simulation.Social.Clans.ClanWarehouseLogAction)line.Action,
+            line.ItemKey, line.ItemName, line.Quantity)).ToArray();
 
     private static CastleInfo Castle(CastleStatePacket packet) =>
         new((long)packet.OwnerClanId, packet.OwnerName, packet.Tax, (Simulation.Social.Castle.SiegeState)packet.Siege, packet.League, packet.SecondsLeft,
@@ -857,6 +871,9 @@ internal sealed class PresenceDecoder : IEventHandleReader
                 Title = looks.Title,
                 RankAura = looks.RankAura <= (byte)Contracts.Characters.RankAura.Overall ? (Contracts.Characters.RankAura)looks.RankAura : Contracts.Characters.RankAura.None,
                 HeldWeaponKey = ItemCodes.KeyOf(looks.HeldWeapon),
+                Caravan = looks.Caravan,
+                CaravanName = looks.CaravanName,
+                CaravanStays = looks.CaravanStays,
                 Phoenix = looks.Phoenix,
                 BigHead = looks.BigHead,
                 WeaponGlow = Glow(looks.WeaponGlow),

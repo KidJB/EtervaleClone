@@ -137,6 +137,26 @@ public sealed class ChatAppService
             return;
         }
 
+        if (Simulation.Characters.Caravans.TryParse(text, out var caravanCommand, out var caravanName))
+        {
+            try
+            {
+                _ = caravanCommand switch
+                {
+                    Simulation.Characters.CaravanCommand.Follow => await World.SetCaravanStaysAsync(entityId, false),
+                    Simulation.Characters.CaravanCommand.Stay => await World.SetCaravanStaysAsync(entityId, true),
+                    Simulation.Characters.CaravanCommand.Dismiss => await World.DismissCaravanAsync(entityId),
+                    _ => await World.NameCaravanAsync(entityId, caravanName)
+                };
+            }
+            catch (WorldBusyException)
+            {
+                // A full tick queue drops the command, as it drops a spoken line.
+            }
+
+            return;
+        }
+
         if (Simulation.Characters.PetCommand.TryParse(text, out var petSkin))
         {
             try

@@ -36,6 +36,9 @@ public interface IGameMasterRepository
     // False when no account has this user id.
     Task<bool> SetGmLevelAsync(string userId, int level, CancellationToken ct = default);
 
+    // Replaces an account's password hash (PasswordHasher); false when no account has the name.
+    Task<bool> SetPasswordHashAsync(string userId, string passwordHash, CancellationToken ct = default);
+
     Task AppendAuditAsync(GmAuditEntry entry, CancellationToken ct = default);
 
     // Newest first.

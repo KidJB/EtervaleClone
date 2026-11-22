@@ -905,10 +905,8 @@ public sealed class GameServerConnection : IGameBackend
                 var warehouse = WarehousePacket.Read(packet);
                 if (_services.IsWaiting(warehouse.OperationId))
                 {
-                    var items = warehouse.Items.Select(StoreItems.View).ToArray();
-                    var view = new WarehouseView(warehouse.Revision, warehouse.Money, warehouse.Weight, warehouse.MaxWeight, warehouse.Columns,
-                        warehouse.Rows, items);
-                    AddServicePart(warehouse.OperationId, reply => reply with { Warehouse = view });
+                    var view = StoreItems.View(warehouse);
+                    AddServicePart(warehouse.OperationId, reply => reply with { Warehouse = WarehouseView.Join(reply.Warehouse, view) });
                 }
 
                 break;

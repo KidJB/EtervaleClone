@@ -27,6 +27,7 @@ internal sealed class CharSelectAssets : IDisposable
         [PlayerClass.Assassin] = new("T_cls-assa_.tga", "T_cls-assa.tga", "T_chr-assa.tga"),
         [PlayerClass.Shaman] = new("T_cls-sha_.tga", "T_cls-sha.tga", "T_chr-sha.tga"),
         [PlayerClass.MartialArtist] = new("T_cls-ma_.tga", "T_cls-ma.tga", "T_chr-ma.tga"),
+        [PlayerClass.Rogue] = new("t_cls-vamp_.tga", "t_cls-vamp.tga", "T_chr-vamp.tga"),
     };
 
     private readonly PristonTextureLoader _loader;
@@ -179,13 +180,13 @@ internal sealed class CharSelectAssets : IDisposable
             PlayerClass.Atalanta => "MfB",
             PlayerClass.Priestess => "MfC",
             PlayerClass.Magician => "MmD",
-            PlayerClass.Assassin => "TfE",
+            PlayerClass.Assassin or PlayerClass.Rogue => "TfE",
             PlayerClass.Shaman => "MmE",
             PlayerClass.MartialArtist => "TfF",
             _ => throw new ArgumentOutOfRangeException(nameof(playerClass), playerClass, "Unsupported character-select class.")
         };
         var morion = playerClass is PlayerClass.Knight or PlayerClass.Atalanta or PlayerClass.Priestess or PlayerClass.Magician or PlayerClass.Shaman;
-        var usesLetterSuffix = morion || playerClass is PlayerClass.Assassin or PlayerClass.MartialArtist;
+        var usesLetterSuffix = morion || playerClass is PlayerClass.Assassin or PlayerClass.MartialArtist or PlayerClass.Rogue;
         var order = playerClass == PlayerClass.Atalanta ? new[] { 2, 1, 3 } : new[] { 1, 2, 3 };
         var normalSuffix = usesLetterSuffix ? "-a.tga" : "-01.tga";
         var selectedSuffix = usesLetterSuffix ? "-b.tga" : "-02.tga";

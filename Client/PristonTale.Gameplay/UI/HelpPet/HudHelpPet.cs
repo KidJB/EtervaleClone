@@ -306,7 +306,10 @@ public sealed class HudHelpPet(Task<HelpPetMessages> messages, Random random, IC
         if (state.Level == 8 && state.ExperiencePercent >= 90 && !_classGuide)
         {
             _classGuide = true;
-            Queue($"Special_Message8_{ClassTopic(state.Class)}", _kind);
+            if (ClassTopic(state.Class) is { } topic)
+            {
+                Queue($"Special_Message8_{topic}", _kind);
+            }
         }
         else if (state.Level == 9 && state.ExperiencePercent >= 90 && !_farewell)
         {
@@ -315,7 +318,13 @@ public sealed class HudHelpPet(Task<HelpPetMessages> messages, Random random, IC
         }
     }
 
-    private static string ClassTopic(PlayerClass playerClass) => playerClass == PlayerClass.Mechanician ? "Mecha" : playerClass.ToString();
+    // The class's level-8 tip in the shipped helper file; the Rogue has none.
+    public static string ClassTopic(PlayerClass playerClass) => playerClass switch
+    {
+        PlayerClass.Mechanician => "Mecha",
+        PlayerClass.Rogue => null,
+        _ => playerClass.ToString()
+    };
 
     // One of a list's messages not said since the list was last spent.
     private int Pick(List<int> left, string topic)

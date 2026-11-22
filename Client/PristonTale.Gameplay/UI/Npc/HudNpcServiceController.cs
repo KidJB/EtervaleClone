@@ -36,8 +36,8 @@ public sealed class HudNpcServiceController(Func<NpcServiceCommand, Task<NpcServ
     public bool Request(ulong npcId, string npcName, NpcServiceKind service, NpcServiceAction action, long expectedRevision = 0,
         uint itemCode = 0, Guid itemId = default, int anchor = -1, int count = 1, long amount = 0, Guid[] materials = null, Guid covered = default)
     {
-        // NPC entityId 0 names the mobile shop a used item opens; every other service needs an NPC.
-        if (_request.Pending || request is null || npcId == 0 && service != NpcServiceKind.Shop)
+        // NPC entityId 0 names the mobile shop a used item opens and the caravan storage; every other service needs an NPC.
+        if (_request.Pending || request is null || npcId == 0 && service is not (NpcServiceKind.Shop or NpcServiceKind.Caravan))
         {
             return false;
         }
@@ -74,6 +74,15 @@ public sealed class HudNpcServiceController(Func<NpcServiceCommand, Task<NpcServ
         Quotes = null;
         Warehouse = null;
         Destinations = [];
+    }
+
+    // A part of the clan warehouse another member changed, while it is open here.
+    public void Push(WarehouseView part)
+    {
+        if (Open == NpcServiceKind.ClanWarehouse && part is not null)
+        {
+            Warehouse = WarehouseView.Join(Warehouse, part);
+        }
     }
 
     public void Update()

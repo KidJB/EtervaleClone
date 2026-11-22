@@ -14,7 +14,8 @@ public enum PlayerClass
     Priestess = 8,
     Assassin = 9,
     Shaman = 10,
-    MartialArtist = 11
+    MartialArtist = 11,
+    Rogue = 12
 }
 
 public static class PlayerClasses

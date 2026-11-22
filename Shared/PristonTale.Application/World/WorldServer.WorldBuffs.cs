@@ -50,7 +50,7 @@ public sealed partial class WorldServer
 
     private void StartWorldBuff(string player, WorldBuff buff, int seconds, long now)
     {
-        _worldBuffEnds[(int)buff.Kind] = Math.Max(_worldBuffEnds[(int)buff.Kind], now) + seconds;
+        _worldBuffEnds[(int)buff.Kind] = WorldBuffs.Extend(_worldBuffEnds[(int)buff.Kind], now, seconds);
         RefreshWorldBuffs(now);
         foreach (var id in _connections.Keys)
         {
@@ -93,9 +93,12 @@ public sealed partial class WorldServer
             }
         }
 
+        UpdateClanBuffs(now);
         foreach (var connection in _connections.Values)
         {
-            connection.Player.Character.Premium.WorldBuffMask = _worldBuffMask;
+            var premium = connection.Player.Character.Premium;
+            premium.WorldBuffMask = _worldBuffMask;
+            premium.ClanBuffMask = ClanBuffMaskOf(connection.Player.Clan?.ClanId ?? 0);
         }
     }
 

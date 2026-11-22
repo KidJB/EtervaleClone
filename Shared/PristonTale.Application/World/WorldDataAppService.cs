@@ -30,6 +30,10 @@ public sealed class WorldDataAppService
         var fieldRecords = await _repository.GetAllFieldSpawnsAsync(ct);
         var motionModels = await _repository.GetAllMotionModelsAsync(ct);
         var motionSlots = await _repository.GetAllMotionSlotsAsync(ct);
+        // The Rogue's grimoires stand beside the phantoms they mirror: definitions, shops and drops.
+        itemRecords = GrimoireMirror.Items(itemRecords);
+        monsterRecords = GrimoireMirror.Drops(monsterRecords);
+        npcRecords = GrimoireMirror.Shops(npcRecords);
 
         var itemDefs = WorldDataFactory.ToItemDefinitions(itemRecords);
         // The pet skins' and mounts' items are Etervale's own; an imported item of the same code keeps its place.
@@ -38,8 +42,10 @@ public sealed class WorldDataAppService
         [
             .. itemDefs,
             .. Simulation.Characters.PetSkins.ItemDefinitions().Where(item => !imported.Contains(item.Code)),
+            .. Simulation.Characters.Caravans.ItemDefinitions().Where(item => !imported.Contains(item.Code)),
             .. Simulation.Characters.Mounts.ItemDefinitions().Where(item => !imported.Contains(item.Code)),
-            .. Simulation.World.WorldBuffs.ItemDefinitions().Where(item => !imported.Contains(item.Code))
+            .. Simulation.World.WorldBuffs.ItemDefinitions().Where(item => !imported.Contains(item.Code)),
+            .. Simulation.Social.Clans.ClanBuffs.ItemDefinitions().Where(item => !imported.Contains(item.Code))
         ];
         // The Cabinet's brushes and look tokens (data/cabinet.json), named after the look a token unlocks.
         var named = itemDefs.GroupBy(static item => item.CatalogKey, StringComparer.OrdinalIgnoreCase)
@@ -70,6 +76,7 @@ public sealed class WorldDataAppService
                     : npc)
             .ToList();
         npcDefs = Simulation.Markets.MarketNpcs.AddTo(npcDefs);
+        npcDefs = Simulation.Social.Clans.ClanWarehouse.AddTo(npcDefs);
         // Each Quest Courier stands on the floor of its field, at its post (data/couriers.json).
         var couriers = _couriers?.Current ?? Simulation.Quests.CourierCatalog.Empty;
         var withCouriers = Simulation.Quests.CourierNpcs.AddTo(npcDefs, couriers);
@@ -80,8 +87,8 @@ public sealed class WorldDataAppService
         {
             Npcs = string.Equals(field.Stage, Simulation.World.BossArena.FieldStage, StringComparison.OrdinalIgnoreCase)
                 ? [.. field.Npcs.Where(static npc => npc.NpcId != Simulation.World.BossArena.StatueNpcId)]
-                : string.Equals(field.Stage, Simulation.Markets.MarketNpcs.Stage, StringComparison.OrdinalIgnoreCase) && npcDefs.Exists(static npc => npc.Code == Simulation.Markets.MarketNpcs.CharacterMarketCode)
-                    ? [.. field.Npcs, .. Simulation.Markets.MarketNpcs.Placements.Select((place, index) => new FieldNpcRecord(field.Stage, ushort.MaxValue + index, place.Code, place.X, place.Y, place.Z, place.Angle))]
+                : string.Equals(field.Stage, Simulation.Markets.MarketNpcs.Stage, StringComparison.OrdinalIgnoreCase)
+                    ? [.. field.Npcs, .. TownPlacements(npcDefs).Select((place, index) => new FieldNpcRecord(field.Stage, ushort.MaxValue + index, place.Code, place.X, place.Y, place.Z, place.Angle))]
                     : field.Npcs
         }).Select(field => placedCouriers ? field with { Npcs = [.. field.Npcs, .. CourierPlacements(field, couriers)] } : field).ToList());
 
@@ -95,6 +102,11 @@ public sealed class WorldDataAppService
             fieldSpawns,
             motions);
     }
+
+    // Etervale's own NPCs placed in the market town: the market NPCs and the Clan Warehouse keeper, each when it was made.
+    private static IEnumerable<(int Code, int X, int Y, int Z, int Angle)> TownPlacements(List<Simulation.World.Npcs.NpcDefinition> npcs) =>
+        Simulation.Markets.MarketNpcs.Placements.Append(Simulation.Social.Clans.ClanWarehouse.KeeperPlacement)
+            .Where(place => npcs.Exists(npc => npc.Code == place.Code));
 
     private static string LookName(string key, IReadOnlyDictionary<string, string> items) =>
         Simulation.Characters.Costumes.Find(key)?.Name ?? Simulation.Characters.Costumes.FindGear(key)?.Name

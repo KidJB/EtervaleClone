@@ -18,6 +18,8 @@ public sealed class RendererActorScene(PristonRenderer renderer) : IActorScene
     public ActorHandle AddActor(PristonActorInstance instance) => _renderer.AddActor(instance);
     public void SetActorWorld(ActorHandle handle, Matrix world) => _renderer.SetActorWorld(handle, world);
     public void SetActorColorAdd(ActorHandle handle, Vector3 colorAdd) => _renderer.SetActorColorAdd(handle, colorAdd);
+
+    public void SetActorOutline(ActorHandle handle, Vector3 color, float strength) => _renderer.SetActorOutline(handle, color, strength);
     public bool TryGetActorMotion(ActorHandle handle, out PristonMotionInfo motion, out float ticks) => _renderer.TryGetActorMotion(handle, out motion, out ticks);
     public void SetActorMotion(ActorHandle handle, MotionCode motion) => _renderer.SetActorMotion(handle, motion);
     public void SetActorMotionIndex(ActorHandle handle, int motionIndex) => _renderer.SetActorMotionIndex(handle, motionIndex);

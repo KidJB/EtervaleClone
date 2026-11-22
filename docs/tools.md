@@ -20,6 +20,7 @@ JSON, UI font) and the Blender helper scripts in `3d_glb/blender/`. None of them
 | `tools/PristonTale.AssetDump/` | `ptdump`: headless asset inspector and field texture manifest export (`FieldTextureManifest.cs`) |
 | `tools/PristonTale.GltfExport/` | `ptgltf`: `.smd`/`.smb`/`.inx` to glTF 2.0 via SharpGLTF; also referenced by the regression runner |
 | `tools/PristonTale.WorldImport/` | `ptworld`: migrations plus import of the CP949 GameServer configuration; see [world-import.md](world-import.md) |
+| `tools/PristonTale.AdminPanel/` | `ptadmin`: the browser admin panel; edits database tables and `data/*.json` through `IAdminDataRepository` (see [AdminPanel](#adminpanel-ptadmin)) |
 | `tools/PristonTale.DevAccounts/` | `ptdevaccounts`: accounts, characters, load-test accounts, game-master levels and audit through the real repositories |
 | `tools/PristonTale.SmokeClient/` | Protocol smoke test: login, character, world entry, presence, quest journal and request, chat, one skill cast |
 | `tools/PristonTale.LoadTest/` | Headless bots that log in, enter the world and walk while reporting movement |
@@ -157,6 +158,54 @@ Defaults: without `--sqlite` and `--postgres` the database is `<temp>/pristontal
 `data/pristontale.db`. `--source` defaults to `assets/GameServer/` or `GameServer/` in the working directory or an
 ancestor of the executable; `--assets` to the nearest ancestor `assets/` of the executable (the motion pass is skipped
 without it).
+
+## AdminPanel (`ptadmin`)
+
+A localhost web app for editing the game's data from a browser. Its front page counts the main data and lists what
+makes the running server read each change; its Accounts & characters page creates an account, sets an account's
+password or game-master level, creates a character at a level or maxed (the level cap, the last tier, every skill at
+the top rank) and moves a character to another account (`AdminAccounts`, the same code as `ptdevaccounts add-char`).
+It lists every table of the database (grouped: items, monsters, NPCs and shops, fields and spawns, motions, accounts,
+characters, clans, castle and Bellatra, Cabinet and markets, server, import), pages, searches every column and sorts
+by any column; a row opens in an editor whose fields are typed from the schema. It adds and deletes rows, and edits
+the `data/*.json` files the server reads (coin shop, Cabinet, couriers, world buffs) as text.
+
+```
+dotnet run --project tools/PristonTale.AdminPanel -c Release
+```
+
+Then open `http://127.0.0.1:5080` and sign in with a game account whose game-master level is 4
+(`ptdevaccounts set-gm <user> 4`). Settings come from `adminpanel.json` beside the executable, then the command line:
+
+| Setting | Option | Default |
+| --- | --- | --- |
+| `Url` | `--url` | `http://127.0.0.1:5080` (a non-loopback address prints a warning) |
+| `Sqlite` | `--sqlite <path>` | `data/pristontale.db` (relative to the repository root) |
+| `Postgres` | `--conn "<connection string>"` | empty; when set it is used instead of SQLite |
+| `DataDirectory` | `--data <dir>` | `data` |
+| `SessionHours` | | 8 (1 to 72) |
+
+- Access: a session cookie (HttpOnly, SameSite=Strict, in memory, lost on restart) after a sign-in with the game
+  password of an unblocked administrator account (`AdminSessions`); every write also needs the panel's own
+  `X-Admin-Panel` header.
+- Data access (`IAdminDataRepository`, `AdminDataRepository` in Persistence, the schema from `SqliteAdminSchemaReader` or
+  `PostgresAdminSchemaReader`): table and column names come only from the database's schema, values are parameters,
+  and each write runs in a transaction that must touch exactly one row named by its whole primary key, or changes
+  nothing. Values are checked by column type (`AdminValue`): whole numbers, numbers, booleans, JSON (a text column that
+  holds a JSON document must keep holding one), required columns refuse NULL.
+- Policy (`AdminPolicy`): `remember_tokens` and `VersionInfo` are not shown, `accounts.password_hash` never leaves the
+  database; logs and import provenance (`gm_audit`, `coin_log`, `item_transfers`, `server_events`,
+  `character_market_audit`, `clan_warehouse_log`, `currency_sinks`, `world_*`) and tables without a primary key are
+  read-only.
+- Data files (`AdminDataFiles`): only `*.json` names in the data folder; a new text must parse (comments and trailing
+  commas allowed); the old file is kept as `<name>.bak`.
+- When changes take effect: world data (items, monsters, NPCs, shops, drops, fields, spawns) is read when the server
+  starts, so restart it. `server_settings` reload with `/reload_settings`; `coinshop.json`, `cabinet.json` and
+  `couriers.json` with `/@coinshop_reload`, `/@cabinet_reload` and `/@courier_reload`; the server rewrites
+  `worldbuffs.json` while it runs, so stop it before editing that file. Rows of characters, accounts or clans that are
+  online are overwritten by the server's next save: edit them while the player is offline.
+- Run it against a copy of the database to try edits (`--sqlite <copy>`); migrations are applied at start, so a fresh
+  or older copy works.
 
 ## DevAccounts (`ptdevaccounts`)
 
@@ -357,6 +406,19 @@ python3 tools/ui/build_party_finder.py assets/Hud/PartyFinder
 
 Writes the `pt_*.png` files into the folder, replacing those it makes; the class icons beside them (`Class_icon/N.png`)
 are not its own.
+
+## Clan Warehouse art (`tools/ui/build_clan_warehouse.py`)
+
+Draws the Clan Warehouse window's art (`HudClanWarehouseWindow`) with the party finder's drawing helpers: the 720x440
+window (header band, the sunken 9x9 slot grid, the page bar, the capacity box and the side pane, laid out to the window's
+constants), tabs, buttons, the close button, the log's row bands, check boxes and the log's action icons (put in, taken
+out, gold, upgrade), all without text. Needs Python 3 with Pillow.
+
+```bash
+python3 tools/ui/build_clan_warehouse.py assets/Hud/ClanWarehouse
+```
+
+Writes the `cw_*.png` files into the folder, replacing those it makes. Run it again after changing the window's layout.
 
 ## Blender scripts (`3d_glb/blender/`)
 

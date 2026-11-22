@@ -25,6 +25,7 @@ public sealed partial class GameScene
     // The local player's daily quests as the server last sent them.
     public DailyQuestsInfo DailyQuests { get; private set; } = DailyQuestsInfo.None;
     private SkinPetPresentation _skinPets;
+    private SkinPetPresentation _caravans;
     private MountPresentation _mounts;
     private Action<ulong, PristonModel, float> _seatRider;
     private float _appliedSelfLift;
@@ -74,6 +75,8 @@ public sealed partial class GameScene
         }
 
         _skinPets ??= _renderer is null ? null : new SkinPetPresentation(_actorScene, _actorLoader, _assetRoot ?? "", _log);
+        _caravans ??= _renderer is null ? null : new SkinPetPresentation(_actorScene, _actorLoader, _assetRoot ?? "", _log, CaravanWalker,
+            static player => (player.Caravan, player.CaravanName, player.CaravanStays), -1f);
         _mounts ??= _renderer is null ? null : new MountPresentation(_actorScene, _actorLoader, _assetRoot ?? "", _log);
         if (_crowns is null && _renderer is not null)
         {
@@ -90,6 +93,7 @@ public sealed partial class GameScene
 
         _pets?.Observe(update, _itemAnchor ??= ItemAnchor);
         _skinPets?.Observe(update);
+        _caravans?.Observe(update);
         _mounts?.Observe(update);
         if (update.DailyQuests is { } dailies)
         {
@@ -101,6 +105,8 @@ public sealed partial class GameScene
             PetCollection = collection;
             // The local player's own pet and mount follow its collection, which the server sends at every change.
             _skinPets?.Set(SelfEntityId, collection.Out, PetNames.Shown(collection.Name, _player?.Name ?? ""));
+            _caravans?.Set(SelfEntityId, collection.Caravan, collection.CaravanName.Length > 0 ? collection.CaravanName : Caravans.Get(collection.Caravan)?.Name ?? "",
+                collection.CaravanStays);
             _mounts?.Set(SelfEntityId, collection.Riding ? collection.MountChosen : 0, _player?.Class.Class ?? PlayerClass.Fighter);
         }
         ObserveOwnHead(update);
@@ -165,6 +171,7 @@ public sealed partial class GameScene
         _itemEffects?.Update(_skillClockMs, _itemAnchor, PlayerPosition);
         _pets?.Update(dt, _petOwnerPose, _itemAnchor, PlayerPosition);
         _skinPets?.Update(dt, _petOwnerPose);
+        _caravans?.Update(dt, _petOwnerPose);
         _seatRider ??= SeatRider;
         _mounts?.Update(_petOwnerPose, _seatRider);
         if (SelfLift != _appliedSelfLift && _playerBody is not null)
@@ -255,4 +262,8 @@ public sealed partial class GameScene
     }
 
     private bool IsSelf(ulong entityId) => _remote is not null && entityId == _remote.SelfEntityId && _playerBody is not null;
+
+    // A caravan kind drawn as a walking pet: its model and scale.
+    private static PetSkin CaravanWalker(int kind) =>
+        Caravans.Get(kind) is { } caravan ? new PetSkin(caravan.Id, caravan.Name, 0, caravan.Model, caravan.Scale, caravan.ItemKey) : null;
 }

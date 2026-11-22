@@ -71,6 +71,8 @@ public sealed class GameplayScreen : GameScreen
         _hud.CourierRequest = _scene.CourierAsync;
         _hud.Parties = _scene;
         _hud.SendClan = _scene.SendClan;
+        _hud.DonateClan = _scene.DonateToClan;
+        _hud.DonateClanCoins = _scene.DonateCoinsToClan;
         _hud.SendCastleOwner = _scene.SendCastleOwner;
         _hud.SendBellatraClan = _scene.SendBellatraClan;
         _hud.SendAchievementsRequest = _scene.SendAchievementsRequest;
@@ -236,6 +238,7 @@ public sealed class GameplayScreen : GameScreen
         _hud.PetCollection = _scene.PetCollection;
         _hud.DailyQuests = _scene.DailyQuests;
         _scene.CollectPetLabels(_hud.PetLabels);
+        _hud.OwnCaravan = _scene.CollectCaravanLabels(_hud.CaravanLabels);
         _hud.InCastleField = field?.State == Simulation.World.FieldState.Castle;
         _scene.OwnClanId = _hud.Combat.OwnClan;
         _scene.CastleLeague = _hud.Castle.League;
@@ -286,6 +289,10 @@ public sealed class GameplayScreen : GameScreen
         _hud.RankAura = _scene.SelfRankAura;
         _hud.HelperPet = _scene.SelfHelperPet();
         _hud.HoveredId = _scene.HoveredTargetId;
+        if (_scene.TakeCaravanOpen())
+        {
+            _hud.OpenOwnCaravan();
+        }
         _hud.TracedId = _scene.TracedTargetId;
         _lastKeyboard = Keyboard.GetState();
     }
@@ -370,7 +377,7 @@ public sealed class GameplayScreen : GameScreen
     public override HudCursorKind Cursor =>
         _scene is null || _hud is null
             ? HudCursorKind.Default
-            : _hud.CursorOverride ?? HudCursor.ForHovered(_scene.HoveredDropId != Guid.Empty, Mouse.GetState().LeftButton == ButtonState.Pressed,
+            : _hud.CursorOverride ?? (_scene.CaravanHovered ? HudCursorKind.Talk : (HudCursorKind?)null) ?? HudCursor.ForHovered(_scene.HoveredDropId != Guid.Empty, Mouse.GetState().LeftButton == ButtonState.Pressed,
                 _hud.Combat.KindOf(_scene.HoveredTargetId, out var owner), owner);
 
     // The server's shutdown asks every client to save and quit: the game closes as from the window's close button.

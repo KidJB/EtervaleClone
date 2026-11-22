@@ -8,8 +8,9 @@ namespace PristonTale.Protocol.Packets;
 internal static class DescriptionWire
 {
     // Version 2 carries the player's shop sign after the fields of version 1; version 3 then the player's clan, version 4 the
-    // pet skin out, version 5 the pet's name and version 6 the mount ridden; version 9 the ranking aura.
-    public const ushort Version = 9;
+    // pet skin out, version 5 the pet's name and version 6 the mount ridden; version 9 the ranking aura, version 10 the caravan
+    // and version 11 whether it stays put.
+    public const ushort Version = 11;
     public const int MaxNameBytes = 64;
     public const int MaxModelBytes = 160;
 
@@ -73,6 +74,11 @@ public sealed record DescribedPlayer(
 
     // The ranking aura worn (RankAura), 0 for none.
     public byte RankAura { get; init; }
+
+    // The caravan out (Caravans id, 0 none) and its shown name (from version 10), and whether it stays put (from version 11).
+    public int Caravan { get; init; }
+    public string CaravanName { get; init; } = "";
+    public bool CaravanStays { get; init; }
     // The player's clan (0 for none), its name and its mark's version (0 the default mark).
     public ulong ClanId { get; init; }
     public string ClanName { get; init; } = "";
@@ -135,7 +141,7 @@ public sealed record DescribedTemplate(
 // 0, varuint EntityId, uint8 Revision, uint8 Kind, varuint Level, varuint MoveSpeed, float32 AttackRate, text Name, text
 // Model}, then for a player {varuint Class, Tier, Face, Hair, text HeadModel, uint32 Weapon, Armor, OffHand, uint8 Flags (1
 // village, 2 Phoenix), uint8 HelperPet, uint8 BigHead, glow WeaponGlow, glow OffHandGlow (DescribedGlow), text ShopSign
-// (from version 2), uint8 PetSkin (from version 3), text PetName (from version 4), uint8 Mount (from version 5), varuint Title (from version 7), uint32 HeldWeapon (from version 8: the weapon really worn), uint8 RankAura (from version 9)}, else {varuint Template, float32 TemplateScale, varuint SoundCode, varint PortraitY, PortraitZ,
+// (from version 2), uint8 PetSkin (from version 3), text PetName (from version 4), uint8 Mount (from version 5), varuint Title (from version 7), uint32 HeldWeapon (from version 8: the weapon really worn), uint8 RankAura (from version 9), uint8 Caravan, text CaravanName (from version 10), uint8 CaravanStays (from version 11)}, else {varuint Template, float32 TemplateScale, varuint SoundCode, varint PortraitY, PortraitZ,
 // uint8 Brood, varuint Owner, float32 InstanceScale, uint32 NpcServices, varuint Class (the monster class: 1 boss, 200
 // hammer), varint ShadowSize (-1 none, 0 small to 3 large)}. Text is UTF-8 with a uint16 byte length.
 public sealed record EntityDescriptionPacket(
@@ -153,7 +159,7 @@ public sealed record EntityDescriptionPacket(
     // The player part (four varuints, the head model, three codes, three bytes, two glows, the sign, the clan) is the larger tail.
     private const int PlayerPart = 5 * 4 + 2 + DescriptionWire.MaxModelBytes + 4 * 3 + 3 + 2 * DescribedGlow.Size + 2 + PersonalShopLimits.MaxSignBytes
         + VarInt.MaxBytes64 + 2 + ClanWire.MaxClanNameBytes + 5
-        + 1 + 2 + PetNameLimits.MaxBytes + 1 + VarInt.MaxBytes64 + 4;
+        + 1 + 2 + PetNameLimits.MaxBytes + 1 + VarInt.MaxBytes64 + 4 + 1 + 2 + PetNameLimits.MaxBytes;
     public const int MaximumSize = 8 + 4 + VarInt.MaxBytes64 + 2 + 5 * 2 + 4 + (2 + DescriptionWire.MaxNameBytes) + (2 + DescriptionWire.MaxModelBytes)
         + PlayerPart;
 
@@ -195,6 +201,9 @@ public sealed record EntityDescriptionPacket(
             writer.VarUInt((ulong)Math.Max(0, player.Title));
             writer.UInt32(player.HeldWeapon);
             writer.Byte(player.RankAura);
+            writer.Byte((byte)Math.Clamp(player.Caravan, 0, byte.MaxValue));
+            NpcWire.Text(ref writer, player.CaravanName, PetNameLimits.MaxBytes);
+            writer.Byte(player.CaravanStays ? (byte)1 : (byte)0);
         }
         else
         {
@@ -254,6 +263,9 @@ public sealed record EntityDescriptionPacket(
                 var title = version >= 7 ? reader.VarUInt31() : 0;
                 var heldWeapon = version >= 8 ? reader.UInt32() : 0U;
                 var rankAura = version >= 9 ? reader.Byte() : (byte)0;
+                var caravan = version >= 10 ? reader.Byte() : 0;
+                var caravanName = version >= 10 ? NpcWire.Text(ref reader, PetNameLimits.MaxBytes) : "";
+                var caravanStays = version >= 11 && reader.Byte() != 0;
                 return new EntityDescriptionPacket(entityId, revision, kind, level, moveSpeed, attackRate, name, model,
                     new DescribedPlayer(playerClass, tier, face, hair, head, weapon, armor, offHand, (flags & 1) != 0, (flags & 2) != 0, pet, bigHead)
                     {
@@ -268,7 +280,10 @@ public sealed record EntityDescriptionPacket(
                         Mount = mount,
                         Title = title,
                         HeldWeapon = heldWeapon,
-                        RankAura = rankAura
+                        RankAura = rankAura,
+                        Caravan = caravan,
+                        CaravanName = caravanName,
+                        CaravanStays = caravanStays
                     });
             }
             case EntityKind.Monster or EntityKind.Npc:

@@ -5,7 +5,8 @@ namespace PristonTale.Protocol.Packets;
 
 // What a player asks of the clan service. Found and Entrust name the Clan Master (Id) they are asked at; Invite names the
 // player (Id); Expel, Appoint, Discharge and Entrust name a member (Name); Found names the new clan. Mark is the chief's
-// upload (ClanMarkPacket), answered as the others.
+// upload (ClanMarkPacket), answered as the others. SetPermissions is the chief's new rank rights (Id: packed as
+// ClanStatePacket.Permissions); WarehouseLog asks for the clan warehouse's log (ClanWarehouseLogPacket).
 public enum ClanAction : byte
 {
     Open = 0,
@@ -19,7 +20,18 @@ public enum ClanAction : byte
     Appoint = 8,
     Discharge = 9,
     Entrust = 10,
-    Mark = 11
+    Mark = 11,
+    SetPermissions = 12,
+    WarehouseLog = 13,
+
+    // Gold to the treasury (Id: the Clan Warehouse keeper, Amount) and the chief's upgrade (Id: ClanUpgradeKind).
+    Donate = 14,
+    Upgrade = 15,
+
+    // Coins to the coin treasury (Id: the Clan Warehouse keeper, Amount) and coins spent on a clan buff (Id: the buff's
+    // WorldBuffs.Argument).
+    DonateCoins = 16,
+    SpendCoins = 17
 }
 
 public readonly record struct ClanMemberWire(string Name, PlayerClass Class, int Level, byte Rank, bool Online);
@@ -49,11 +61,11 @@ public static class ClanWire
     internal static string ClanName(ref PacketReader reader) => Utf8Text.Read(ref reader, MaxClanNameBytes, "Clan message");
 }
 
-// C->S {header, uint8 Action, varuint Id, text Name}.
-public sealed record ClanRequestPacket(ClanAction Action, ulong Id, string Name) : IFramePacket
+// C->S {header, uint8 Action, varuint Id, text Name, varuint Amount}.
+public sealed record ClanRequestPacket(ClanAction Action, ulong Id, string Name, ulong Amount = 0) : IFramePacket
 {
-    private const int MinimumSize = 8 + WireHeader.Size + 1 + 1 + 2;
-    public const int MaxSize = MinimumSize + VarInt.MaxBytes64 + ClanWire.MaxNameBytes;
+    private const int MinimumSize = 8 + WireHeader.Size + 1 + 1 + 2 + 1;
+    public const int MaxSize = MinimumSize + 2 * VarInt.MaxBytes64 + ClanWire.MaxNameBytes;
 
     public int Write(Span<byte> destination)
     {
@@ -62,6 +74,7 @@ public sealed record ClanRequestPacket(ClanAction Action, ulong Id, string Name)
         writer.Byte((byte)Action);
         writer.VarUInt(Id);
         Utf8Text.Write(ref writer, Name, ClanWire.MaxNameBytes);
+        writer.VarUInt(Amount);
         return writer.Finish();
     }
 
@@ -75,19 +88,22 @@ public sealed record ClanRequestPacket(ClanAction Action, ulong Id, string Name)
             throw new InvalidDataException("Clan request has an unknown action.");
         }
 
-        return new ClanRequestPacket(action, reader.VarUInt(), ClanWire.Name(ref reader));
+        return new ClanRequestPacket(action, reader.VarUInt(), ClanWire.Name(ref reader), reader.VarUInt());
     }
 }
 
 // S->C the player's clan, or none: {header, uint8 HasClan; with a clan varuint ClanId, text Name, uint8 State, int64
 // Deadline (Unix seconds, 0 none), uint8 Rank, uint8 Capacity, text Intro, varuint MarkVersion, uint16 Count, then per
-// member {text Name, uint8 Class, varuint Level, uint8 Rank, uint8 Online}}.
+// member {text Name, uint8 Class, varuint Level, uint8 Rank, uint8 Online}, then uint16 Permissions (the members' rights
+// in the low byte, the vice's in the high one), uint8 Rights (the receiver's), varuint Treasury, uint8 SlotLevel, uint8
+// WeightLevel, varuint CoinTreasury}. Rights are ClanPermission bits; the levels are the clan warehouse's upgrades.
 public sealed record ClanStatePacket(ulong ClanId, string Name, byte State, long Deadline, byte Rank, int Capacity, string Intro, int MarkVersion,
-    IReadOnlyList<ClanMemberWire> Members) : IFramePacket
+    IReadOnlyList<ClanMemberWire> Members, ushort Permissions = 0, byte Rights = 0, long Treasury = 0, byte SlotLevel = 0, byte WeightLevel = 0,
+    long CoinTreasury = 0) : IFramePacket
 {
     private const int MemberSize = 2 + ClanWire.MaxNameBytes + 1 + VarInt.MaxBytes64 + 2;
     public const int MaxSize = 8 + WireHeader.Size + 1 + VarInt.MaxBytes64 + 2 + ClanWire.MaxClanNameBytes + 1 + 8 + 2 + 2 + ClanWire.MaxIntroBytes
-        + VarInt.MaxBytes64 + 2 + ClanWire.MaxMembers * MemberSize;
+        + VarInt.MaxBytes64 + 2 + ClanWire.MaxMembers * MemberSize + 2 + 1 + VarInt.MaxBytes64 + 2 + VarInt.MaxBytes64;
 
     public static readonly ClanStatePacket None = new(0, "", 0, 0, 0, 0, "", 0, []);
 
@@ -122,6 +138,13 @@ public sealed record ClanStatePacket(ulong ClanId, string Name, byte State, long
                 writer.Byte(member.Rank);
                 writer.Byte(member.Online ? (byte)1 : (byte)0);
             }
+
+            writer.UInt16(Permissions);
+            writer.Byte(Rights);
+            writer.VarUInt((ulong)Math.Max(0, Treasury));
+            writer.Byte(SlotLevel);
+            writer.Byte(WeightLevel);
+            writer.VarUInt((ulong)Math.Max(0, CoinTreasury));
         }
 
         return writer.Finish();
@@ -156,7 +179,13 @@ public sealed record ClanStatePacket(ulong ClanId, string Name, byte State, long
             members[index] = new ClanMemberWire(ClanWire.Name(ref reader), (PlayerClass)reader.Byte(), reader.VarUInt31(), reader.Byte(), reader.Byte() != 0);
         }
 
-        return new ClanStatePacket(clanId, name, state, deadline, rank, capacity, intro, mark, members);
+        return new ClanStatePacket(clanId, name, state, deadline, rank, capacity, intro, mark, members, reader.UInt16(), reader.Byte())
+        {
+            Treasury = (long)Math.Min(reader.VarUInt(), long.MaxValue),
+            SlotLevel = reader.Byte(),
+            WeightLevel = reader.Byte(),
+            CoinTreasury = (long)Math.Min(reader.VarUInt(), long.MaxValue)
+        };
     }
 }
 
@@ -235,5 +264,61 @@ public sealed record ClanMarkPacket(byte[] Pixels) : IFramePacket
         }
 
         return new ClanMarkPacket(reader.Bytes(ClanWire.MarkBytes).ToArray());
+    }
+}
+
+public readonly record struct ClanWarehouseLogWire(long At, string Character, byte Action, string ItemKey, string ItemName, int Quantity);
+
+// S->C the clan warehouse's latest log lines, newest first, for a member whose rank may read them: {header, uint16 Count,
+// then per line {int64 At (Unix seconds), text Character, uint8 Action (ClanWarehouseLogAction), text ItemKey, text
+// ItemName, varuint Quantity}}.
+public sealed record ClanWarehouseLogPacket(IReadOnlyList<ClanWarehouseLogWire> Lines) : IFramePacket
+{
+    private const int MaxKeyBytes = 16;
+    private const int MaxItemNameBytes = NpcWire.MaxItemNameBytes;
+    private const int LineSize = 8 + 2 + ClanWire.MaxNameBytes + 1 + 2 + MaxKeyBytes + 2 + MaxItemNameBytes + VarInt.MaxBytes64;
+    public const int MaxSize = 8 + WireHeader.Size + 2 + Contracts.Social.ClanLimits.WarehouseLogLines * LineSize;
+
+    public int Write(Span<byte> destination)
+    {
+        if (Lines.Count > Contracts.Social.ClanLimits.WarehouseLogLines)
+        {
+            throw new ArgumentOutOfRangeException(nameof(destination), "Too many clan warehouse log lines.");
+        }
+
+        var writer = new PacketWriter(destination, EtervaleOpcodes.ClanWarehouseLog);
+        ClanWire.Header(ref writer);
+        writer.UInt16((ushort)Lines.Count);
+        foreach (var line in Lines)
+        {
+            writer.Int64(line.At);
+            Utf8Text.Write(ref writer, line.Character, ClanWire.MaxNameBytes);
+            writer.Byte(line.Action);
+            Utf8Text.Write(ref writer, line.ItemKey, MaxKeyBytes);
+            Utf8Text.Write(ref writer, line.ItemName, MaxItemNameBytes);
+            writer.VarUInt((ulong)Math.Max(0, line.Quantity));
+        }
+
+        return writer.Finish();
+    }
+
+    public static ClanWarehouseLogPacket Read(ReadOnlySpan<byte> packet)
+    {
+        var reader = new PacketReader(packet, 8 + WireHeader.Size + 2);
+        ClanWire.ReadHeader(ref reader);
+        var count = reader.UInt16();
+        if (count > Contracts.Social.ClanLimits.WarehouseLogLines)
+        {
+            throw new InvalidDataException("Clan warehouse log has too many lines.");
+        }
+
+        var lines = new ClanWarehouseLogWire[count];
+        for (var index = 0; index < count; index++)
+        {
+            lines[index] = new ClanWarehouseLogWire(reader.Int64(), ClanWire.Name(ref reader), reader.Byte(), Utf8Text.Read(ref reader, MaxKeyBytes, "Clan message"),
+                Utf8Text.Read(ref reader, MaxItemNameBytes, "Clan message"), reader.VarUInt31());
+        }
+
+        return new ClanWarehouseLogPacket(lines);
     }
 }

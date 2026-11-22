@@ -31,6 +31,11 @@ public sealed record PlayerAppearanceInfo(
 
     // The weapon really worn, under the skin of WeaponKey.
     public string HeldWeaponKey { get; init; } = "";
+
+    // The caravan out (Caravans id, 0 none), its shown name and whether it stays put instead of following.
+    public int Caravan { get; init; }
+    public string CaravanName { get; init; } = "";
+    public bool CaravanStays { get; init; }
     public bool Phoenix { get; init; }
     public int BigHead { get; init; }
 

@@ -69,6 +69,7 @@ public sealed class HudRankings
         new(RankingBoard.Level, PlayerClass.Assassin, Folder + "topassassins.png", Folder + "topassassins_.png"),
         new(RankingBoard.Level, PlayerClass.Shaman, Folder + "topshamans.png", Folder + "topshamans_.png"),
         new(RankingBoard.Level, PlayerClass.MartialArtist, "", ""),
+        new(RankingBoard.Level, PlayerClass.Rogue, "", ""),
         new(RankingBoard.Bellatra, 0, Folder + "sodclans.png", Folder + "sodclans_.png")
     ];
 
@@ -83,7 +84,8 @@ public sealed class HudRankings
         [PlayerClass.Magician] = Folder + "class_mg.png",
         [PlayerClass.Priestess] = Folder + "class_prs.png",
         [PlayerClass.Assassin] = Folder + "class_ass.png",
-        [PlayerClass.Shaman] = Folder + "class_sh.png"
+        [PlayerClass.Shaman] = Folder + "class_sh.png",
+        [PlayerClass.Rogue] = Folder + "class_rogue.png"
     };
 
     private static readonly string[] PlayerMedals = [Folder + "level_1.png", Folder + "level_2.png", Folder + "level_3.png"];

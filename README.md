@@ -124,6 +124,16 @@ Run the client in another terminal and log in with the account you created:
 dotnet run --project Client/PristonTale -c Release --no-build
 ```
 
+Edit the database and data files from a browser with the admin panel (an account of game-master level 4 signs in; see
+[docs/tools.md](docs/tools.md#adminpanel-ptadmin)):
+
+```bash
+dotnet run --project tools/PristonTale.DevAccounts -c Release --no-build -- set-gm demo 4
+dotnet run --project tools/PristonTale.AdminPanel -c Release
+```
+
+Then open http://127.0.0.1:5080.
+
 The client connects over TLS to `serverAddress` in `client-settings.json` beside its executable (`localhost` by
 default; `host`, `host:port` or `tcp://host:port`, port 10009 when left out). On its first start the server creates a
 self-signed certificate at `data/server-certificate.pfx` and logs its SHA-256; a client on the same machine accepts it,

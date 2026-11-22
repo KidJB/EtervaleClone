@@ -38,6 +38,9 @@ public static class ClassProfiles
     // The classes that cast at range with a staff (their basic attack and its sounds are a caster's).
     public static bool CastsWithStaff(PlayerClass playerClass) => Of(playerClass).CastingWeapon == ItemKind.Staff;
 
+    // The classes a new character may take; the Rogue is closed until she is finished.
+    public static bool Creatable(PlayerClass playerClass) => Enum.IsDefined(playerClass) && playerClass != PlayerClass.Rogue;
+
     // The classes items can be specialised for (those with a requirement shift).
     public static bool Specializes(PlayerClass playerClass) => Of(playerClass).Shift is not null;
 
@@ -54,6 +57,7 @@ public static class ClassProfiles
         PlayerClass.Assassin => AssassinClass.Profile,
         PlayerClass.Shaman => ShamanClass.Profile,
         PlayerClass.MartialArtist => MartialArtistClass.Profile,
+        PlayerClass.Rogue => RogueClass.Profile,
         _ => throw new ArgumentOutOfRangeException(nameof(playerClass))
     };
 }

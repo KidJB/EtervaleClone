@@ -10,7 +10,7 @@ public static class CourierWire
     public const int MaxMonsterBytes = 32;
     public const int MaxItemKeyBytes = 16;
     public const int MaxObjectives = 4;
-    public const int MaxQuests = 16;
+    public const int MaxQuests = 19;
 
     internal static void Header(ref PacketWriter writer) => WireHeader.Write(ref writer, Version);
 

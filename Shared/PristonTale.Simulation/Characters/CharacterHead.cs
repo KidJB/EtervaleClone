@@ -10,7 +10,7 @@ public static class CharacterHead
     public static string CustomHead(PlayerClass playerClass, int number) => string.Create(System.Globalization.CultureInfo.InvariantCulture,
         $"char/tmABCD/{CustomPrefix(playerClass)}{number}.inx");
 
-    private static string CustomPrefix(PlayerClass playerClass) => playerClass switch
+    private static string CustomPrefix(PlayerClass playerClass) => CharacterHeadModels.HeadDonor(playerClass) switch
     {
         PlayerClass.Mechanician => "Tmh-A",
         PlayerClass.Fighter => "Tmh-B",
@@ -71,7 +71,7 @@ public static class CharacterHead
         }
 
         return string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"char/tmABCD/{pattern.Prefix}{pattern.Number(hairVariant)}{pattern.Suffix}.inx");
+            $"{pattern.Folder}{pattern.Prefix}{pattern.Number(hairVariant)}{pattern.Suffix}.inx");
     }
 
     // The big head of the big-head potion: look 1 or 2, cycling three heads by hair. Archer, Atalanta and Priestess ship
@@ -82,7 +82,7 @@ public static class CharacterHead
         ArgumentOutOfRangeException.ThrowIfGreaterThan(look, 2);
         var secondOnly = playerClass is PlayerClass.Archer or PlayerClass.Atalanta or PlayerClass.Priestess;
         var suffix = look == 1 && !secondOnly ? "b" : "t";
-        var prefix = CharacterHeadModels.Get(playerClass, 0).Prefix;
+        var prefix = CharacterHeadModels.Get(CharacterHeadModels.HeadDonor(playerClass), 0).Prefix;
         return string.Create(System.Globalization.CultureInfo.InvariantCulture,
             $"char/tmABCD/{prefix}{Math.Abs(hairIndex) % 3 + 1:D2}{suffix}.inx");
     }
@@ -97,7 +97,7 @@ public static class CharacterHead
     // Look 3: the soccer-ball potion's head, one model per class whatever the hair.
     public const int SoccerLook = 3;
 
-    public static string SoccerHead(PlayerClass playerClass) => "char/tmABCD/" + playerClass switch
+    public static string SoccerHead(PlayerClass playerClass) => "char/tmABCD/" + CharacterHeadModels.HeadDonor(playerClass) switch
     {
         PlayerClass.Fighter => "TmhB-18t.inx",
         PlayerClass.Mechanician => "TmhA-18t.inx",

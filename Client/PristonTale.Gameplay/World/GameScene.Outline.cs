@@ -17,6 +17,42 @@ public sealed partial class GameScene
     private static readonly Vector3 MonsterOutline = new(1f, 30f / 255f, 0f);
     private static readonly Vector3 NpcOutline = new(0f, 1f, 100f / 255f);
     private ulong _outlinedId;
+    private bool _caravanOutlined;
+
+    // The own caravan under the cursor: outlined as an NPC is, the talk pointer over it, and a click opens its storage.
+    public bool CaravanHovered { get; private set; }
+
+    private bool _caravanOpenRequested;
+
+    // Whether a click on the own caravan asked for its storage since the last call.
+    public bool TakeCaravanOpen()
+    {
+        var requested = _caravanOpenRequested;
+        _caravanOpenRequested = false;
+        return requested;
+    }
+
+    // The own caravan is hovered when the ray meets it and no entity is under the cursor.
+    private void UpdateCaravanHover(Ray? ray, bool entityHovered)
+    {
+        var self = _remote?.SelfEntityId ?? 0;
+        CaravanHovered = !entityHovered && ray is { } cursor && _caravans?.Pick(cursor, self) is not null;
+        if (_caravans is null || _camera is null)
+        {
+            return;
+        }
+
+        if (CaravanHovered && _caravans.TryGetAnchor(self, out var anchor))
+        {
+            _caravans.SetOutline(self, NpcOutline, OutlineStrength(Vector3.Distance(anchor, _camera.Position)));
+            _caravanOutlined = true;
+        }
+        else if (_caravanOutlined)
+        {
+            _caravans.SetOutline(self, Vector3.Zero, 0f);
+            _caravanOutlined = false;
+        }
+    }
 
     // The outline's width share at this distance from the camera.
     public static float OutlineStrength(float distance) => Math.Clamp(1f - (distance - OutlineFullDistance) / OutlineFadeDistance, 0f, 1f);

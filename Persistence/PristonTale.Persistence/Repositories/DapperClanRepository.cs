@@ -11,15 +11,21 @@ public sealed class DapperClanRepository(IDbConnectionFactory connectionFactory)
     public async Task<(IReadOnlyList<ClanRecord> Clans, IReadOnlyList<ClanMemberRecord> Members)> LoadAsync(CancellationToken ct = default)
     {
         await using var connection = await connectionFactory.OpenAsync(ct);
-        var clans = await connection.QueryAsync<(long Id, string Name, long State, long CreatedAt, long DeadlineAt, string Intro, long MarkVersion)>(
-            new CommandDefinition("SELECT id, name, state, created_at, deadline_at, intro, mark_version FROM clans ORDER BY id", cancellationToken: ct));
+        var clans = await connection.QueryAsync<(long Id, string Name, long State, long CreatedAt, long DeadlineAt, string Intro, long MarkVersion,
+            long RankPermissions, long Treasury, long SlotLevel, long WeightLevel, long CoinTreasury)>(new CommandDefinition(
+            """
+            SELECT id, name, state, created_at, deadline_at, intro, mark_version, rank_permissions, treasury, warehouse_slot_level, warehouse_weight_level,
+                coin_treasury
+            FROM clans ORDER BY id
+            """, cancellationToken: ct));
         var members = await connection.QueryAsync<(long ClanId, long CharacterId, long Rank, long JoinedAt, string Name, long JobCode, long Level, long AccountId)>(
             new CommandDefinition(
                 """
                 SELECT m.clan_id, m.character_id, m.rank, m.joined_at, c.name, c.job_code, c.level, c.account_id
                 FROM clan_members m JOIN characters c ON c.id = m.character_id ORDER BY m.clan_id, m.joined_at
                 """, cancellationToken: ct));
-        return (clans.Select(static row => new ClanRecord(row.Id, row.Name, (short)row.State, row.CreatedAt, row.DeadlineAt, row.Intro, (int)row.MarkVersion))
+        return (clans.Select(static row => new ClanRecord(row.Id, row.Name, (short)row.State, row.CreatedAt, row.DeadlineAt, row.Intro, (int)row.MarkVersion,
+                (int)row.RankPermissions, row.Treasury, (int)row.SlotLevel, (int)row.WeightLevel, row.CoinTreasury))
                 .ToArray(),
             members.Select(static row => new ClanMemberRecord(row.ClanId, row.CharacterId, (short)row.Rank, row.JoinedAt, row.Name, (int)row.JobCode,
                 (int)row.Level, row.AccountId)).ToArray());
@@ -39,10 +45,10 @@ public sealed class DapperClanRepository(IDbConnectionFactory connectionFactory)
 
         var id = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
             """
-            INSERT INTO clans (name, name_key, state, created_at, deadline_at, intro, mark_version)
-            VALUES (@Name, @key, @State, @CreatedAt, @DeadlineAt, @Intro, @MarkVersion) RETURNING id
+            INSERT INTO clans (name, name_key, state, created_at, deadline_at, intro, mark_version, rank_permissions)
+            VALUES (@Name, @key, @State, @CreatedAt, @DeadlineAt, @Intro, @MarkVersion, @RankPermissions) RETURNING id
             """,
-            new { clan.Name, key = Key(clan.Name), clan.State, clan.CreatedAt, clan.DeadlineAt, clan.Intro, clan.MarkVersion }, transaction, cancellationToken: ct));
+            new { clan.Name, key = Key(clan.Name), clan.State, clan.CreatedAt, clan.DeadlineAt, clan.Intro, clan.MarkVersion, clan.RankPermissions }, transaction, cancellationToken: ct));
         await InsertMemberAsync(connection, transaction, chief with { ClanId = id }, ct);
         await transaction.CommitAsync(ct);
         return id;
@@ -152,6 +158,90 @@ public sealed class DapperClanRepository(IDbConnectionFactory connectionFactory)
         await using var connection = await connectionFactory.OpenAsync(ct);
         return await connection.ExecuteAsync(new CommandDefinition(
             "UPDATE clans SET mark_version = @version WHERE id = @clanId", new { clanId, version }, cancellationToken: ct)) > 0;
+    }
+
+    public async Task<bool> SetRankPermissionsAsync(long clanId, int packed, CancellationToken ct = default)
+    {
+        await using var connection = await connectionFactory.OpenAsync(ct);
+        return await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE clans SET rank_permissions = @packed WHERE id = @clanId", new { clanId, packed }, cancellationToken: ct)) > 0;
+    }
+
+    public async Task<bool> DonateAsync(long clanId, long amount, long maxTreasury, CharacterRecord payment, ClanWarehouseLogRecord log,
+        CancellationToken ct = default)
+    {
+        await using var connection = await connectionFactory.OpenAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        var paid = await PayAsync(connection, transaction, payment, ct)
+            && await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE clans SET treasury = treasury + @amount WHERE id = @clanId AND treasury <= @limit",
+                new { clanId, amount, limit = maxTreasury - amount }, transaction, cancellationToken: ct)) > 0;
+        if (!paid)
+        {
+            await transaction.RollbackAsync(ct);
+            return false;
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition(DapperClanStorageRepository.LogInsertSql, log, transaction, cancellationToken: ct));
+        await transaction.CommitAsync(ct);
+        return true;
+    }
+
+    public async Task<bool> UpgradeAsync(long clanId, Simulation.Social.Clans.ClanUpgradeKind kind, int fromLevel, long cost, ClanWarehouseLogRecord log,
+        CancellationToken ct = default)
+    {
+        var column = kind == Simulation.Social.Clans.ClanUpgradeKind.WarehouseSlots ? "warehouse_slot_level" : "warehouse_weight_level";
+        await using var connection = await connectionFactory.OpenAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        var paid = await connection.ExecuteAsync(new CommandDefinition(
+            $"UPDATE clans SET treasury = treasury - @cost, {column} = @next WHERE id = @clanId AND treasury >= @cost AND {column} = @fromLevel",
+            new { clanId, cost, fromLevel, next = fromLevel + 1 }, transaction, cancellationToken: ct));
+        if (paid == 0)
+        {
+            await transaction.RollbackAsync(ct);
+            return false;
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition(DapperClanStorageRepository.LogInsertSql, log, transaction, cancellationToken: ct));
+        await transaction.CommitAsync(ct);
+        return true;
+    }
+
+    public async Task<bool> DonateCoinsAsync(long clanId, long accountId, long amount, long maxCoinTreasury, ClanWarehouseLogRecord log,
+        CancellationToken ct = default)
+    {
+        await using var connection = await connectionFactory.OpenAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        var paid = await DapperCoinRepository.ChangeAsync(connection, transaction, accountId, -amount, "Clan donation", ct) is not null
+            && await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE clans SET coin_treasury = coin_treasury + @amount WHERE id = @clanId AND coin_treasury <= @limit",
+                new { clanId, amount, limit = maxCoinTreasury - amount }, transaction, cancellationToken: ct)) > 0;
+        if (!paid)
+        {
+            await transaction.RollbackAsync(ct);
+            return false;
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition(DapperClanStorageRepository.LogInsertSql, log, transaction, cancellationToken: ct));
+        await transaction.CommitAsync(ct);
+        return true;
+    }
+
+    public async Task<bool> SpendCoinsAsync(long clanId, long cost, ClanWarehouseLogRecord log, CancellationToken ct = default)
+    {
+        await using var connection = await connectionFactory.OpenAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        if (await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE clans SET coin_treasury = coin_treasury - @cost WHERE id = @clanId AND coin_treasury >= @cost",
+                new { clanId, cost }, transaction, cancellationToken: ct)) == 0)
+        {
+            await transaction.RollbackAsync(ct);
+            return false;
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition(DapperClanStorageRepository.LogInsertSql, log, transaction, cancellationToken: ct));
+        await transaction.CommitAsync(ct);
+        return true;
     }
 
     public async Task<IReadOnlyDictionary<long, string>> ClanNamesAsync(long accountId, CancellationToken ct = default)

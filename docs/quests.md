@@ -211,16 +211,21 @@ quest variant, which the importer stores as the code's quest definition (`item_d
   frame (right and bottom anchored, so it keeps its place over the bottom bar on a larger screen): five titles per page,
   page arrows, running/finished tabs, close; a title opens its description (`image/party/party_DATA/<file>`) on the
   panel to the left.
-- The quest book (`L`, or the `Q` button under the minimap's pet button) lists every quest of the player's side
-  (`QuestBook.For`): the beginner quests, the level milestones, the bonus chains, Fury of Phantom, the four rank-ups and
-  the wing exchanges, drawn on the open book of `assets/Hud/QuestBook/` (`background.png` with its close, scroll and
-  status icons; a plain dark box when the art is missing). "In Progress" lists the accepted (running) quest,
-  "Quest List" all of them. Each row's icon shows Done (the check mark), Running, Available or Locked (`QuestBook.StatusOf`, from the level, the class
-  tier and the journal's running code and `LevelLog`/`ElementaryLog`); a click shows the quest on the right page: title, level and
-  who gives it (`QuestBookEntry.Giver`),
-  the task beside the green mark, the status beside the blue one and the rewards beside the check. Milestone levels, hunts and points come from `LevelQuests.Milestones`, rank-up levels from
-  `RankUpRules.RequiredLevel`, chain points from `QuestRewards`, wing gold from `WingQuest.ExchangeGold`. The wheel
-  scrolls the list; the `x`, the button, `L` or Escape close it.
+- The quest book (`L`, or the `Q` button under the minimap's pet button) is a dark framed window drawn by the HUD
+  painter (`HudQuestBook`): a "Quest Book" title plate, a red close box, the list pane on the left and the page on the
+  right. The list starts with "Show all" (off: only available and running quests; on: locked and finished ones too,
+  `HudQuestBook.Shows`) and the Location / Level heading, then sections that a click on their header collapses or opens
+  (the collapse and expand icons of `assets/Hud/QuestBook/`): Rank up, Level Quests, Beginner Quests and Side Quests
+  (`HudQuestBook.StorySection` over the player's side's `QuestBook.For`: the beginner quests, the level milestones, the
+  bonus chains, Fury of Phantom, the four rank-ups and the wing exchanges), Daily (`HudQuestBook.Daily`), then one
+  section per hunting field with the Quest Couriers' hunts (`HudQuestBook.Couriers`, see [Quest Couriers](#quest-couriers)).
+  A section with nothing to show is left out. Each row has its status icon (Done, Running, Available or Locked:
+  `QuestBook.StatusOf` from the level, the class tier and the journal's running code and `LevelLog`/`ElementaryLog`), a
+  "!" (yellow to take, blue repeatable) or "?" while running, its name and its level. A click shows the quest on the
+  page: its title, "Level N / status", a Description (who to talk to, the task or each objective with its kills, where to
+  deliver it; a speech mark or a target mark before each line) and Quest Rewards. Milestone levels, hunts and points come
+  from `LevelQuests.Milestones`, rank-up levels from `RankUpRules.RequiredLevel`, chain points from `QuestRewards`, wing
+  gold from `WingQuest.ExchangeGold`. The wheel scrolls the list; the close box, the button, `L` or Escape close it.
 - The quest tracker (`HudQuestTracker`) is a bordered dark box headed "Active Quests" (with the number tracked) on the
   right of the screen while a quest or a daily quest runs. Each quest is a block: its title with a QUEST or DAILY tag,
   its task wrapped to the box, a progress row (the hunted monster, or "Monsters slain", on the left and the count on
@@ -284,7 +289,7 @@ credited to the player counts toward each accepted hunt whose monster level it r
 `DailyQuestState.OnKill`). A claim at the giver (`DailyQuestAppService.ClaimAsync`) prepares on a copy the experience (the
 quest's percent of what the level needs), the gold (within the carry limit), the potion stack and the claim; the character
 and the coins added to the account are stored in one transaction (`ICoinRepository.BuyWithCharacterAsync` with a negative
-price) before the commit. The owner's state travels as `DailyQuestState` (protocol.md); the quest book's Daily tab
+price) before the commit. The owner's state travels as `DailyQuestState` (protocol.md); the quest book's Daily section
 (`HudQuestBook.Daily`) lists the dailies of the player's level, and Messenger Ian's "Daily quests" button opens it with
 Accept and Claim.
 
@@ -318,7 +323,10 @@ data in `data/couriers.json`, read at start by `CourierCatalogStore` and reloade
 - Wire: `CourierBoardRequest`/`CourierBoard` (a Courier's hunts at the player's level and the player's own from it, with
   their standing), `CourierRequest`/`CourierResult` (accept, abandon, turn in) and `CourierState` (the accepted hunts, on
   entry and every change). Client: `HudCourierWindow` (Available, Active and Completed tabs; details and Accept, Abandon,
-  Turn In), Courier blocks in `HudQuestTracker`, a chat notice when a hunt is ready, and the quest mark over the field's
+  Turn In), the quest book's field sections (`HudQuestBook.Couriers`: the board for `CourierCatalog.BookNpc`, which
+  `CourierCatalog.BookQuests` fills with the hunts offered at the player's level in the `BookFields` (3) fields whose
+  offers start highest, then the accepted hunts of other fields, as many as one frame holds (`CourierWire.MaxQuests`, 19);
+  asked when the book opens and again after a level or hunt change; the highest-level field first), Courier blocks in `HudQuestTracker`, a chat notice when a hunt is ready, and the quest mark over the field's
   Courier (ready, taken or a hunt to take).
 - Shipped data: `--generate-couriers` (testing.md) writes a Courier beside the arrival of each hunting field (not towns,
   the castle, Bellatra, the boss field, the quest arena and room, the action field) and six hunts of its spawned monsters:
@@ -345,6 +353,9 @@ them to the premium rules and `PremiumEffects`; the HUD shows them with `HudWorl
 for a game master, 0 seconds ends them.
 
 World buffs never pause, in town or offline; the Active Buffs panel's hover box marks their time left "(DOES NOT PAUSE)".
+
+The clan's own items (`CL101`-`CL110`, `CL201`-`CL210`, coin shop tab Clan Buffs) run the same buffs for its members only
+(`ClanBuffs`, `PremiumTimers.ClanBuffMask`); a buff running for the world and the clan counts once ([application.md](application.md#clan-world-buffs)).
 
 ## Boss arena
 

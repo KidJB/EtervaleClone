@@ -98,7 +98,7 @@ internal static class HelpPetHudTests
             "System", "RunAndWalk", "Camera_Hand", "Mini_Map", "LeftSkill", "RightSkill", "ChatBox", "Bar_Life", "Bar_Mana", "Bar_Stamina", "Bar_Exp",
             "DayandNight", "Special_Message9", .. new[] { 2, 6, 9, 10 }.SelectMany(level => new[] { $"Level_Message{level}-1", $"Level_Message{level}-2" }),
             .. new[] { 3, 4, 5, 7, 8 }.Select(level => $"Level_Message{level}"),
-            .. Enum.GetValues<PlayerClass>().Select(playerClass => $"Special_Message8_{(playerClass == PlayerClass.Mechanician ? "Mecha" : playerClass)}")
+            .. Enum.GetValues<PlayerClass>().Select(HudHelpPet.ClassTopic).OfType<string>().Select(topic => $"Special_Message8_{topic}")
         ];
         var missing = topics.Where(topic => shipped.Lines(topic).Length == 0).ToArray();
         Assert.True(missing.Length == 0 && shipped.Lines("Potion_ShortKey").Length == 6 && shipped.Name(4) == "Mut", $"missing topics: {string.Join(", ", missing)}");

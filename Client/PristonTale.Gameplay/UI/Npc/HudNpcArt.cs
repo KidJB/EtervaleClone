@@ -49,6 +49,7 @@ public static class HudNpcArt
         NpcServiceKind.Shop => ClientText.Get("NpcService.Shop"),
         NpcServiceKind.SkillMaster => ClientText.Get("NpcService.SkillMaster"),
         NpcServiceKind.Warehouse => ClientText.Get("NpcService.Warehouse"),
+        NpcServiceKind.ClanWarehouse => ClientText.Get("NpcService.ClanWarehouse"),
         NpcServiceKind.QuestGiver or NpcServiceKind.QuestScript => ClientText.Get("NpcService.Quest"),
         NpcServiceKind.QuestEvent => value == Simulation.Items.Usable.Puzzles.CollectorEvent ? ClientText.Get("NpcService.PuzzleExchange") : ClientText.Get("NpcService.EventQuest"),
         NpcServiceKind.WarpGate => ClientText.Get("NpcService.WarpGate"),

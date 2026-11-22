@@ -26,8 +26,10 @@ public sealed class Clan
 {
     private readonly List<ClanMember> _members = [];
 
-    public Clan(long id, string name, ClanState state, long createdAtSeconds, long deadlineSeconds, string intro = "", int markVersion = 0)
+    public Clan(long id, string name, ClanState state, long createdAtSeconds, long deadlineSeconds, string intro = "", int markVersion = 0,
+        ClanRankPermissions? permissions = null)
     {
+        Permissions = permissions ?? ClanRankPermissions.Default;
         Id = id;
         Name = name;
         State = state;
@@ -44,6 +46,16 @@ public sealed class Clan
     public long DeadlineSeconds { get; set; }
     public string Intro { get; set; }
     public int MarkVersion { get; set; }
+    public ClanRankPermissions Permissions { get; set; }
+
+    // The treasury's gold and the clan warehouse's upgrade levels (ClanUpgrades).
+    public long Treasury { get; set; }
+    public int SlotLevel { get; set; }
+    public int WeightLevel { get; set; }
+
+    // The coin treasury: coin-shop coins its members donated, which the ranks with ClanPermission.SpendCoins spend on clan
+    // world buffs; nobody takes them back.
+    public long CoinTreasury { get; set; }
 
     public IReadOnlyList<ClanMember> Members => _members;
 
@@ -54,6 +66,9 @@ public sealed class Clan
     public ClanMember Vice => _members.FirstOrDefault(static member => member.Rank == ClanRank.Vice);
 
     public int Capacity => ClanRules.Capacity(Chief.Level);
+
+    // A member's rights over what the clan owns (none for someone outside it).
+    public ClanPermission RightsOf(long characterId) => Find(characterId) is { } member ? Permissions.For(member.Rank) : ClanPermission.None;
 
     public ClanMember Find(long characterId) => _members.FirstOrDefault(member => member.CharacterId == characterId);
 
@@ -74,5 +89,6 @@ public sealed class Clan
 }
 
 // What a player shows of its clan over its head: the clan, its name and its mark's version (0 the default mark); the
-// world also reads whether the clan is registered (clan pets need one).
-public sealed record ClanTag(long ClanId, string Name, int MarkVersion, bool Registered = false);
+// world also reads whether the clan is registered (clan pets need one) and the player's rights (ClanPermission) over
+// what the clan owns.
+public sealed record ClanTag(long ClanId, string Name, int MarkVersion, bool Registered = false, ClanPermission Rights = ClanPermission.None);

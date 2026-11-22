@@ -132,7 +132,7 @@ public sealed class MountPresentation(IActorScene scene, PristonActorLoader load
         PlayerClass.Pikeman => "ps",
         PlayerClass.Magician => "mgs",
         PlayerClass.Priestess => "prs",
-        PlayerClass.Assassin => "asn",
+        PlayerClass.Assassin or PlayerClass.Rogue => "asn",
         PlayerClass.Shaman => "sha",
         _ => "fs"
     };

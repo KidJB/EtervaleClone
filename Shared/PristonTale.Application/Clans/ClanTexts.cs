@@ -12,6 +12,7 @@ public static class ClanTexts
         ClanStatus.LevelTooLow => GameText.Of(GameTextId.ClanLevelTooLow, Number(ClanRules.FoundingLevel)),
         ClanStatus.NameInvalid => GameText.Of(GameTextId.ClanNameInvalid, Number(ClanRules.MinNameLength), Number(ClanRules.MaxNameLength)),
         ClanStatus.JoinCooldown => GameText.Of(GameTextId.ClanJoinCooldown, Number(ClanRules.JoinCooldownDays)),
+        ClanStatus.DonationOutOfRange => GameText.Of(GameTextId.ClanDonationRange, Number(ClanUpgrades.MinDonation), Number(ClanUpgrades.MaxDonation)),
         _ => GameText.Of(Id(status))
     };
 
@@ -40,6 +41,11 @@ public static class ClanTexts
         ClanStatus.OutOfReach => GameTextId.NpcOutOfReach,
         ClanStatus.Busy => GameTextId.ClanBusy,
         ClanStatus.MarkUnavailable => GameTextId.ClanMarkUnavailable,
+        ClanStatus.NotPermitted => GameTextId.ClanRankTooLow,
+        ClanStatus.TreasuryFull => GameTextId.ClanTreasuryFull,
+        ClanStatus.NotEnoughTreasury => GameTextId.ClanNotEnoughTreasury,
+        ClanStatus.MaxLevel => GameTextId.ClanUpgradeMaxed,
+        ClanStatus.NotEnoughCoins => GameTextId.NotEnoughCoinsClan,
         _ => GameTextId.ClanUnavailable
     };
 }

@@ -40,6 +40,7 @@ public static class ItemUseMessages
         ItemUseStatus.NotEnoughGold => GameTextId.NotEnoughGold,
         ItemUseStatus.CrystalRefused => GameTextId.CrystalRefused,
         ItemUseStatus.MercenaryLimit => GameTextId.MercenaryLimit,
+        ItemUseStatus.ClanRankTooLow => GameTextId.ClanRankTooLow,
         _ => GameTextId.ItemNotUsed
     };
 }

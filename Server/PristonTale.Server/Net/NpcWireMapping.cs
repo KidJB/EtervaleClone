@@ -1,3 +1,4 @@
+using PristonTale.Protocol.Binary;
 using PristonTale.Protocol.Packets;
 using PristonTale.Simulation.World.Npcs;
 
@@ -6,6 +7,24 @@ namespace PristonTale.Server.Net;
 // Encodes a service reply: the state messages it carries first, then the result, all with the request's operation id.
 internal static class NpcWireMapping
 {
+    // A warehouse in messages of at most WarehousePacket.MaxItems items each, all of its revision; an empty one in one.
+    public static IEnumerable<WarehousePacket> WarehouseParts(Guid operation, ulong npc, WarehouseView warehouse, uint opcode)
+    {
+        var start = 0;
+        do
+        {
+            var part = warehouse.Items.Skip(start).Take(WarehousePacket.MaxItems).ToArray();
+            yield return new WarehousePacket(operation, npc, warehouse.Revision, warehouse.Money, warehouse.Weight, warehouse.MaxWeight,
+                (short)warehouse.Columns, (short)warehouse.Rows, part.Select(ItemWireMapping.StoreItem).ToArray())
+            {
+                Opcode = opcode,
+                Details = part.Select(ItemWireMapping.Detail).ToArray()
+            };
+            start += WarehousePacket.MaxItems;
+        }
+        while (start < warehouse.Items.Count);
+    }
+
     public static void SendState(NpcServiceRequestPacket request, NpcServiceReply reply, Action<ClientSession.PacketWrite> send)
     {
         var operation = request.OperationId;
@@ -29,11 +48,10 @@ internal static class NpcWireMapping
 
         if (reply.Warehouse is { } warehouse)
         {
-            var entries = warehouse.Items.Take(WarehousePacket.MaxItems)
-                .Select(ItemWireMapping.StoreItem)
-                .ToArray();
-            send(new WarehousePacket(operation, npc, warehouse.Revision, warehouse.Money, warehouse.Weight, warehouse.MaxWeight,
-                (short)warehouse.Columns, (short)warehouse.Rows, entries).Write);
+            foreach (var part in WarehouseParts(operation, npc, warehouse, EtervaleOpcodes.Warehouse))
+            {
+                send(part.Write);
+            }
         }
 
         if (reply.Destinations is { } destinations)

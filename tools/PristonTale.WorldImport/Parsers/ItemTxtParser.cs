@@ -300,6 +300,7 @@ public sealed class ItemTxtParser
         "assassin" => (uint)JobBitCode.Assassin,
         "shaman" => (uint)JobBitCode.Shaman,
         "martialartist" or "martial artist" or "martial" => (uint)JobBitCode.MartialArtist,
+        "rogue" => (uint)JobBitCode.Rogue,
         _ => 0u,
     };
 }

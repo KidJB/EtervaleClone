@@ -397,7 +397,10 @@ public sealed class WorldPlayer
         ClanMark = Clan?.MarkVersion ?? 0,
         Title = AchievementTitle,
         RankAura = _character.Premium.RankAura,
-        HeldWeaponKey = _character.GetEquipped(EquipmentSlot.Weapon)?.Definition.CatalogKey ?? ""
+        HeldWeaponKey = _character.GetEquipped(EquipmentSlot.Weapon)?.Definition.CatalogKey ?? "",
+        Caravan = _character.Caravan?.Kind ?? 0,
+        CaravanName = Caravans.Shown(_character.Caravan),
+        CaravanStays = _character.Caravan?.Stays ?? false
     };
 
     // The title over its name (AchievementRules.TitleOf), 0 for none.
@@ -431,6 +434,16 @@ public sealed class WorldPlayer
 
     // The world buff items this player used, waiting for the world's next pass.
     public List<int> PendingWorldBuffs { get; } = [];
+
+    // The clan world buff items this player used (the clan, the item's rule argument), waiting for the world's next pass.
+    public List<(long ClanId, int Argument)> PendingClanBuffs { get; } = [];
+
+    // The clan whose warehouse this player has open (0 for none).
+    public long OpenClanWarehouse { get; set; }
+
+    // The clan warehouse's view made for this player (its items' values are the viewer's) and the copy it was made from.
+    internal Simulation.World.Npcs.WarehouseStorage? ClanWarehouseSeen { get; set; }
+    internal Simulation.World.Npcs.WarehouseView? ClanWarehouseShown { get; set; }
 
     // WorldServer serializes this with the tick. Height stays authoritative; client terrain samples are not trusted.
     public MovementVerdict ReportMovement(Vector3 position, float facing, bool moving, bool running, ulong actionTarget, long nowMs,

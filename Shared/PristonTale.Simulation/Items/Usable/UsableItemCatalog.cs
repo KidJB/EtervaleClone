@@ -31,11 +31,15 @@ public enum UsableItemAction : byte
     UnionCore,
     // Unlocks the pet skin of the argument (PetSkins) for the account and sends that pet out.
     PetSkin,
+    Caravan,
     // Adds the mount of the argument (Mounts) to the account's stable and picks it.
     Mount,
 
     // Starts the world buff of the argument (World.WorldBuffs) for every player.
-    WorldBuff
+    WorldBuff,
+
+    // Starts the world buff of the argument for the user's clan only (Social.Clans.ClanBuffs).
+    ClanBuff
 }
 
 // The three scroll effects; a scroll refuses while another scroll of the same effect, or the opposite offensive or
@@ -212,6 +216,11 @@ public static class UsableItemCatalog
             rules[skin.ItemKey] = new UsableItemRule(UsableItemAction.PetSkin, skin.Id);
         }
 
+        foreach (var caravan in Characters.Caravans.All)
+        {
+            rules[caravan.ItemKey] = new UsableItemRule(UsableItemAction.Caravan, caravan.Id);
+        }
+
         foreach (var mount in Characters.Mounts.All)
         {
             rules[mount.ItemKey] = new UsableItemRule(UsableItemAction.Mount, mount.Id);
@@ -221,6 +230,8 @@ public static class UsableItemCatalog
         {
             rules[buff.ItemKey] = new UsableItemRule(UsableItemAction.WorldBuff, World.WorldBuffs.Argument(buff.Kind, false));
             rules[buff.DayItemKey] = new UsableItemRule(UsableItemAction.WorldBuff, World.WorldBuffs.Argument(buff.Kind, true));
+            rules[Social.Clans.ClanBuffs.ItemKey(buff, false)] = new UsableItemRule(UsableItemAction.ClanBuff, World.WorldBuffs.Argument(buff.Kind, false));
+            rules[Social.Clans.ClanBuffs.ItemKey(buff, true)] = new UsableItemRule(UsableItemAction.ClanBuff, World.WorldBuffs.Argument(buff.Kind, true));
         }
 
         // Packages run Third Eyes and an EXP potion together at the package's own percentages.

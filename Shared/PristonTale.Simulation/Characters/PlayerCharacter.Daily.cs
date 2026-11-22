@@ -10,4 +10,7 @@ public sealed partial class PlayerCharacter
 
     // The looks chosen in The Cabinet (SkinRules), saved with the character.
     public SkinSet Skins { get; set; } = SkinSet.None;
+
+    // The caravan out, or null (Caravans).
+    public CaravanState Caravan { get; set; }
 }

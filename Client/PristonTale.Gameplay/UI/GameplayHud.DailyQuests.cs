@@ -11,6 +11,7 @@ public sealed partial class GameplayHud
         if (_state is { } state)
         {
             _questBook.RefreshDaily(DailyQuests, state.Level);
+            AskQuestBookHunts(state.Level);
         }
 
         if (_dailyAnswer is { IsCompleted: true } answer)

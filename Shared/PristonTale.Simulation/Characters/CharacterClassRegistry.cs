@@ -22,7 +22,8 @@ public sealed class CharacterClassRegistry
             new PriestessClass(),
             new AssassinClass(),
             new ShamanClass(),
-            new MartialArtistClass()
+            new MartialArtistClass(),
+            new RogueClass()
         ];
         _byClass = all.ToDictionary(static c => c.Class);
         All = all;

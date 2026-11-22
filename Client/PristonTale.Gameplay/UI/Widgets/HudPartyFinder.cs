@@ -125,8 +125,13 @@ public sealed class HudPartyFinder
     // A text box has the keyboard.
     public bool Typing => Open && (_joinPassword.Focused || _minLevel.Focused || _password.Focused);
 
-    // A class's icon; the art numbers them by class, the Martial Artist's 12.
-    private static string Icon(PlayerClass job) => Folder + "Class_icon/" + (job == PlayerClass.MartialArtist ? 12 : (int)job) + ".png";
+    // A class's icon; the art numbers them by class, the Martial Artist's 12 and the Rogue's 13.
+    private static string Icon(PlayerClass job) => Folder + "Class_icon/" + job switch
+    {
+        PlayerClass.MartialArtist => 12,
+        PlayerClass.Rogue => 13,
+        _ => (int)job
+    } + ".png";
 
     private static Rectangle ListHome(HudLayout layout) =>
         new((layout.Width - ListWidth - Gap - InfoWidth) / 2, (layout.Height - ListHeight) / 2, ListWidth, ListHeight);

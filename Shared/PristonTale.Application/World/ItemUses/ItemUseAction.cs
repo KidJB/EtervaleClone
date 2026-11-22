@@ -96,7 +96,9 @@ internal static class ItemUseActions
         [UsableItemAction.PuzzleBag] = new PuzzleBagUse(),
         [UsableItemAction.PetSkin] = new PetSkinUse(),
         [UsableItemAction.Mount] = new MountUse(),
-        [UsableItemAction.WorldBuff] = new WorldBuffUse()
+        [UsableItemAction.Caravan] = new CaravanUse(),
+        [UsableItemAction.WorldBuff] = new WorldBuffUse(),
+        [UsableItemAction.ClanBuff] = new ClanBuffUse()
     };
 
     public static ItemUseAction For(UsableItemAction action) => ByAction.GetValueOrDefault(action, Plain);

@@ -24,6 +24,7 @@ public static class PostgresPersistenceServiceCollectionExtensions
 
         services.AddSingleton(_ => new NpgsqlDataSourceBuilder(connectionString).Build());
         services.AddSingleton<IDbConnectionFactory, NpgsqlConnectionFactory>();
+        services.AddSingleton<Abstractions.Admin.IAdminSchemaReader, PostgresAdminSchemaReader>();
 
         return services.AddPristonRepositories(connectionString, static rb => rb.AddPostgres());
     }

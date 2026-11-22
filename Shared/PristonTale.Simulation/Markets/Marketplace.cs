@@ -59,6 +59,7 @@ public static class MarketplaceRules
         new("Wands", MarketplaceCategory.Weapons, [ItemKind.Staff]),
         new("Daggers", MarketplaceCategory.Weapons, [ItemKind.Dagger]),
         new("Phantoms", MarketplaceCategory.Weapons, [ItemKind.Phantom]),
+        new("Grimoires", MarketplaceCategory.Weapons, [ItemKind.Grimoire]),
         new("Amulets", MarketplaceCategory.Accessory, [ItemKind.Amulet]),
         new("Rings", MarketplaceCategory.Accessory, [ItemKind.Ring]),
         new("Bracelets", MarketplaceCategory.Accessory, [ItemKind.Bracelet]),

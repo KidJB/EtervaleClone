@@ -9,6 +9,8 @@ public sealed partial class GameplayHud
     private readonly HudCourierWindow _courierWindow = new();
     private readonly HashSet<int> _couriersReady = [];
     private Protocol.Packets.CourierStatePacket _couriers = new([]);
+    private Action<ulong> _askBoard;
+    private int _huntsLevel = -1;
 
     private static readonly Dictionary<string, int> FieldCodes = new Simulation.World.WorldCatalog().AllFields
         .GroupBy(static field => field.Id, StringComparer.OrdinalIgnoreCase).ToDictionary(static group => group.Key, static group => group.First().FieldCode,
@@ -17,7 +19,11 @@ public sealed partial class GameplayHud
     // Asks a Courier's board; set by the screen.
     public Action<ulong> CourierBoardRequest
     {
-        set => _courierWindow.Ask = value;
+        set
+        {
+            _courierWindow.Ask = value;
+            _askBoard = value;
+        }
     }
 
     // Accepts, abandons or turns in a Courier hunt; set by the screen.
@@ -28,17 +34,38 @@ public sealed partial class GameplayHud
 
     public void ObserveCouriers(PresenceUpdate update)
     {
-        if (update.CourierBoard is { } board)
+        if (update.CourierBoard is { NpcId: Simulation.Quests.CourierCatalog.BookNpc } book)
+        {
+            _questBook.RefreshHunts(book.Quests);
+        }
+        else if (update.CourierBoard is { } board)
         {
             _courierWindow.ObserveBoard(board);
         }
 
         if (update.Couriers is { } couriers)
         {
+            _questBook.InvalidateHunts();
             _courierWindow.ObserveState(couriers);
             _questTracker.RefreshCouriers(couriers);
             AnnounceReadyCouriers(couriers);
             _couriers = couriers;
+        }
+    }
+
+    // The Quest Book's Hunts tab asks its board while the book is open, again after a level or a hunt changes.
+    private void AskQuestBookHunts(int level)
+    {
+        if (level != _huntsLevel)
+        {
+            _huntsLevel = level;
+            _questBook.InvalidateHunts();
+        }
+
+        if (_questBook.Open && _questBook.HuntsWanted && _askBoard is { } ask)
+        {
+            _questBook.AskedHunts();
+            ask(Simulation.Quests.CourierCatalog.BookNpc);
         }
     }
 

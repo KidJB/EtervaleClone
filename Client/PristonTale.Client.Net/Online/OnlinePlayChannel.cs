@@ -247,10 +247,10 @@ internal sealed class OnlinePlayChannel : IPlayChannel
         _connection.SendDismissCrystalPets(statusCode);
     }
 
-    public async Task SendClanAsync(ClanAction action, ulong id, string name, CancellationToken ct = default)
+    public async Task SendClanAsync(ClanAction action, ulong id, string name, CancellationToken ct = default, ulong amount = 0)
     {
         await _start.WaitAsync(ct);
-        _connection.SendSocial(new ClanRequestPacket(action, id, name ?? ""));
+        _connection.SendSocial(new ClanRequestPacket(action, id, name ?? "", amount));
     }
 
     public async Task SendCastleOwnerAsync(CastleOwnerAction action, ulong npcId, Simulation.Social.Castle.CastleSetup setup, long amount,

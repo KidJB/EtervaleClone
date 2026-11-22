@@ -46,4 +46,5 @@ public sealed record CharacterRecord(
     short MountChosen = 0,
     string DailyQuests = "",
     string Skins = "",
-    string CourierQuests = "");
+    string CourierQuests = "",
+    string Caravan = "");

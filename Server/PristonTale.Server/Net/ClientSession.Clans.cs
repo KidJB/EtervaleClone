@@ -54,6 +54,12 @@ internal sealed partial class ClientSession
             ClanAction.Appoint => await clans.SetViceAsync(session.EntityId, request.Name, true),
             ClanAction.Discharge => await clans.SetViceAsync(session.EntityId, request.Name, false),
             ClanAction.Entrust => await clans.EntrustAsync(token, request.Id, request.Name),
+            ClanAction.SetPermissions => await clans.SetPermissionsAsync(session.EntityId, ClanRankPermissions.Unpack((int)Math.Min(request.Id, ushort.MaxValue))),
+            ClanAction.WarehouseLog => await SendWarehouseLogAsync(session),
+            ClanAction.Donate => await clans.DonateAsync(token, request.Id, (long)Math.Min(request.Amount, (ulong)long.MaxValue)),
+            ClanAction.DonateCoins => await clans.DonateCoinsAsync(token, request.Id, (long)Math.Min(request.Amount, (ulong)long.MaxValue)),
+            ClanAction.SpendCoins => await clans.SpendCoinsAsync(session.EntityId, (int)Math.Min(request.Id, int.MaxValue)),
+            ClanAction.Upgrade => await clans.UpgradeAsync(session.EntityId, (ClanUpgradeKind)Math.Min(request.Id, byte.MaxValue)),
             _ => ClanStatus.Unavailable
         });
     }
@@ -85,6 +91,20 @@ internal sealed partial class ClientSession
         SendLarge(new ClanResultPacket(action, (byte)status).Write, ClanResultPacket.Size);
     }
 
+    // The log goes to a member whose rank may read it; the others are told why not.
+    private async Task<ClanStatus> SendWarehouseLogAsync(PlayerSession session)
+    {
+        if (await _services.Clans.WarehouseLogAsync(session.EntityId) is not { } lines)
+        {
+            return ClanStatus.NotPermitted;
+        }
+
+        var packet = new ClanWarehouseLogPacket(lines.Select(static line => new ClanWarehouseLogWire(line.AtSeconds, line.Character, (byte)line.Action,
+            line.ItemKey, line.ItemName, line.Quantity)).ToArray());
+        SendLarge(packet.Write, ClanWarehouseLogPacket.MaxSize);
+        return ClanStatus.Ok;
+    }
+
     // Opening the Clan Master's window sends the player's clan as it is now.
     private ClanStatus Open(PlayerSession session)
     {
@@ -97,7 +117,13 @@ internal sealed partial class ClientSession
         var packet = view is null ? ClanStatePacket.None
             : new ClanStatePacket((ulong)view.ClanId, view.Name, (byte)view.State, view.DeadlineSeconds, (byte)view.Rank, view.Capacity, view.Intro,
                 view.MarkVersion, view.Members.Select(static member => new ClanMemberWire(member.Name, member.Class, member.Level, (byte)member.Rank,
-                    member.Online)).ToArray());
+                    member.Online)).ToArray(), (ushort)view.Permissions.Packed, (byte)view.Rights)
+            {
+                Treasury = view.Treasury,
+                SlotLevel = (byte)view.SlotLevel,
+                WeightLevel = (byte)view.WeightLevel,
+                CoinTreasury = view.CoinTreasury
+            };
         SendLarge(packet.Write, ClanStatePacket.MaxSize);
     }
 

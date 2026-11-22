@@ -33,7 +33,9 @@ into it is described in [server.md](server.md); skill resolution details are in 
 | `Services/TradeAppService.cs`, `World/WorldServer.Trades.cs`, `World/Trades/Trade.cs` | Trades between players: requests, offers, locks and the exchange that holds and stores two characters (below) |
 | `World/WorldServer.Notices.cs`, `World/WorldNotice.cs`, `Services/WorldNoticeRequests.cs` | The lines a party or trade change answers, delivered through the chat (`ChatDirectory.Deliver`) |
 | `Contacts/ContactAppService.cs` | The friends page: each character's friends and ignored players, stored, with the friends' presence (below) |
-| `Clans/ClanAppService.cs`, `Clans/ClanTexts.cs`, `Clans/IClanMarkStore.cs`, `World/WorldServer.Clans.cs`, `World/WorldServer.NpcPayments.cs` | The clans: founding, invitations, ranks, leaving, expelling, entrusting, the chief's mark upload, dissolution and the chat roster (below) |
+| `Clans/ClanAppService.cs`, `Clans/ClanTexts.cs`, `Clans/IClanMarkStore.cs`, `World/WorldServer.Clans.cs`, `World/WorldServer.NpcPayments.cs` | The clans: founding, invitations, ranks, the rank rights, leaving, expelling, entrusting, the chief's mark upload, dissolution and the chat roster (below) |
+| `World/WorldServer.ClanBuffs.cs`, `World/ItemUses/MountUse.cs` (`WorldBuffUse`) | Clan world buffs: one end per clan and buff, each member's `ClanBuffMask`, started with a world buff item used for the clan ([Clan world buffs](#clan-world-buffs)) |
+| `World/ClanWarehouseTransactions.cs`, `World/WorldServer.ClanWarehouses.cs`, `Services/NpcAppService.cs` | The clan warehouse: the clan's one copy in the world, its changes by rank rights, stored with the character and the log ([Clan warehouse](#clan-warehouse)) |
 | `Clans/IClanDirectory.cs`, `Castle/CastleAppService.cs`, `Castle/CastleWorld.cs` | Bless Castle: the owner clan, the tax, the soul fountain and the siege's schedule and clock (below); the clans it reads through `IClanDirectory`, the world through `ICastleWorld` |
 | `World/WorldServer.Castle.cs`, `World/FieldInstance.Castle.cs`, `World/CastleSiege.cs` | The siege in the castle field: its defenders, the clans' damage board, the tower's fall and the published `CastleSiegeView` |
 | `Chat/`, `GameMasters/` | Chat routing, whispers and notices; game-master commands, levels and audit ([chat-and-gm.md](chat-and-gm.md)) |
@@ -664,7 +666,24 @@ bid its coins back in one transaction, and the leading bid is a compare-and-set 
 the other changes nothing. `CabinetDealService` closes ended deals every half minute (and `/@deal_end` at once): the leader receives the
 look (source Deal) for its held coins, or its coins back when its account owns the look by then.
 
+## Caravans
+
+A caravan is a creature that follows its owner and carries a 9x9 storage of its own (`Caravans` in Simulation: twelve
+kinds, CV101 to CV112, each with its model under `char/npc/Caravans` (Hopy the plain monster's), scale, crystal, 7 days
+and its buff icon: Hopy, Cuepy, Rabie, Tobie, Arma, Buma, Rudolph, Hungky, Pingu, Yeti, Golden Hopy and Sir Knight). Using
+a crystal (`CaravanUse`) calls its caravan, adds its hours to the same kind already out, and is refused (`CaravanOtherOut`)
+while another kind is out. The caravan out is `PlayerCharacter.Caravan` (kind, Unix-second end, name, whether it stays put),
+saved in `characters.caravan`; the tick (`StepCaravans`) sends it away when its time ends, and its storage stays for the
+next one. Its chat commands (`Caravans.TryParse`): `/caravan name X` names it through `PetNames` (`NameCaravanAsync`; an
+empty name clears it), `/caravan follow` and `/caravan stay` make it follow or stand where it is (`SetCaravanStaysAsync`),
+and `/caravan dismiss` sends it away before its time (`DismissCaravanAsync`).
+
+The storage is the `Caravan` NPC service (26) with no NPC (entity 0), handled by `CaravanTransactions` the way the
+warehouse is, without gold: open, refresh, close, deposit, withdraw and move, each saved with the character under the
+storage's revision (`ICaravanStorageRepository`). Every request needs a caravan out, otherwise `CaravanAway`.
+
 ## Pet skins
+
 
 A pet skin is a monster drawn small beside its owner (`PetSkins`: id, name, monster, model, scale and item; ten to start).
 The account owns the skins it unlocked: each character row keeps a bit per skin (`pet_skins`) and entering the world
@@ -779,6 +798,72 @@ live level (views, the chief's capacity, entrusting).
   days; a passed deadline dissolves the clan, and its members cannot join one for four days.
 - Every change sends each online member the clan's view and a line in the chat (joined, left, expelled, registered,
   below six, chief changed, vice appointed or discharged, disbanded). A character in a clan cannot be deleted.
+- Rank rights (`ClanPermission`: deposit, withdraw, read the warehouse log, start clan buffs; `ClanRankPermissions`):
+  the chief always has them all; the chief sets the vice's and the members' (`SetPermissionsAsync`, `ClanAction.SetPermissions`,
+  stored in `clans.rank_permissions`); new clans start with the vice holding all and the members deposit and withdraw.
+  The clan's view carries the table and the member's own rights, and the tag (`ClanTag.Rights`) carries them to the world,
+  so the world never asks the client: every member is retagged when the rights change, the vice when appointed or
+  discharged, the chief and heir when the clan is entrusted. `WarehouseLogAsync` answers the warehouse log (the latest
+  `ClanWarehouse.LogLines`, newest first) to a rank that may read it, null otherwise. Dissolving a clan ends its buffs
+  and drops its warehouse copy in the world (`ForgetClanAsync`); its stored buffs, warehouse and log go with its row.
+
+### Clan world buffs
+
+The world buffs of a clan ([quests.md](quests.md#world-buffs) for the world's): the same kinds, effects, durations and
+extension (`WorldBuffs.Extend`) on items of their own (`ClanBuffs`: `CL101`-`CL110` for an hour, `CL201`-`CL210` for a day,
+in the coin shop's Clan Buffs tab). Using one (`ClanBuffUse`, action `ClanBuff`) starts the buff for the user's clan only;
+it refuses a player without a clan (`ClanOnly`) or whose rank may not (`ClanRankTooLow`), and the item is kept on a
+refusal. A `WB` item always starts the world's. On the next second the world adds the time to that
+clan's end (`WorldServer.UpdateClanBuffs`) and tells its online members. Every second each player carries its clan's
+running mask (`PremiumTimers.ClanBuffMask`) from its tag, so a member who leaves loses it on that pass, and one who joins
+or enters the world gets the time left. The rules read `PremiumTimers.BuffMask` (world or clan): a buff running both
+ways counts once. `ClanBuffState` (a new array only on a change) is stored by `ClanBuffService`
+([server.md](server.md)) in `clan_buffs` and restored at start (`RestoreClanBuffsAsync`), so they run on through a
+restart and expire on time; each member's snapshot carries its clan's running buffs (`WorldSnapshot.ClanBuffs`).
+
+### Clan warehouse
+
+The `ClanWarehouse` NPC service (32), offered by the Clan Warehouse keeper alone: an NPC of Etervale's own (code 9003,
+`ClanWarehouse.AddTo` when the world data loads, drawn as the first imported warehouse keeper) standing in the market town
+beside the market NPCs (`ClanWarehouse.KeeperPlacement`). `ClanWarehouseTransactions` handles it: every request needs
+that keeper in the player's field and within reach (otherwise `OutOfReach`). It is storage of
+the clan (`ClanWarehouse`: two pages of the store grid, 140 items and 1,400 weight, 40% over the account warehouse's
+100 and 1,000, no gold), opened in a town by a member of a clan; the clan is the tag's, never the client's. The first
+member to open it reads it from storage (`NpcAppService.OpenClanWarehouseAsync`, `IClanStorageRepository`) into the world's
+one copy (`ProvideClanWarehouseAsync`); later opens and every member share that copy. Open and refresh mark the player
+as viewing (`WorldPlayer.OpenClanWarehouse`), close and a changed tag clear it; deposit, withdraw and move (between pages
+too: an anchor is `page * StoreGrid.Cells + cell`) need it open and the rank's right (`ClanWarehouse.Allows`: deposit,
+withdraw, either to move; otherwise `NotPermitted`), and are checked against the copy's revision (`Stale`). A change is
+made on a clone, stored with the character and its log lines (who, deposit or withdraw, the item's key, name and
+count, the time; moves are not logged) in one transaction under the revision it was made from, then replaces the copy
+at commit. A second member's change made from the same revision fails in storage (`Conflict`): the world is given the
+stored warehouse again and nothing is duplicated or lost. Every member with it open is sent the new view in its next
+snapshot (`WorldSnapshot.ClanWarehouse`).
+
+### Clan treasury and upgrades
+
+A gold sink for clans (`ClanUpgrades`, stored in `clans.treasury`, `warehouse_slot_level` and `warehouse_weight_level`).
+Any member gives gold at the Clan Warehouse keeper (`ClanAppService.DonateAsync`, `ClanAction.Donate`: 1,000 to
+1,000,000,000 at a time, the treasury holding at most 1,000,000,000,000); the world takes it from the character
+(`PrepareNpcPaymentAsync` with the keeper's service) and the character, the treasury and the log line are stored in one
+transaction (`IClanRepository.DonateAsync`). Only the chief spends it (`UpgradeAsync`, `ClanAction.Upgrade`) on the
+warehouse's next level of an upgrade, five each, every level costing twice the one before: slots 140, 160, 180, 200, 220,
+240 items (a third page from 180) for 5, 10, 20, 40 and 80 million gold, weight 1,400, 1,700, 2,000, 2,400, 2,800,
+3,200 for 4, 8, 16, 32 and 64 million. The treasury pays only from the level it was asked at (`IClanRepository.UpgradeAsync`
+checks the level and the gold in its update), and the world's copy of the warehouse takes the new limits at once with
+its items and revision (`ResizeClanWarehouseAsync`, `ClanWarehouse.Resized`); a warehouse read later comes with the levels
+(`ClanWarehouseRecord`). Donations and upgrades are lines of the warehouse log (`ClanWarehouseLogAction.Donate`,
+`Upgrade`), and the clan's view carries the treasury and the levels.
+
+Beside it the coin treasury (`clans.coin_treasury`, `ClanBuffs`): any member gives coin-shop coins at the keeper
+(`DonateCoinsAsync`, `ClanAction.DonateCoins`: 1 to 1,000,000 at a time, at most 1,000,000,000 held); the account's coins
+(with its coin log line), the coin treasury and the clan's log line change in one transaction
+(`IClanRepository.DonateCoinsAsync`), and nobody takes them back. A rank with `ClanPermission.SpendCoins` (the chief always;
+the vice by default, which M058 turns on for clans stored before it) spends them on a clan world buff
+(`SpendCoinsAsync`, `ClanAction.SpendCoins` with the buff's `WorldBuffs.Argument`) at the coin shop's world buff prices,
+200 for an hour and 4,000 for a day (`ClanBuffs.CoinPrice`): the treasury pays in storage first
+(`IClanRepository.SpendCoinsAsync`), then the world starts or extends the clan's buff (`WorldServer.StartClanBuffAsync`).
+Both are log lines (`ClanWarehouseLogAction.DonateCoins`, `SpendCoins`).
 
 ## Bless Castle
 

@@ -33,6 +33,7 @@ public static class StarterGifts
         PlayerClass.Assassin => "WD101",
         PlayerClass.Shaman => "WN101",
         PlayerClass.MartialArtist => "WV101",
+        PlayerClass.Rogue => "WX101",
         _ => throw new ArgumentOutOfRangeException(nameof(playerClass), playerClass, "A class without a starter weapon.")
     };
 

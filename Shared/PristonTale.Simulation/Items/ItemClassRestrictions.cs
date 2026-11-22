@@ -6,16 +6,17 @@ namespace PristonTale.Simulation.Items;
 
 public static class ItemClassRestrictions
 {
-    private const JobBitCode Casters = JobBitCode.Magician | JobBitCode.Priestess | JobBitCode.Shaman;
+    private const JobBitCode Casters = JobBitCode.Magician | JobBitCode.Priestess | JobBitCode.Shaman | JobBitCode.Rogue;
     private const JobBitCode Fighters = JobBitCode.Mechanician | JobBitCode.Fighter | JobBitCode.Archer
         | JobBitCode.Pikeman | JobBitCode.Atalanta | JobBitCode.Knight | JobBitCode.Assassin | JobBitCode.MartialArtist;
     private static readonly JobBitCode Female = Enum.GetValues<PlayerClass>().Where(static c => ClassProfiles.Of(c).Female)
         .Aggregate((JobBitCode)0, static (mask, c) => mask | JobBits.Of(c));
     private const JobBitCode All = Casters | Fighters;
 
-    // The daggers, phantoms and vambraces belong to the Assassin, the Shaman and the Martial Artist, who uses no other weapon.
+    // The daggers, phantoms, vambraces and grimoires belong to the Assassin, the Shaman, the Martial Artist and the Rogue; the
+    // last two use no other weapon.
     private static readonly (string Family, JobBitCode Owner)[] ClassWeapons =
-        [("WD1", JobBitCode.Assassin), ("WN1", JobBitCode.Shaman), ("WV1", JobBitCode.MartialArtist)];
+        [("WD1", JobBitCode.Assassin), ("WN1", JobBitCode.Shaman), ("WV1", JobBitCode.MartialArtist), ("WX1", JobBitCode.Rogue)];
 
     // The classes whose body armour is a robe.
     public static bool WearsRobe(PlayerClass playerClass) => (JobBits.Of(playerClass) & Casters) != 0;
@@ -32,7 +33,7 @@ public static class ItemClassRestrictions
                 }
             }
 
-            return (uint)(All & ~JobBitCode.MartialArtist);
+            return (uint)(All & ~(JobBitCode.MartialArtist | JobBitCode.Rogue));
         }
 
         bool armor = key.StartsWith("DA1", StringComparison.OrdinalIgnoreCase);

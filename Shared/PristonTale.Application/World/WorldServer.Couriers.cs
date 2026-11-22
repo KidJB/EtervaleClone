@@ -25,7 +25,17 @@ public sealed partial class WorldServer
     public Task<CourierBoardView?> CourierBoardAsync(PlayerSession session, ulong npcEntityId) =>
         EnqueueAsync<CourierBoardView?>(session.EntityId, () =>
         {
-            if (!TryGetPlaying(session, out var connection) || !AtCourier(connection, npcEntityId, out var npc))
+            if (!TryGetPlaying(session, out var connection))
+            {
+                return null;
+            }
+
+            if (npcEntityId == CourierCatalog.BookNpc)
+            {
+                return CourierBook(connection, npcEntityId);
+            }
+
+            if (!AtCourier(connection, npcEntityId, out var npc))
             {
                 return null;
             }
@@ -53,6 +63,25 @@ public sealed partial class WorldServer
 
             return new CourierBoardView(npcEntityId, npc.Definition.Label, shown);
         });
+
+    // The Quest Book's board (CourierCatalog.BookQuests), with each hunt's standing and kills as a Courier shows them.
+    private CourierBoardView CourierBook(Connection connection, ulong bookId)
+    {
+        var catalog = Couriers;
+        var now = _clock.GetUtcNow();
+        var state = connection.Player.Character.Couriers;
+        var shown = new List<(CourierQuest, CourierStanding, int[], long)>();
+        foreach (var quest in catalog.BookQuests(connection.Player.Level, state.Active.ContainsKey))
+        {
+            var standing = state.Standing(quest, now, catalog.Schedule);
+            var cooldown = standing == CourierStanding.Cooldown && state.TurnedIn.TryGetValue(quest.Id, out var at)
+                ? Math.Max(0, at + quest.CooldownMinutes * 60L - now.ToUnixTimeSeconds())
+                : 0;
+            shown.Add((quest, standing, state.Active.TryGetValue(quest.Id, out var progress) ? [.. progress.Kills] : new int[quest.Objectives.Count], cooldown));
+        }
+
+        return new CourierBoardView(bookId, "", shown);
+    }
 
     public Task<CourierStatus> AcceptCourierQuestAsync(PlayerSession session, ulong npcEntityId, int questId) =>
         EnqueueAsync(session.EntityId, () =>

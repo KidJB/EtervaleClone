@@ -127,6 +127,9 @@ public sealed record OwnerState(
     public int MountChosen { get; init; }
     public bool Riding { get; init; }
 
+    // The caravan out (Caravans), or null.
+    public CaravanState Caravan { get; init; }
+
     public long AgingRevision { get; init; } = -1;
     public IReadOnlyList<AgingProgressView> Aging { get; init; } = Array.Empty<AgingProgressView>();
 
@@ -148,7 +151,7 @@ public sealed record OwnerState(
             character.StatPoints, character.SkillPoints, character.EliteSkillPoints, character.Tier, character.BagPage, character.WeaponSet, attributes,
             character.InventoryRevision, character.ProgressionRevision, character.Skills.Revision, character.Premium.Revision, character.AgingRevision,
             character.Effects.Revision, character.PetSkins, character.PetOut, character.PetName, character.Mounts, character.MountChosen, character.Riding,
-            character.DailyQuests.Revision, character.Couriers.Revision);
+            character.DailyQuests.Revision, character.Couriers.Revision, character.Caravan);
         if (previous is not null && previous.Stamp == stamp)
         {
             return previous;
@@ -203,6 +206,7 @@ public sealed record OwnerState(
             Mounts = character.Mounts,
             MountChosen = character.MountChosen,
             Riding = character.Riding,
+            Caravan = character.Caravan,
             AgingRevision = character.AgingRevision,
             Aging = previous is not null && previous.AgingRevision == character.AgingRevision && previous.InventoryRevision == character.InventoryRevision
                 ? previous.Aging
@@ -250,4 +254,4 @@ public sealed record OwnerState(
 internal readonly record struct OwnerStamp(int Level, ulong Experience, long Money, int Life, int Mana, int Stamina, int StatPoints, int SkillPoints,
     int EliteSkillPoints, short Tier, int BagPage, int WeaponSet, CharacterAttributes Attributes, long InventoryRevision, long ProgressionRevision,
     long SkillsRevision, long PremiumRevision, long AgingRevision, long EffectsRevision, ulong PetSkins, int PetOut, string PetName, ulong Mounts,
-    int MountChosen, bool Riding, long DailyRevision, long CourierRevision);
+    int MountChosen, bool Riding, long DailyRevision, long CourierRevision, CaravanState Caravan);

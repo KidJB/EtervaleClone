@@ -58,6 +58,9 @@ public enum NpcServiceKind : byte
     // Text: label of a key present in the supplied data that no classic client handles.
     Unported = 25,
 
+    // The storage of the player's caravan (no NPC, entity 0): opened only while the caravan is out.
+    Caravan = 26,
+
     // Etervale's daily quests (Quests.DailyQuests), added to their giver when the world data loads.
     DailyQuest = 26,
 
@@ -72,7 +75,10 @@ public enum NpcServiceKind : byte
     Marketplace = 30,
 
     // Etervale's Quest Couriers (Quests.CourierCatalog), placed in their fields when the world data loads.
-    Courier = 31
+    Courier = 31,
+
+    // The clan warehouse (Social.Clans.ClanWarehouse; no NPC, entity 0) of the player's clan.
+    ClanWarehouse = 32
 }
 
 public sealed record NpcService(NpcServiceKind Kind, int Value = 0, int Value2 = 0, string Text = "");

@@ -4,15 +4,19 @@ namespace PristonTale.Simulation.Characters;
 
 internal static class CharacterHeadModels
 {
-    // A head file is Prefix + its variant number (two digits, unless Numbers spells them) + Suffix.
+    // A head file is Folder + Prefix + its variant number (two digits, unless Numbers spells them) + Suffix.
     internal readonly record struct Pattern(string Prefix, string Suffix, int VariantCount = CharacterVisualSet.HairPotionCount,
-        string[] Numbers = null)
+        string[] Numbers = null, string Folder = "char/tmABCD/")
     {
         public string Number(int variant) => Numbers is { } numbers ? numbers[variant] : (variant + 1).ToString("D2", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     // The fifth tier's Priestess heads 6 to 9 carry three digits.
     private static readonly string[] PriestessFifthNumbers = ["01", "02", "03", "04", "05", "006", "007", "008", "009", "10", "11", "12", "13"];
+
+    // The Rogue's heads are h<number>t<model tier 1 to 4>, numbers without padding; her fifth tier wears the fourth's.
+    private static readonly string[] RogueNumbers = [.. Enumerable.Range(1, CharacterVisualSet.HairPotionCount).Select(static n => n.ToString(System.Globalization.CultureInfo.InvariantCulture))];
+    private const string RogueFolder = "char/vampira/";
 
     private static readonly Dictionary<PlayerClass, Pattern[]> ByClass = new()
     {
@@ -103,8 +107,19 @@ internal static class CharacterHeadModels
             new("tfh-f", "b", CharacterFace.FaceCount),
             new("tfh-f", "c", CharacterFace.FaceCount),
             new("tfh-f", "d", CharacterFace.FaceCount)
+        ],
+        [PlayerClass.Rogue] =
+        [
+            new("h", "t1", Numbers: RogueNumbers, Folder: RogueFolder),
+            new("h", "t2", Numbers: RogueNumbers, Folder: RogueFolder),
+            new("h", "t3", Numbers: RogueNumbers, Folder: RogueFolder),
+            new("h", "t4", Numbers: RogueNumbers, Folder: RogueFolder),
+            new("h", "t4", Numbers: RogueNumbers, Folder: RogueFolder)
         ]
     };
+
+    // The class whose big and custom heads a class borrows: the Rogue stands on the Assassin's skeleton.
+    internal static PlayerClass HeadDonor(PlayerClass playerClass) => playerClass == PlayerClass.Rogue ? PlayerClass.Assassin : playerClass;
 
     internal static Pattern Get(PlayerClass playerClass, int tier)
     {

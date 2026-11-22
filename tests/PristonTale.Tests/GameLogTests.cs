@@ -78,6 +78,8 @@ internal static class GameLogTests
 
         public Task<bool> SetGmLevelAsync(string userId, int level, CancellationToken ct = default) => Task.FromResult(true);
 
+        public Task<bool> SetPasswordHashAsync(string userId, string passwordHash, CancellationToken ct = default) => Task.FromResult(true);
+
         public Task<IReadOnlyList<PristonTale.Persistence.Abstractions.GameMasters.GmAuditRecord>> RecentAuditAsync(int limit, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<PristonTale.Persistence.Abstractions.GameMasters.GmAuditRecord>>([]);
 

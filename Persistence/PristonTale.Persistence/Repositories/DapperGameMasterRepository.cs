@@ -16,6 +16,15 @@ public sealed class DapperGameMasterRepository(IDbConnectionFactory connectionFa
         return rows > 0;
     }
 
+    public async Task<bool> SetPasswordHashAsync(string userId, string passwordHash, CancellationToken ct = default)
+    {
+        await using var connection = await connectionFactory.OpenAsync(ct);
+        var rows = await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE accounts SET password_hash = @passwordHash WHERE user_id = @userId",
+            new { userId, passwordHash }, cancellationToken: ct));
+        return rows > 0;
+    }
+
     public async Task AppendAuditAsync(GmAuditEntry entry, CancellationToken ct = default)
     {
         await using var connection = await connectionFactory.OpenAsync(ct);

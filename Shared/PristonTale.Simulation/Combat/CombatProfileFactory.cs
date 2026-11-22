@@ -31,7 +31,7 @@ public static class CombatProfileFactory
 
     // A staff or a phantom in hand never deals a critical hit (its wielder's normal attacks, weapon skills and spells).
     public static bool WeaponCanCritical(PlayerCharacter character) =>
-        character.GetEquipped(EquipmentSlot.Weapon) is not { Definition.Kind: ItemKind.Staff or ItemKind.Phantom };
+        character.GetEquipped(EquipmentSlot.Weapon) is not { Definition.Kind: ItemKind.Staff or ItemKind.Phantom or ItemKind.Grimoire };
 
     // Items, specializations and the critical passives share one cap; buffs add beyond it.
     public static int CriticalChance(PlayerCharacter character)

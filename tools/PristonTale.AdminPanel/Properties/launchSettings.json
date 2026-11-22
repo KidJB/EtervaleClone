@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "PristonTale.AdminPanel": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:53741;http://localhost:53742"
+    }
+  }
+}

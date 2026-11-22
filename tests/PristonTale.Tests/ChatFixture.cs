@@ -256,6 +256,8 @@ internal sealed class MemoryGameMasters : IGameMasterRepository, IGmAudit
         return Task.FromResult(true);
     }
 
+    public Task<bool> SetPasswordHashAsync(string userId, string passwordHash, CancellationToken ct = default) => Task.FromResult(Levels.ContainsKey(userId));
+
     public Task AppendAuditAsync(GmAuditEntry entry, CancellationToken ct = default)
     {
         Append(entry);

@@ -54,7 +54,7 @@ Monster skills are a separate system (see [world.md](world.md)); they share only
 - Code: `group << 24 | tierBit << 16 | slot`, written as a hex string (`"0x01020001"`). `tierBit` is the `JobTier`
   value (`Job1` 0x1, `Job2` 0x2, `Job3` 0x4, `Job4` 0x8, `Job5` 0x10) and must match `tier`; `slot` is 1..4.
 - Class groups: Mechanician 0x01, Fighter 0x02, Pikeman 0x03, Archer 0x04, Knight 0x05, Atalanta 0x06,
-  Priestess 0x07, Magician 0x08, Assassin 0x10, Martial Artist 0x20, Shaman 0x50.
+  Priestess 0x07, Magician 0x08, Assassin 0x10, Martial Artist 0x20, Shaman 0x50, Rogue 0x60.
 - The file name is the `PlayerClass` enum name. The array order is the skill-window order (window index 0..19): it
   drives learning order, price, tier gates, proficiency streaks and HUD placement. It is not always the slot order:
   Mechanician lists `0x01010004` before `0x01010003`.

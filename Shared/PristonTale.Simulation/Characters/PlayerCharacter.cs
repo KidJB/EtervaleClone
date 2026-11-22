@@ -770,6 +770,7 @@ public sealed partial class PlayerCharacter
         clone.DailyQuests.CopyFrom(DailyQuests);
         clone.Couriers.CopyFrom(Couriers);
         clone.Skins = Skins;
+        clone.Caravan = Caravan;
         clone.Premium.CopyFrom(Premium);
         clone.ItemUses.CopyFrom(ItemUses);
         clone.Recompute();

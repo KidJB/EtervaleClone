@@ -55,6 +55,7 @@ progression, regeneration and movement rates. `World/`, `Physics/` and `Skills/`
 | `Trades/` | Trades: `TradeRules` (what may pass, the 9x4 grid, an offer's check and the exchange of two offers on candidates), `TradeOffer`, `TradeStatus` and the original's `TradeMessages` |
 | `Social/ContactBook.cs` | A character's friends and ignored players: the lists' rules (`ContactLimits`), `ContactStatus` and `ContactMessages` |
 | `Social/Clans/Clan.cs`, `Social/Clans/ClanRules.cs` | A clan, its members (`ClanMember`, `ClanRank`), state (`ClanState`) and tag (`ClanTag`); the rules: founding at level 40 for 500,000 gold, capacity by the chief's level (20 at 40, one per level, at most 80), registration at six members within ten days (`Recount`, `Expired`), entrusting (`CheckEntrust`), names, `ClanStatus` |
+| `Social/Clans/ClanPermissions.cs`, `Social/Clans/ClanBuffs.cs`, `Social/Clans/ClanWarehouse.cs` | What a rank may do with what the clan owns (`ClanPermission`, `ClanRankPermissions`: the chief all, the vice and members as the chief sets, packed for storage); clan world buffs (`ClanBuffs`: their items `CL1xx`/`CL2xx`, names and `Mask`); the Clan Warehouse keeper NPC; the clan warehouse (`ClanWarehouse`: two pages, 140 items, 1,400 weight, the right each action needs, `ClanWarehouseLogEntry`) |
 | `Social/Castle/CastleRules.cs` | Bless Castle: `CastleMode`, `SiegeState`, `CastleClanSkill` and the times (siege and league minutes, the league's restart, the tax hour, the fountain's potions) |
 | `Social/Castle/CastleSiege.cs` | The siege's defenders (`CastleObject`, `CastleTower`, `CastleSiegeRules`: places, the mercenaries' posts, the monsters by key, an ownerless castle's defenders) and the clans' damage (`CastleDamageBoard`, `CastleClanScore`) |
 | `Social/Castle/CastleOwnerRules.cs`, `Social/Castle/CastleClanSkills.cs` | The owner's setup (`CastleSetup`) and what a change costs (`CastleOwnerRules`, `CastleOwnerStatus`); the clan skills' statuses, effects, names and icons |
@@ -131,6 +132,7 @@ The class also loads its skill window from `ClassSkillCatalog.For(class)` (see [
 | Assassin | 9 | 0x10 | Tempskron | 25/10/22/20/22 | 80 | 3/3/2/1/2/0 |
 | Shaman | 10 | 0x100000 | Morion | 15/27/20/15/22 | 200 | 2/1/2/3/2/1 |
 | Martial Artist | 11 | 0x20 | Tempskron | 26/9/20/20/24 | 80 | 3/3/2/1/2/0 |
+| Rogue | 12 | 0x200000 | Morion | 15/27/20/15/22 | 200 | 2/1/2/3/2/1 |
 
 - Two job masks exist: `JobBitCode` (non-sequential bits) is used for item class restrictions and item specialization;
   `CharacterClassDef.MotionJobMask = 1 << (Class - 1)` is used for animation tables. Do not mix them. A class's
@@ -142,7 +144,13 @@ The class also loads its skill window from `ClassSkillCatalog.For(class)` (see [
 - Head models: `CharacterHead.Resolve` builds `char/tmABCD/<prefix><variant 01..13><suffix>.inx` from the per-class,
   per-tier pattern in `CharacterHeadModels` (the fifth tier's heads end in `d`; the Priestess's 6 to 9 are spelled
   `006`..`009`). Assassin, Shaman and Martial Artist tiers 1-4 have only the three creation faces;
-  `Apply` falls back to the face index instead of inventing a file name.
+  `Apply` falls back to the face index instead of inventing a file name. A pattern may name its own folder: the Rogue's
+  heads are `char/vampira/h<1..13>t<1..4>.inx` (her fifth tier wears the fourth's), and she borrows the Assassin's big
+  and custom heads (`CharacterHeadModels.HeadDonor`), whose skeleton she shares.
+- The Rogue is a female Morion caster whose models live in `char/vampira` (body, robes `robe02`-`robe25`, heads,
+  motion table with job bit `0x800`); she casts with a grimoire (`ItemKind.Grimoire`) and has no level-8 helper tip.
+  The class is closed: `ClassProfiles.Creatable` refuses her, so the server answers `UnknownClass` to a new Rogue and
+  character select leaves her out.
 
 ## Character aggregate
 
@@ -233,14 +241,14 @@ nothing):
 
 | Weapon | Primary | Divisor | Secondary |
 | --- | --- | --- | --- |
-| Staff or Phantom, magic fn > 0 | Spi | 150 (fn 1) or 170 | `Tal / 30` |
+| Staff, Phantom or Grimoire, magic fn > 0 | Spi | 150 (fn 1) or 170 | `Tal / 30` |
 | Bow or ThrowingWeapon | Agi | 130 (ranged fn 1) or 190 | `(Tal+Str) / 40` (fn 1) or `/ 50` |
 | Anything else | Str | 130 / 150 / 190 (melee fn 1 / 2 / other) | `(Tal+Agi) / 40 / 45 / 50` |
 
 - `min = 2 + wMin*(primary+divisor)/divisor + secondary + job + (wMin+wMax)/16`
 - `max = 4 + wMax*(primary+divisor)/divisor + secondary + job + items.LevelDamage`
 - `job = Level / 6` when the weapon is the class's favoured kind (Fighter axe, Archer bow, Pikeman pole, Knight sword,
-  Atalanta javelin, Assassin dagger, Magician/Priestess staff, Shaman phantom, Martial Artist vambrace; Mechanician:
+  Atalanta javelin, Assassin dagger, Magician/Priestess staff, Shaman phantom, Martial Artist vambrace, Rogue grimoire; Mechanician:
   weapon specialized for
   Mechanician).
 - Adds the passive weapon mastery bonuses (`PassiveSkills.WeaponBonus`, `PassiveSkillEffects.WeaponBonus`), then
@@ -381,8 +389,12 @@ totals.
   Two-handed weapons are the listed keys of the item table (axes, hammers, staves, poles, bows and swords; claws,
   javelins, daggers, phantoms and vambraces have none). Force orbs (`FO1`) and other families are not wearable.
 - `AllowedJobs` (0 = any class): `DA1` armor for non-casters, `DA2` robes and `OM1` for casters, with fixed key
-  numbers restricted to male-only or female-only classes; daggers for the Assassin, phantoms for the Shaman and
-  vambraces for the Martial Artist alone, who wields no other weapon. A specialization never restricts who may wear an item.
+  numbers restricted to male-only or female-only classes; daggers for the Assassin, phantoms for the Shaman,
+  vambraces for the Martial Artist and grimoires (`WX1`) for the Rogue alone; the last two wield no other weapon.
+- Grimoires are Etervale's own: `Grimoires.TryMirror` pairs each phantom WN101-WN127 with the grimoire of the same
+  number, and the world data adds them beside the phantoms (`GrimoireMirror`: the same template under the grimoire's
+  key and kind, named "Grimoire" for "Phantom", sold by every shop that sells the phantom and added to every drop line
+  and bonus drop that holds it). A specialization never restricts who may wear an item.
 - `ItemInstance`: `InstanceId` (Guid, preserved across moves and copies with `preserveId`), `Count`, `UpgradeLevel`,
   durability, and `Roll` (`ItemRoll`): damage range, attack rating, defence, absorb (one decimal), block (two
   decimals), move speed, life/mana/stamina regeneration, added life/mana/stamina, resistances, requirements, price,

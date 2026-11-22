@@ -6,7 +6,8 @@ namespace PristonTale.Application.World;
 
 // A validated NPC service request. The warehouse, when set, is stored with the snapshot; the commit applies the
 // candidate, the gold change and the arrival. Tax: the castle's tax the gold change was charged with. BellatraTeam: the
-// team a Bellatra ticket enters (none: -1).
+// team a Bellatra ticket enters (none: -1). CaravanStorage: Warehouse is the character's caravan storage. ClanWarehouse:
+// the clan whose warehouse Warehouse is (0 for none), stored with ClanLog, the lines its log gains.
 public sealed record PreparedNpcOperation(
     PlayerCharacter Original,
     PlayerCharacter? Candidate,
@@ -16,5 +17,8 @@ public sealed record PreparedNpcOperation(
     WarehouseStorage? Warehouse = null,
     long ExpectedWarehouseRevision = 0,
     int Tax = 0,
-    int BellatraTeam = -1)
+    int BellatraTeam = -1,
+    bool CaravanStorage = false,
+    long ClanWarehouse = 0,
+    IReadOnlyList<Simulation.Social.Clans.ClanWarehouseLogEntry>? ClanLog = null)
     : PreparedOperation(Original, Candidate, Snapshot);

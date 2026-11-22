@@ -10,7 +10,7 @@ public enum ItemKind
     Amulet, Bracelet, Ring, ForceOrb, Sheltom,
     Potion, Material, Quest, Misc,
     // Keep new values appended: ItemKind is persisted as an integer in world-data rows.
-    Dagger, Phantom, Orb, Vambrace
+    Dagger, Phantom, Orb, Vambrace, Grimoire
 }
 
 public readonly record struct ItemStatBlock(

@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Etervale Admin</title>
+<style>
+:root {
+  --bg: #12100d; --panel: #1b1814; --panel2: #231f1a; --line: #3a3228; --text: #e9e2d3; --muted: #9c9182;
+  --gold: #d9b26a; --gold2: #f0cf8a; --red: #e0705a; --green: #7fc48a; --blue: #7fa9d9;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+button:hover { border-color: var(--gold); color: var(--gold2); }
+button.primary { background: #4a3a1f; border-color: var(--gold); color: var(--gold2); }
+button.danger { border-color: #6b3328; color: var(--red); }
+button:disabled { opacity: .45; cursor: default; }
+input, select, textarea { background: #0e0c0a; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+input:focus, textarea:focus { outline: none; border-color: var(--gold); }
+header { display: flex; align-items: center; gap: 16px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
+header h1 { margin: 0; font-size: 18px; color: var(--gold2); letter-spacing: .5px; }
+header .who { margin-left: auto; color: var(--muted); }
+.notice { padding: 8px 18px; background: #2a2114; border-bottom: 1px solid var(--line); color: #e8cf98; font-size: 13px; }
+.layout { display: grid; grid-template-columns: 260px 1fr; height: calc(100vh - 92px); }
+nav { border-right: 1px solid var(--line); overflow: auto; background: var(--panel); padding: 8px 0; }
+nav input { margin: 4px 12px 8px; width: calc(100% - 24px); }
+nav h3 { margin: 12px 14px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+nav a { display: flex; justify-content: space-between; padding: 4px 16px; color: var(--text); text-decoration: none; cursor: pointer; }
+nav a:hover { background: var(--panel2); }
+nav a.active { background: #3a2e1a; color: var(--gold2); }
+nav a .tag { font-size: 10px; color: var(--muted); }
+main { overflow: hidden; display: flex; flex-direction: column; }
+.toolbar { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.toolbar h2 { margin: 0 12px 0 0; font-size: 16px; color: var(--gold2); }
+.toolbar .spacer { flex: 1; }
+.toolbar .count { color: var(--muted); }
+.grid { overflow: auto; flex: 1; }
+table { border-collapse: collapse; width: max-content; min-width: 100%; }
+th, td { padding: 5px 10px; border-bottom: 1px solid #2a241d; text-align: left; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+th { position: sticky; top: 0; background: var(--panel2); color: var(--gold); cursor: pointer; font-weight: 600; z-index: 1; }
+th .key { color: var(--blue); font-size: 11px; margin-left: 4px; }
+tbody tr:hover { background: #1f1b16; cursor: pointer; }
+td.null { color: #5c5348; font-style: italic; }
+.drawer { position: fixed; top: 0; right: 0; width: min(560px, 100%); height: 100vh; background: var(--panel); border-left: 1px solid var(--line);
+  box-shadow: -10px 0 30px #000a; display: none; flex-direction: column; z-index: 5; }
+.drawer.open { display: flex; }
+.drawer header { justify-content: space-between; }
+.fields { overflow: auto; padding: 12px 18px; flex: 1; }
+.field { margin-bottom: 12px; }
+.field label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.field label b { color: var(--text); font-weight: 600; }
+.field input, .field textarea { width: 100%; }
+.field textarea { min-height: 90px; font-family: Consolas, monospace; font-size: 12px; }
+.field .nullbox { font-size: 12px; color: var(--muted); }
+.actions { display: flex; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); }
+.actions .spacer { flex: 1; }
+.message { padding: 8px 18px; font-size: 13px; min-height: 20px; }
+.message.error { color: var(--red); }
+.message.ok { color: var(--green); }
+.login { max-width: 360px; margin: 12vh auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 28px; }
+.login h1 { margin: 0 0 6px; color: var(--gold2); font-size: 22px; }
+.login p { color: var(--muted); margin: 0 0 18px; }
+.login input { width: 100%; margin-bottom: 10px; }
+.login button { width: 100%; }
+.editor { flex: 1; display: flex; flex-direction: column; padding: 10px 14px; gap: 8px; }
+.editor textarea { flex: 1; width: 100%; font-family: Consolas, monospace; font-size: 13px; resize: none; }
+.readonly { color: var(--muted); font-size: 12px; }
+.page { overflow: auto; padding: 18px 22px; }
+.page h2 { margin: 0 0 4px; color: var(--gold2); font-size: 18px; }
+.page > p { color: var(--muted); margin: 0 0 18px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; cursor: pointer; }
+.card:hover { border-color: var(--gold); }
+.card .n { font-size: 22px; color: var(--gold2); }
+.card .l { color: var(--muted); font-size: 12px; }
+.forms { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.form { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.form h3 { margin: 0 0 4px; font-size: 15px; color: var(--gold); }
+.form p { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
+.form label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 3px; }
+.form input, .form select { width: 100%; }
+.form .row { display: flex; gap: 8px; align-items: center; }
+.form .row input[type=checkbox] { width: auto; }
+.form button { margin-top: 12px; }
+.reloads { border-collapse: collapse; width: 100%; max-width: 900px; }
+.reloads td { white-space: normal; max-width: none; padding: 6px 10px; }
+.reloads td:first-child { color: var(--gold); width: 45%; }
+</style>
+</head>
+<body>
+<div id="login" class="login" hidden>
+  <h1>Etervale Admin</h1>
+  <p>Sign in with a game account whose game-master level is 4 (administrator).</p>
+  <form id="loginForm">
+    <input id="user" placeholder="Account" autocomplete="username" required>
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
+    <button class="primary" type="submit">Sign in</button>
+    <div id="loginMessage" class="message error"></div>
+  </form>
+</div>
+<div id="app" hidden>
+  <header><h1>Etervale Admin</h1><span id="database" class="readonly"></span><span class="who" id="who"></span><button id="logout">Sign out</button></header>
+  <div class="notice">Edits are written to the database at once. The running server reads world data (items, monsters, NPCs, shops, drops, fields)
+    when it starts: restart it to see those changes. Server settings reload with <b>/reload_settings</b>; data files name their own reload.</div>
+  <div class="layout">
+    <nav><input id="filter" placeholder="Find a table…"><div id="tables"></div></nav>
+    <main id="main"></main>
+  </div>
+</div>
+<div id="drawer" class="drawer">
+  <header><h1 id="drawerTitle">Row</h1><button id="drawerClose">Close</button></header>
+  <div id="fields" class="fields"></div>
+  <div id="drawerMessage" class="message"></div>
+  <div class="actions"><button id="delete" class="danger">Delete</button><span class="spacer"></span><button id="cancel">Cancel</button><button id="save" class="primary">Save</button></div>
+</div>
+<script>
+"use strict";
+const groups = [
+  ["Items", /^item|^items$/], ["Monsters", /^monster/], ["NPCs & shops", /^npc/], ["Fields & spawns", /^field|^fields$/],
+  ["Motions", /^motion/], ["Accounts", /^account|^languages$/], ["Characters", /^character|^caravan|^warehouses$|^stalls$|^item_box$/],
+  ["Clans", /^clan/], ["Castle & Bellatra", /^castle|^bellatra/], ["Cabinet & market", /^cabinet/], ["Server", /^server_|^gm_|^coin_|^currency/],
+  ["Import", /^world_/]
+];
+const state = { tables: [], table: null, file: null, page: 0, size: 50, search: "", sort: "", desc: false, rows: [], total: 0, editing: null };
+const $ = id => document.getElementById(id);
+
+async function call(method, url, body) {
+  const response = await fetch(url, { method, headers: { "Content-Type": "application/json", "X-Admin-Panel": "1" }, body: body ? JSON.stringify(body) : undefined });
+  const data = response.headers.get("content-type")?.includes("json") ? await response.json() : null;
+  if (response.status === 401 && url !== "/api/login") { showLogin(); throw new Error("Sign in first."); }
+  if (!response.ok) { throw new Error(data?.error || `${response.status} ${response.statusText}`); }
+  return data;
+}
+
+function showLogin() { $("app").hidden = true; $("login").hidden = false; $("drawer").classList.remove("open"); }
+
+async function start() {
+  try {
+    const me = await call("GET", "/api/me");
+    $("who").textContent = me.user; $("database").textContent = me.database;
+    $("login").hidden = true; $("app").hidden = false;
+    state.tables = await call("GET", "/api/tables");
+    state.files = await call("GET", "/api/files");
+    state.classes = await call("GET", "/api/classes");
+    openOverview();
+  } catch { showLogin(); }
+}
+
+$("loginForm").onsubmit = async event => {
+  event.preventDefault();
+  $("loginMessage").textContent = "";
+  try { await call("POST", "/api/login", { user: $("user").value, password: $("password").value }); $("password").value = ""; start(); }
+  catch (error) { $("loginMessage").textContent = error.message; }
+};
+$("logout").onclick = async () => { await call("POST", "/api/logout"); showLogin(); };
+$("filter").oninput = drawNav;
+
+function drawNav() {
+  const filter = $("filter").value.toLowerCase();
+  const nav = $("tables"); nav.innerHTML = "";
+  const placed = new Set();
+  const toolsHeading = document.createElement("h3"); toolsHeading.textContent = "Tools"; nav.append(toolsHeading);
+  for (const [name, open] of [["Overview", openOverview], ["Accounts & characters", openAccounts]]) {
+    const link = document.createElement("a");
+    link.innerHTML = "<span></span>"; link.firstChild.textContent = name;
+    link.className = state.tool === name ? "active" : "";
+    link.onclick = open;
+    nav.append(link);
+  }
+  const section = (title, tables) => {
+    const shown = tables.filter(t => t.name.toLowerCase().includes(filter));
+    if (!shown.length) return;
+    const heading = document.createElement("h3"); heading.textContent = title; nav.append(heading);
+    for (const table of shown) {
+      const link = document.createElement("a");
+      link.innerHTML = `<span></span><span class="tag">${table.readOnly ? "read-only" : ""}</span>`;
+      link.firstChild.textContent = table.name;
+      link.className = state.table?.name === table.name ? "active" : "";
+      link.onclick = () => openTable(table);
+      nav.append(link);
+    }
+  };
+  for (const [title, pattern] of groups) {
+    const tables = state.tables.filter(t => !placed.has(t.name) && pattern.test(t.name));
+    tables.forEach(t => placed.add(t.name));
+    section(title, tables);
+  }
+  section("Other", state.tables.filter(t => !placed.has(t.name)));
+  const files = (state.files || []).filter(f => f.name.toLowerCase().includes(filter));
+  if (files.length) {
+    const heading = document.createElement("h3"); heading.textContent = "Data files"; nav.append(heading);
+    for (const file of files) {
+      const link = document.createElement("a");
+      link.innerHTML = `<span></span><span class="tag">${Math.ceil(file.bytes / 1024)} KB</span>`;
+      link.firstChild.textContent = file.name;
+      link.className = state.file?.name === file.name ? "active" : "";
+      link.onclick = () => openFile(file);
+      nav.append(link);
+    }
+  }
+}
+
+function openTable(table) {
+  Object.assign(state, { table, file: null, tool: null, page: 0, search: "", sort: "", desc: false });
+  const main = $("main");
+  main.innerHTML = `<div class="toolbar"><h2></h2><input id="search" placeholder="Search every column…" size="28">
+    <span class="spacer"></span><span class="count" id="count"></span>
+    <button id="prev">‹ Prev</button><span id="pageInfo" class="count"></span><button id="next">Next ›</button>
+    <select id="size"><option>25</option><option selected>50</option><option>100</option><option>250</option></select>
+    ${table.readOnly ? `<span class="readonly">read-only</span>` : `<button id="add" class="primary">+ New row</button>`}</div>
+    <div class="grid"><table><thead><tr id="head"></tr></thead><tbody id="body"></tbody></table></div>`;
+  main.querySelector("h2").textContent = table.name;
+  let timer;
+  $("search").oninput = () => { clearTimeout(timer); timer = setTimeout(() => { state.search = $("search").value; state.page = 0; loadRows(); }, 250); };
+  $("prev").onclick = () => { if (state.page > 0) { state.page--; loadRows(); } };
+  $("next").onclick = () => { if ((state.page + 1) * state.size < state.total) { state.page++; loadRows(); } };
+  $("size").onchange = () => { state.size = Number($("size").value); state.page = 0; loadRows(); };
+  if (!table.readOnly) $("add").onclick = () => openRow(null);
+  const head = $("head");
+  table.columns.forEach(column => {
+    const th = document.createElement("th");
+    th.textContent = column.name;
+    if (column.isKey) th.insertAdjacentHTML("beforeend", `<span class="key">key</span>`);
+    th.title = `${column.sqlType || column.kind}${column.notNull ? ", required" : ""}`;
+    th.onclick = () => { state.desc = state.sort === column.name ? !state.desc : false; state.sort = column.name; loadRows(); };
+    head.append(th);
+  });
+  drawNav(); loadRows();
+}
+
+async function loadRows() {
+  const table = state.table;
+  const query = new URLSearchParams({ page: state.page, size: state.size, search: state.search, sort: state.sort, desc: state.desc });
+  try {
+    const page = await call("GET", `/api/tables/${encodeURIComponent(table.name)}/rows?${query}`);
+    if (state.table !== table) return;
+    state.rows = page.rows; state.total = page.total;
+    const body = $("body"); body.innerHTML = "";
+    for (const row of page.rows) {
+      const tr = document.createElement("tr");
+      row.forEach(value => {
+        const td = document.createElement("td");
+        if (value === null) { td.textContent = "NULL"; td.className = "null"; } else { td.textContent = value; td.title = value.length > 40 ? value.slice(0, 600) : ""; }
+        tr.append(td);
+      });
+      tr.onclick = () => openRow(row);
+      body.append(tr);
+    }
+    const pages = Math.max(1, Math.ceil(page.total / page.size));
+    $("count").textContent = `${page.total.toLocaleString()} rows`;
+    $("pageInfo").textContent = `Page ${page.page + 1} of ${pages}`;
+    $("prev").disabled = page.page === 0; $("next").disabled = page.page + 1 >= pages;
+  } catch (error) { $("count").textContent = error.message; }
+}
+
+function openRow(row) {
+  const table = state.table;
+  state.editing = row;
+  $("drawerTitle").textContent = row ? `${table.name}: edit row` : `${table.name}: new row`;
+  $("drawerMessage").textContent = ""; $("drawerMessage").className = "message";
+  $("delete").hidden = !row || table.readOnly; $("save").hidden = table.readOnly;
+  const fields = $("fields"); fields.innerHTML = "";
+  table.columns.forEach((column, index) => {
+    const value = row ? row[index] : null;
+    const field = document.createElement("div"); field.className = "field";
+    const long = column.kind === "Json" || (value && (value.length > 60 || value.trim().startsWith("{") || value.trim().startsWith("[")));
+    const input = document.createElement(long ? "textarea" : "input");
+    input.value = value ?? ""; input.dataset.column = column.name; input.dataset.original = value ?? "\u0000null";
+    const locked = table.readOnly || column.kind === "Opaque" || (row && column.isKey);
+    input.disabled = locked;
+    if (long && value && (value.trim().startsWith("{") || value.trim().startsWith("["))) { try { input.value = JSON.stringify(JSON.parse(value), null, 2); } catch { } }
+    const label = document.createElement("label");
+    label.innerHTML = `<b></b><span>${column.sqlType || column.kind}${column.isKey ? " · key" : ""}${column.notNull ? " · required" : ""}</span>`;
+    label.firstChild.textContent = column.name;
+    field.append(label, input);
+    if (!column.notNull && !locked) {
+      const none = document.createElement("label"); none.className = "nullbox";
+      none.innerHTML = `<span><input type="checkbox"> NULL</span>`;
+      const box = none.querySelector("input"); box.checked = row ? value === null : !column.isKey;
+      input.disabled = box.checked; box.onchange = () => { input.disabled = box.checked; };
+      input.dataset.nullBox = "1"; field.append(none); input._null = box;
+    }
+    fields.append(field);
+  });
+  $("drawer").classList.add("open");
+}
+
+function collect() {
+  const values = {}, key = {};
+  const table = state.table;
+  for (const input of $("fields").querySelectorAll("[data-column]")) {
+    const column = table.columns.find(c => c.name === input.dataset.column);
+    const isNull = input._null?.checked === true;
+    let text = isNull ? null : input.value;
+    // A pretty-printed JSON value is sent back compact.
+    if (text !== null && input.tagName === "TEXTAREA") { try { const parsed = JSON.parse(text); if (typeof parsed === "object") text = JSON.stringify(parsed); } catch { } }
+    if (state.editing) {
+      const original = state.editing[table.columns.indexOf(column)];
+      if (column.isKey) { key[column.name] = original; continue; }
+      if (column.kind === "Opaque" || table.readOnly) continue;
+      const unchanged = text === original || (text !== null && original !== null && sameJson(text, original));
+      if (!unchanged) values[column.name] = text;
+    } else {
+      // Left empty, a NULL box or a lone whole-number key (the database numbers it) is not sent at all.
+      if (isNull || column.kind === "Opaque") continue;
+      if (text === "" && column.isKey && column.kind === "Integer") continue;
+      values[column.name] = text;
+    }
+  }
+  return { key, values };
+}
+
+function sameJson(a, b) { try { return JSON.stringify(JSON.parse(a)) === JSON.stringify(JSON.parse(b)); } catch { return false; } }
+
+async function write(method, body, done) {
+  const message = $("drawerMessage");
+  try {
+    await call(method, `/api/tables/${encodeURIComponent(state.table.name)}/rows`, body);
+    message.className = "message ok"; message.textContent = done;
+    await loadRows();
+    setTimeout(() => $("drawer").classList.remove("open"), 500);
+  } catch (error) { message.className = "message error"; message.textContent = error.message; }
+}
+
+$("save").onclick = () => {
+  const { key, values } = collect();
+  if (state.editing && !Object.keys(values).length) { $("drawerMessage").textContent = "Nothing changed."; return; }
+  write(state.editing ? "PUT" : "POST", state.editing ? { key, values } : { values }, state.editing ? "Saved." : "Added.");
+};
+$("delete").onclick = () => {
+  if (!confirm("Delete this row? This cannot be undone.")) return;
+  write("DELETE", { key: collect().key }, "Deleted.");
+};
+$("drawerClose").onclick = $("cancel").onclick = () => $("drawer").classList.remove("open");
+
+async function openFile(file) {
+  Object.assign(state, { table: null, file, tool: null });
+  drawNav();
+  const main = $("main");
+  main.innerHTML = `<div class="toolbar"><h2></h2><span class="readonly"></span><span class="spacer"></span><span id="fileMessage" class="message"></span>
+    <button id="format">Format</button><button id="saveFile" class="primary">Save file</button></div>
+    <div class="editor"><textarea id="fileText" spellcheck="false"></textarea></div>`;
+  main.querySelector("h2").textContent = file.name;
+  main.querySelector(".readonly").textContent = `Takes effect after ${file.reload}. The previous version is kept as ${file.name}.bak.`;
+  const data = await call("GET", `/api/files/${encodeURIComponent(file.name)}`);
+  $("fileText").value = data.text;
+  $("format").onclick = () => { try { $("fileText").value = JSON.stringify(JSON.parse($("fileText").value), null, 2); } catch (error) { show(error.message, true); } };
+  $("saveFile").onclick = async () => {
+    try { await call("PUT", `/api/files/${encodeURIComponent(file.name)}`, { text: $("fileText").value }); show(`Saved. Now run ${file.reload}.`, false); }
+    catch (error) { show(error.message, true); }
+  };
+  function show(text, bad) { const m = $("fileMessage"); m.textContent = text; m.className = "message " + (bad ? "error" : "ok"); }
+}
+
+function openTableNamed(name, search) {
+  const table = state.tables.find(t => t.name === name);
+  if (!table) return;
+  openTable(table);
+  if (search) { $("search").value = search; state.search = search; loadRows(); }
+}
+
+async function openOverview() {
+  Object.assign(state, { table: null, file: null, tool: "Overview" });
+  drawNav();
+  const main = $("main");
+  main.innerHTML = `<div class="page"><h2>Overview</h2><p id="overviewDb"></p><div class="cards" id="cards"></div>
+    <h2>When a change takes effect</h2><p>The panel writes at once; the running server reads each kind of data at its own time.</p>
+    <table class="reloads"><tbody id="reloads"></tbody></table></div>`;
+  const overview = await call("GET", "/api/overview");
+  $("overviewDb").textContent = `Database: ${overview.database}`;
+  for (const count of overview.counts) {
+    const card = document.createElement("div"); card.className = "card";
+    card.innerHTML = `<div class="n"></div><div class="l"></div>`;
+    card.querySelector(".n").textContent = count.rows.toLocaleString();
+    card.querySelector(".l").textContent = count.label;
+    card.onclick = () => openTableNamed(count.table);
+    $("cards").append(card);
+  }
+  for (const reload of overview.reloads) {
+    const row = document.createElement("tr");
+    row.innerHTML = "<td></td><td></td>";
+    row.children[0].textContent = reload.what; row.children[1].textContent = reload.how;
+    $("reloads").append(row);
+  }
+}
+
+function openAccounts() {
+  Object.assign(state, { table: null, file: null, tool: "Accounts & characters" });
+  drawNav();
+  const classes = state.classes.map(c => `<option value="${c.name}">${c.name}${c.open ? "" : " (closed to players)"}</option>`).join("");
+  const main = $("main");
+  main.innerHTML = `<div class="page"><h2>Accounts &amp; characters</h2>
+    <p>Do these while the player is offline: an online player's next save overwrites its account and characters.
+      <a href="#" id="toAccounts">Accounts table</a> · <a href="#" id="toCharacters">Characters table</a></p>
+    <div class="forms">
+      <form class="form" data-method="POST" data-url="/api/accounts"><h3>Create account</h3><p>A new login account, game-master level 0.</p>
+        <label>Account</label><input name="user" required><label>Password</label><input name="password" type="password" required>
+        <button class="primary">Create</button><div class="message"></div></form>
+      <form class="form" data-method="PUT" data-url="/api/accounts/password"><h3>Reset password</h3><p>Replaces the account's password; remembered logins keep working until they expire.</p>
+        <label>Account</label><input name="user" required><label>New password</label><input name="password" type="password" required>
+        <button class="primary">Set password</button><div class="message"></div></form>
+      <form class="form" data-method="PUT" data-url="/api/accounts/gm"><h3>Game-master level</h3><p>Applies at the account's next login.</p>
+        <label>Account</label><input name="user" required>
+        <label>Level</label><select name="level"><option value="0">0 · Player</option><option value="1">1 · Guide</option><option value="2">2 · Moderator</option>
+          <option value="3">3 · Operator</option><option value="4">4 · Administrator</option></select>
+        <button class="primary">Set level</button><div class="message"></div></form>
+      <form class="form" data-method="POST" data-url="/api/characters"><h3>Create character</h3><p>In the account's first free slot, in its class's town.</p>
+        <label>Account</label><input name="user" required><label>Name</label><input name="name" required>
+        <label>Class</label><select name="class">${classes}</select>
+        <label>Level</label><input name="level" type="number" min="1" value="1">
+        <label class="row"><input name="max" type="checkbox"> Maxed: level cap, last tier, every skill at the top rank</label>
+        <button class="primary">Create</button><div class="message"></div></form>
+      <form class="form" data-method="PUT" data-url="/api/characters/move"><h3>Move character</h3><p>To another account's first free slot.</p>
+        <label>Character</label><input name="name" required><label>To account</label><input name="user" required>
+        <button class="primary">Move</button><div class="message"></div></form>
+    </div></div>`;
+  $("toAccounts").onclick = event => { event.preventDefault(); openTableNamed("accounts"); };
+  $("toCharacters").onclick = event => { event.preventDefault(); openTableNamed("characters"); };
+  for (const form of main.querySelectorAll("form")) {
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const body = {};
+      for (const input of form.querySelectorAll("input, select")) {
+        body[input.name] = input.type === "checkbox" ? input.checked : input.type === "number" || input.name === "level" ? Number(input.value) : input.value;
+      }
+      const message = form.querySelector(".message");
+      try {
+        const result = await call(form.dataset.method, form.dataset.url, body);
+        message.className = "message ok"; message.textContent = result.message;
+        form.querySelectorAll("input[type=password]").forEach(input => input.value = "");
+      } catch (error) { message.className = "message error"; message.textContent = error.message; }
+    };
+  }
+}
+
+start();
+</script>
+</body>
+</html>

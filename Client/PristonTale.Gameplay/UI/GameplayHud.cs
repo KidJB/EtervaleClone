@@ -57,6 +57,7 @@ public sealed partial class GameplayHud : IDisposable
     private readonly HudShopWindow _shop = new();
     private readonly HudCountBox _countBox = new();
     private readonly HudWarehouseWindow _warehouse = new();
+    private readonly HudClanWarehouseWindow _clanWarehouse = new();
     // StoredPlacement as a delegate made once, for the warehouse's per-frame update.
     private readonly Func<OwnedItemView, Point, HudPlacement> _storedPlacement;
     private readonly HudAgingWindow _aging = new();
@@ -119,6 +120,8 @@ public sealed partial class GameplayHud : IDisposable
     private readonly HudPremiumKeeps _premiumKeeps = new();
     private readonly HudPuzzleExchange _puzzle = new();
     private readonly HudCrystalDismiss _crystalDismiss = new();
+    private readonly HudCaravanDismiss _caravanDismiss = new();
+    private PristonTale.Client.Net.Presence.PetCollectionInfo _caravanShownFor;
     private readonly HudRestartPanel _restart;
     private readonly HudWingGate _wingGate;
     private int _itemUseCompletions;
@@ -171,9 +174,10 @@ public sealed partial class GameplayHud : IDisposable
         _settings = new HudSettingsPanel(context.Presentation);
         _sprites = new HudSprites(context.GraphicsDevice, context.AssetRoot, context.Log);
         _sprites.Request(HudArt.Static);
-        _sprites.Request([.. HudMinimap.Art, .. Npc.HudArenaEvent.Art, .. Npc.HudArenaTimer.Art, .. Npc.HudCabinet.Art, .. HudWorldBuffs.Art, .. HudCombat.TargetBarArt, AutoSkillArt, .. HudQuestBook.Art, .. HudQuestTracker.Art, .. HudPetWindow.Art, .. Inventory.HudItemFrame.Art, Widgets.HudGroundLabels.BeamArt, .. HudCoinShop.Art, .. Npc.HudItemBox.Art, .. Markets.HudMarketplace.Art, .. Markets.HudCharacterMarket.Art, .. HudCourierWindow.Art]);
+        _sprites.Request([.. HudMinimap.Art, .. Npc.HudArenaEvent.Art, .. Npc.HudArenaTimer.Art, .. Npc.HudCabinet.Art, .. Npc.HudClanWarehouseWindow.Art, .. HudWorldBuffs.Art, .. HudCombat.TargetBarArt, AutoSkillArt, .. HudQuestBook.Art, .. HudQuestTracker.Art, .. HudPetWindow.Art, .. Inventory.HudItemFrame.Art, Widgets.HudGroundLabels.BeamArt, .. HudCoinShop.Art, .. Npc.HudItemBox.Art, .. Markets.HudMarketplace.Art, .. Markets.HudCharacterMarket.Art, .. HudCourierWindow.Art]);
         _arenaEvent.Teleport = () => _ = _chat.Send?.Invoke("/arena enter", false, Guid.Empty);
         _sprites.Request(HudNpcArt.All);
+        _sprites.Request(HudWarehouseWindow.CaravanArt);
         _sprites.Request(HudCraftArt.All);
         _sprites.Request(HudArt.BlockText);
         _sprites.Request(HudQuestArt.All);
@@ -184,7 +188,7 @@ public sealed partial class GameplayHud : IDisposable
         _icons.Request([PetSkins.IconKey]);
         _personalShop = new HudPersonalShopController(context.Log) { Notify = _notice.Show, Command = line => _ = _chat.Send?.Invoke(line, false, Guid.Empty), AskCount = (first, second, maximum, accepted) => _countBox.Open(first, second, maximum, accepted) };
         _benches = [_aging, _mix, _smelting, _manufacture, _mixtureReset];
-        _serviceWindows = [_shop, _warehouse, .. _benches, _personalShop.Window, _trade];
+        _serviceWindows = [_shop, _warehouse, _clanWarehouse, .. _benches, _personalShop.Window, _trade];
         _sprites.Request(HudPersonalShopArt.All);
         _skills = new HudSkillsPanel(context.Font, _sprites);
         _skillHud = new HudSkillHud(_sprites, context.GraphicsDevice);
@@ -306,6 +310,11 @@ public sealed partial class GameplayHud : IDisposable
 
     // The names over the pets in view, filled by the scene each frame (GameScene.CollectPetLabels).
     public List<(HudOverheadPoint Point, string Text)> PetLabels { get; } = new();
+
+    // The names over the caravans in view and the point over the local player's own, filled by the scene each frame
+    // (GameScene.CollectCaravanLabels); a click on the own one opens its storage.
+    public List<(HudOverheadPoint Point, string Text)> CaravanLabels { get; } = new();
+    public HudOverheadPoint? OwnCaravan { get; set; }
 
     // Every scheduled boss of the world, for the boss list beside the minimap.
     public IReadOnlyList<PristonTale.Client.Net.Presence.BossListInfo> BossList
@@ -560,7 +569,7 @@ public sealed partial class GameplayHud : IDisposable
             || _questWindow.Open || _partyWindow.Open || _quests.Dialog is not null || _quests.SkillResetBox;
         closed |= _personalShop.Close();
         CloseServices();
-        closed |= _itemUse.Teleport.IsOpen || _itemUse.Confirming || _puzzle.Confirming || _crystalDismiss.Confirming || _wingGate.IsOpen || _wingGate.Confirming
+        closed |= _itemUse.Teleport.IsOpen || _itemUse.Confirming || _puzzle.Confirming || _crystalDismiss.Confirming || _caravanDismiss.Confirming || _wingGate.IsOpen || _wingGate.Confirming
             || _helpWindow.IsOpen;
         _helpWindow.Close();
         _clanWindow.Close();
@@ -572,6 +581,7 @@ public sealed partial class GameplayHud : IDisposable
         _wingGate.Close();
         _puzzle.Close();
         _crystalDismiss.Close();
+        _caravanDismiss.Close();
         _quests.CloseDialog();
         _quests.AnswerSkillReset(false);
         _quests.LeaveNpc();
@@ -615,6 +625,12 @@ public sealed partial class GameplayHud : IDisposable
         _itemUse.Restore(state, InCastleField, _clock.Elapsed.TotalMilliseconds);
         _restart.Update(PlayerDead, _clock.Elapsed.TotalMilliseconds);
         _premium.Apply(PremiumTimers, _clock.Elapsed.TotalMilliseconds);
+        if (!ReferenceEquals(_caravanShownFor, PetCollection))
+        {
+            _caravanShownFor = PetCollection;
+            _premium.SetCaravan(PetCollection.Caravan, PetCollection.CaravanEnds, PetCollection.CaravanName, DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                _clock.Elapsed.TotalMilliseconds);
+        }
         _premium.Hold(PremiumPaused, _clock.Elapsed.TotalMilliseconds);
         _quests.Update();
         _npc.Update(_context.Font);
@@ -794,7 +810,7 @@ public sealed partial class GameplayHud : IDisposable
         var clickTaken = clicked && Captures(layout, pointer, design);
         var typedText = _context.TypedText.Drain();
         // A count box or the shop's sign box takes the keyboard: neither the chat nor a game key sees what is typed there.
-        var boxTyping = _countBox.IsOpen || _personalShop.SignOpen || _petWindow.Naming || _itemBox.Naming || _cabinet.Searching || _marketplace.Searching || _characterMarket.Typing || _clanWindow.Typing || _partyFinder.Typing;
+        var boxTyping = _countBox.IsOpen || _personalShop.SignOpen || _petWindow.Naming || _itemBox.Naming || _cabinet.Searching || _marketplace.Searching || _characterMarket.Typing || _clanWindow.Typing || _partyFinder.Typing || _warehouse.NamingCaravan;
         if (_countBox.IsOpen)
         {
             _typingKeyboard = keyboard;
@@ -816,6 +832,14 @@ public sealed partial class GameplayHud : IDisposable
         else if (_partyFinder.Typing)
         {
             _partyFinder.Type(typedText, elapsedSeconds);
+        }
+        else if (_warehouse.NamingCaravan)
+        {
+            _warehouse.TypeCaravanName(typedText, elapsedSeconds);
+            if (Pressed(keyboard, Keys.Enter) || Pressed(keyboard, Keys.Escape))
+            {
+                _warehouse.StopNamingCaravan();
+            }
         }
         else if (_cabinet.Searching)
         {
@@ -840,6 +864,10 @@ public sealed partial class GameplayHud : IDisposable
             _typingKeyboard = keyboard;
             _clanWindow.Type(typedText, _typedKey ??= key => Pressed(_typingKeyboard, key), _canDraw ??= _painter.CanDraw);
         }
+        else if (_caravanDismiss.Confirming && !_chat.Window.Focused && Pressed(keyboard, Keys.Enter))
+        {
+            DismissCaravan(_caravanDismiss.Accept());
+        }
         else if (_crystalDismiss.Confirming && !_chat.Window.Focused && Pressed(keyboard, Keys.Enter))
         {
             // Enter answers Yes to the dismiss question instead of opening the chat input.
@@ -859,7 +887,7 @@ public sealed partial class GameplayHud : IDisposable
         }
 
         var typing = boxTyping || _chat.KeyboardCaptured;
-        _inventory.SidesLocked = _warehouse.IsOpen && (_inventory.Dragging != Guid.Empty || _warehouse.Dragging != Guid.Empty);
+        _inventory.SidesLocked = Storage.IsOpen && (_inventory.Dragging != Guid.Empty || Storage.Dragging != Guid.Empty);
         if (!typing)
         {
             UpdateKeys(keyboard);
@@ -867,8 +895,8 @@ public sealed partial class GameplayHud : IDisposable
 
         var workLocked = _services.Pending || _settingsOpen || ModalOpen;
         // A click that sets a warehouse item down in the bag is not also a pick-up there.
-        var storedCarried = _warehouse.Dragging != Guid.Empty;
-        var warehouseAction = _warehouse.Update(mouse, _previousMouse, pointer, _storedPlacement, workLocked, _inventory.Dragging != Guid.Empty);
+        var storedCarried = Storage.Dragging != Guid.Empty;
+        var warehouseAction = Storage.Update(mouse, _previousMouse, pointer, _storedPlacement, workLocked, _inventory.Dragging != Guid.Empty);
         HudWorkbench actedBench = null;
         var benchAction = HudWorkActionKind.None;
         foreach (var bench in _benches)
@@ -900,7 +928,11 @@ public sealed partial class GameplayHud : IDisposable
             rightPressed = false;
         }
 
-        if (rightPressed && !ModalOpen && !_settingsOpen)
+        if (rightPressed && !ModalOpen && !_settingsOpen && _premium.CaravanAt(pointer) is { } caravanName)
+        {
+            _caravanDismiss.Offer(caravanName);
+        }
+        else if (rightPressed && !ModalOpen && !_settingsOpen)
         {
             _crystalDismiss.Offer(_skillHud.BuffAt(pointer));
         }
@@ -914,22 +946,22 @@ public sealed partial class GameplayHud : IDisposable
         _skills.RefreshRanks(_state);
         var hoveredSkill = _skillSlide.FullyOpen && _skillMaster == 0 ? _skills.HoveredSkill(skillOrigin, pointer) : 0;
         _minimap.Drag(layout, pointer, mouse, _previousMouse, MinimapShown && !ModalOpen && !_settingsOpen && _inventory.Dragging == Guid.Empty
-            && _warehouse.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty && !_questTracker.Dragging);
+            && Storage.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty && !_questTracker.Dragging);
         _questTracker.Update(layout, pointer, mouse, _previousMouse, !ModalOpen && !_settingsOpen && !_minimap.Dragging && _inventory.Dragging == Guid.Empty
-            && _warehouse.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty);
+            && Storage.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty);
 
         _tuning.Update(layout, pointer, mouse, _previousMouse, _clock.Elapsed.TotalSeconds);
         _partyFrames.Drag(layout, Party, pointer, mouse, _previousMouse, !ModalOpen && !_settingsOpen && !_minimap.Dragging && !_questTracker.Dragging
-            && _inventory.Dragging == Guid.Empty && _warehouse.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty);
+            && _inventory.Dragging == Guid.Empty && Storage.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty);
         _worldBuffs.Update(layout, pointer, mouse, _previousMouse, !ModalOpen && !_settingsOpen && !_minimap.Dragging && !_questTracker.Dragging
-            && _inventory.Dragging == Guid.Empty && _warehouse.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty);
+            && _inventory.Dragging == Guid.Empty && Storage.Dragging == Guid.Empty && _actionBar.Carried.IsEmpty);
 
         // The bar reads the skill window's press before the bindings forget it on its release.
-        _actionBar.Update(layout, pointer, mouse, _previousMouse, _inventory.Dragging != Guid.Empty || _warehouse.Dragging != Guid.Empty,
+        _actionBar.Update(layout, pointer, mouse, _previousMouse, _inventory.Dragging != Guid.Empty || Storage.Dragging != Guid.Empty,
             ModalOpen || _settingsOpen);
         _bindings.Update(typing ? default : keyboard, mouse, hoveredSkill);
         SaveActionBar();
-        PointerCaptured = clickTaken || Captures(layout, pointer, design) || _chat.Window.Contains(layout, pointer, ChatYields(layout)) || _inventory.Dragging != Guid.Empty || _warehouse.Dragging != Guid.Empty;
+        PointerCaptured = clickTaken || Captures(layout, pointer, design) || _chat.Window.Contains(layout, pointer, ChatYields(layout)) || _inventory.Dragging != Guid.Empty || Storage.Dragging != Guid.Empty;
         // A click in the world (to move or act) lets go of the chat's input line, keeping what was typed.
         if (clicked && !PointerCaptured && _chat.Window.Focused)
         {
@@ -957,14 +989,14 @@ public sealed partial class GameplayHud : IDisposable
     public HudCursorKind? CursorOverride =>
         ModalOpen ? HudCursorKind.Default
         : _shop.IsOpen ? _shop.Mode switch { HudShopMode.Sell => HudCursorKind.Sell, HudShopMode.Repair => HudCursorKind.Repair, _ => HudCursorKind.Buy }
-        : _inventory.Dragging != Guid.Empty || _warehouse.Dragging != Guid.Empty ? HudCursorKind.Hidden
+        : _inventory.Dragging != Guid.Empty || Storage.Dragging != Guid.Empty ? HudCursorKind.Hidden
         : null;
 
     // A dialog, a message box or the warp map: it takes every click, the bag's included.
     private bool ModalOpen =>
         _countBox.IsOpen || _personalShop.ModalOpen || _npcOpen || _clanWindow.IsOpen || _castleWindow.IsOpen || _bellatraWindow.IsOpen || _quests.Dialog is not null || _quests.Confirming || _quests.SkillResetBox || _skills.TrainingPending
         || _wingGate.IsOpen || _wingGate.Confirming || _itemUse.Teleport.IsOpen || _itemUse.Confirming || _puzzle.Confirming
-        || _crystalDismiss.Confirming;
+        || _crystalDismiss.Confirming || _caravanDismiss.Confirming;
 
     // As in the original, a modal or a work window keeps every click from the world (the work windows still trade items
     // with the bag); the status, inventory, skill and shop windows keep only their own area.
@@ -1061,7 +1093,7 @@ public sealed partial class GameplayHud : IDisposable
         {
             _inventoryPanel.ClockMs = _clock.Elapsed.TotalMilliseconds;
             var bagOrigin = PanelOrigin(layout, _inventorySlide);
-            _inventoryPanel.Draw(_painter, bagOrigin, _state, _inventory, _icons, pointer, _inventorySlide.FullyOpen, _warehouse.Carried);
+            _inventoryPanel.Draw(_painter, bagOrigin, _state, _inventory, _icons, pointer, _inventorySlide.FullyOpen, Storage.Carried);
             var money = Inventory.HudInventoryLayout.Money(bagOrigin);
             _painter.Text("Coins", money.Right + 40, money.Y, BagCoinColor);
             _painter.Text(Coins.Text, money.Right + 84, money.Y, BagCoinColor);
@@ -1199,6 +1231,7 @@ public sealed partial class GameplayHud : IDisposable
 
         _puzzle.Draw(_painter, pointer);
         _crystalDismiss.Draw(_painter, pointer);
+        _caravanDismiss.Draw(_painter, pointer);
         if (_personalShop.ModalOpen)
         {
             _painter.Flush();
@@ -1308,6 +1341,27 @@ public sealed partial class GameplayHud : IDisposable
                 HudCombat.DrawNamePlate(_painter, layout, text, x, (int)(point.Screen.Y / scale), PetLabelColor);
             }
         }
+
+        foreach (var (point, text) in CaravanLabels)
+        {
+            if (point.Depth <= HudChatBubbles.MaxDepth)
+            {
+                HudCombat.DrawNamePlate(_painter, layout, text, (int)(point.Screen.X / scale), (int)(point.Screen.Y / scale), CaravanLabelColor);
+            }
+        }
+    }
+
+    private static readonly Color CaravanLabelColor = new(255, 214, 120);
+    private const int CaravanClickWidth = 120;
+    private const int CaravanClickHeight = 44;
+
+    // The area over the local player's caravan whose click opens its storage.
+    private Rectangle? OwnCaravanArea(HudLayout layout)
+    {
+        var scale = Math.Max(1, layout.Scale);
+        return OwnCaravan is { } point && point.Depth <= HudChatBubbles.MaxDepth
+            ? new Rectangle((int)(point.Screen.X / scale) - CaravanClickWidth / 2, (int)(point.Screen.Y / scale) - CaravanClickHeight, CaravanClickWidth, CaravanClickHeight + 8)
+            : null;
     }
 
     private static readonly Color PetLabelColor = new(180, 240, 180);

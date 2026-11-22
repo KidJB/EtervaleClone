@@ -62,7 +62,7 @@ public sealed class CharacterAppService
         if (!CharacterNames.IsValidLength(trimmed))
             return CreateCharacterOutcome.Failed(CreateCharacterFailure.NameLength);
 
-        if (!Enum.IsDefined(playerClass))
+        if (!ClassProfiles.Creatable(playerClass))
             return CreateCharacterOutcome.Failed(CreateCharacterFailure.UnknownClass);
 
         if (!CharacterFace.IsValidIndex(faceIndex))

@@ -63,8 +63,14 @@ public sealed partial class GameplayHud
             _shop.Hide();
         }
 
-        if (_services.Open != NpcServiceKind.Warehouse && _warehouse.IsOpen)
+        if (_services.Open != NpcServiceKind.ClanWarehouse && _clanWarehouse.IsOpen)
         {
+            _clanWarehouse.Hide();
+        }
+
+        if (_services.Open is not (NpcServiceKind.Warehouse or NpcServiceKind.Caravan) && _warehouse.IsOpen)
+        {
+            SendCaravanChanges();
             _warehouse.Hide();
         }
 
@@ -92,9 +98,9 @@ public sealed partial class GameplayHud
             _manufacture.ProductsFor = _manufacture.Item;
         }
 
-        if (_warehouse.IsOpen && _services.Warehouse is { } view && !ReferenceEquals(view, _warehouse.View))
+        if (Storage.IsOpen && _services.Warehouse is { } view && !ReferenceEquals(view, Storage.View))
         {
-            _warehouse.Refresh(view);
+            Storage.Refresh(view);
             RequestIcons(_state);
         }
 
@@ -109,14 +115,14 @@ public sealed partial class GameplayHud
     private void RequestIcons(OwnerState state)
     {
         RememberKeys(state?.Items);
-        RememberKeys(_warehouse.View?.Items);
+        RememberKeys(Storage.View?.Items);
         var keys = state?.Items.Select(static item => item.CatalogKey) ?? [];
         if (_shop.IsOpen)
         {
             keys = keys.Concat(_shop.IconKeys);
         }
 
-        if (_warehouse.IsOpen && _warehouse.View is { } view)
+        if (Storage.IsOpen && Storage.View is { } view)
         {
             keys = keys.Concat(view.Items.Select(static item => item.CatalogKey));
         }
@@ -158,7 +164,7 @@ public sealed partial class GameplayHud
         }
         else if (command.Action is NpcServiceAction.Move or NpcServiceAction.Withdraw)
         {
-            _warehouse.CarryAfter(command.Covered);
+            Storage.CarryAfter(command.Covered);
         }
     }
 
@@ -177,6 +183,38 @@ public sealed partial class GameplayHud
 
     // The Item Distributor opens its own window (HudItemBox) and the bag; every other service asks the server to open. True
     // when a window opens or the request went out.
+    // The storage the open window shows: the caravan's or the NPC's warehouse.
+    // The window showing the open storage: the clan warehouse's own, or the warehouse window (the account's, the caravan's).
+    private IHudStorageWindow Storage => _services.Open == NpcServiceKind.ClanWarehouse ? _clanWarehouse : _warehouse;
+
+    private NpcServiceKind StorageKind => _services.Open is NpcServiceKind.Caravan or NpcServiceKind.ClanWarehouse ? _services.Open.Value : NpcServiceKind.Warehouse;
+
+    // Opens the local player's caravan storage (no NPC); the server refuses it while no caravan is out.
+    // What the caravan window changed (its name, follow or stay), sent as the chat commands the server takes.
+    private void SendCaravanChanges()
+    {
+        if (!_warehouse.CaravanMode)
+        {
+            return;
+        }
+
+        foreach (var command in _warehouse.CaravanChanges())
+        {
+            _ = _chat.Send?.Invoke(command, false, Guid.Empty);
+        }
+    }
+
+    // A click on the own caravan's model in the world opens its storage as its name does.
+    public void OpenOwnCaravan()
+    {
+        if (!ModalOpen)
+        {
+            OpenCaravan();
+        }
+    }
+
+    private bool OpenCaravan() => _services.Request(0, ClientText.Get("Caravan.Title"), NpcServiceKind.Caravan, NpcServiceAction.Open);
+
     private bool OpenNpcService(ulong npcId, string npcName, NpcServiceKind kind)
     {
         if (kind == NpcServiceKind.Cabinet)
@@ -251,6 +289,18 @@ public sealed partial class GameplayHud
                 RequestIcons(_state);
                 OpenOnly(_inventorySlide);
                 break;
+            case NpcServiceKind.Caravan when _services.Warehouse is { } view:
+                _npcOpen = false;
+                _warehouse.ShowCaravan(view, PetCollection.CaravanName, !PetCollection.CaravanStays);
+                RequestIcons(_state);
+                OpenOnly(_inventorySlide);
+                break;
+            case NpcServiceKind.ClanWarehouse when _services.Warehouse is { } view:
+                _npcOpen = false;
+                _clanWarehouse.Show(view, Clan);
+                RequestIcons(_state);
+                OpenOnly(_inventorySlide);
+                break;
             case NpcServiceKind.Warehouse when _services.Warehouse is { } view:
                 _npcOpen = false;
                 _warehouse.Show(view);
@@ -314,6 +364,7 @@ public sealed partial class GameplayHud
 
     private void CloseServices()
     {
+        SendCaravanChanges();
         _services.Close();
         foreach (var window in _serviceWindows)
         {
@@ -447,7 +498,7 @@ public sealed partial class GameplayHud
             return;
         }
 
-        if (_warehouse.FullyOpen && _warehouse.View is { } view)
+        if (_warehouse.FullyOpen && _warehouse.View is { } view && _services.Open == NpcServiceKind.Warehouse)
         {
             _countBox.Open(ClientText.Get("Count.HowMuchGold"), ClientText.Get("Count.ToStore"), Math.Min(_state.Money, WarehouseStorage.MaxMoney - view.Money),
                 amount => _services.Request(_services.NpcId, _services.NpcName, NpcServiceKind.Warehouse, NpcServiceAction.DepositGold,
@@ -497,7 +548,7 @@ public sealed partial class GameplayHud
         }
 
         // Over the grid: free cells store it, one stored item is exchanged; a refusal keeps it on the cursor.
-        if (_warehouse.SetDownOnGrid(dropped, pointer) is { Kind: not HudWarehouseActionKind.None } action)
+        if (Storage.SetDownOnGrid(dropped, pointer) is { Kind: not HudWarehouseActionKind.None } action)
         {
             ApplyWarehouseAction(_state, action);
             return action.Kind == HudWarehouseActionKind.Deposit;
@@ -528,10 +579,10 @@ public sealed partial class GameplayHud
                     HudWarehouseActionKind.Move => NpcServiceAction.Move,
                     _ => NpcServiceAction.Withdraw
                 };
-                _services.Request(_services.NpcId, _services.NpcName, NpcServiceKind.Warehouse, service, revision, itemId: action.ItemId,
+                _services.Request(_services.NpcId, _services.NpcName, StorageKind, service, revision, itemId: action.ItemId,
                     anchor: action.Anchor, covered: action.Covered);
                 break;
-            case HudWarehouseActionKind.WithdrawGold when state is not null && _warehouse.View is { } view:
+            case HudWarehouseActionKind.WithdrawGold when state is not null && _warehouse.View is { } view && _services.Open == NpcServiceKind.Warehouse:
                 // As much as is stored and the character may still carry, as the original bounds the count.
                 _countBox.Open(ClientText.Get("Count.HowMuchGold"), ClientText.Get("Count.ToTakeOut"), Math.Min(view.Money, MoneyLimits.CarryLimit(state.Level, state.Tier) - state.Money),
                     amount => _services.Request(_services.NpcId, _services.NpcName, NpcServiceKind.Warehouse, NpcServiceAction.WithdrawGold,
@@ -539,6 +590,36 @@ public sealed partial class GameplayHud
                 break;
             case HudWarehouseActionKind.Refused:
                 _notice.Show(action.Message);
+                break;
+            case HudWarehouseActionKind.ClanLog:
+                _sendClan?.Invoke(Protocol.Packets.ClanAction.WarehouseLog, 0, "");
+                break;
+            case HudWarehouseActionKind.ClanPermissions:
+                _sendClan?.Invoke(Protocol.Packets.ClanAction.SetPermissions, (ulong)action.Anchor, "");
+                break;
+            case HudWarehouseActionKind.ClanBuff when state is not null && OwnedItemView.Find(state.Items, action.ItemId) is { } buffItem:
+                _itemUse.Request(buffItem, state);
+                break;
+            case HudWarehouseActionKind.ClanCoinBuff:
+                _sendClan?.Invoke(Protocol.Packets.ClanAction.SpendCoins, (ulong)action.Anchor, "");
+                break;
+            case HudWarehouseActionKind.ClanDonateCoins:
+                // At most the coins the account holds (as last learned; the server checks the account) and one donation may give.
+                var coinKeeper = _services.NpcId;
+                Coins.Refresh();
+                _countBox.Open(ClientText.Get("ClanWarehouse.DonateCoinsTitle"), ClientText.Get("ClanWarehouse.DonateCoinsPrompt"),
+                    Coins.Value > 0 ? Math.Min(Coins.Value, Simulation.Social.Clans.ClanBuffs.MaxCoinDonation) : Simulation.Social.Clans.ClanBuffs.MaxCoinDonation,
+                    amount => _donateClanCoins?.Invoke(coinKeeper, amount));
+                break;
+            case HudWarehouseActionKind.ClanUpgrade:
+                _sendClan?.Invoke(Protocol.Packets.ClanAction.Upgrade, (ulong)action.Anchor, "");
+                break;
+            case HudWarehouseActionKind.ClanDonate when state is not null:
+                // At most what the player carries and one donation may give (ClanUpgrades).
+                var keeper = _services.NpcId;
+                _countBox.Open(ClientText.Get("ClanWarehouse.DonateTitle"), ClientText.Get("ClanWarehouse.DonatePrompt"),
+                    Math.Min(state.Money, Simulation.Social.Clans.ClanUpgrades.MaxDonation),
+                    amount => _donateClan?.Invoke(keeper, amount));
                 break;
         }
     }

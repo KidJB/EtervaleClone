@@ -40,6 +40,15 @@ public sealed record PresenceUpdate(
     public BossTimeInfo? BossTime { get; init; }
     public IReadOnlyList<(int Kind, int SecondsLeft)>? WorldBuffs { get; init; }
 
+    // The running buffs of the local player's clan, when they changed or its clan did.
+    public IReadOnlyList<(int Kind, int SecondsLeft)>? ClanBuffs { get; init; }
+
+    // A part of the clan warehouse another member changed, while the local player has it open (WarehouseView.Join).
+    public PristonTale.Simulation.World.Npcs.WarehouseView? ClanWarehouse { get; init; }
+
+    // The clan warehouse's log, newest first, when the local player asked for it.
+    public IReadOnlyList<ClanWarehouseLogLine>? ClanWarehouseLog { get; init; }
+
     // The bosses of the local player's field at their spot, when it entered a field or a boss came alive or went.
     public IReadOnlyList<BossSpotInfo>? BossSpots { get; init; }
 
@@ -142,6 +151,12 @@ public sealed record DailyQuestsInfo(int Day, IReadOnlyDictionary<int, int> Acce
 
 public sealed record PetCollectionInfo(ulong Skins, int Out)
 {
+    // The caravan out (Caravans id, 0 none), when it leaves (Unix seconds), the name given to it and whether it stays put.
+    public int Caravan { get; init; }
+    public long CaravanEnds { get; init; }
+    public string CaravanName { get; init; } = "";
+    public bool CaravanStays { get; init; }
+
     // The name the player gave its pet (empty: the skin's name shows).
     public string Name { get; init; } = "";
 

@@ -95,6 +95,7 @@ public static class CharacterRecordFactory
             DailyQuests = DailyQuestCodec.Capture(character.DailyQuests),
             CourierQuests = CourierQuestCodec.Capture(character.Couriers),
             Skins = SkinCodec.Capture(character.Skins),
+            Caravan = CaravanCodec.Capture(character.Caravan),
             Mounts = unchecked((long)character.Mounts),
             MountChosen = (short)character.MountChosen,
             Strength = attributes.Strength,

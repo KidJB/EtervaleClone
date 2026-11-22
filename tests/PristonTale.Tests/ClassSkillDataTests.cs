@@ -15,7 +15,7 @@ internal static class ClassSkillDataTests
     private static readonly PlayerClass[] Ported =
     [
         PlayerClass.Mechanician, PlayerClass.Fighter, PlayerClass.Pikeman, PlayerClass.Archer, PlayerClass.Knight, PlayerClass.Atalanta,
-        PlayerClass.Priestess, PlayerClass.Magician, PlayerClass.Assassin, PlayerClass.Shaman, PlayerClass.MartialArtist
+        PlayerClass.Priestess, PlayerClass.Magician, PlayerClass.Assassin, PlayerClass.Shaman, PlayerClass.MartialArtist, PlayerClass.Rogue
     ];
 
     private const int PortedSkills = 20;
@@ -175,7 +175,7 @@ internal static class ClassSkillDataTests
             }
         }
 
-        Assert.True(seen.Count == 220, "class skill catalog is incomplete");
+        Assert.True(seen.Count == Enum.GetValues<PlayerClass>().Length * 20, "class skill catalog is incomplete");
         Assert.True(Enum.GetValues<PlayerClass>().All(playerClass => ClassSkillCatalog.For(playerClass).Skip(16)
                 .All(skill => skill.RequiredLevel is 80 or 83 or 86 or 90 && skill.ManaByRank.Count == 10)),
             "a fifth-tier skill lost its level or its costs");

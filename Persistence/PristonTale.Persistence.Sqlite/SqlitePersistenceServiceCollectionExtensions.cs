@@ -24,6 +24,7 @@ public static class SqlitePersistenceServiceCollectionExtensions
         }.ToString();
 
         services.AddSingleton<IDbConnectionFactory>(new SqliteConnectionFactory(databasePath));
+        services.AddSingleton<Abstractions.Admin.IAdminSchemaReader, SqliteAdminSchemaReader>();
         return services.AddPristonRepositories(connectionString, static rb => rb.AddSQLite());
     }
 }

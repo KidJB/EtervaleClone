@@ -27,7 +27,10 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<Abstractions.Rankings.IRankingRepository, DapperRankingRepository>();
         services.AddSingleton<ICharacterRepository, DapperCharacterRepository>();
         services.AddSingleton<IWorldDataRepository, DapperWorldDataRepository>();
+        services.AddSingleton<Abstractions.Admin.IAdminDataRepository, AdminDataRepository>();
         services.AddSingleton<IWarehouseRepository, DapperWarehouseRepository>();
+        services.AddSingleton<PristonTale.Persistence.Abstractions.Caravans.ICaravanStorageRepository, DapperCaravanStorageRepository>();
+        services.AddSingleton<Abstractions.Clans.IClanStorageRepository, DapperClanStorageRepository>();
         services.AddSingleton<Abstractions.Coins.ICoinRepository, DapperCoinRepository>();
         services.AddSingleton<Abstractions.ItemBoxes.IItemBoxRepository, DapperItemBoxRepository>();
         services.AddSingleton<Abstractions.Stalls.IStallRepository, DapperStallRepository>();

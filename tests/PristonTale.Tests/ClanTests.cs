@@ -40,6 +40,92 @@ internal static class ClanTests
             MarkAsync);
         yield return ("the party window's clan tab shows only in a clan; its page picks members, whispers to online ones, opens clan chat and closes",
             PageAsync);
+        yield return ("the clan treasury takes members' gold at the keeper, and only the chief spends it on the warehouse's next level",
+            TreasuryAsync);
+        yield return ("members give coins to the clan coin treasury at the keeper; the vice and chief spend it on clan buffs, members cannot",
+            CoinTreasuryAsync);
+        yield return ("the chief sets the ranks' rights over what the clan owns: stored, sent in the view, worn in the tag, and the log by them",
+            RankRightsAsync);
+    }
+
+    private static async Task TreasuryAsync()
+    {
+        await using var fixture = await Fixture.CreateAsync(100_000_000, 60);
+        var service = fixture.Service;
+        Assert.True(await service.FoundAsync(fixture.Session.SessionToken, fixture.NpcId, "Lions") == ClanStatus.Ok, "founding failed");
+        var chiefId = fixture.Session.EntityId;
+        var gold = fixture.Session.Character!.Money;
+        Assert.True(await service.DonateAsync(fixture.Session.SessionToken, fixture.NpcId, 10) == ClanStatus.DonationOutOfRange
+            && await service.DonateAsync(fixture.Session.SessionToken, 0, 6_000_000) is not ClanStatus.Ok, "a tiny donation or one away from the keeper was taken");
+        Assert.True(Application.Clans.ClanTexts.Of(ClanStatus.DonationOutOfRange) == Contracts.Texts.GameText.Of(Contracts.Texts.GameTextId.ClanDonationRange, "1000", "1000000000"),
+            "a donation out of range does not name the range");
+        Assert.True(await service.DonateAsync(fixture.Session.SessionToken, fixture.NpcId, 6_000_000) == ClanStatus.Ok, "the donation was refused");
+        Assert.True(fixture.Session.Character.Money == gold - 6_000_000 && fixture.Characters.Record.Money == gold - 6_000_000
+            && fixture.Clans.Clans.Values.Single().Treasury == 6_000_000 && fixture.Link.View?.Treasury == 6_000_000, "the gold did not move to the treasury");
+        Assert.True(fixture.Clans.Log.Single() is { Action: (short)ClanWarehouseLogAction.Donate, Quantity: 6_000_000, CharacterName: "Founder" },
+            "the donation was not logged");
+
+        var recruit = await fixture.AddMemberAsync("Recruit", 10, 45);
+        Assert.True(await service.InviteAsync(chiefId, recruit.Session.EntityId) == ClanStatus.Ok
+            && await service.AnswerAsync(recruit.Session.EntityId, true) == ClanStatus.Ok, "the recruit did not join");
+        Assert.True(await service.UpgradeAsync(recruit.Session.EntityId, ClanUpgradeKind.WarehouseSlots) == ClanStatus.NotChief, "a member spent the treasury");
+        Assert.True(await service.UpgradeAsync(chiefId, ClanUpgradeKind.WarehouseSlots) == ClanStatus.Ok
+            && fixture.Clans.Clans.Values.Single() is { SlotLevel: 1, Treasury: 1_000_000 } && fixture.Link.View is { SlotLevel: 1, Treasury: 1_000_000 },
+            "the slots upgrade was not bought from the treasury");
+        Assert.True(await service.UpgradeAsync(chiefId, ClanUpgradeKind.WarehouseSlots) == ClanStatus.NotEnoughTreasury
+            && fixture.Clans.Clans.Values.Single().SlotLevel == 1, "an upgrade the treasury cannot pay was bought");
+    }
+
+    private static async Task CoinTreasuryAsync()
+    {
+        await using var fixture = await Fixture.CreateAsync(1_000_000, 60);
+        var service = fixture.Service;
+        Assert.True(await service.FoundAsync(fixture.Session.SessionToken, fixture.NpcId, "Lions") == ClanStatus.Ok, "founding failed");
+        var chiefId = fixture.Session.EntityId;
+        fixture.Clans.AccountCoins = 5_000;
+        Assert.True(await service.DonateCoinsAsync(fixture.Session.SessionToken, 0, 100) == ClanStatus.OutOfReach, "coins were given away from the keeper");
+        Assert.True(await service.DonateCoinsAsync(fixture.Session.SessionToken, fixture.NpcId, 6_000) == ClanStatus.NotEnoughCoins
+            && fixture.Clans.AccountCoins == 5_000, "more coins than the account holds were given");
+        Assert.True(await service.DonateCoinsAsync(fixture.Session.SessionToken, fixture.NpcId, 4_500) == ClanStatus.Ok
+            && fixture.Clans.AccountCoins == 500 && fixture.Link.View?.CoinTreasury == 4_500
+            && fixture.Clans.Log.Single() is { Action: (short)ClanWarehouseLogAction.DonateCoins, Quantity: 4_500 }, "the coins did not reach the treasury");
+
+        var recruit = await fixture.AddMemberAsync("Recruit", 10, 45);
+        Assert.True(await service.InviteAsync(chiefId, recruit.Session.EntityId) == ClanStatus.Ok
+            && await service.AnswerAsync(recruit.Session.EntityId, true) == ClanStatus.Ok, "the recruit did not join");
+        var day = Simulation.World.WorldBuffs.Argument(Simulation.World.WorldBuffKind.Drop, true);
+        Assert.True(await service.SpendCoinsAsync(recruit.Session.EntityId, day) == ClanStatus.NotPermitted, "a member spent the coin treasury");
+        Assert.True(await service.SetViceAsync(chiefId, "Recruit", true) == ClanStatus.Ok
+            && await service.SpendCoinsAsync(recruit.Session.EntityId, day) == ClanStatus.Ok, "the vice could not spend the coin treasury");
+        Assert.True(fixture.Clans.Clans.Values.Single().CoinTreasury == 500 && fixture.Link.View?.CoinTreasury == 500
+            && fixture.Clans.Log.Last() is { Action: (short)ClanWarehouseLogAction.SpendCoins, Quantity: 4_000 }, "the buff was not paid from the treasury");
+        Assert.True(await service.SpendCoinsAsync(chiefId, day) == ClanStatus.NotEnoughTreasury && fixture.Clans.Clans.Values.Single().CoinTreasury == 500,
+            "a buff the coin treasury cannot pay was bought");
+    }
+
+    private static async Task RankRightsAsync()
+    {
+        await using var fixture = await Fixture.CreateAsync(1_000_000, 60);
+        var service = fixture.Service;
+        Assert.True(await service.FoundAsync(fixture.Session.SessionToken, fixture.NpcId, "Lions") == ClanStatus.Ok, "founding failed");
+        var chiefId = fixture.Session.EntityId;
+        var recruit = await fixture.AddMemberAsync("Recruit", 10, 45);
+        Assert.True(await service.InviteAsync(chiefId, recruit.Session.EntityId) == ClanStatus.Ok
+            && await service.AnswerAsync(recruit.Session.EntityId, true) == ClanStatus.Ok, "the recruit did not join");
+        Assert.True(fixture.Player.Clan?.Rights == ClanPermission.All && fixture.Link.View?.Permissions == ClanRankPermissions.Default
+            && recruit.Link.View?.Rights == (ClanPermission.Deposit | ClanPermission.Withdraw), "the default rights are not in the tag and the views");
+        Assert.True(await service.WarehouseLogAsync(recruit.Session.EntityId) is null && await service.WarehouseLogAsync(chiefId) is { Count: 0 },
+            "the log went to a rank without the right, or not to the chief");
+
+        var changed = new ClanRankPermissions(ClanPermission.Deposit | ClanPermission.ViewLog, ClanPermission.Deposit);
+        Assert.True(await service.SetPermissionsAsync(recruit.Session.EntityId, changed) == ClanStatus.NotChief, "a member set the rights");
+        Assert.True(await service.SetPermissionsAsync(chiefId, changed) == ClanStatus.Ok && fixture.Clans.Clans.Values.Single().RankPermissions == changed.Packed,
+            "the chief's rights were not stored");
+        Assert.True(recruit.Link.View is { Rights: ClanPermission.Deposit | ClanPermission.ViewLog } view && view.Permissions == changed
+            && await service.WarehouseLogAsync(recruit.Session.EntityId) is not null, "the member's view and log do not follow the new rights");
+        Assert.True(await service.SetViceAsync(chiefId, "Recruit", true) == ClanStatus.Ok && recruit.Link.View?.Rights == ClanPermission.Deposit,
+            "the new vice has not the vice's rights");
+        Assert.True(fixture.Player.Clan?.Rights == ClanPermission.All, "the chief lost a right");
     }
 
     private static Task RulesAsync()
@@ -599,6 +685,75 @@ internal static class ClanTests
             return Task.FromResult(true);
         }
 
+        public List<ClanWarehouseLogRecord> Log { get; } = [];
+
+        public async Task<bool> DonateAsync(long clanId, long amount, long maxTreasury, CharacterRecord payment, ClanWarehouseLogRecord log,
+            CancellationToken ct = default)
+        {
+            ThrowIfFailing();
+            if (!Clans.TryGetValue(clanId, out var clan) || clan.Treasury > maxTreasury - amount || !await PayAsync(payment))
+            {
+                return false;
+            }
+
+            Clans[clanId] = clan with { Treasury = clan.Treasury + amount };
+            Log.Add(log);
+            return true;
+        }
+
+        public Task<bool> UpgradeAsync(long clanId, ClanUpgradeKind kind, int fromLevel, long cost, ClanWarehouseLogRecord log, CancellationToken ct = default)
+        {
+            ThrowIfFailing();
+            if (!Clans.TryGetValue(clanId, out var clan) || clan.Treasury < cost
+                || ClanUpgrades.LevelOf(kind, clan.SlotLevel, clan.WeightLevel) != fromLevel)
+            {
+                return Task.FromResult(false);
+            }
+
+            Clans[clanId] = kind == ClanUpgradeKind.WarehouseSlots
+                ? clan with { Treasury = clan.Treasury - cost, SlotLevel = fromLevel + 1 }
+                : clan with { Treasury = clan.Treasury - cost, WeightLevel = fromLevel + 1 };
+            Log.Add(log);
+            return Task.FromResult(true);
+        }
+
+        public long AccountCoins { get; set; }
+
+        public Task<bool> DonateCoinsAsync(long clanId, long accountId, long amount, long maxCoinTreasury, ClanWarehouseLogRecord log,
+            CancellationToken ct = default)
+        {
+            ThrowIfFailing();
+            if (!Clans.TryGetValue(clanId, out var clan) || AccountCoins < amount || clan.CoinTreasury > maxCoinTreasury - amount)
+            {
+                return Task.FromResult(false);
+            }
+
+            AccountCoins -= amount;
+            Clans[clanId] = clan with { CoinTreasury = clan.CoinTreasury + amount };
+            Log.Add(log);
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> SpendCoinsAsync(long clanId, long cost, ClanWarehouseLogRecord log, CancellationToken ct = default)
+        {
+            ThrowIfFailing();
+            if (!Clans.TryGetValue(clanId, out var clan) || clan.CoinTreasury < cost)
+            {
+                return Task.FromResult(false);
+            }
+
+            Clans[clanId] = clan with { CoinTreasury = clan.CoinTreasury - cost };
+            Log.Add(log);
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> SetRankPermissionsAsync(long clanId, int packed, CancellationToken ct = default)
+        {
+            ThrowIfFailing();
+            Clans[clanId] = Clans[clanId] with { RankPermissions = packed };
+            return Task.FromResult(true);
+        }
+
         public Task<IReadOnlyDictionary<long, string>> ClanNamesAsync(long accountId, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyDictionary<long, string>>(Members.Values.Where(member => member.AccountId == accountId)
                 .ToDictionary(member => member.CharacterId, member => Clans[member.ClanId].Name));
@@ -668,7 +823,11 @@ internal static class ClanTests
             var character = classes.CreatePlayer(PlayerClass.Fighter, starter.Name, level);
             character.RestoreProgress(0, money);
             var characters = new MemoryCharacters(CharacterRecordFactory.FromLiveSession(starter, character, 3, new Vector3(100, 0, 100)));
-            var npc = new NpcDefinition(1, "Clan Master", "master.inx", [new NpcService(NpcServiceKind.Clan)]) { DisplayName = "Clan Master" };
+            // The fixture's NPC also keeps the clan warehouse, where donations are paid.
+            var npc = new NpcDefinition(1, "Clan Master", "master.inx", [new NpcService(NpcServiceKind.Clan), new NpcService(NpcServiceKind.ClanWarehouse)])
+            {
+                DisplayName = "Clan Master"
+            };
             var empty = WorldData.Empty;
             var holder = new WorldDataHolder
             {

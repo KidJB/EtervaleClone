@@ -27,7 +27,7 @@ public static class PremiumEffects
         AddBooster(boosters, premium, PremiumEffectKind.ManaBooster, StatKind.MaxMana);
         AddBooster(boosters, premium, PremiumEffectKind.StaminaBooster, StatKind.MaxStamina);
         Set(character, BoosterCode, boosters.ToArray());
-        Set(character, WorldBuffCode, WorldModifiers(premium.WorldBuffMask));
+        Set(character, WorldBuffCode, WorldModifiers(premium.BuffMask));
     }
 
     private static StatModifier[] WorldModifiers(int mask)

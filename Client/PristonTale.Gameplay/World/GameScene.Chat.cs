@@ -99,6 +99,28 @@ public sealed partial class GameScene
         }
     }
 
+    // Fills the caller's list with the names over the caravans in view; the local player's own caravan's point is returned
+    // too, so a click on its name opens its storage.
+    public HudOverheadPoint? CollectCaravanLabels(List<(HudOverheadPoint Point, string Text)> labels)
+    {
+        labels.Clear();
+        if (_camera is null || _caravans is null)
+        {
+            return null;
+        }
+
+        _caravans.CollectLabels(_petLabelAnchors);
+        foreach (var (anchor, text) in _petLabelAnchors)
+        {
+            if (Project(anchor) is { } point)
+            {
+                labels.Add((point, text));
+            }
+        }
+
+        return _caravans.TryGetAnchor(SelfEntityId, out var own) ? Project(own) : null;
+    }
+
     private HudOverheadPoint? Project(Vector3 anchor)
     {
         var depth = -Vector3.Transform(anchor, _camera.View).Z;

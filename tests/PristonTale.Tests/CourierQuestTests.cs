@@ -38,6 +38,7 @@ internal static class CourierQuestTests
         yield return ("courier: the hunts survive the save and the wire", PersistenceAsync);
         yield return ("courier: the catalog file skips bad quests, and the shipped one names a Courier and field for each hunt, and the Courier service runs", CatalogAsync);
         yield return ("courier: generated hunts reward a share of their kills' experience by difficulty and category", RewardsAsync);
+        yield return ("courier: the Quest Book lists the hunts of the three best fields at the level and every accepted one, a section per field", BookAsync);
     }
 
     private static CourierQuest Quest(int id, CourierCategory category, int minLevel = 10, int maxLevel = 30, bool party = true, int cooldown = 0,
@@ -47,6 +48,35 @@ internal static class CourierQuestTests
             1000, CooldownMinutes: cooldown, PartyCredit: party);
 
     private static CourierCatalog Catalog(params CourierQuest[] quests) => new([new CourierPost(Courier, CourierNpcs.Name, Field, 0, 0, 0)], quests, new CourierSchedule());
+
+    private static Task BookAsync()
+    {
+        CourierQuest At(int id, int field, int minLevel, int maxLevel) => Quest(id, CourierCategory.Daily, minLevel, maxLevel) with { FieldCode = field };
+        var catalog = new CourierCatalog([], [At(1, 1, 10, 30), At(2, 2, 20, 40), At(3, 3, 25, 45), At(4, 4, 28, 50), At(5, 4, 15, 35), At(6, 5, 60, 80),
+            At(7, 6, 5, 20), At(8, 1, 12, 30) with { Enabled = false }], new CourierSchedule());
+        var offered = catalog.BookQuests(30, static _ => false).Select(static quest => quest.Id).Order().ToArray();
+        Assert.True(offered.SequenceEqual([2, 3, 4, 5]), $"the book's fields are not the three best at the level: {string.Join(",", offered)}");
+        var accepted = catalog.BookQuests(30, static id => id == 7).Select(static quest => quest.Id).ToHashSet();
+        Assert.True(accepted.Contains(7) && !accepted.Contains(1) && !accepted.Contains(6) && !accepted.Contains(8), "an accepted hunt is missing from the book");
+
+        static Protocol.Packets.CourierWireQuest Wire(int id, int field, int minLevel) =>
+            new(id, $"Hunt {id}", "", 0, 0, field, minLevel, minLevel + 10, 0, 0, "", 0, 0, 0, []);
+        var hunts = new[] { Wire(1, 7, 20), Wire(2, 9, 40), Wire(3, 7, 25) };
+        var fields = Gameplay.UI.Quests.HudQuestBook.HuntFields(hunts);
+        Assert.True(fields.SequenceEqual([9, 7]), "the fields are not ordered by their hunts' levels");
+        Assert.True(Gameplay.UI.Quests.HudQuestBook.HuntStatus(hunts[0]) == QuestBookStatus.Available
+            && Gameplay.UI.Quests.HudQuestBook.HuntStatus(hunts[0] with { Standing = (byte)CourierStanding.Ready }) == QuestBookStatus.Running
+            && Gameplay.UI.Quests.HudQuestBook.HuntStatus(hunts[0] with { Standing = (byte)CourierStanding.Cooldown }) == QuestBookStatus.Locked,
+            "a hunt's standing does not map to its book status");
+        Assert.True(Gameplay.UI.Quests.HudQuestBook.Shows(QuestBookStatus.Running, false) && !Gameplay.UI.Quests.HudQuestBook.Shows(QuestBookStatus.Done, false)
+            && !Gameplay.UI.Quests.HudQuestBook.Shows(QuestBookStatus.Locked, false) && Gameplay.UI.Quests.HudQuestBook.Shows(QuestBookStatus.Locked, true),
+            "Show all does not decide which quests show");
+        var book = QuestBook.For(tempskron: true);
+        Assert.True(book.Where(static entry => entry.RankUpTier >= 0).All(static entry => Gameplay.UI.Quests.HudQuestBook.StorySection(entry) == "Rank up")
+            && book.Select(Gameplay.UI.Quests.HudQuestBook.StorySection).Distinct().Count() > 1, "the story quests are not split into sections");
+        Assert.True(CourierCatalog.BookNpc == ulong.MaxValue && CourierCatalog.BookFields == 3, "the book's board changed");
+        return Task.CompletedTask;
+    }
 
     private static readonly DateTimeOffset Noon = new(2026, 11, 16, 12, 0, 0, TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 11, 16, 12, 0, 0)));
 

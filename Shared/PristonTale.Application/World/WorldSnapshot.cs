@@ -54,6 +54,11 @@ public readonly struct PlayerAppearanceView
     // The weapon really worn, under the skin of WeaponKey.
     public string HeldWeaponKey { get; init; } = "";
 
+    // The caravan out (Caravans id, 0 none), the name shown over it and whether it stands still instead of following.
+    public int Caravan { get; init; }
+    public string CaravanName { get; init; } = "";
+    public bool CaravanStays { get; init; }
+
     // The sign of the personal shop the player sells from, empty when it sells nothing.
     public string ShopSign { get; init; } = "";
 
@@ -302,6 +307,12 @@ public readonly struct WorldSnapshot
     public TradeView? Trade { get; init; }
     public TradeRequest? TradeRequest { get; init; }
 
+    // The running buffs of the receiver's clan (empty without a clan or buffs); the same array until they change.
+    public Simulation.World.WorldBuffEnd[] ClanBuffs { get; init; } = [];
+
+    // The receiver's clan warehouse while it has it open (null otherwise); a new view each time it changes.
+    public Simulation.World.Npcs.WarehouseView? ClanWarehouse { get; init; }
+
     public WorldSnapshot WithOwner(OwnerState? owner, SkillCooldownView[]? cooldowns = null) => new(ServerTick, Entities, Events, FieldId, owner, GroundDrops)
     {
         Grid = Grid,
@@ -348,6 +359,8 @@ public readonly struct WorldSnapshot
         TradeRequest = TradeRequest,
         Bellatra = Bellatra,
         Arena = Arena,
+        ClanBuffs = ClanBuffs,
+        ClanWarehouse = ClanWarehouse,
         Pinned = Pinned,
         PinKey = PinKey
     };
@@ -367,6 +380,8 @@ public readonly struct WorldSnapshot
         Trade = Trade,
         TradeRequest = TradeRequest,
         Bellatra = Bellatra,
-        Arena = Arena
+        Arena = Arena,
+        ClanBuffs = ClanBuffs,
+        ClanWarehouse = ClanWarehouse
     };
 }

@@ -154,6 +154,7 @@ public static class HostingExtensions
         builder.Services.AddHostedService<ServerSettingsService>();
         // The clans are read before the game server opens.
         builder.Services.AddHostedService<PristonTale.Server.World.ClanService>();
+        builder.Services.AddHostedService<PristonTale.Server.World.ClanBuffService>();
         // The castle is read after the clans (its owner must still exist).
         builder.Services.AddHostedService<PristonTale.Server.World.CastleService>();
         builder.Services.AddHostedService<GameTcpServer>();

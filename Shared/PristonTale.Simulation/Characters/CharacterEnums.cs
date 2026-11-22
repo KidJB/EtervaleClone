@@ -20,7 +20,8 @@ public enum JobBitCode : uint
     Magician = 0x00080000,
     Assassin = 0x00000010,
     MartialArtist = 0x00000020,
-    Shaman = 0x00100000
+    Shaman = 0x00100000,
+    Rogue = 0x00200000
 }
 
 // Persisted equipment slot order of the classic save layout: no helmet slot, and Sheltom kept separate.

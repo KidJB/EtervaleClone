@@ -63,7 +63,8 @@ public enum NpcServiceStatus : ushort
     BellatraLevel = 16,
     BellatraNoTickets = 17,
     BellatraTeamFull = 18,
-    BellatraEntered = 19
+    BellatraEntered = 19,
+    NotPermitted = 20
 }
 
 // ItemCode names a stock entry to buy; ItemId an owned item. Anchor is a destination cell (-1 = first free) or, for a
@@ -120,7 +121,29 @@ public sealed record ShopQuote(Guid ItemId, long SellPrice, long RepairCost, int
 
 public sealed record ShopQuotes(long InventoryRevision, IReadOnlyList<ShopQuote> Items);
 
-public sealed record WarehouseView(long Revision, long Money, int Weight, int MaxWeight, int Columns, int Rows, IReadOnlyList<OwnedItemView> Items);
+public sealed record WarehouseView(long Revision, long Money, int Weight, int MaxWeight, int Columns, int Rows, IReadOnlyList<OwnedItemView> Items)
+{
+    // A warehouse that came in parts: a part of the same revision adds its items (each once), another revision replaces it.
+    public static WarehouseView Join(WarehouseView existing, WarehouseView part)
+    {
+        if (existing is null || existing.Revision != part.Revision)
+        {
+            return part;
+        }
+
+        var items = new List<OwnedItemView>(existing.Items.Count + part.Items.Count);
+        items.AddRange(existing.Items);
+        foreach (var item in part.Items)
+        {
+            if (OwnedItemView.Find(items, item.InstanceId) is null)
+            {
+                items.Add(item);
+            }
+        }
+
+        return part with { Items = items };
+    }
+}
 
 public sealed record TeleportOffer(int Index, int FieldCode, string Name, long Price, int MinimumLevel);
 

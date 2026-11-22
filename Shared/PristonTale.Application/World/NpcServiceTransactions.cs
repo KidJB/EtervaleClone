@@ -55,8 +55,13 @@ internal static class NpcServiceTransactions
 
     // booth: Bellatra as it stands, for its team booths.
     public static PreparedNpcOperation Prepare(PlayerSession session, WorldPlayer player, FieldInstance field, NpcServiceCommand command,
-        ItemCatalog items, WorldCatalog world, BellatraBooth? booth = null)
+        ItemCatalog items, WorldCatalog world, BellatraBooth? booth = null, long nowSeconds = 0)
     {
+        if (CaravanTransactions.Handles(command))
+        {
+            return CaravanTransactions.Prepare(session, player, field, command, nowSeconds);
+        }
+
         if (MobileShopTransactions.Handles(command))
         {
             return MobileShopTransactions.Prepare(session, player, field, command);
@@ -110,7 +115,7 @@ internal static class NpcServiceTransactions
         }
 
         if (command.OperationId == Guid.Empty || command.ExpectedRevision != original.InventoryRevision
-            || storage is not null && command.Service == NpcServiceKind.Warehouse && command.ExpectedStorageRevision != storage.Revision)
+            || storage is not null && command.Service is NpcServiceKind.Warehouse or NpcServiceKind.Caravan or NpcServiceKind.ClanWarehouse && command.ExpectedStorageRevision != storage.Revision)
         {
             return Final(original, NpcServiceOutcome.Failed(NpcServiceStatus.Stale, GameText.Of(GameTextId.ServiceStale),
                 original.InventoryRevision, storage?.Revision ?? 0));
@@ -266,7 +271,7 @@ internal static class NpcServiceTransactions
                 Catalog = command.Action == NpcServiceAction.Open ? Catalog(npc.Definition.Shop, items, tax) : null,
                 Quotes = Quotes(character)
             },
-            NpcServiceKind.Warehouse => new NpcServiceReply(outcome) { Warehouse = storage!.View() },
+            NpcServiceKind.Warehouse => new NpcServiceReply(outcome) { Warehouse = storage!.View(character) },
             NpcServiceKind.Teleporter => new NpcServiceReply(outcome) { Destinations = Destinations(service, world, character.Level, tax) },
             NpcServiceKind.Manufacture when command.Action == NpcServiceAction.Refresh => new NpcServiceReply(outcome)
             {
@@ -304,7 +309,7 @@ internal static class NpcServiceTransactions
         command.Service switch
         {
             NpcServiceKind.Shop => new NpcServiceReply(outcome) { Quotes = Quotes(character) },
-            NpcServiceKind.Warehouse when storage is not null => new NpcServiceReply(outcome) { Warehouse = storage.View() },
+            NpcServiceKind.Warehouse when storage is not null => new NpcServiceReply(outcome) { Warehouse = storage.View(character) },
             _ => new NpcServiceReply(outcome)
         };
 

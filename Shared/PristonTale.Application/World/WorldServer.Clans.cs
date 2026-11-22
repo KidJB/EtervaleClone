@@ -13,6 +13,10 @@ public sealed partial class WorldServer
             if (_connections.TryGetValue(entityId, out var connection))
             {
                 connection.Player.Clan = tag;
+                if (tag?.ClanId != connection.Player.OpenClanWarehouse)
+                {
+                    connection.Player.OpenClanWarehouse = 0;
+                }
             }
 
             return true;

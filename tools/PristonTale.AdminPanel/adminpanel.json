@@ -1,0 +1,7 @@
+{
+  "Url": "http://127.0.0.1:5080",
+  "Sqlite": "data/pristontale.db",
+  "Postgres": "",
+  "DataDirectory": "data",
+  "SessionHours": 8
+}

@@ -21,7 +21,7 @@ public static class PremiumRules
     // Percent of extra experience on a kill: the world's EXP buff, the EXP potion (or package), the Phoenix and the ranking aura.
     public static int ExperiencePercent(PremiumTimers timers) =>
         Progression.RankAuraBonus.ExperiencePercent(timers.RankAura) +
-        (World.WorldBuffs.Has(timers.WorldBuffMask, World.WorldBuffKind.Experience) ? World.WorldBuffs.ExperiencePercent : 0) +
+        (World.WorldBuffs.Has(timers.BuffMask, World.WorldBuffKind.Experience) ? World.WorldBuffs.ExperiencePercent : 0) +
         timers.ValueOf(PremiumEffectKind.ExperienceUp) + (timers.IsActive(PremiumEffectKind.PhoenixPet) ? PhoenixExperiencePercent : 0);
 
     public static ulong BoostExperience(ulong experience, PremiumTimers timers)
@@ -39,7 +39,7 @@ public static class PremiumRules
     // Percent chance of one extra drop roll from a monster that drops at all: Third Eyes (or a package) plus the Phoenix;
     // 100 or more always rolls.
     public static int ExtraDropChance(PremiumTimers timers) =>
-        (World.WorldBuffs.Has(timers.WorldBuffMask, World.WorldBuffKind.Drop) ? World.WorldBuffs.DropPercent : 0) +
+        (World.WorldBuffs.Has(timers.BuffMask, World.WorldBuffKind.Drop) ? World.WorldBuffs.DropPercent : 0) +
         timers.ValueOf(PremiumEffectKind.ThirdEyes) + (timers.IsActive(PremiumEffectKind.PhoenixPet) ? PhoenixDropPercent : 0);
 
     // Life and mana returned by one attack that hit `hits` monsters with an average power: no chance, every attack.
@@ -64,7 +64,7 @@ public static class PremiumRules
     public static int ManaFor(PremiumTimers timers, int spirit, int power, int hits) =>
         hits > 0 && timers.IsActive(PremiumEffectKind.ManaRecharging) ? ManaRecharge(spirit, power, hits) : 0;
 
-    public static int StaminaCost(int cost, PremiumTimers timers) => Math.Max(0, cost - cost * ((World.WorldBuffs.Has(timers.WorldBuffMask, World.WorldBuffKind.SpDown) ? World.WorldBuffs.CostPercent : 0) + timers.ValueOf(PremiumEffectKind.StaminaReduce)) / 100);
+    public static int StaminaCost(int cost, PremiumTimers timers) => Math.Max(0, cost - cost * ((World.WorldBuffs.Has(timers.BuffMask, World.WorldBuffKind.SpDown) ? World.WorldBuffs.CostPercent : 0) + timers.ValueOf(PremiumEffectKind.StaminaReduce)) / 100);
 
     // Carrying capacity added by Might of Awell and the Gravity Scrolls.
     public static int WeightBonus(PremiumTimers timers) =>

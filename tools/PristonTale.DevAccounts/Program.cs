@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using PristonTale.Persistence.Abstractions;
 using PristonTale.Persistence.Abstractions.Accounts;
+using PristonTale.Persistence.Abstractions.Admin;
 using PristonTale.Persistence.Abstractions.Characters;
 using PristonTale.Persistence.Abstractions.GameMasters;
 using PristonTale.Persistence.Abstractions.Security;
@@ -162,30 +163,10 @@ async Task<int> AddCharacter(List<string> a)
     var level = max ? PristonTale.Simulation.Progression.ExperienceTable.MaximumLevel
         : a.Count > 4 && int.TryParse(a[4], out var parsed) ? Math.Max(1, parsed) : 1;
 
-    var account = await accounts.FindByUserIdAsync(user);
-    if (account is null)
-        return Usage($"no account '{user}' — run create-account first");
-    if (!CharacterNames.IsValidLength(name))
-        return Usage($"character name must be {CharacterNames.MinLength}–{CharacterNames.MaxLength} characters");
-    if (await characters.NameExistsAsync(name))
-        return Usage($"character name '{name}' is already taken");
-
-    if (CharacterSlots.FirstFree(await characters.UsedSlotsAsync(account.Id)) is not { } slot)
-        return Usage($"account '{user}' has no free character slots (max {CharacterSlots.Maximum})");
-
-    var field = PristonTale.Simulation.Progression.DeathPenalty.TownField(playerClass);
-    var record = CharacterRecordFactory.NewStarter(classes, account.Id, name, slot, playerClass, field, level: level);
-    if (max)
-    {
-        var character = classes.CreatePlayer(playerClass, name, level);
-        character.ApplyQuestProgress(PlayerCharacter.LastTier, (level - 1) * PlayerCharacter.StatusPointsPerLevel, 0, 0);
-        foreach (var skill in classes.Get(playerClass).Skills.Where(static skill => skill.Code != 0))
-            character.Skills.Restore(skill.Code, PristonTale.Simulation.Progression.SkillLearning.MaxRank);
-        record = CharacterRecordFactory.FromLiveSession(record, character, field, new System.Numerics.Vector3(record.PosX, 0f, record.PosZ));
-    }
-
-    var created = await characters.CreateAsync(record);
-    Console.WriteLine($"created character #{created.Id} '{created.Name}' ({playerClass}, level {created.Level}{(max ? ", last tier, every skill at the top rank" : "")}) in slot {slot} of '{user}'");
+    var (created, error) = await new AdminAccounts(accounts, characters, gameMasters, classes).CreateCharacterAsync(user, name, playerClass, level, max);
+    if (created is null)
+        return Usage(error!);
+    Console.WriteLine($"created character #{created.Id} '{created.Name}' ({playerClass}, level {created.Level}{(max ? ", last tier, every skill at the top rank" : "")}) in slot {created.Slot} of '{user}'");
     return 0;
 }
 

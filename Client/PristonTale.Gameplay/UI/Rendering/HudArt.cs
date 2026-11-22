@@ -197,6 +197,7 @@ public static class HudArt
         PlayerClass.Assassin => "Assassin",
         PlayerClass.Shaman => "Shaman",
         PlayerClass.MartialArtist => "Martial",
+        PlayerClass.Rogue => "Rogue",
         _ => "Mecha"
     };
 

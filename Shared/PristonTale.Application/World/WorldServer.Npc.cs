@@ -75,8 +75,14 @@ public sealed partial class WorldServer
                     message, revision)));
             }
 
+            if (ClanWarehouseTransactions.Handles(command))
+            {
+                return ClanWarehouseTransactions.Prepare(session, connection.Player, field, command, ClanWarehouseOf(connection.Player),
+                    _clock.GetUtcNow().ToUnixTimeSeconds());
+            }
+
             return NpcServiceTransactions.Prepare(session, connection.Player, field, command, _worldData.Current.Items, _catalog,
-                command.Service == NpcServiceKind.EventBooth ? Booth() : null);
+                command.Service == NpcServiceKind.EventBooth ? Booth() : null, _clock.GetUtcNow().ToUnixTimeSeconds());
         });
     }
 
@@ -92,7 +98,7 @@ public sealed partial class WorldServer
             }
 
             // A warehouse change moves items and gold between the character and its account's warehouse.
-            if (operation.Warehouse is not null
+            if (operation.Warehouse is not null && !operation.CaravanStorage && operation.ClanWarehouse == 0
                 && Transfer(Persistence.Abstractions.GameLogs.ItemTransferKind.WarehouseDeposit, Guid.NewGuid(), session.FieldId) is { } deposit
                 && Transfer(Persistence.Abstractions.GameLogs.ItemTransferKind.WarehouseWithdrawal, Guid.NewGuid(), session.FieldId) is { } withdrawal)
             {
@@ -108,7 +114,15 @@ public sealed partial class WorldServer
             operation.Original.CommitInventoryOperation(operation.Candidate);
             operation.Original.TryChangeMoney(operation.MoneyDelta);
             RecordSpending(operation);
-            if (operation.Warehouse is not null)
+            if (operation.Warehouse is not null && operation.ClanWarehouse != 0)
+            {
+                CommitClanWarehouse(operation.ClanWarehouse, operation.Warehouse);
+            }
+            else if (operation.Warehouse is not null && operation.CaravanStorage)
+            {
+                session.Caravan = operation.Warehouse;
+            }
+            else if (operation.Warehouse is not null)
             {
                 session.Warehouse = operation.Warehouse;
             }

@@ -5,6 +5,7 @@ using PristonTale.Simulation.World.Npcs;
 
 namespace PristonTale.Persistence.Abstractions.Warehouses;
 
+// A warehouse's items as SavedItems JSON whose anchors span its pages (WarehouseStorage).
 public static class WarehouseStateCodec
 {
     public static WarehouseStorage Restore(WarehouseRecord? record, ItemCatalog catalog)
@@ -19,14 +20,19 @@ public static class WarehouseStateCodec
             throw new InvalidDataException("Invalid saved warehouse totals.");
         }
 
-        var storage = new WarehouseStorage(record.Revision, record.Money);
-        if (CharacterStateCodec.IsBlank(record.Items, JsonValueKind.Array))
+        return RestoreItems(new WarehouseStorage(record.Revision, record.Money), record.Items, catalog);
+    }
+
+    // Fills the empty storage with the saved items.
+    public static WarehouseStorage RestoreItems(WarehouseStorage storage, JsonText items, ItemCatalog catalog)
+    {
+        if (CharacterStateCodec.IsBlank(items, JsonValueKind.Array))
         {
             return storage;
         }
 
-        var state = JsonSerializer.Deserialize<SavedItems>(record.Items.Value, CharacterStateCodec.Options);
-        if (state is null || state.Version != 1 || state.Items is null || state.Items.Length > WarehouseStorage.MaxItems)
+        var state = JsonSerializer.Deserialize<SavedItems>(items.Value, CharacterStateCodec.Options);
+        if (state is null || state.Version != 1 || state.Items is null || state.Items.Length > storage.ItemLimit)
         {
             throw new InvalidDataException("Unsupported warehouse state version or size.");
         }
@@ -44,9 +50,12 @@ public static class WarehouseStateCodec
         return storage;
     }
 
-    public static WarehouseRecord Capture(long accountId, WarehouseStorage storage)
+    public static WarehouseRecord Capture(long accountId, WarehouseStorage storage) =>
+        new(accountId, storage.Money, storage.Revision, CaptureItems(storage));
+
+    public static JsonText CaptureItems(WarehouseStorage storage)
     {
-        var items = storage.Grid.Occupied().Select(static cell => CharacterStateCodec.CaptureItem(cell.Item, cell.Anchor, null)).ToArray();
-        return new WarehouseRecord(accountId, storage.Money, storage.Revision, CharacterJson.Write(new SavedItems(1, items)));
+        var items = storage.Occupied().Select(static cell => CharacterStateCodec.CaptureItem(cell.Item, cell.Anchor, null)).ToArray();
+        return CharacterJson.Write(new SavedItems(1, items));
     }
 }

@@ -89,6 +89,10 @@ public sealed partial class GameScene
             if (TryPickLoot(mouse))
             {
             }
+            else if (CaravanHovered)
+            {
+                _caravanOpenRequested = true;
+            }
             else if (!SelfCasting && TryCastSkillClick(mouse, rightButton: false))
             {
             }
@@ -341,13 +345,18 @@ public sealed partial class GameScene
     {
         ulong hovered = 0;
         var hoveredKind = EntityKind.None;
-        if (_remote is not null && _camera is not null && !PointerCaptured && CameraInputEnabled && TryCursorRay(Mouse.GetState(), out var ray)
-            && _remote.TryPick(ray, _remote.SelfEntityId, out var entityId, out var kind))
+        Ray? cursor = null;
+        if (_remote is not null && _camera is not null && !PointerCaptured && CameraInputEnabled && TryCursorRay(Mouse.GetState(), out var ray))
         {
-            hovered = entityId;
-            hoveredKind = kind;
+            cursor = ray;
+            if (_remote.TryPick(ray, _remote.SelfEntityId, out var entityId, out var kind))
+            {
+                hovered = entityId;
+                hoveredKind = kind;
+            }
         }
 
+        UpdateCaravanHover(cursor, hovered != 0);
         _targetSelection.Hover(hovered);
         UpdateOutline(hovered, hoveredKind);
         _targetSelection.Update(gameTime.TotalGameTime.TotalMilliseconds, _targetLiveness);

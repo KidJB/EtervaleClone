@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.Xna.Framework;
 using PristonTale.Client.Net.Presence;
 using PristonTale.Gameplay.UI.Rendering;
+using PristonTale.Simulation.Characters;
 using PristonTale.Simulation.Items.Usable;
 using PristonTale.Contracts.Units;
 using PristonTale.Gameplay.Localization;
@@ -9,7 +10,8 @@ using PristonTale.Gameplay.Localization;
 namespace PristonTale.Gameplay.UI.Widgets;
 
 // The running premium timers, in the order the items were used: the Personal rows of the Active Buffs panel (HudWorldBuffs).
-// Hovering a row shows the name, the effect and the time left.
+// Hovering a row shows the name, the effect and the time left. The caravan out has its row last (SetCaravan); it runs on
+// real time, so a town does not hold it, and a right click on it offers to send it away (CaravanAt).
 public sealed class HudPremiumTimers
 {
     public const int Left = 8;
@@ -55,6 +57,7 @@ public sealed class HudPremiumTimers
         }
 
         _revision = snapshot.Revision;
+        var caravan = _entries.Find(static entry => entry.Caravan != 0);
         var next = new List<Entry>();
         foreach (var timer in snapshot.Timers)
         {
@@ -78,7 +81,35 @@ public sealed class HudPremiumTimers
 
         _entries.Clear();
         _entries.AddRange(next);
+        if (caravan is not null)
+        {
+            _entries.Add(caravan);
+        }
     }
+
+    // The caravan out (Caravans id, 0 none), when it leaves (Unix seconds) and its shown name; nowUnixSeconds is the clock
+    // the end is counted from.
+    public void SetCaravan(int kind, long endsUnixSeconds, string name, long nowUnixSeconds, double nowMs)
+    {
+        _entries.RemoveAll(static entry => entry.Caravan != 0);
+        if (Caravans.Get(kind) is not { } caravan || endsUnixSeconds <= nowUnixSeconds)
+        {
+            return;
+        }
+
+        _sprites.Request(caravan.IconPath);
+        _entries.Add(new Entry
+        {
+            Caravan = kind,
+            Icon = caravan.IconPath,
+            Name = name.Length > 0 ? name : caravan.Name,
+            EndMs = nowMs + (endsUnixSeconds - nowUnixSeconds) * 1000d,
+            Y = Top + Step * _entries.Count
+        });
+    }
+
+    // The caravan's row under the pointer: its name, or null.
+    public string CaravanAt(Point pointer) => At(pointer) is { Caravan: not 0 } entry ? entry.Name : null;
 
     // In a town where personal timers stand still (PremiumTimers.PausesInField) the ends move on with the clock, as the
     // server holds them, so the time left shown holds too.
@@ -88,7 +119,10 @@ public sealed class HudPremiumTimers
         {
             foreach (var entry in _entries)
             {
-                entry.EndMs += nowMs - _heldAt;
+                if (entry.Caravan == 0)
+                {
+                    entry.EndMs += nowMs - _heldAt;
+                }
             }
         }
 
@@ -145,7 +179,9 @@ public sealed class HudPremiumTimers
         var remaining = Remaining(entry, nowMs);
         if (entry.Hover is null || entry.HoverSeconds != remaining)
         {
-            entry.Hover = [ItemStatuses.PremiumName(entry.Kind), Describe(entry.Kind, entry.Value), TimeLeft(remaining)];
+            entry.Hover = entry.Caravan != 0
+                ? [entry.Name, ClientText.Get("Caravan.DismissHint"), TimeLeft(remaining)]
+                : [ItemStatuses.PremiumName(entry.Kind), Describe(entry.Kind, entry.Value), TimeLeft(remaining)];
             entry.HoverSeconds = remaining;
         }
 
@@ -250,6 +286,9 @@ public sealed class HudPremiumTimers
     private sealed class Entry
     {
         public PremiumEffectKind Kind { get; init; }
+
+        // The caravan's id for the caravan's row, else 0.
+        public int Caravan { get; init; }
         public string Icon { get; init; }
         public string Back { get; init; }
         public string[] Hover { get; set; }

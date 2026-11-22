@@ -5,6 +5,7 @@ public static class StoreGrid
 {
     public const int Columns = 9;
     public const int Rows = 9;
+    public const int Cells = Columns * Rows;
 
     public static Inventory Create() => new(Columns, Rows);
 }

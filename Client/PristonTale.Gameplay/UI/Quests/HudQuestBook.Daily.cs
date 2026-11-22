@@ -1,27 +1,19 @@
 using System.Globalization;
 using Microsoft.Xna.Framework;
 using PristonTale.Client.Net.Presence;
-using PristonTale.Gameplay.UI.Chat;
 using PristonTale.Gameplay.UI.Rendering;
 using PristonTale.Simulation.Quests;
 
 namespace PristonTale.Gameplay.UI.Quests;
 
-// The Daily tab: every daily quest of the player's level (DailyQuests) with its state of the day from the server
-// (DailyQuestsInfo); the right page shows the hunt with the kills so far, the rewards and, while the player talks to the
-// daily quest giver (DailyNpc), the button that accepts or claims it.
+// The Daily section: every daily quest of the player's level (DailyQuests) with its state of the day from the server
+// (DailyQuestsInfo); the page shows the hunt with the kills so far, the rewards and, while the player talks to the daily
+// quest giver (DailyNpc), the button that accepts or claims it.
 public sealed partial class HudQuestBook
 {
-    private static readonly Rectangle DailyButton = new(404, 392, 140, 22);
     private readonly List<DailyQuest> _dailies = [];
-    private readonly List<string> _dailyTask = [];
-    private readonly List<string> _dailyRewards = [];
     private DailyQuestsInfo _dailyInfo = DailyQuestsInfo.None;
     private int _dailyLevel = -1;
-    private DailyQuest _dailyDetailFor;
-    private int _dailyKillsShown = -1;
-    private string _dailyLevelLine = "";
-    private int _dailySelected;
 
     // The daily quest giver the player is talking to (its entity), 0 when none: only then do Accept and Claim work.
     public ulong DailyNpc { get; set; }
@@ -36,13 +28,13 @@ public sealed partial class HudQuestBook
         return request;
     }
 
-    // Opens the book on the Daily tab at the giver.
+    private static Rectangle DailyButton(Rectangle pane) => new(pane.X + (pane.Width - 160) / 2, pane.Bottom - 40, 160, 24);
+
+    // Opens the book on the Daily section at the giver.
     public void ShowDaily(ulong npcEntityId)
     {
-        Open = true;
-        _mode = BookMode.Daily;
         DailyNpc = npcEntityId;
-        _scroll = 0;
+        ShowSection("daily");
     }
 
     public void RefreshDaily(DailyQuestsInfo info, int level)
@@ -62,8 +54,8 @@ public sealed partial class HudQuestBook
             }
         }
 
-        _dailySelected = Math.Clamp(_dailySelected, 0, Math.Max(0, _dailies.Count - 1));
-        _dailyKillsShown = -1;
+        _detailFor = null;
+        Rebuild();
     }
 
     private QuestBookStatus DailyStatus(DailyQuest quest) =>
@@ -71,74 +63,38 @@ public sealed partial class HudQuestBook
         : _dailyInfo.Accepted.ContainsKey(quest.Id) ? QuestBookStatus.Running
         : QuestBookStatus.Available;
 
-    private bool ClickDaily(Rectangle window, Point pointer)
+    private void ClickDaily(Rectangle pane, Point pointer)
     {
-        for (var row = 0; row < VisibleRows && _scroll + row < _dailies.Count; row++)
+        if (DailyNpc == 0 || _selected.Index >= _dailies.Count || !DailyButton(pane).Contains(pointer))
         {
-            if (Row(window, row).Contains(pointer))
-            {
-                _dailySelected = _scroll + row;
-                return true;
-            }
-        }
-
-        if (DailyNpc != 0 && _dailySelected < _dailies.Count && At(window, DailyButton).Contains(pointer))
-        {
-            var quest = _dailies[_dailySelected];
-            var status = DailyStatus(quest);
-            if (status == QuestBookStatus.Available)
-            {
-                DailyRequest = (DailyNpc, quest.Id, 1);
-            }
-            else if (status == QuestBookStatus.Running && _dailyInfo.Accepted[quest.Id] >= quest.Kills)
-            {
-                DailyRequest = (DailyNpc, quest.Id, 2);
-            }
-        }
-
-        return true;
-    }
-
-    private void DrawDaily(HudPainter painter, Rectangle window, Point pointer)
-    {
-        for (var row = 0; row < VisibleRows && _scroll + row < _dailies.Count; row++)
-        {
-            var index = _scroll + row;
-            var bounds = Row(window, row);
-            if (index == _dailySelected || bounds.Contains(pointer))
-            {
-                painter.ColorBox(bounds, 120, 90, 50, index == _dailySelected ? 110 : 60);
-            }
-
-            painter.Sprite(StatusArt[(int)DailyStatus(_dailies[index])], bounds.X + 3, bounds.Y + 1);
-            painter.Text(painter.Fit(_dailies[index].Name, bounds.Width - 22), bounds.X + 18, bounds.Y, ListText);
-        }
-
-        if (_dailies.Count == 0)
-        {
-            painter.TextCentered("No daily quest for your level.", window.X + ListArea.X, window.X + ListArea.Right, window.Y + ListArea.Y + 4, ListText);
             return;
         }
 
-        var quest = _dailies[Math.Min(_dailySelected, _dailies.Count - 1)];
+        var quest = _dailies[_selected.Index];
+        var status = DailyStatus(quest);
+        if (status == QuestBookStatus.Available)
+        {
+            DailyRequest = (DailyNpc, quest.Id, 1);
+        }
+        else if (status == QuestBookStatus.Running && _dailyInfo.Accepted[quest.Id] >= quest.Kills)
+        {
+            DailyRequest = (DailyNpc, quest.Id, 2);
+        }
+    }
+
+    private void DrawDaily(HudPainter painter, Rectangle pane, Point pointer)
+    {
+        var quest = _dailies[_selected.Index];
         var status = DailyStatus(quest);
         var kills = _dailyInfo.Accepted.GetValueOrDefault(quest.Id);
-        if (!ReferenceEquals(quest, _dailyDetailFor) || kills != _dailyKillsShown)
+        if (!ReferenceEquals(quest, _detailFor) || kills != _detailKills)
         {
-            (_dailyDetailFor, _dailyKillsShown) = (quest, kills);
-            DescribeDaily(painter, quest, status, kills);
+            (_detailFor, _detailKills) = (quest, kills);
+            DescribeDaily(painter, pane, quest, status, kills);
         }
 
-        var left = window.X + PageLeft;
-        var right = window.X + PageRight;
-        painter.TextCentered(painter.Fit(quest.Name, PageRight - PageLeft), left, right, window.Y + 74, Heading);
-        painter.TextCentered(_dailyLevelLine, left, right, window.Y + 90, Ink);
-        painter.TextCentered("Get it from: " + DailyQuests.GiverName + " (Ricarten)", left, right, window.Y + 106, Ink);
-        Section(painter, window, 0, "Task", Heading, _dailyTask);
-        Section(painter, window, 1, status == QuestBookStatus.Done ? "Done today" : StatusNames[(int)status], StatusColors[(int)status], null);
-        Section(painter, window, 2, "Rewards", Heading, _dailyRewards);
-
-        var button = At(window, DailyButton);
+        DrawPage(painter, pane, quest.Name, status == QuestBookStatus.Done ? QuestBookStatus.Done : status);
+        var button = DailyButton(pane);
         var label = status switch
         {
             QuestBookStatus.Available => "Accept",
@@ -149,41 +105,36 @@ public sealed partial class HudQuestBook
         {
             if (status != QuestBookStatus.Done)
             {
-                painter.TextCentered("Accept and claim at " + DailyQuests.GiverName, left, right, button.Y + 4, Ink);
+                painter.TextCentered("Accept and claim at " + DailyQuests.GiverName, pane.X, pane.Right, button.Y + 4, Muted);
             }
         }
         else if (label is not null)
         {
-            painter.ColorBox(button, 90, 50, 20, button.Contains(pointer) ? 230 : 180);
-            painter.TextCentered(label, button.X, button.Right, button.Y + 3, new Color(255, 230, 170));
+            painter.Fill(button, FrameLight);
+            painter.Fill(new Rectangle(button.X + 1, button.Y + 1, button.Width - 2, button.Height - 2), button.Contains(pointer) ? RowChosen : Plate);
+            painter.TextCentered(label, button.X, button.Right, button.Y + 4, Heading);
         }
     }
 
     // The level line, the task with the kills so far and the rewards, made again only when another quest or count shows.
-    private void DescribeDaily(HudPainter painter, DailyQuest quest, QuestBookStatus status, int kills)
+    private void DescribeDaily(HudPainter painter, Rectangle pane, DailyQuest quest, QuestBookStatus status, int kills)
     {
-        var width = PageRight - PageLeft - 12;
-        _dailyLevelLine = string.Create(CultureInfo.InvariantCulture,
-            $"Daily, level {quest.MinLevel}{(quest.MaxLevel >= 999 ? "+" : $"-{quest.MaxLevel}")}");
-        var task = string.Create(CultureInfo.InvariantCulture,
-            $"{quest.Story} Defeat {quest.Kills} monsters of level {quest.MonsterLevel} or higher.");
-        if (status == QuestBookStatus.Running)
+        var width = pane.Width - 70;
+        _levelLine = string.Create(CultureInfo.InvariantCulture, $"Daily, level {quest.MinLevel}{(quest.MaxLevel >= 999 ? "+" : $"-{quest.MaxLevel}")}");
+        _description.Clear();
+        AddLines(painter, width, LineMark.Talk, "Talk to " + DailyQuests.GiverName + " in Ricarten", GiverLines, strong: true);
+        if (quest.Story.Length > 0)
         {
-            task += string.Create(CultureInfo.InvariantCulture, $" ({Math.Min(kills, quest.Kills)}/{quest.Kills})");
+            AddLines(painter, width, LineMark.Talk, quest.Story, 2);
         }
 
-        _dailyTask.Clear();
-        _dailyTask.AddRange(HudChatText.Wrap(task, width, SectionLines[0], MaxLineChars, painter.Measure));
-        _dailyRewards.Clear();
-        foreach (var reward in (string[])
-                 [
-                     string.Create(CultureInfo.InvariantCulture, $"- Experience: {quest.ExpPercent}% of your level"),
-                     string.Create(CultureInfo.InvariantCulture, $"- {quest.Gold:N0} Gold"),
-                     string.Create(CultureInfo.InvariantCulture, $"- {quest.Coins} coin{(quest.Coins == 1 ? "" : "s")}"),
-                     string.Create(CultureInfo.InvariantCulture, $"- {quest.ItemCount} x {quest.ItemKey}")
-                 ])
-        {
-            _dailyRewards.AddRange(HudChatText.Wrap(reward, width, SectionLines[2], MaxLineChars, painter.Measure));
-        }
+        var count = status == QuestBookStatus.Running ? Math.Min(kills, quest.Kills) : 0;
+        AddLines(painter, width, LineMark.Target, string.Create(CultureInfo.InvariantCulture,
+            $"Monsters of level {quest.MonsterLevel}+ ({count}/{quest.Kills})"), 2);
+        _rewards.Clear();
+        _rewards.Add(string.Create(CultureInfo.InvariantCulture, $"{quest.ExpPercent}% of your level's XP"));
+        _rewards.Add(string.Create(CultureInfo.InvariantCulture, $"{quest.Gold:N0} GP"));
+        _rewards.Add(string.Create(CultureInfo.InvariantCulture, $"{quest.Coins} coin{(quest.Coins == 1 ? "" : "s")}"));
+        _rewards.Add(string.Create(CultureInfo.InvariantCulture, $"{quest.ItemCount} x {quest.ItemKey}"));
     }
 }

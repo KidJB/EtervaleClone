@@ -38,7 +38,8 @@ public enum ItemUseStatus : ushort
     UnionCoreWrongClan = 25,
     ClanPetOwned = 26,
     ClanPetsNearby = 27,
-    MercenaryLimit = 28
+    MercenaryLimit = 28,
+    ClanRankTooLow = 29
 }
 
 public sealed record ItemUseOutcome(bool Ok, long Revision, ItemUseStatus Status, uint ItemCode, GameText Message)

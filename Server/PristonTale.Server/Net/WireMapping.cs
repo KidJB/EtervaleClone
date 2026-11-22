@@ -49,6 +49,9 @@ internal static class WireMapping
                     Title = appearance.Title,
                     RankAura = (byte)appearance.RankAura,
                     HeldWeapon = ItemCode(appearance.HeldWeaponKey),
+                    Caravan = appearance.Caravan,
+                    CaravanName = appearance.CaravanName,
+                    CaravanStays = appearance.CaravanStays,
                     ClanId = (ulong)Math.Max(0, appearance.ClanId),
                     ClanName = appearance.ClanName,
                     ClanMark = appearance.ClanMark

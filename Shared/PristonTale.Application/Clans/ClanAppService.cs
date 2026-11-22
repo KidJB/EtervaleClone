@@ -14,9 +14,11 @@ namespace PristonTale.Application.Clans;
 
 public sealed record ClanMemberView(string Name, PlayerClass Class, int Level, ClanRank Rank, bool Online);
 
-// A member's view of its clan; Deadline 0 when no dissolution is pending.
+// A member's view of its clan; Deadline 0 when no dissolution is pending. Permissions: what the chief lets each rank do;
+// Rights: what the member may do.
 public sealed record ClanView(long ClanId, string Name, ClanState State, long DeadlineSeconds, ClanRank Rank, int Capacity, string Intro, int MarkVersion,
-    IReadOnlyList<ClanMemberView> Members);
+    IReadOnlyList<ClanMemberView> Members, ClanRankPermissions Permissions = default, ClanPermission Rights = ClanPermission.None, long Treasury = 0,
+    int SlotLevel = 0, int WeightLevel = 0, long CoinTreasury = 0);
 
 // What an invited player is asked: the clan, its chief and the recruiter who asked.
 public sealed record ClanInvitation(ulong RecruiterId, string ClanName, string ChiefName);
@@ -44,6 +46,7 @@ public sealed class ClanAppService : IClanDirectory
     private readonly TimeProvider _clock;
     private readonly DurableOperations _durable;
     private readonly IClanMarkStore _marks;
+    private readonly IClanStorageRepository? _storage;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Lock _state = new();
     private readonly Dictionary<long, Clan> _clans = new();
@@ -53,8 +56,9 @@ public sealed class ClanAppService : IClanDirectory
     private readonly ConcurrentDictionary<ulong, Pending> _invitations = new();
 
     public ClanAppService(IClanRepository repository, WorldServer world, ChatDirectory chat, ISessionRegistry sessions, ICharacterSaves saves,
-        TimeProvider? clock = null, IClanMarkStore? marks = null)
+        TimeProvider? clock = null, IClanMarkStore? marks = null, IClanStorageRepository? storage = null)
     {
+        _storage = storage;
         _marks = marks ?? NoClanMarkStore.Instance;
         _repository = repository;
         _world = world;
@@ -117,7 +121,13 @@ public sealed class ClanAppService : IClanDirectory
                 foreach (var record in clans)
                 {
                     _clans[record.Id] = new Clan(record.Id, record.Name, (ClanState)record.State, record.CreatedAt, record.DeadlineAt, record.Intro,
-                        record.MarkVersion);
+                        record.MarkVersion, ClanRankPermissions.Unpack(record.RankPermissions))
+                    {
+                        Treasury = record.Treasury,
+                        SlotLevel = record.SlotLevel,
+                        WeightLevel = record.WeightLevel,
+                        CoinTreasury = record.CoinTreasury
+                    };
                 }
 
                 foreach (var record in members)
@@ -412,6 +422,8 @@ public sealed class ClanAppService : IClanDirectory
             clan.Replace(target! with { Rank = rank });
         }
 
+        await Retag(clan, target!.CharacterId);
+
         Announce(clan, GameText.Of(appoint ? GameTextId.ClanViceAppointed : GameTextId.ClanViceDischarged, target!.Name));
         Publish(clan);
         return ClanStatus.Ok;
@@ -486,6 +498,8 @@ public sealed class ClanAppService : IClanDirectory
                 clan.Replace(chief with { Rank = ClanRank.Member });
             }
 
+            await Task.WhenAll(Retag(clan, heir!.CharacterId), Retag(clan, chief.CharacterId));
+
             Announce(clan, GameText.Of(GameTextId.ClanChiefChanged, chief.Name, heir!.Name));
             Publish(clan);
             return ClanStatus.Ok;
@@ -540,13 +554,18 @@ public sealed class ClanAppService : IClanDirectory
     // The Clan Master's fee through the world's durable path, stored by store with the paying character; a refusal, a
     // busy world or a storage failure answers why.
     private async Task<ClanStatus> PayAsync(string sessionToken, ulong npcEntityId, long fee, int minimumLevel,
+        Func<PlayerSession, PreparedNpcPayment, Task<bool>> store) =>
+        await PayAsync(sessionToken, npcEntityId, Simulation.World.Npcs.NpcServiceKind.Clan, fee, minimumLevel, store);
+
+    // service: the NPC service the fee is paid at (the Clan Master's, or the Clan Warehouse keeper's for a donation).
+    private async Task<ClanStatus> PayAsync(string sessionToken, ulong npcEntityId, Simulation.World.Npcs.NpcServiceKind service, long fee, int minimumLevel,
         Func<PlayerSession, PreparedNpcPayment, Task<bool>> store)
     {
         try
         {
             using var lease = await _durable.AdmitAsync(_sessions, sessionToken, CancellationToken.None);
             return await lease.RunAsync(
-                s => _world.PrepareNpcPaymentAsync(s, npcEntityId, Simulation.World.Npcs.NpcServiceKind.Clan, fee, minimumLevel),
+                s => _world.PrepareNpcPaymentAsync(s, npcEntityId, service, fee, minimumLevel),
                 _world.CommitNpcPaymentAsync,
                 static prepared => prepared.Status switch
                 {
@@ -616,6 +635,14 @@ public sealed class ClanAppService : IClanDirectory
         }
 
         await Task.WhenAll(members.Select(characterId => Retag(null, characterId)));
+        try
+        {
+            await _world.ForgetClanAsync(clan.Id);
+        }
+        catch (WorldBusyException)
+        {
+        }
+
         return true;
     }
 
@@ -726,19 +753,262 @@ public sealed class ClanAppService : IClanDirectory
             : new ClanView(clan.Id, clan.Name, clan.State, clan.DeadlineSeconds, self.Rank, ClanRules.Capacity(LevelOf(clan.Chief)), clan.Intro, clan.MarkVersion,
                 clan.Members.OrderByDescending(static member => member.Rank).ThenBy(static member => member.Name, StringComparer.OrdinalIgnoreCase)
                     .Select(member => new ClanMemberView(member.Name, member.Class, LevelOf(member), member.Rank, _entityOf.ContainsKey(member.CharacterId)))
-                    .ToArray());
+                    .ToArray(), clan.Permissions, clan.Permissions.For(self.Rank), clan.Treasury, clan.SlotLevel, clan.WeightLevel,
+                    clan.CoinTreasury);
 
     // The tag over the head is looks only: a busy world leaves the old one until the next change or world entry.
     private async Task ShowTagAsync(ulong entityId, Clan? clan)
     {
         try
         {
-            await _world.SetClanTagAsync(entityId, clan is null ? null : new ClanTag(clan.Id, clan.Name, clan.MarkVersion, clan.State == ClanState.Registered));
+            var rights = clan is not null && _online.TryGetValue(entityId, out var online) ? RightsOf(clan, online.CharacterId) : ClanPermission.None;
+            await _world.SetClanTagAsync(entityId, clan is null ? null
+                : new ClanTag(clan.Id, clan.Name, clan.MarkVersion, clan.State == ClanState.Registered, rights));
         }
         catch (WorldBusyException)
         {
         }
     }
+
+    private ClanPermission RightsOf(Clan clan, long characterId)
+    {
+        lock (_state)
+        {
+            return clan.RightsOf(characterId);
+        }
+    }
+
+    // The chief sets what the vice and the members may do with what the clan owns; every online member is retagged with
+    // its rights.
+    public Task<ClanStatus> SetPermissionsAsync(ulong entityId, ClanRankPermissions permissions) => RunMemberAsync(entityId, async (online, clan, member) =>
+    {
+        if (member.Rank != ClanRank.Chief)
+        {
+            return ClanStatus.NotChief;
+        }
+
+        var normalized = ClanRankPermissions.Unpack(permissions.Packed);
+        if (!await StoreAsync(() => _repository.SetRankPermissionsAsync(clan.Id, normalized.Packed)))
+        {
+            return ClanStatus.Unavailable;
+        }
+
+        lock (_state)
+        {
+            clan.Permissions = normalized;
+        }
+
+        await Task.WhenAll(clan.Members.Select(clanMember => Retag(clan, clanMember.CharacterId)));
+        Announce(clan, GameText.Of(GameTextId.ClanPermissionsChanged));
+        Publish(clan);
+        return ClanStatus.Ok;
+    });
+
+    // The clan warehouse's latest log lines, for a member whose rank may read them (null when it may not or has no clan).
+    public async Task<IReadOnlyList<ClanWarehouseLogEntry>?> WarehouseLogAsync(ulong entityId)
+    {
+        long clanId;
+        lock (_state)
+        {
+            if (!_online.TryGetValue(entityId, out var online) || !_byCharacter.TryGetValue(online.CharacterId, out var clan)
+                || !ClanRankPermissions.Allows(clan.RightsOf(online.CharacterId), ClanPermission.ViewLog))
+            {
+                return null;
+            }
+
+            clanId = clan.Id;
+        }
+
+        if (_storage is null)
+        {
+            return [];
+        }
+
+        var rows = await _storage.WarehouseLogAsync(clanId, ClanWarehouse.LogLines);
+        return rows.Select(static row => new ClanWarehouseLogEntry(row.At, row.CharacterName, (ClanWarehouseLogAction)row.Action, row.ItemKey, row.ItemName,
+            row.Quantity)).ToArray();
+    }
+
+    // A member gives gold to the clan treasury at the Clan Warehouse keeper; the gold leaves the character as the treasury
+    // gains it, stored together with the log line.
+    public async Task<ClanStatus> DonateAsync(string sessionToken, ulong npcEntityId, long amount)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            if (!_sessions.TryGet(sessionToken, out var session) || !TryMember(session.EntityId, out _, out var clan, out var member))
+            {
+                return ClanStatus.NotInClan;
+            }
+
+            var refusal = ClanUpgrades.CheckDonation(amount, clan.Treasury);
+            if (refusal != ClanStatus.Ok)
+            {
+                return Tell(session.EntityId, refusal);
+            }
+
+            var log = new ClanWarehouseLogRecord(clan.Id, Now, member.Name, (short)ClanWarehouseLogAction.Donate, "", "Gold", (int)amount);
+            var outcome = await PayAsync(sessionToken, npcEntityId, Simulation.World.Npcs.NpcServiceKind.ClanWarehouse, amount, 0,
+                (s, prepared) => _repository.DonateAsync(clan.Id, amount, ClanUpgrades.MaxTreasury, s.Stamp(prepared.Snapshot!), log, CancellationToken.None));
+            if (outcome != ClanStatus.Ok)
+            {
+                return Tell(session.EntityId, outcome);
+            }
+
+            lock (_state)
+            {
+                clan.Treasury += amount;
+            }
+
+            Announce(clan, GameText.Of(GameTextId.ClanDonated, member.Name, ClanTexts.Number(amount)));
+            Publish(clan);
+            return ClanStatus.Ok;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    // A member gives coin-shop coins to the clan coin treasury at the Clan Warehouse keeper: the account's coins and the
+    // treasury change in one transaction; nobody takes them back.
+    public async Task<ClanStatus> DonateCoinsAsync(string sessionToken, ulong npcEntityId, long amount)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            if (!_sessions.TryGet(sessionToken, out var session) || !TryMember(session.EntityId, out var online, out var clan, out var member))
+            {
+                return ClanStatus.NotInClan;
+            }
+
+            var refusal = ClanBuffs.CheckCoinDonation(amount, clan.CoinTreasury);
+            if (refusal == ClanStatus.Ok && !await AtKeeperAsync(session, npcEntityId))
+            {
+                refusal = ClanStatus.OutOfReach;
+            }
+
+            if (refusal != ClanStatus.Ok)
+            {
+                return Tell(session.EntityId, refusal);
+            }
+
+            var log = new ClanWarehouseLogRecord(clan.Id, Now, member.Name, (short)ClanWarehouseLogAction.DonateCoins, "", "Coins", (int)amount);
+            if (!await StoreAsync(() => _repository.DonateCoinsAsync(clan.Id, online.AccountId, amount, ClanBuffs.MaxCoinTreasury, log)))
+            {
+                return Tell(session.EntityId, ClanStatus.NotEnoughCoins);
+            }
+
+            lock (_state)
+            {
+                clan.CoinTreasury += amount;
+            }
+
+            Announce(clan, GameText.Of(GameTextId.ClanDonatedCoins, member.Name, ClanTexts.Number(amount)));
+            Publish(clan);
+            return ClanStatus.Ok;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    // A rank with the right spends the coin treasury on a clan world buff (argument: WorldBuffs.Argument): the coins are
+    // stored as spent first, then the world starts the buff for the clan.
+    public Task<ClanStatus> SpendCoinsAsync(ulong entityId, int argument) => RunMemberAsync(entityId, async (online, clan, member) =>
+    {
+        var refusal = ClanBuffs.CheckCoinSpend(clan.RightsOf(member.CharacterId), argument, clan.CoinTreasury);
+        if (refusal != ClanStatus.Ok)
+        {
+            return refusal;
+        }
+
+        var (kind, seconds) = Simulation.World.WorldBuffs.FromArgument(argument);
+        var day = seconds == Simulation.World.WorldBuffs.DayDurationSeconds;
+        var buff = Simulation.World.WorldBuffs.Get(kind)!;
+        var cost = ClanBuffs.CoinPrice(day);
+        var log = new ClanWarehouseLogRecord(clan.Id, Now, member.Name, (short)ClanWarehouseLogAction.SpendCoins, ClanBuffs.ItemKey(buff, day),
+            ClanBuffs.Name(buff), (int)cost);
+        if (!await StoreAsync(() => _repository.SpendCoinsAsync(clan.Id, cost, log)))
+        {
+            return ClanStatus.NotEnoughTreasury;
+        }
+
+        lock (_state)
+        {
+            clan.CoinTreasury -= cost;
+        }
+
+        await _world.StartClanBuffAsync(clan.Id, member.Name, argument);
+        Publish(clan);
+        return ClanStatus.Ok;
+    });
+
+    // Whether the player stands at an NPC offering the clan warehouse.
+    private async Task<bool> AtKeeperAsync(PlayerSession session, ulong npcEntityId)
+    {
+        try
+        {
+            var reach = await _world.CheckNpcServiceAsync(session, new Simulation.World.Npcs.NpcServiceCommand(Guid.Empty, npcEntityId,
+                Simulation.World.Npcs.NpcServiceKind.ClanWarehouse, Simulation.World.Npcs.NpcServiceAction.Open));
+            return reach.Ok;
+        }
+        catch (WorldBusyException)
+        {
+            return false;
+        }
+    }
+
+    // The chief spends the treasury on the clan warehouse's next level of an upgrade; the world's copy of the warehouse
+    // takes the new limits at once.
+    public Task<ClanStatus> UpgradeAsync(ulong entityId, ClanUpgradeKind kind) => RunMemberAsync(entityId, async (online, clan, member) =>
+    {
+        var level = ClanUpgrades.LevelOf(kind, clan.SlotLevel, clan.WeightLevel);
+        var refusal = ClanUpgrades.CheckUpgrade(member.Rank, kind, level, clan.Treasury);
+        if (refusal != ClanStatus.Ok)
+        {
+            return refusal;
+        }
+
+        var cost = ClanUpgrades.Cost(kind, level);
+        var log = new ClanWarehouseLogRecord(clan.Id, Now, member.Name, (short)ClanWarehouseLogAction.Upgrade, kind.ToString(), "Upgrade", level + 1);
+        if (!await StoreAsync(() => _repository.UpgradeAsync(clan.Id, kind, level, cost, log)))
+        {
+            return ClanStatus.Unavailable;
+        }
+
+        int slots;
+        int weight;
+        lock (_state)
+        {
+            clan.Treasury -= cost;
+            if (kind == ClanUpgradeKind.WarehouseSlots)
+            {
+                clan.SlotLevel = level + 1;
+            }
+            else
+            {
+                clan.WeightLevel = level + 1;
+            }
+
+            (slots, weight) = (clan.SlotLevel, clan.WeightLevel);
+        }
+
+        try
+        {
+            await _world.ResizeClanWarehouseAsync(clan.Id, slots, weight);
+        }
+        catch (WorldBusyException)
+        {
+        }
+
+        Announce(clan, kind == ClanUpgradeKind.WarehouseSlots
+            ? GameText.Of(GameTextId.ClanUpgradeSlots, ClanTexts.Number(ClanUpgrades.ItemLimit(slots)))
+            : GameText.Of(GameTextId.ClanUpgradeWeight, ClanTexts.Number(ClanUpgrades.WeightLimit(weight))));
+        Publish(clan);
+        return ClanStatus.Ok;
+    });
 
     private void Announce(Clan clan, GameText line)
     {

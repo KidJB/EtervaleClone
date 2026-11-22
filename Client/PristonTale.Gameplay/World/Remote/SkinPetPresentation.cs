@@ -13,7 +13,9 @@ namespace PristonTale.Gameplay.World.Remote;
 // The skin pets that walk beside their owners: each player's PetSkin (from its looks) drawn as that monster's model at the
 // skin's scale, on the ground behind and to the side of its owner. It closes a tenth of the distance to its place per 70 Hz
 // frame, faces where it goes, walks while it moves and stands while it is near; a pet left far behind (a warp) jumps there.
-public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader loader, string assetRoot, IClientLog log) : IDisposable
+// The same walkers draw caravans (Caravans): skins and looks pick another list and part of the looks, side the other flank.
+public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader loader, string assetRoot, IClientLog log,
+    Func<int, PetSkin> skins = null, Func<PlayerAppearanceInfo, (int Skin, string Label, bool Stays)> looks = null, float side = 1f) : IDisposable
 {
     private const float Behind = 26f;
     private const float Aside = 18f;
@@ -22,6 +24,7 @@ public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader lo
     private const float JumpDistance = 600f;
     // The name hangs this far above the pet's feet at full size (scaled with the skin, as its model is).
     private const float LabelHeight = 70f;
+    private const float PickRadius = LabelHeight / 2f;
 
     private readonly Dictionary<int, Task<PristonActor>> _models = new();
     private readonly Dictionary<ulong, Pet> _pets = new();
@@ -34,7 +37,8 @@ public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader lo
         {
             if (spawn.Player is { } player)
             {
-                Set(spawn.EntityId, player.PetSkin, PetNames.Shown(player.PetName, player.Name));
+                var (skin, label, stays) = looks?.Invoke(player) ?? (player.PetSkin, PetNames.Shown(player.PetName, player.Name), false);
+                Set(spawn.EntityId, skin, label, stays);
             }
         }
 
@@ -46,14 +50,16 @@ public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader lo
 
     public bool Has(ulong ownerId) => _pets.ContainsKey(ownerId);
 
-    // label: the name shown over the pet (PetNames.Shown); a new name alone keeps the pet where it is.
-    public void Set(ulong ownerId, int skin, string label)
+    // label: the name shown over the pet (PetNames.Shown); a new name alone keeps the pet where it is. stays: the walker
+    // stands where it is instead of following its owner.
+    public void Set(ulong ownerId, int skin, string label, bool stays = false)
     {
         if (_pets.TryGetValue(ownerId, out var pet))
         {
             if (pet.Skin.Id == skin)
             {
                 pet.Label = label;
+                pet.Stays = stays;
                 return;
             }
 
@@ -61,9 +67,9 @@ public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader lo
             _pets.Remove(ownerId);
         }
 
-        if (PetSkins.Get(skin) is { } chosen)
+        if ((skins ?? PetSkins.Get)(skin) is { } chosen)
         {
-            _pets[ownerId] = new Pet(chosen) { Label = label };
+            _pets[ownerId] = new Pet(chosen) { Label = label, Stays = stays };
             Prepare(chosen);
         }
     }
@@ -80,7 +86,7 @@ public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader lo
                 continue;
             }
 
-            var place = at.Position + Vector3.Transform(new Vector3(Aside, 0f, -Behind), Matrix.CreateRotationY(at.Facing));
+            var place = at.Position + Vector3.Transform(new Vector3(Aside * side, 0f, -Behind), Matrix.CreateRotationY(at.Facing));
             if (!pet.HasActor)
             {
                 if (_models.GetValueOrDefault(pet.Skin.Id) is not { IsCompletedSuccessfully: true } model)
@@ -92,6 +98,17 @@ public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader lo
                 pet.Facing = at.Facing;
                 pet.Handle = scene.AddActor(new PristonActorInstance(model.Result, World(pet), MotionCode.Stand));
                 pet.HasActor = true;
+            }
+
+            if (pet.Stays)
+            {
+                if (pet.Walking)
+                {
+                    pet.Walking = false;
+                    scene.SetActorMotion(pet.Handle, MotionCode.Stand);
+                }
+
+                continue;
             }
 
             var offset = place - pet.Position;
@@ -134,6 +151,47 @@ public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader lo
                 labels.Add((pet.Position + Vector3.Up * (LabelHeight * pet.Skin.Scale), pet.Label));
             }
         }
+    }
+
+    // The distance along the ray to an owner's walker, while it is drawn: a sphere around its body, as tall as its label is
+    // high; null when the ray misses it.
+    public float? Pick(Ray ray, ulong ownerId)
+    {
+        if (!_pets.TryGetValue(ownerId, out var pet) || !pet.HasActor)
+        {
+            return null;
+        }
+
+        return PickAt(ray, pet.Position, pet.Skin.Scale);
+    }
+
+    // The distance along the ray to a walker standing at position with the model's scale; null when it misses.
+    public static float? PickAt(Ray ray, Vector3 position, float scale)
+    {
+        var radius = PickRadius * scale;
+        return CursorPicking.IntersectSphere(ray, position + Vector3.Up * radius, radius);
+    }
+
+    // The hover outline around an owner's walker (strength 0 removes it).
+    public void SetOutline(ulong ownerId, Vector3 color, float strength)
+    {
+        if (_pets.TryGetValue(ownerId, out var pet) && pet.HasActor)
+        {
+            scene.SetActorOutline(pet.Handle, color, strength);
+        }
+    }
+
+    // The point above an owner's walker's head, while it is drawn.
+    public bool TryGetAnchor(ulong ownerId, out Vector3 anchor)
+    {
+        if (_pets.TryGetValue(ownerId, out var pet) && pet.HasActor)
+        {
+            anchor = pet.Position + Vector3.Up * (LabelHeight * pet.Skin.Scale);
+            return true;
+        }
+
+        anchor = default;
+        return false;
     }
 
     public void Dispose()
@@ -187,6 +245,7 @@ public sealed class SkinPetPresentation(IActorScene scene, PristonActorLoader lo
         public Vector3 Position { get; set; }
         public float Facing { get; set; }
         public string Label { get; set; } = "";
+        public bool Stays { get; set; }
 
         public void Remove(IActorScene scene)
         {

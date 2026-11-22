@@ -2,8 +2,11 @@ using PristonTale.Persistence.Abstractions.Characters;
 
 namespace PristonTale.Persistence.Abstractions.Clans;
 
-// A clan row: state 0 registering, 1 registered; times in Unix seconds, deadline 0 for none.
-public sealed record ClanRecord(long Id, string Name, short State, long CreatedAt, long DeadlineAt, string Intro, int MarkVersion);
+// A clan row: state 0 registering, 1 registered; times in Unix seconds, deadline 0 for none; RankPermissions packed
+// (Simulation.Social.Clans.ClanRankPermissions); the treasury's gold and the warehouse's upgrade levels (ClanUpgrades).
+public sealed record ClanRecord(long Id, string Name, short State, long CreatedAt, long DeadlineAt, string Intro, int MarkVersion,
+    int RankPermissions = Simulation.Social.Clans.ClanRankPermissions.DefaultPacked, long Treasury = 0, int SlotLevel = 0, int WeightLevel = 0,
+    long CoinTreasury = 0);
 
 // A member row with the character's name, class and level read alongside (they are not stored twice).
 public sealed record ClanMemberRecord(long ClanId, long CharacterId, short Rank, long JoinedAt, string Name = "", int JobCode = 0, int Level = 0,
@@ -41,6 +44,25 @@ public interface IClanRepository
 
     // The clan's mark version once a new mark is kept.
     Task<bool> SetMarkVersionAsync(long clanId, int version, CancellationToken ct = default);
+
+    // The rights the chief gives the vice and the members (packed).
+    Task<bool> SetRankPermissionsAsync(long clanId, int packed, CancellationToken ct = default);
+
+    // The donor's gold goes to the treasury: the paying character, the treasury and the log line in one transaction; false
+    // when the capture is stale, the clan is gone or the treasury would pass maxTreasury.
+    Task<bool> DonateAsync(long clanId, long amount, long maxTreasury, CharacterRecord payment, ClanWarehouseLogRecord log, CancellationToken ct = default);
+
+    // The treasury pays cost for the upgrade's next level from fromLevel, with the log line; false when the treasury holds
+    // less or the level moved.
+    Task<bool> UpgradeAsync(long clanId, Simulation.Social.Clans.ClanUpgradeKind kind, int fromLevel, long cost, ClanWarehouseLogRecord log,
+        CancellationToken ct = default);
+
+    // The donor's account coins go to the coin treasury: the account's coins (with its coin log line), the coin treasury and
+    // the clan's log line in one transaction; false when the account holds too few or the coin treasury would pass max.
+    Task<bool> DonateCoinsAsync(long clanId, long accountId, long amount, long maxCoinTreasury, ClanWarehouseLogRecord log, CancellationToken ct = default);
+
+    // The coin treasury pays cost, with the log line; false when it holds less.
+    Task<bool> SpendCoinsAsync(long clanId, long cost, ClanWarehouseLogRecord log, CancellationToken ct = default);
 
     // The clan name of each of the account's characters that is in one, by character id.
     Task<IReadOnlyDictionary<long, string>> ClanNamesAsync(long accountId, CancellationToken ct = default);

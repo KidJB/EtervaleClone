@@ -84,6 +84,8 @@ internal sealed class FieldDescriptors
                 && _appearance.BigHead == appearance.BigHead && _appearance.Class == appearance.Class && _appearance.PetSkin == appearance.PetSkin
                 && _appearance.Mount == appearance.Mount && _appearance.Title == appearance.Title && _appearance.RankAura == appearance.RankAura
                 && string.Equals(_appearance.HeldWeaponKey, appearance.HeldWeaponKey, StringComparison.Ordinal)
+                && _appearance.Caravan == appearance.Caravan && string.Equals(_appearance.CaravanName, appearance.CaravanName, StringComparison.Ordinal)
+                && _appearance.CaravanStays == appearance.CaravanStays
                 && string.Equals(_appearance.PetName, appearance.PetName, StringComparison.Ordinal)
                 && string.Equals(_appearance.WeaponKey, appearance.WeaponKey, StringComparison.Ordinal)
                 && string.Equals(_appearance.ArmorKey, appearance.ArmorKey, StringComparison.Ordinal)

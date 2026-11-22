@@ -109,6 +109,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
     private long _courierRevision = -1;
     private int _mountChosen = -1;
     private bool _riding;
+    private Simulation.Characters.CaravanState? _caravan;
 
     // The world's boss list last sent.
     private BossList? _bossList;
@@ -389,6 +390,8 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         SendTrade(snapshot, connection);
         SendBellatra(snapshot, connection);
         SendArena(snapshot, connection);
+        SendClanBuffs(snapshot, connection);
+        SendClanWarehouse(snapshot, connection);
         if (snapshot.Quest is not null)
         {
             SendQuest(snapshot.Quest, connection);
@@ -598,7 +601,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
     private void SendPetCollection(Simulation.Characters.OwnerState? owner, IPacketSink connection)
     {
         if (owner is null || unchecked((long)owner.PetSkins) == _petSkins && owner.PetOut == _petOut && owner.PetName == _petName
-            && unchecked((long)owner.Mounts) == _mounts && owner.MountChosen == _mountChosen && owner.Riding == _riding)
+            && unchecked((long)owner.Mounts) == _mounts && owner.MountChosen == _mountChosen && owner.Riding == _riding && owner.Caravan == _caravan)
         {
             return;
         }
@@ -606,6 +609,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         _mounts = unchecked((long)owner.Mounts);
         _mountChosen = owner.MountChosen;
         _riding = owner.Riding;
+        _caravan = owner.Caravan;
 
         _petSkins = unchecked((long)owner.PetSkins);
         _petOut = owner.PetOut;
@@ -615,7 +619,11 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
             Name = owner.PetName,
             Mounts = owner.Mounts,
             MountChosen = (byte)Math.Clamp(owner.MountChosen, 0, byte.MaxValue),
-            Riding = owner.Riding
+            Riding = owner.Riding,
+            Caravan = (byte)Math.Clamp(owner.Caravan?.Kind ?? 0, 0, byte.MaxValue),
+            CaravanEnds = owner.Caravan?.ExpiresAt ?? 0,
+            CaravanName = owner.Caravan?.Name ?? "",
+            CaravanStays = owner.Caravan?.Stays ?? false
         };
         connection.Send(_scratch.AsSpan(0, packet.Write(_scratch)));
     }
@@ -1318,7 +1326,7 @@ internal sealed partial class PresenceEncoder : IEventHandleWriter
         return HashCode.Combine(view.MaxLife, view.Level, view.TemplateId, view.MoveSpeed, view.AttackRate,
             HashCode.Combine(appearance.WeaponKey, appearance.ArmorKey, appearance.OffHandKey, appearance.InVillage, appearance.Tier, appearance.HairIndex,
                 HashCode.Combine(appearance.HelperPet, appearance.Phoenix, appearance.BigHead, appearance.WeaponGlow, appearance.OffHandGlow, appearance.ShopSign,
-                    appearance.ClanId, HashCode.Combine(appearance.ClanName, appearance.ClanMark, appearance.PetSkin, appearance.PetName, appearance.Mount, appearance.Title, appearance.HeldWeaponKey, appearance.RankAura))),
+                    appearance.ClanId, HashCode.Combine(appearance.ClanName, appearance.ClanMark, appearance.PetSkin, appearance.PetName, appearance.Mount, appearance.Title, appearance.HeldWeaponKey, HashCode.Combine(appearance.RankAura, appearance.Caravan, appearance.CaravanName, appearance.CaravanStays)))),
             view.OwnerId,
             view.ModelScale);
     }

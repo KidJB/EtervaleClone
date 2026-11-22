@@ -6,8 +6,8 @@ using PristonTale.Simulation.World;
 
 namespace PristonTale.Gameplay.UI.Widgets;
 
-// The Active Buffs box, under the target portrait until moved: the personal timers, then the world buffs, counted from what
-// the server last sent. The heading strip drags it and its arrow folds it; Offset, Collapsed and Revision let the HUD save both.
+// The Active Buffs box, under the target portrait until moved: the personal timers, then the world buffs and the clan's
+// world buffs in sections of their own, counted from what the server last sent. The heading strip drags it and its arrow folds it; Offset, Collapsed and Revision let the HUD save both.
 public sealed class HudWorldBuffs
 {
     private const int Width = 250;
@@ -29,18 +29,20 @@ public sealed class HudWorldBuffs
         Folder + "IceUp.png", Folder + "SixthSense.png", Folder + "EXP.png", Folder + "EventDrop.png"
     ];
     private static readonly Color Section = new(150, 200, 120);
-    private static readonly Color BoxColor = new(10, 8, 6, 205);
-    private static readonly Color BorderColor = new(120, 92, 52);
-    private static readonly Color StripColor = new(52, 38, 22, 235);
-    private static readonly Color StripLitColor = new(70, 52, 30, 245);
+    internal static readonly Color BoxColor = new(10, 8, 6, 205);
+    internal static readonly Color BorderColor = new(120, 92, 52);
+    internal static readonly Color StripColor = new(52, 38, 22, 235);
+    internal static readonly Color StripLitColor = new(70, 52, 30, 245);
     private static readonly Color RuleColor = new(90, 70, 44, 160);
-    private static readonly Color Heading = new(240, 205, 120);
-    private static readonly Color Name = new(235, 225, 205);
-    private static readonly Color Time = new(120, 220, 120);
+    internal static readonly Color Heading = new(240, 205, 120);
+    internal static readonly Color Name = new(235, 225, 205);
+    internal static readonly Color Time = new(120, 220, 120);
 
     private const string RankArt = Folder + "EXP.png";
 
     private readonly List<(string Name, string Effect, string Icon, double EndMs, string Time)> _rows = [];
+    private readonly List<(string Name, string Effect, string Icon, double EndMs, string Time)> _clanRows = [];
+    private IReadOnlyList<(int Kind, int SecondsLeft)> _clanFrom;
     private Contracts.Characters.RankAura _rank;
     private string _rankLine = "";
     private IReadOnlyList<(int Kind, int SecondsLeft)> _from;
@@ -140,15 +142,77 @@ public sealed class HudWorldBuffs
         }
 
         _from = buffs;
-        _rows.Clear();
+        Fill(_rows, buffs, nowMs, "");
+    }
+
+    // The running buffs of the player's clan, named as the clan's.
+    public void ReceiveClan(IReadOnlyList<(int Kind, int SecondsLeft)> buffs, double nowMs)
+    {
+        if (ReferenceEquals(buffs, _clanFrom) || buffs is null)
+        {
+            return;
+        }
+
+        _clanFrom = buffs;
+        Fill(_clanRows, buffs, nowMs, Localization.ClientText.Get("ClanBuffs.Owner"));
+    }
+
+    private void Fill(List<(string Name, string Effect, string Icon, double EndMs, string Time)> rows, IReadOnlyList<(int Kind, int SecondsLeft)> buffs,
+        double nowMs, string owner)
+    {
+        rows.Clear();
         _second = -1;
         foreach (var (kind, secondsLeft) in buffs)
         {
             if (WorldBuffs.Get(kind) is { } buff)
             {
-                _rows.Add((buff.Name, buff.Effect, Art[kind - 1], nowMs + secondsLeft * 1000d, ""));
+                rows.Add((owner.Length == 0 ? buff.Name : owner + " " + buff.Name, buff.Effect, Art[kind - 1], nowMs + secondsLeft * 1000d, ""));
             }
         }
+    }
+
+    private static void CountDown(List<(string Name, string Effect, string Icon, double EndMs, string Time)> rows, double nowMs)
+    {
+        for (var index = rows.Count - 1; index >= 0; index--)
+        {
+            var left = (int)Math.Ceiling((rows[index].EndMs - nowMs) / 1000d);
+            if (left <= 0)
+            {
+                rows.RemoveAt(index);
+            }
+            else
+            {
+                rows[index] = rows[index] with { Time = TimeLeft(left) + " (DOES NOT PAUSE)" };
+            }
+        }
+    }
+
+    private static int TileRows(int count) => count > 0 ? Step + 4 + (count + TilesPerRow - 1) / TilesPerRow * (Tile + 2) : 0;
+
+    // One section of tiles under its heading; hovering a tile names it. The y under the section.
+    private static int DrawTiles(HudPainter painter, Rectangle bounds, int x, int y, Point pointer, string heading,
+        List<(string Name, string Effect, string Icon, double EndMs, string Time)> rows)
+    {
+        if (rows.Count == 0)
+        {
+            return y;
+        }
+
+        painter.Text(heading, x, y, Section);
+        painter.Fill(new Rectangle(x, y + Step, InnerWidth, 1), RuleColor);
+        y += Step + 4;
+        for (var index = 0; index < rows.Count; index++)
+        {
+            var row = rows[index];
+            var tile = new Rectangle(x + index % TilesPerRow * (Tile + 2), y + index / TilesPerRow * (Tile + 2), Tile, Tile);
+            painter.Stretch(row.Icon, tile);
+            if (tile.Contains(pointer))
+            {
+                DrawTip(painter, bounds, row);
+            }
+        }
+
+        return y + (rows.Count + TilesPerRow - 1) / TilesPerRow * (Tile + 2);
     }
 
     // The panel: the premium timers under Personal and the world buffs as a row of tiles under World; hovering a tile names it.
@@ -158,28 +222,18 @@ public sealed class HudWorldBuffs
         if (second != _second)
         {
             _second = second;
-            for (var index = _rows.Count - 1; index >= 0; index--)
-            {
-                var left = (int)Math.Ceiling((_rows[index].EndMs - nowMs) / 1000d);
-                if (left <= 0)
-                {
-                    _rows.RemoveAt(index);
-                }
-                else
-                {
-                    _rows[index] = _rows[index] with { Time = string.Create(CultureInfo.InvariantCulture, $"{left / 3600:D2}:{left / 60 % 60:D2}:{left % 60:D2} (DOES NOT PAUSE)") };
-                }
-            }
+            CountDown(_rows, nowMs);
+            CountDown(_clanRows, nowMs);
         }
 
-        _shown = _rows.Count > 0 || personal.Count > 0 || _rankLine.Length > 0;
+        _shown = _rows.Count > 0 || _clanRows.Count > 0 || personal.Count > 0 || _rankLine.Length > 0;
         if (!_shown)
         {
             return;
         }
 
         _bodyHeight = (_rankLine.Length > 0 ? Step + 4 + PersonalRow + 6 : 0) + (personal.Count > 0 ? Step + 4 + personal.Count * PersonalRow + 6 : 0)
-            + (_rows.Count > 0 ? Step + 4 + (_rows.Count + TilesPerRow - 1) / TilesPerRow * (Tile + 2) : 0);
+            + TileRows(_rows.Count) + (_rows.Count > 0 && _clanRows.Count > 0 ? 6 : 0) + TileRows(_clanRows.Count);
         var bounds = Bounds(layout);
         painter.Fill(bounds, BoxColor);
         Border(painter, bounds);
@@ -213,24 +267,13 @@ public sealed class HudWorldBuffs
             y = personal.Draw(painter, x, y + Step + 4, InnerWidth, nowMs) + 6;
         }
 
-        if (_rows.Count == 0)
+        y = DrawTiles(painter, bounds, x, y, pointer, "World", _rows);
+        if (_rows.Count > 0)
         {
-            return;
+            y += 6;
         }
 
-        painter.Text("World", x, y, Section);
-        painter.Fill(new Rectangle(x, y + Step, InnerWidth, 1), RuleColor);
-        y += Step + 4;
-        for (var index = 0; index < _rows.Count; index++)
-        {
-            var row = _rows[index];
-            var tile = new Rectangle(x + index % TilesPerRow * (Tile + 2), y + index / TilesPerRow * (Tile + 2), Tile, Tile);
-            painter.Stretch(row.Icon, tile);
-            if (tile.Contains(pointer))
-            {
-                DrawTip(painter, bounds, row);
-            }
-        }
+        DrawTiles(painter, bounds, x, y, pointer, Localization.ClientText.Get("ClanBuffs.Section"), _clanRows);
     }
 
     // The hovered tile's name, effect and time, in a box under the panel.
@@ -244,7 +287,17 @@ public sealed class HudWorldBuffs
         painter.Text(row.Time, tip.X + Padding, tip.Y + 4 + Step * 2, Time);
     }
 
-    private static void Border(HudPainter painter, Rectangle bounds)
+    // Seconds left as hh:mm:ss.
+    internal static string TimeLeft(int seconds) => string.Create(CultureInfo.InvariantCulture, $"{seconds / 3600:D2}:{seconds / 60 % 60:D2}:{seconds % 60:D2}");
+
+    // A labelled button in the box's colours: lit under the pointer, dim when it cannot be used.
+    internal static void Button(HudPainter painter, Rectangle bounds, Point pointer, string label, bool enabled = true)
+    {
+        painter.Fill(bounds, !enabled ? BoxColor : bounds.Contains(pointer) ? StripLitColor : StripColor);
+        painter.TextCentered(label, bounds.Left, bounds.Right, bounds.Y + 3, enabled ? Color.White : RuleColor);
+    }
+
+    internal static void Border(HudPainter painter, Rectangle bounds)
     {
         painter.Fill(new Rectangle(bounds.X, bounds.Y, bounds.Width, 1), BorderColor);
         painter.Fill(new Rectangle(bounds.X, bounds.Bottom - 1, bounds.Width, 1), BorderColor);

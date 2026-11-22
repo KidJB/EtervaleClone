@@ -773,6 +773,7 @@ public sealed partial class WorldServer
         RenewClanSkill(nowSeconds);
         StepBellatra(UnixNowMs);
         StepAchievements();
+        StepCaravans();
         ApplyQuestTravels();
         Checkpoint(serverTick);
         OfferStarterGifts(serverTick);
@@ -839,7 +840,9 @@ public sealed partial class WorldServer
                     Trade = connection.Player.Trade?.ViewFor(entityId),
                     TradeRequest = connection.Player.TradeRequest,
                     Bellatra = BellatraViewOf(connection),
-                    Arena = ArenaViewOf(connection)
+                    Arena = ArenaViewOf(connection),
+                    ClanBuffs = ClanBuffsOf(connection.Player.Clan?.ClanId ?? 0),
+                    ClanWarehouse = ClanWarehouseViewOf(connection.Player)
                 });
                 // Only an outbox pins and releases frames; any other writer may keep the snapshot forever.
                 frame.Retained |= connection.Outbound is not WorldOutbox.OutboxWriter;

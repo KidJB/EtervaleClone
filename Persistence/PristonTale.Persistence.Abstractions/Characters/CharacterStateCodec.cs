@@ -64,6 +64,7 @@ public static class CharacterStateCodec
         DailyQuestCodec.Restore(character.DailyQuests, record.DailyQuests);
         CourierQuestCodec.Restore(character.Couriers, record.CourierQuests);
         character.Skins = SkinCodec.Restore(record.Skins);
+        character.Caravan = CaravanCodec.Restore(record.Caravan);
 
         character.RestoreSides(inventory.ActiveSide, equipment.ActiveSide);
         // Gear restores first: the potion space it gives bounds the belt's stacks.
