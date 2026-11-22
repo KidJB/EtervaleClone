@@ -125,11 +125,12 @@ public sealed class PlayerEquipmentPresentation
             }
 
             var worn = weapon;
-            weapon = Simulation.Characters.SkinRules.WeaponLook(weapon, skins);
-            armor = Simulation.Characters.SkinRules.Look(armor, skins.Armor);
-            offHand = Simulation.Characters.SkinRules.Look(offHand, skins.OffHand);
+            var shown = skins.Shown();
+            weapon = Simulation.Characters.SkinRules.WeaponLook(weapon, shown);
+            armor = Simulation.Characters.SkinRules.Look(armor, shown.Armor);
+            offHand = Simulation.Characters.SkinRules.Look(offHand, shown.OffHand);
             ArmorKey = armor;
-            var desired = EquipmentVisuals.Apply(_basePlayerVisuals, armor, weapon, offHand, village, _jobMask, worn);
+            var desired = EquipmentVisuals.Apply(_basePlayerVisuals, armor, weapon, offHand, village, _jobMask, worn, owner.CostumeKey);
             if (desired != _requestedPlayerVisuals)
             {
                 _requestedPlayerVisuals = desired;

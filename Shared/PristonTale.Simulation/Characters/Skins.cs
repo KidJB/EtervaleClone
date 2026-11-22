@@ -27,9 +27,13 @@ public enum SkinStatus : byte
 
 // The looks a character chose in The Cabinet, one catalog key per slot ("" for the worn item's own look). Weapon is the look of a
 // one-handed weapon, TwoHand of a two-handed one, so a character switching between the two keeps a look on each.
-public sealed record SkinSet(string Weapon = "", string Armor = "", string OffHand = "", string Hair = "", string TwoHand = "")
+// Hidden: the character shows its real gear to everyone, none of its looks nor its costume (the inventory's costume button).
+public sealed record SkinSet(string Weapon = "", string Armor = "", string OffHand = "", string Hair = "", string TwoHand = "", bool Hidden = false)
 {
     public static readonly SkinSet None = new();
+
+    // The looks shown: none while hidden.
+    public SkinSet Shown() => Hidden ? None : this;
 }
 
 // Skins: every piece of gear sells its look for coins to the whole account; a character shows an owned look over the item it
@@ -38,6 +42,16 @@ public sealed record SkinSet(string Weapon = "", string Armor = "", string OffHa
 // robes (DA2, DA4), and costumes (Costumes) fit over either for the classes they have a body for.
 public static class SkinRules
 {
+    // The chat commands the costume button sends: show the real gear, or the looks again.
+    public const string HideCommand = "/cosmetics hide";
+    public const string ShowCommand = "/cosmetics show";
+
+    public static bool TryParseCosmetics(string text, out bool hidden)
+    {
+        hidden = string.Equals(text?.Trim(), HideCommand, StringComparison.OrdinalIgnoreCase);
+        return hidden || string.Equals(text?.Trim(), ShowCommand, StringComparison.OrdinalIgnoreCase);
+    }
+
     public const string NpcName = "Knight Commander Derik";
     public const int MinPrice = 550;
     public const int MaxPrice = 6000;

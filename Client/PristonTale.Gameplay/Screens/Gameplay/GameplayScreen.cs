@@ -73,6 +73,7 @@ public sealed class GameplayScreen : GameScreen
         _hud.SendClan = _scene.SendClan;
         _hud.DonateClan = _scene.DonateToClan;
         _hud.DonateClanCoins = _scene.DonateCoinsToClan;
+        _hud.CosmeticsChanged = _scene.ShowCosmeticsHidden;
         _hud.SendCastleOwner = _scene.SendCastleOwner;
         _hud.SendBellatraClan = _scene.SendBellatraClan;
         _hud.SendAchievementsRequest = _scene.SendAchievementsRequest;
@@ -231,6 +232,7 @@ public sealed class GameplayScreen : GameScreen
         _hud.PremiumPaused = field is not null && PristonTale.Simulation.Items.Usable.PremiumTimers.PausesInField(field.FieldCode);
         _hud.NextBoss = _scene.NextBoss;
         _hud.WorldBuffs = _scene.WorldBuffs;
+        _hud.CosmeticsHidden = _scene.CosmeticsHidden;
         _hud.AutoSkill = _scene.AutoSkill;
         _hud.BossSpots = _scene.BossSpots;
         _hud.SpawnSpots = _scene.SpawnSpots;
@@ -370,7 +372,20 @@ public sealed class GameplayScreen : GameScreen
     private bool Pressed(KeyboardState keyboard, Keys key) =>
         keyboard.IsKeyDown(key) && !_lastKeyboard.IsKeyDown(key);
 
-    public override bool HandleEscape() => _hud?.ClosePanel() == true;
+    public override bool HandleEscape()
+    {
+        if (_hud is null)
+        {
+            return true;
+        }
+
+        if (!_hud.ClosePanel())
+        {
+            _hud.OpenSettings();
+        }
+
+        return true;
+    }
 
     // The scene clears its hovered entity while the HUD has the pointer, so windows show the arrow unless the HUD imposes
     // one (a shop's mode, a dragged item).

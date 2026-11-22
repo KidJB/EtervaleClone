@@ -174,7 +174,7 @@ Commands match by exact, case-sensitive prefix in table order. Levels:
 | Moderator | `/field`, `/player_location` |
 | Operator | `/get_money`, `/AgingSetting` |
 | Administrator | `/easy_castle` |
-| Administrator | `/achievement`, `/init_premiumitem`, `/@rarity`, `/@get_perf`, `/@get`, `/@put_rarity`, `/@put_perf`, `/@put`, `/@coins`, `/@coinshop_reload`, `/@courier_reload`, `/@courier_reset <character> [all|daily|midnight|onetime|repeatable|weekly]`, `/@courier_new <id> <courier code> <monster id> <count> <experience> <min level> <max level> <name>`, `/@courier_set <id> <exp|gold|level|category|difficulty|enabled|count|cooldown|name> <value>`, `/@cabinet_reload`, `/@cabinet_set <look> <price|rarity|sources|enabled|description|token> <value>`, `/@cabinet_drop <token or brush> <monster code|boss> <chance per 10000, 0 removes>`, `/@cabinet_unlock <online name> <look> [source]`, `/@cabinet_reset <online name>`, `/@deal_new <look> <start bid> <bid step> <hours> [min level]`, `/@deal_end <id>`, `/GiveMeExp!`, `/expup`, `/GiveMeMoney!`, `/reload_settings`, `/setting`, `/set_absorb` |
+| Administrator | `/achievement`, `/init_premiumitem`, `/@rarity`, `/@get_perf`, `/@get`, `/@put_rarity`, `/@put_perf`, `/@put`, `/@coins`, `/@coinshop_reload`, `/@courier_reload`, `/@courier_reset <character> [all|daily|midnight|onetime|repeatable|weekly]`, `/@courier_new <id> <courier code> <monster id> <count> <experience> <min level> <max level> <name>`, `/@courier_set <id> <exp|gold|level|category|difficulty|enabled|count|cooldown|name> <value>`, `/@cabinet_reload`, `/@cabinet_set <look> <price|rarity|sources|enabled|description|token> <value>`, `/@cabinet_drop <token or brush> <monster code|boss> <chance per 10000, 0 removes>`, `/@cabinet_unlock <online name> <look> [source]`, `/@cabinet_reset <online name>`, `/@deal_new <look> <start bid> <bid step> <hours> [min level]`, `/@deal_end <id>`, `/GiveMeExp!`, `/expup`, `/GiveMeMoney!`, `/unlocktier`, `/reload_settings`, `/setting`, `/set_absorb` |
 
 - Information: local time, boss minute, the issuer's force orb and premium timers, gold spent per sink, carried potions,
   connection packet counts, players and monsters, a player by entity id, account or name, damage range, session.
@@ -206,6 +206,9 @@ Commands match by exact, case-sensitive prefix in table order. Levels:
   the fountain's minute, `/set_castle_tax` makes the next tax and the chosen clan skill take effect now,
   `/easy_castle` leaves every standing defender of the running siege one life.
 - Experience: `/GiveMeExp! level` raises to a level, `/expup n` adds n points as a monster's award would.
+- Class tier (Administrator only): `/unlocktier [1..5]` uses visible tier numbers; a requested tier
+  raises the level to its range end when necessary and learns eligible skills at rank 1. Without an
+  argument, the tier is inferred from the current level. See [GM tier testing](GM_TIER_TESTING.md).
 - `server.test` or `server.debug` (settings table) lower `/GiveMeExp!`, `/expup` and `/GiveMeMoney!` to Guide; on a debug
   server `/` and an item code drops that item; `gm.potion_monitor` (default on) enables `/get_potion`.
 - `/reload_settings` reads the settings table at once and lists the refused values; `/setting name` shows a row and its

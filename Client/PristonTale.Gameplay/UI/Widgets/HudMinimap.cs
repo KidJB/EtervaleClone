@@ -67,7 +67,7 @@ public sealed class HudMinimap
     public const string QuestFinishIcon = Folder + "Quest-Finish.png";
     public static readonly string[] Art =
     [
-        BossAliveIcon, BossWaitingIcon, LargeBorder, SpawnIcon, PlayerIcon, FriendlyIcon, NpcIcon, WarpIcon, WarehouseIcon, CraftIcon, SkillMasterIcon,
+        BossAliveIcon, BossWaitingIcon, BossPlaqueArt, LargeBorder, SpawnIcon, PlayerIcon, FriendlyIcon, NpcIcon, WarpIcon, WarehouseIcon, CraftIcon, SkillMasterIcon,
         SupplyIcon, SmithIcon, MagicIcon, QuestStartIcon, QuestRepeatableIcon, QuestProgressIcon, QuestFinishIcon
     ];
 
@@ -83,9 +83,6 @@ public sealed class HudMinimap
     private string _fieldMap;
     private string _fieldTitle;
     private string _neighbourMap;
-    // A sharper map of the same area (HudArt.FieldMapHd), drawn instead when the file exists.
-    private string _fieldMapHd;
-    private string _neighbourMapHd;
     private float _viewSize = InitialViewSize;
     private const int TitleHeight = 16;
     // A press on the map moves it once the pointer has gone this far, so a click stays a click.
@@ -99,6 +96,9 @@ public sealed class HudMinimap
     public const string BossAliveIcon = "Hud/Minimap/boss-active.png";
     public const string BossWaitingIcon = "Hud/Minimap/boss-inactive.png";
     private const int BossIconSize = 16;
+    public const string BossPlaqueArt = "Hud/Minimap/nextboss.png";
+    private const int BossPlaqueWidth = 130;
+    private const int BossPlaqueHeight = 23;
     private Point _offset;
     private Point _pressedAt;
     private Point _pressedOffset;
@@ -323,38 +323,31 @@ public sealed class HudMinimap
             var fieldMap = world.FieldId is null ? null : HudArt.FieldMap(world.FieldId);
             var fieldTitle = world.FieldId is null ? null : HudArt.FieldTitle(world.FieldId);
             var neighbourMap = neighbour is null ? null : HudArt.FieldMap(neighbour);
-            var fieldMapHd = world.FieldId is null ? null : HudArt.FieldMapHd(world.FieldId);
-            var neighbourMapHd = neighbour is null ? null : HudArt.FieldMapHd(neighbour);
             ReleaseUnless(sprites, _fieldMap, fieldMap, neighbourMap);
             ReleaseUnless(sprites, _fieldTitle, fieldTitle, null);
             ReleaseUnless(sprites, _neighbourMap, fieldMap, neighbourMap);
-            ReleaseUnless(sprites, _fieldMapHd, fieldMapHd, neighbourMapHd);
-            ReleaseUnless(sprites, _neighbourMapHd, fieldMapHd, neighbourMapHd);
             _field = world.FieldId;
             _neighbour = neighbour;
             _fieldMap = fieldMap;
             _fieldTitle = fieldTitle;
             _neighbourMap = neighbourMap;
-            _fieldMapHd = fieldMapHd;
-            _neighbourMapHd = neighbourMapHd;
             _pan = Vector2.Zero;
             Request(sprites, _fieldMap);
             Request(sprites, _fieldTitle);
             Request(sprites, _neighbourMap);
-            Request(sprites, _fieldMapHd);
-            Request(sprites, _neighbourMapHd);
         }
 
         _viewSize = EaseViewSize(_viewSize, ViewSize(world.Underground), elapsedSeconds);
     }
 
-    // The next boss line on a dark strip over the field title.
+    // The next boss line on its plaque (BossPlaqueArt, 130x23) above the field title, its left edge 5 pixels out of the map and
+    // the line 20 pixels in, as the RPT interface places it.
     public void DrawBossTime(HudPainter painter, HudLayout layout, string line)
     {
         var area = Area(layout);
-        var strip = new Rectangle(area.X - 4, Math.Max(0, area.Y - TitleHeight - 2), area.Width + 8, TitleHeight);
-        painter.ColorBox(strip, 0, 0, 0, 160);
-        painter.TextCentered(line, strip.X, strip.Right, strip.Y - 1, BossColor);
+        var plaque = new Rectangle(area.X - 5, Math.Max(0, area.Y - BossPlaqueHeight - 4), BossPlaqueWidth, BossPlaqueHeight);
+        painter.Stretch(BossPlaqueArt, plaque);
+        painter.Text(line, plaque.X + 20, plaque.Y + 4, BossColor);
     }
 
     // The marker the pointer is over, nearest first; -1 for none.
@@ -418,12 +411,12 @@ public sealed class HudMinimap
         painter.ColorBox(box, 0, 0, 0, 128);
         if (_neighbour is not null)
         {
-            DrawMap(painter, box, _neighbourMapHd, _neighbourMap, world.NeighbourMapRectangle, view);
+            DrawMap(painter, box, _neighbourMap, world.NeighbourMapRectangle, view);
         }
 
         if (_field is not null)
         {
-            DrawMap(painter, box, _fieldMapHd, _fieldMap, world.MapRectangle, view);
+            DrawMap(painter, box, _fieldMap, world.MapRectangle, view);
         }
 
         var center = new Vector2(box.X + Size / 2, box.Y + Size / 2);
@@ -502,13 +495,8 @@ public sealed class HudMinimap
 
     private Vector3 ViewCenter(Vector3 player) => new(player.X + _pan.X, player.Y, player.Z + _pan.Y);
 
-    private void DrawMap(HudPainter painter, Rectangle box, string hdPath, string path, PristonIntRectangle rectangle, Vector3 player)
+    private void DrawMap(HudPainter painter, Rectangle box, string path, PristonIntRectangle rectangle, Vector3 player)
     {
-        if (hdPath is not null && painter.Texture(hdPath) is not null)
-        {
-            path = hdPath;
-        }
-
         var map = painter.Texture(path);
         if (map is null || !MapRegion(rectangle, player, ViewRadius, Size, out var source, out var destination))
         {

@@ -121,3 +121,7 @@ monogame/runtime/work/
 monogame/runtime/bin/
 monogame/pipeline/bin/
 data/worldbuffs.json
+
+# Python scripts and test bytecode
+__pycache__/
+*.py[cod]

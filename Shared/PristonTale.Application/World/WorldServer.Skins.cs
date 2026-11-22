@@ -21,7 +21,22 @@ public sealed partial class WorldServer
                 return false;
             }
 
-            connection.Player.Character.Skins = skins;
+            // Applying looks keeps the choice to hide them.
+            connection.Player.Character.Skins = skins with { Hidden = connection.Player.Character.Skins.Hidden };
+            return true;
+        });
+
+    // The costume button: the character shows its real gear to everyone (hidden) or its looks and costume again.
+    public Task<bool> SetCosmeticsHiddenAsync(ulong entityId, bool hidden) =>
+        EnqueueAsync(entityId, () =>
+        {
+            if (!_connections.TryGetValue(entityId, out var connection))
+            {
+                return false;
+            }
+
+            var character = connection.Player.Character;
+            character.Skins = character.Skins with { Hidden = hidden };
             return true;
         });
 

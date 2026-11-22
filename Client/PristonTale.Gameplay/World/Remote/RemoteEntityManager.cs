@@ -519,9 +519,9 @@ public sealed partial class RemoteEntityManager
         }
     }
 
-    private const float MonsterPickRadius = 60f;
-    private const float PlayerPickRadius = 40f;
-    private const float NpcPickRadius = 40f;
+    private const float MonsterPickRadius = 30f;
+    private const float PlayerPickRadius = 23f;
+    private const float NpcPickRadius = 23f;
 
     private static float PickRadius(EntityKind kind) => kind switch
     {
@@ -603,7 +603,7 @@ public sealed partial class RemoteEntityManager
             var radius = PickRadius(entity.Kind);
             if (radius <= 0f)
                 continue;
-            var hit = CursorPicking.IntersectSphere(ray, entity.DrawnPosition, radius);
+            var hit = CursorPicking.IntersectActor(ray, entity.DrawnPosition, radius);
             if (hit is null)
                 continue;
             if (hit.Value < bestDistance)
@@ -856,7 +856,8 @@ public sealed partial class RemoteEntityManager
             CharacterHead.Apply(defaults, appearance.Class, appearance.Tier, appearance.FaceIndex, appearance.HairIndex),
             appearance.Class, appearance.BigHead);
         uint jobMask = _classRegistry.Get(appearance.Class).Definition.MotionJobMask;
-        return EquipmentVisuals.Apply(head, appearance.ArmorKey, appearance.WeaponKey, appearance.OffHandKey, appearance.InVillage, jobMask, appearance.HeldWeaponKey);
+        return EquipmentVisuals.Apply(head, appearance.ArmorKey, appearance.WeaponKey, appearance.OffHandKey, appearance.InVillage, jobMask, appearance.HeldWeaponKey,
+            appearance.CostumeKey);
     }
 
     private bool TryResolveVisuals(PlayerClass playerClass, out CharacterVisualSet visuals)

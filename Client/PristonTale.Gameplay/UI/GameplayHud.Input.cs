@@ -136,6 +136,12 @@ public sealed partial class GameplayHud
             _inventory.ToggleBagPage();
         }
 
+        // T: show the real gear instead of the looks and costume, or the looks again, as the costume button does.
+        if (Pressed(keyboard, Keys.T))
+        {
+            ToggleCosmetics();
+        }
+
         if (Pressed(keyboard, Keys.P) && _skillSlide.Open)
         {
             _skills.TurnPageByKey();
@@ -342,7 +348,7 @@ public sealed partial class GameplayHud
 
         if (_skills.TrainingPending)
         {
-            _skills.HandleTrainingClick(PanelOrigin(layout, _skillSlide), pointer, state, _skillMaster, _progression);
+            _skills.HandleTrainingClick(PanelOrigin(layout, _skillSlide), pointer, state, _skillMaster, _progression, _notice.Show);
             return;
         }
 
@@ -554,7 +560,7 @@ public sealed partial class GameplayHud
                 return;
             }
 
-            _skills.HandleTrainingClick(origin, pointer, state, _skillMaster, _progression);
+            _skills.HandleTrainingClick(origin, pointer, state, _skillMaster, _progression, _notice.Show);
         }
     }
 

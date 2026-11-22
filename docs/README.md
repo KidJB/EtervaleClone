@@ -26,6 +26,7 @@ where to look. Setup, build and run commands are in the root [README.md](../READ
 | [special-items.md](special-items.md) | Usable items end to end: premium timers, pets, travel items, scrolls, force orbs, firecrackers, item HUD |
 | [coin-shop.md](coin-shop.md) | Account coins and the coin shop: catalog file, prices, purchase storage, messages, window |
 | [markets.md](markets.md) | The Character Market and the Marketplace NPC: listings, sales, live shop search, settings, windows |
+| [costumes.md](costumes.md) | Cosmetic wardrobe, gender policy, body mappings and inventory presentation |
 | [chat-and-gm.md](chat-and-gm.md) | Chat end to end: window, bubbles, routing, whispers, notices; game-master levels, commands and audit |
 | [application.md](application.md) | `Shared/PristonTale.Application`: use cases, sessions, `WorldServer`, tick, transactions, NPC services |
 | [server.md](server.md) | `Server/PristonTale.Server`: startup, hosted services, TCP edge, settings |
@@ -34,6 +35,7 @@ where to look. Setup, build and run commands are in the root [README.md](../READ
 | [world-import.md](world-import.md) | `tools/PristonTale.WorldImport`: authored data formats, parsers, catalog import, verify |
 | [client.md](client.md) | Client app, screens, game scene, HUD and windows, remote actors, audio, client networking |
 | [rendering.md](rendering.md) | `Client/PristonTale.Engine3D`: original formats, renderer passes, lighting, shadows, post-processing |
+| [modern-forest.md](modern-forest.md) | Experimental 99-tree visual overlay for fore-1, staging and rollback |
 | [shaders.md](shaders.md) | Shader library under `Client/PristonTale/Content/Shaders` |
 | [effects.md](effects.md) | `Client/PristonTale.Effects` and the VFX JSON format |
 | [client-settings.md](client-settings.md) | Every `client-settings.json` field, presets and validation |

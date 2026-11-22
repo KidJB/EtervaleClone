@@ -18,6 +18,7 @@ public sealed class CharacterAppService
     private readonly CharacterClassRegistry _classes;
     private readonly WorldDataHolder _worldData;
     private readonly WorldCatalog _world;
+    private readonly CostumeCatalog _costumes;
 
     public CharacterAppService(
         ISessionRegistry sessions,
@@ -26,7 +27,7 @@ public sealed class CharacterAppService
         WorldDataHolder worldData,
         WorldCatalog world,
         Persistence.Abstractions.Clans.IClanRepository? clans = null,
-        Persistence.Abstractions.Markets.ICharacterMarketRepository? market = null)
+        Persistence.Abstractions.Markets.ICharacterMarketRepository? market = null, CostumeCatalog? costumes = null)
     {
         _market = market;
         _clans = clans;
@@ -35,6 +36,7 @@ public sealed class CharacterAppService
         _classes = classes;
         _worldData = worldData;
         _world = world;
+        _costumes = costumes ?? CostumeCatalog.Empty;
     }
 
     public async Task<IReadOnlyList<CharacterSummary>> ListCharactersAsync(string sessionToken, CancellationToken ct = default)
@@ -151,6 +153,20 @@ public sealed class CharacterAppService
         {
         }
 
+        var costumeKey = "";
+        try
+        {
+            var inventory = CharacterStateCodec.ReadInventory(character.Inventory);
+            var cosmetic = inventory.Items.FirstOrDefault(item => item.InstanceId != Guid.Empty
+                && item.InstanceId == inventory.CostumeItemId && !item.Slot.HasValue && item.Belt is null
+                && item.QuestBox is null && !item.Held);
+            if (cosmetic is not null && _worldData.Current.Items.TryGet(cosmetic.Code, out var definition)
+                && _costumes.Contains(definition.CatalogKey))
+                costumeKey = definition.CatalogKey;
+        }
+        catch (Exception exception) when (exception is InvalidDataException or System.Text.Json.JsonException
+            or ArgumentException or InvalidOperationException or KeyNotFoundException) { }
+
         var inVillage = _world.TryGetFieldByCode(character.FieldId, out var field) && field.State == FieldState.Village;
         return new CharacterSummary(
             character.Name,
@@ -162,7 +178,7 @@ public sealed class CharacterAppService
             armorKey,
             weaponKey,
             offHandKey,
-            inVillage);
+            inVillage) { CostumeKey = costumeKey };
     }
 
     private (string Armor, string Weapon, string OffHand) VisualKeys(CharacterRecord character)

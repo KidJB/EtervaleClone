@@ -41,9 +41,12 @@ public sealed record SkinCatalogPacket(Guid OperationId, long Balance, bool Last
 {
     public string TwoHand { get; init; } = "";
 
+    // The character shows its real gear (SkinSet.Hidden).
+    public bool Hidden { get; init; }
+
     private const int MinimumSize = 8 + WireHeader.Size + 16 + 8 + 4 + 2 * 5 + 2;
     private const int ArticleMaxSize = 2 + SkinWire.MaxKeyBytes + 2 + SkinWire.MaxNameBytes + 1 + 4 + 4 + 1 + 3 + 2 + SkinWire.MaxDescriptionBytes;
-    public const int MaxSize = MinimumSize + 5 * SkinWire.MaxKeyBytes + SkinWire.MaxArticles * ArticleMaxSize;
+    public const int MaxSize = MinimumSize + 5 * SkinWire.MaxKeyBytes + 1 + SkinWire.MaxArticles * ArticleMaxSize;
 
     public int Write(Span<byte> destination)
     {
@@ -58,6 +61,7 @@ public sealed record SkinCatalogPacket(Guid OperationId, long Balance, bool Last
         Utf8Text.Write(ref writer, OffHand, SkinWire.MaxKeyBytes);
         Utf8Text.Write(ref writer, Hair, SkinWire.MaxKeyBytes);
         Utf8Text.Write(ref writer, TwoHand, SkinWire.MaxKeyBytes);
+        writer.Byte(Hidden ? (byte)1 : (byte)0);
         writer.UInt16((ushort)Articles.Count);
         foreach (var article in Articles)
         {
@@ -89,6 +93,7 @@ public sealed record SkinCatalogPacket(Guid OperationId, long Balance, bool Last
         var offHand = Utf8Text.Read(ref reader, SkinWire.MaxKeyBytes, "Skin catalog");
         var hair = Utf8Text.Read(ref reader, SkinWire.MaxKeyBytes, "Skin catalog");
         var twoHand = Utf8Text.Read(ref reader, SkinWire.MaxKeyBytes, "Skin catalog");
+        var hidden = reader.Byte() != 0;
         var count = reader.UInt16();
         if (count > SkinWire.MaxArticles)
         {
@@ -116,7 +121,7 @@ public sealed record SkinCatalogPacket(Guid OperationId, long Balance, bool Last
             };
         }
 
-        return new SkinCatalogPacket(operation, balance, last, weapon, armor, offHand, hair, articles) { TwoHand = twoHand };
+        return new SkinCatalogPacket(operation, balance, last, weapon, armor, offHand, hair, articles) { TwoHand = twoHand, Hidden = hidden };
     }
 }
 

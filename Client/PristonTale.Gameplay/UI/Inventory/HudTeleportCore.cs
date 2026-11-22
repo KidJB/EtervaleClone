@@ -51,7 +51,6 @@ public sealed class HudTeleportCore(HudSprites sprites)
     private int _bossScroll;
     private TeleportCoreDestination _chosen;
     private string _preview;
-    private string _previewHd;
     private string _levelLine;
 
     public bool IsOpen { get; private set; }
@@ -203,7 +202,7 @@ public sealed class HudTeleportCore(HudSprites sprites)
         }
 
         var preview = Preview;
-        var art = _previewHd is not null && painter.Texture(_previewHd) is not null ? _previewHd : _preview;
+        var art = _preview;
         if (art is not null && painter.Texture(art) is { } map)
         {
             var scale = MathF.Min((float)preview.Width / map.Width, (float)preview.Height / map.Height);
@@ -257,7 +256,7 @@ public sealed class HudTeleportCore(HudSprites sprites)
         painter.TextCentered(ClientText.Get(TagKeys[(int)tag]), box.X, box.Right, box.Y - 2, Color.White);
     }
 
-    // Picking a destination shows its map: the HD render when there is one, the original map otherwise.
+    // Picking a destination shows its map.
     private void Choose(TeleportCoreDestination destination)
     {
         _chosen = destination;
@@ -266,9 +265,7 @@ public sealed class HudTeleportCore(HudSprites sprites)
         if (Fields[destination.Index] is { } field)
         {
             _preview = HudArt.FieldMap(field.Id);
-            _previewHd = HudArt.FieldMapHd(field.Id);
             _sprites.Request(_preview);
-            _sprites.Request(_previewHd);
         }
     }
 
@@ -277,9 +274,7 @@ public sealed class HudTeleportCore(HudSprites sprites)
         if (_preview is not null)
         {
             _sprites.Release(_preview);
-            _sprites.Release(_previewHd);
             _preview = null;
-            _previewHd = null;
         }
     }
 

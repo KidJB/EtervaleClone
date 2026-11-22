@@ -56,7 +56,7 @@ dotnet run --project tools/PristonTale.AssetDump -c Release --no-build -- --expo
 
 | Form | Behavior |
 | --- | --- |
-| `<asset-path> [flags]` | `.inx` index dump; `.bmp`/`.tga` texture stats; other files by header (`SMD Stage data`/`SMD Model data`) |
+| `<asset-path> [flags]` | `.inx` index dump; `.bmp`/`.tga` texture stats; `.smd`/`.smb` files by ASCII stage/model signature or the 24-byte binary model signature |
 | `--export-field-textures <asset-root> <field-id> <output-dir>` | Exactly four arguments; see below |
 | `--pack-video <image-dir> <fps> <output.etv>` | Packs the directory's JPEG/PNG images of one size, in name order, into a frame video (format in `FrameVideo`); exit 1 on a bad rate, mixed sizes or I/O errors |
 | no arguments | Usage, exit 1; `-h`/`--help` prints usage, exit 0 |
@@ -74,6 +74,10 @@ Flags (case-insensitive; flags that do not apply to the asset kind are ignored):
 | `--normals` | | Authored normal stats per object (zero count, average length, samples) | |
 | `--motions` | | | Usable motion slots (slot ≥ 10, state ≠ 0, end > start) with raw and resolved event frames |
 | `--full` | All of the above | All of the above | All of the above |
+
+Binary-header `.smd` and `.smb` models are now recognized by the inspector, using the same header signature the
+engine already accepts. `--objects` shows their geometry and whether their objects have animation keys. This is
+inspection only; it does not convert files or generate `.inx` motion indexes.
 
 Summaries: a stage prints counts, light types (night, lens, dynamic), whether each two-layer material's faces carry a
 second UV set, bounds and material aggregates; a model prints object/material counts, animation, bounds, totals and
@@ -419,6 +423,15 @@ python3 tools/ui/build_clan_warehouse.py assets/Hud/ClanWarehouse
 ```
 
 Writes the `cw_*.png` files into the folder, replacing those it makes. Run it again after changing the window's layout.
+
+## Minimap boss plaque (`tools/ui/build_minimap_plaque.py`)
+
+Draws the plaque the next boss countdown sits on above the minimap (`HudMinimap.BossPlaqueArt`, 130x23) with the party
+finder's drawing helpers, without text. Needs Python 3 with Pillow.
+
+```bash
+python3 tools/ui/build_minimap_plaque.py assets/Hud/Minimap
+```
 
 ## Blender scripts (`3d_glb/blender/`)
 

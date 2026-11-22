@@ -28,7 +28,7 @@ internal sealed partial class ClientSession
 
             offset += count;
             var packet = new SkinCatalogPacket(request.OperationId, view.Balance, offset >= view.Articles.Count, view.Skins.Weapon, view.Skins.Armor,
-                view.Skins.OffHand, view.Skins.Hair, part) { TwoHand = view.Skins.TwoHand };
+                view.Skins.OffHand, view.Skins.Hair, part) { TwoHand = view.Skins.TwoHand, Hidden = view.Skins.Hidden };
             SendLarge(packet.Write, SkinCatalogPacket.MaxSize);
         }
         while (offset < view.Articles.Count);

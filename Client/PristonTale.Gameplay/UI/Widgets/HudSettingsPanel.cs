@@ -32,7 +32,7 @@ internal sealed class HudSettingsPanel
     private const int DropArrowWidth = 26;
     private const int DropWidth = 110;
     private const int DropHeight = 26;
-    private const int RowCount = 26;
+    private const int RowCount = 27;
     private const int Bar = -1;
 
     private const string Folder = "Hud/Settings/";
@@ -76,7 +76,7 @@ internal sealed class HudSettingsPanel
         [Heading(ScreenHeading), new(0), new(1), new(2), new(3), new(4), new(7), new(8),
             Heading(GraphicsHeading), new(11), new(9), new(10), new(12), new(13), new(16), new(17), new(18), new(22), new(23), new(24)],
         [Heading(MusicHeading), new(5), Heading(SoundHeading), new(6)],
-        [Heading(GeneralHeading), new(20), new(19)],
+        [Heading(GeneralHeading), new(20), new(19), new(26)],
         [Heading(TargetHeading), new(14), new(21), Heading(PersonalHeading), new(15), new(25)]
     ];
 
@@ -252,6 +252,7 @@ internal sealed class HudSettingsPanel
             22 => current with { DepthOfField = !current.DepthOfField },
             23 => current with { RenderScale = RenderScales[(Array.IndexOf(RenderScales, current.RenderScale) + direction + RenderScales.Length) % RenderScales.Length] },
             24 => current with { DynamicResolutionFps = Cycle(DynamicResolutionTargets, current.DynamicResolutionFps, direction) },
+            26 => current with { CameraSceneryCollision = !current.CameraSceneryCollision },
         _ => current
     };
 
@@ -479,6 +480,7 @@ internal sealed class HudSettingsPanel
         labels[24] = settings.DynamicResolutionFps == 0
             ? ClientText.Get("Settings.DynamicResolutionOff")
             : ClientText.Format("Settings.DynamicResolution", settings.DynamicResolutionFps);
+        labels[26] = ClientText.Get(settings.CameraSceneryCollision ? "Settings.CameraCollisionOn" : "Settings.CameraCollisionOff");
     }
 
     private static string NextLanguage(string language, int direction)

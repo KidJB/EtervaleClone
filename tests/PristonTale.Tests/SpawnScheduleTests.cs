@@ -102,8 +102,10 @@ internal static class SpawnScheduleTests
         Assert.True(read == new PristonTale.Protocol.Packets.BossTimePacket("Valento", 3725, true), "the boss time did not survive the wire");
         var line = new PristonTale.Gameplay.UI.Widgets.HudBossTime();
         line.Receive(new PristonTale.Client.Net.Presence.BossTimeInfo("Valento", 3725, true), 1000);
-        Assert.True(line.Text(1000) == "Next boss: Valento 01:02:05" && line.Text(3500) == "Next boss: Valento 01:02:03", "the countdown did not run");
-        Assert.True(line.Text(1000 + 3725_000) == "Next boss: Valento now", "a due pass did not read now");
+        Assert.True(line.Text(1000) == "Next Boss: 01:02:05" && line.Text(3500) == "Next Boss: 01:02:03", "the countdown did not run");
+        Assert.True(line.Text(1000 + 3725_000) == "", "a due pass still showed");
+        line.Receive(new PristonTale.Client.Net.Presence.BossTimeInfo("Valento", 90_000, false), 2000);
+        Assert.True(line.Text(2000) == "", "tomorrow's pass showed a countdown");
         line.Receive(new PristonTale.Client.Net.Presence.BossTimeInfo("", 0, false), 2000);
         Assert.True(line.Text(2000) == "", "a field without bosses showed a line");
         return Task.CompletedTask;

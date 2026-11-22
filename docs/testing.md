@@ -193,7 +193,7 @@ when reading those assets is authorized. GPU probes:
 | --- | --- | --- |
 | `--verify-shaders <content>` | yes | Draws every technique into float targets and compares with C# references (see below) |
 | `--benchmark-render <assets> <content> <report.json> <field-id> <settings.json> [options]` | yes | Frame timing report plus `<report>.png` |
-| `--render-minimaps <assets> <content> <output-dir> <field-id>...` | yes | Each field's minimap (`<field-id>.tga` and a `.png`): the stage and its objects from straight above at noon, framed by the stage's authored map rectangle, 2048 pixels on the longer side (drawn in 512-pixel tiles at twice that and averaged), black outside the stage. Copy the PNG into `assets/Field/mapHD` (the HUD minimap draws it over the original map, `HudArt.FieldMapHd`) |
+| `--render-minimaps <assets> <content> <output-dir> <field-id>...` | yes | Each field's minimap (`<field-id>.tga` and a `.png`): the stage and its objects from straight above at noon, framed by the stage's authored map rectangle, 2048 pixels on the longer side (drawn in 512-pixel tiles at twice that and averaged), black outside the stage. The HUD draws the original `Field/map` art; these renders are for reference |
 | `--check-look <mode> <assets> <content> <output-dir>` | yes | Fails on look regressions; `mode` is `charselect`, `actor`, `opening`, `scenery` or `shade` |
 | `--profile-stream <assets> <content>` | yes | Incremental stage upload with the game's policy at a fixed 60 Hz |
 | `--profile-stream-baseline <assets> <content>` | yes | Same with an 8-step upload limit for comparison |

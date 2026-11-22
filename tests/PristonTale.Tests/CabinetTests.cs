@@ -222,6 +222,19 @@ internal static class CabinetTests
             Assert.True((await fixture.RunAsync(skins.ApplyAsync(fighter.Session.SessionToken, SkinSet.None))).Status == SkinStatus.Ok && character.Derived == before,
                 "removing a look changed a stat");
             Assert.True(SkinRules.Look(Armor, Robe) == Armor && SkinRules.Look("WA101", "DS101") == "WA101", "a look of another kind showed over gear");
+
+            // The costume button: the real gear shows to everyone; applying looks keeps the choice; the button shows them again.
+            Assert.True(await fixture.RunAsync(fixture.World.SetCosmeticsHiddenAsync(fighter.Session.EntityId, true)) && character.Skins.Hidden
+                && character.Skins.Shown() == SkinSet.None, "hiding the looks");
+            Assert.True((await fixture.RunAsync(skins.ApplyAsync(fighter.Session.SessionToken, new SkinSet(Armor: Armor)))).Status == SkinStatus.Ok
+                && character.Skins is { Hidden: true, Armor: Armor } && SkinRules.Look(ArmorItem.CatalogKey, character.Skins.Shown().Armor) == ArmorItem.CatalogKey,
+                "applying a look showed it while the looks are hidden");
+            Assert.True(await fixture.RunAsync(fixture.World.SetCosmeticsHiddenAsync(fighter.Session.EntityId, false))
+                && character.Skins.Shown().Armor == Armor, "the looks did not show again");
+            Assert.True(SkinRules.TryParseCosmetics(SkinRules.HideCommand, out var hide) && hide && SkinRules.TryParseCosmetics(SkinRules.ShowCommand, out var show)
+                && !show && !SkinRules.TryParseCosmetics("/cosmetics", out _), "the costume button's commands");
+            Assert.True(PristonTale.Persistence.Abstractions.Characters.SkinCodec.Restore(PristonTale.Persistence.Abstractions.Characters.SkinCodec.Capture(new SkinSet(Hidden: true))).Hidden,
+                "the hidden looks were not saved");
         }
         finally
         {

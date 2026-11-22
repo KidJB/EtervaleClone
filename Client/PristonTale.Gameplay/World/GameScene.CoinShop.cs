@@ -59,7 +59,7 @@ public sealed partial class GameScene
         var result = await channel.ApplySkinsAsync(skins, _presenceCts.Token);
         if (result.Status == Simulation.Characters.SkinStatus.Ok && _equipmentPresentation is { } presentation)
         {
-            presentation.Skins = skins;
+            presentation.Skins = skins with { Hidden = presentation.Skins.Hidden };
         }
 
         return result;
@@ -73,6 +73,18 @@ public sealed partial class GameScene
 
     public Task<(Simulation.Characters.CabinetBidStatus Status, long Balance)> CabinetBidAsync(long dealId, long amount) =>
         _playChannel is { } channel ? channel.CabinetBidAsync(dealId, amount, _presenceCts.Token) : Task.FromResult((Simulation.Characters.CabinetBidStatus.Rejected, 0L));
+
+    // Whether the own character shows its real gear (SkinSet.Hidden).
+    public bool CosmeticsHidden => _equipmentPresentation?.Skins.Hidden ?? false;
+
+    // The own model shows the real gear, or its looks again, before the server's next description.
+    public void ShowCosmeticsHidden(bool hidden)
+    {
+        if (_equipmentPresentation is { } presentation)
+        {
+            presentation.Skins = presentation.Skins with { Hidden = hidden };
+        }
+    }
 
     // The looks the character came in with, read once it stands in the world.
     private async Task LoadSkinsAsync(Remote.PlayerEquipmentPresentation presentation)

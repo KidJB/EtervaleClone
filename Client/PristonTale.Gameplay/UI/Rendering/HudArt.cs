@@ -79,6 +79,7 @@ public static class HudArt
     // (A, B) and the close button.
     public static readonly string[] PageHints = [Sin + "Inven/InfoBox/ButtonItemA.bmp", Sin + "Inven/InfoBox/ButtonItemB.bmp"];
     public static readonly string[] PairHints = [Sin + "Inven/InfoBox/ButtonA.bmp", Sin + "Inven/InfoBox/ButtonB.bmp"];
+    public const string CostumeHint = Sin + "Inven/InfoBox/Costume.bmp";
     public const string CloseHint = Sin + "Inven/InfoBox/ButtonExit.bmp";
 
     // The special item box: its button closed and open (or under the pointer), the 44-pixel box drawn for each of its
@@ -171,7 +172,7 @@ public static class HudArt
         SystemMenu, SystemSettings, SystemHelp, SystemExit, RestartMain, RestartField, RestartTown, RestartExit, SelectJobGray, SelectJob,
         .. MenuButtons, .. MenuButtonsDown, .. MenuInfo,
         SkillNormal, SkillWindow, SkillWindowSecond, SkillPageForward, SkillPageBack, SkillSelect, SkillGauge, SkillGaugeBack, SkillGaugePassive, SkillTraining, SkillTrainingTop, .. ShortKeys,
-        Inventory, PuzzleBoard, CoverLarge, CoverMiddle, CoverSmall, PotionBack, SideLeft, SideRight, .. PageHints, .. PairHints, CloseHint,
+        Inventory, PuzzleBoard, CoverLarge, CoverMiddle, CoverSmall, PotionBack, SideLeft, SideRight, .. PageHints, .. PairHints, CostumeHint, CloseHint,
         QuestBoxButton, QuestBoxButtonOpen, QuestBoxTile, QuestBoxHint, QuestBoxCloseHint, QuestBoxGlow,
         Status, StatusPoint, StatusArrow, StatusArrowDown,
         .. InfoBox,
@@ -211,7 +212,6 @@ public static class HudArt
     public static string FieldMap(string fieldId) => $"Field/map/{fieldId}.tga";
 
     // A higher-resolution map of the same area as FieldMap, when one was made for the field.
-    public static string FieldMapHd(string fieldId) => $"Field/mapHD/{fieldId}.png";
     public static string FieldTitle(string fieldId) => $"Field/title/{fieldId}t.tga";
 
     private static string[] Names(string a, string b, string c, string d, string e, string f, string suffix) =>

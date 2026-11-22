@@ -47,6 +47,7 @@ public sealed class WorldPlayer
     public int GameMasterLevel { get; init; }
 
     private readonly PlayerCharacter _character;
+    private readonly CostumeCatalog _costumes;
     private bool _inVillage;
 
     // The client owns locomotion and reports it with MovementReport. Reports spend a distance budget that refills at
@@ -264,7 +265,7 @@ public sealed class WorldPlayer
         _ => RegenerationPosture.Acting
     };
 
-    public WorldPlayer(ulong entityId, Vector3 position, PlayerCharacter character, bool inVillage, PlayerAppearanceView appearance)
+    public WorldPlayer(ulong entityId, Vector3 position, PlayerCharacter character, bool inVillage, PlayerAppearanceView appearance, CostumeCatalog? costumes = null)
     {
         if (!WorldPosition.IsValid(position))
         {
@@ -274,6 +275,7 @@ public sealed class WorldPlayer
         EntityId = entityId;
         Position = position;
         _character = character;
+        _costumes = costumes ?? CostumeCatalog.Empty;
         FlinchMs = MotionTiming.DurationMs(PlayerMotionFallback.GetClip(character.Class.Class, MotionCode.Damage).Frames, MotionCodes.DamageAndEatRate);
         _inVillage = inVillage;
         _appearance = appearance;
@@ -376,13 +378,14 @@ public sealed class WorldPlayer
     // Built on every read from the equipment and premium state: read InVillage for the flag alone.
     public PlayerAppearanceView Appearance => _appearance with
     {
-        WeaponKey = SkinRules.WeaponLook(_character.GetEquipped(EquipmentSlot.Weapon)?.Definition.CatalogKey ?? "", _character.Skins),
-        ArmorKey = SkinRules.Look(_character.GetEquipped(EquipmentSlot.Armor)?.Definition.CatalogKey ?? "", _character.Skins.Armor),
-        OffHandKey = SkinRules.Look(_character.GetEquipped(EquipmentSlot.OffHand)?.Definition.CatalogKey ?? "", _character.Skins.OffHand),
+        WeaponKey = SkinRules.WeaponLook(_character.GetEquipped(EquipmentSlot.Weapon)?.Definition.CatalogKey ?? "", _character.Skins.Shown()),
+        ArmorKey = SkinRules.Look(_character.GetEquipped(EquipmentSlot.Armor)?.Definition.CatalogKey ?? "", _character.Skins.Shown().Armor),
+        CostumeKey = _character.Skins.Hidden ? "" : _character.ActiveCostumeKey(_costumes),
+        OffHandKey = SkinRules.Look(_character.GetEquipped(EquipmentSlot.OffHand)?.Definition.CatalogKey ?? "", _character.Skins.Shown().OffHand),
         WeaponGlow = HeldItemGlow.For(_character.GetEquipped(EquipmentSlot.Weapon)),
         OffHandGlow = HeldItemGlow.For(_character.GetEquipped(EquipmentSlot.OffHand)),
         InVillage = _inVillage,
-        HairIndex = SkinRules.HairOf(_character.Skins.Hair) ?? _appearance.HairIndex,
+        HairIndex = SkinRules.HairOf(_character.Skins.Shown().Hair) ?? _appearance.HairIndex,
         Tier = _character.Tier,
         HelperPet = HelpPets.Active(_character) is { } pet ? HelpPets.KindOf(pet) : 0,
         Phoenix = _character.Premium.IsActive(PremiumEffectKind.PhoenixPet),

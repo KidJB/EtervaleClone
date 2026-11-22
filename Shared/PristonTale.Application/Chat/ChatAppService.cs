@@ -137,6 +137,20 @@ public sealed class ChatAppService
             return;
         }
 
+        if (Simulation.Characters.SkinRules.TryParseCosmetics(text, out var hideCosmetics))
+        {
+            try
+            {
+                await World.SetCosmeticsHiddenAsync(entityId, hideCosmetics);
+            }
+            catch (WorldBusyException)
+            {
+                // A full tick queue drops the command, as it drops a spoken line.
+            }
+
+            return;
+        }
+
         if (Simulation.Characters.Caravans.TryParse(text, out var caravanCommand, out var caravanName))
         {
             try

@@ -28,6 +28,7 @@ public sealed class SessionAppService
     private readonly WorldDataHolder _worldData;
     private readonly TimeProvider _clock;
     private readonly Persistence.Abstractions.Markets.ICharacterMarketRepository? _market;
+    private readonly CostumeCatalog _costumes;
 
     public SessionAppService(
         ISessionRegistry sessions,
@@ -38,7 +39,7 @@ public sealed class SessionAppService
         WorldServer? host = null,
         WorldDataHolder? worldData = null,
         TimeProvider? clock = null,
-        Persistence.Abstractions.Markets.ICharacterMarketRepository? market = null)
+        Persistence.Abstractions.Markets.ICharacterMarketRepository? market = null, CostumeCatalog? costumes = null)
     {
         _market = market;
         _sessions = sessions;
@@ -50,6 +51,7 @@ public sealed class SessionAppService
         _host = host;
         _worldData = worldData ?? new WorldDataHolder();
         _clock = clock ?? TimeProvider.System;
+        _costumes = costumes ?? CostumeCatalog.Empty;
     }
 
     public async Task<EnterWorldOutcome> EnterWorldAsync(string sessionToken, string characterName, CancellationToken ct = default)
@@ -102,7 +104,7 @@ public sealed class SessionAppService
             var character = new PlayerCharacter(_classes.Get((PlayerClass)record.JobCode), record.Name, record.Level, attributes);
             try
             {
-                CharacterStateCodec.Restore(character, record, _worldData.Current.Items);
+                CharacterStateCodec.Restore(character, record, _worldData.Current.Items, _costumes);
                 SavedPremium.Restore(character, record.Premium, _clock.GetUtcNow().ToUnixTimeSeconds());
                 // Pet skins and mounts belong to the account: what its other characters unlocked joins this one.
                 foreach (var sibling in await _characters.ListByAccountAsync(session.AccountId, ct))

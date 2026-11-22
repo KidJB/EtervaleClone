@@ -34,6 +34,7 @@ public sealed partial class GameScene
 {
     public void LoadEntered(string assetRoot, EnteredCharacter entered)
     {
+        EquipmentVisuals.SetCostumeCatalog(CostumeVisualCatalog.Load(assetRoot, _log));
         if (!_worldCatalog.TryGetFieldByCode(entered.FieldCode, out var field))
             field = _worldCatalog.Ricarten;
 
@@ -89,6 +90,7 @@ public sealed partial class GameScene
         _renderer.ClearActors();
         var placed = Stopwatch.GetTimestamp();
         AddPlayerActors(assetRoot, entered?.FaceIndex ?? 0, entered?.Tier ?? 0, entered?.HairIndex ?? 0);
+        QueueModernForest(loaded);
         var actors = Stopwatch.GetTimestamp();
 
         _camera = new PristonCamera(_playerBody.Position, _playerForward, ToCameraSettings(field.Camera));
@@ -152,13 +154,18 @@ public sealed partial class GameScene
             .Select(_reader.ReadModel)
             .ToArray();
         var collision = new PristonCollisionWorld(stage);
+        var modernScenery = ModernForestOverlay.Prepare(assetRoot, stage.Path, _log);
         ConfigureFieldLighting(field.Lighting);
         var handle = _renderer.AddStage(stage, animationModels);
-        return new LoadedField(field, stage, collision, handle);
+        return new LoadedField(field, stage, collision, handle, modernScenery);
     }
 
     private void UnloadAllFields()
     {
+        foreach (var field in _fields)
+        {
+            ReleaseModernForest(field);
+        }
         foreach (var field in _fields)
             _renderer.RemoveStage(field.RenderHandle);
         _fields.Clear();
@@ -237,7 +244,23 @@ public sealed partial class GameScene
 
             if (!keep)
             {
-                _log.Info($"[Stream] unload {field.Definition.Id} (walked away from {active.Id}).");
+                // Diagnostic only: show which retention boundary caused this unload.
+                var seamDistance = TryGateSeam(active, field.Definition, out var traceSeam)
+                    ? Vector2.Distance(player, traceSeam) : -1f;
+                var nearestWarpDistance = float.MaxValue;
+                foreach (var warp in active.WarpGates)
+                {
+                    if (warp.DestinationFieldId == field.Definition.Id)
+                    {
+                        nearestWarpDistance = MathF.Min(nearestWarpDistance,
+                            Vector2.Distance(player, WorldSpace.Planar(warp.X, warp.Z)));
+                    }
+                }
+
+                _log.Info($"[Stream] unload {field.Definition.Id} (walked away from {active.Id}); " +
+                    $"position=({player.X:F0},{player.Y:F0}), seam={seamDistance:F0}, " +
+                    $"warp={(nearestWarpDistance == float.MaxValue ? -1f : nearestWarpDistance):F0}, " +
+                    $"retention={disconnect:F0}, moving={_hasMoveTarget}.");
                 UnloadField(field);
             }
         }
@@ -312,6 +335,7 @@ public sealed partial class GameScene
 
     private void UnloadField(LoadedField field)
     {
+        ReleaseModernForest(field);
         _renderer.RemoveStage(field.RenderHandle);
         _fields.Remove(field);
         InvalidateGround();

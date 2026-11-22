@@ -213,6 +213,7 @@ public sealed partial class GameplayHud : IDisposable
         _questDocuments = new HudQuestDocuments(context.AssetRoot, context.Log);
         _inventory.InterceptClick = InterceptInventoryClick;
         _inventory.ExternalDrop = DropFromInventory;
+        _inventory.CosmeticsToggled = ToggleCosmetics;
         _inventory.ThrowRequested = ThrowFromInventory;
         _inventory.GoldRequested = GoldFromInventory;
         _inventory.LockRefused = () => _notice.Show(ClientText.Get("Inventory.Locked"));
@@ -280,6 +281,24 @@ public sealed partial class GameplayHud : IDisposable
     public Contracts.Characters.RankAura RankAura
     {
         set => _worldBuffs.Rank(value, DataText.ClassTitle(_class, 0));
+    }
+
+    // Whether the character shows its real gear (the costume button), as the scene last knew it; set by the screen.
+    public bool CosmeticsHidden
+    {
+        set => _inventory.CosmeticsHidden = value;
+    }
+
+    // The own model shows the real gear or the looks again at once; set by the screen.
+    public Action<bool> CosmeticsChanged { get; set; }
+
+    // The costume button: the server is told with its chat command (everyone then sees it), the own model follows at once.
+    private void ToggleCosmetics()
+    {
+        var hide = !_inventory.CosmeticsHidden;
+        _ = _chat.Send?.Invoke(hide ? Simulation.Characters.SkinRules.HideCommand : Simulation.Characters.SkinRules.ShowCommand, false, Guid.Empty);
+        _inventory.CosmeticsHidden = hide;
+        CosmeticsChanged?.Invoke(hide);
     }
 
     public IReadOnlyList<(int Kind, int SecondsLeft)> WorldBuffs
@@ -466,6 +485,12 @@ public sealed partial class GameplayHud : IDisposable
     public bool ExpectPickup(uint itemCode) => _inventory.ExpectPickup(itemCode);
 
     public void PickupAnswered(bool ok, long revision) => _inventory.PickupAnswered(ok, revision);
+
+    public void OpenSettings()
+    {
+        _systemMenu = false;
+        _settingsOpen = true;
+    }
 
     public bool ClosePanel()
     {

@@ -122,9 +122,9 @@ OpeningScreen --login ok--> CharacterSelectScreen --enter world ok--> GameplaySc
   field code, spawn x/z, tier, hair) and requests `GameplayScreen`. The Exit button returns to `OpeningScreen`; the next
   login opens a new connection.
 - `GameplayScreen` has no transition out; leaving it means quitting.
-- Escape: `Game1` calls `GameClient.HandleEscape` -> `GameScreen.HandleEscape`. `GameplayScreen` closes the open HUD
-  panels (`GameplayHud.ClosePanel`) and returns true if anything was open; every other case exits the game. While a
-  display change awaits confirmation, Escape reverts it and Enter confirms it instead.
+- Escape: `Game1` calls `GameClient.HandleEscape` -> `GameScreen.HandleEscape`. In gameplay, Escape closes
+  open HUD panels; when none is open, it opens Settings. The system Exit action and the normal window close still
+  exit the game. While a display change awaits confirmation, Escape reverts it and Enter confirms it instead.
 
 ### Shutdown
 
@@ -614,9 +614,11 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
     under the pointer. The player's arrow stays on the player and hides once outside the box.
 
   A press outside the map, switching its size or changing fields recentres it on the player.
-  Over the field title, a field with scheduled bosses shows `Next boss: <name> hh:mm:ss` (`HudBossTime`), counted down
-  on the client from the server's `BossTime` (sent once per pass, kept in `GameScene.NextBoss`); `now` once the pass is
-  due until the server sends the next, `tomorrow` for a pass on a later day.
+  Above the field title, on its plaque (`assets/Hud/Minimap/nextboss.png`, 130x23, from
+  `tools/ui/build_minimap_plaque.py`, its left edge 5 pixels out of the map), a field with a boss pass today shows
+  `Next Boss: hh:mm:ss` (`HudBossTime`, the line 20 pixels in), counted down on the client from the server's `BossTime`
+  (sent once per pass, kept in `GameScene.NextBoss`). Nothing shows while no pass of today counts down (a pass due, or
+  one on a later day); the boss list (`HudBossList`) names the bosses and their times.
   Each boss of the field shows at its spot (the server's `BossSpots`, kept in `GameScene.BossSpots`) as a 16-pixel skull:
   `Hud/Minimap/boss-inactive.png` (grey) until it is alive, `Hud/Minimap/boss-active.png` (red) while it is; hovering
   shows its name.
@@ -632,10 +634,6 @@ come from the window's text input (`Game1` to `GameClient.TypeCharacter` to `Scr
   An NPC with none of these keeps the dot. Clan mates show `friendly.png`, other players `player.png`. The field's
   active monster spawn points (the server's `SpawnSpots`, sent once per field and kept in `GameScene.SpawnSpots`) show
   as 4-pixel dots under every other marker; they have no name.
-  A field with a sharper map in `assets/Field/mapHD/<field>.png` (`HudArt.FieldMapHd`) draws that instead of
-  `Field/map/<field>.tga` once it is loaded. It covers the same area, so the same map rectangle places it. These
-  maps are the fields drawn from straight above with the game's renderer (`--render-minimaps`,
-  [testing.md](testing.md)), 2048 pixels on the longer side.
   `N` switches to the large map (`HudMinimap.Large`): a 384-pixel box that grows up and left from the small box's
   bottom-right corner, in `border_large.png`, and shows half again as far.
   A skull button left of the map's title (`HudBossList`) opens a window beside the map listing every scheduled boss of
@@ -1250,3 +1248,13 @@ art asset named `logo`.
 - [protocol.md](protocol.md) — opcodes, packets, framing and TLS.
 - [application.md](application.md), [server.md](server.md) — the authority behind each request.
 - [testing.md](testing.md) — regression runner and capture probes.
+
+## Gameplay usability (Fedora phase 1)
+
+- Settings has three pages: display/audio; graphics and camera; and a read-only reference of mouse/keyboard shortcuts.
+  The existing language switch remains available. The optional scenery-collision toggle affects only the camera.
+- The level guide's transient notice sits below the top-left quest information.
+- Actor selection uses torso pick volumes; ground-item labels take precedence over overlapping 3D item bounds.
+  Ground navigation ignores floors not reachable from the current surface.
+- The optional streaming trace reports portal/seam distances when unloading a neighbouring field. It changes no
+  loading distances, movement physics or authoritative warp behaviour.
